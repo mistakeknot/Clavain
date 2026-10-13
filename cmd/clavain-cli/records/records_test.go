@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -139,5 +140,91 @@ func TestTimestampsStrictlyIncrease(t *testing.T) {
 			t.Fatal(err, r.At, prev)
 		}
 		prev = r.At
+	}
+}
+
+func TestFrictionClosedSet(t *testing.T) {
+	line := `{"version":"0.1","kind":"friction","session":"s","at":"2026-10-13T09:00:00Z","friction":"hunter2hunter2"}`
+	if _, err := Decode([]byte(line)); err == nil {
+		t.Fatal("arbitrary friction token accepted")
+	}
+}
+
+func TestDecodeRejectsTrailingData(t *testing.T) {
+	one := `{"version":"0.1","kind":"turn","session":"s","at":"2026-10-13T09:00:00Z","state":"idle"}`
+	if _, err := Decode([]byte(one + "\n")); err != nil {
+		t.Fatal(err)
+	}
+	for _, tail := range []string{one, `{"x":1}`, "garbage"} {
+		if _, err := Decode([]byte(one + " " + tail)); err == nil {
+			t.Errorf("trailing %q accepted", tail)
+		}
+	}
+}
+
+func TestConcurrentEmit(t *testing.T) {
+	dir := t.TempDir()
+	w := &Writer{Dir: dir, Config: true, Getenv: env(nil), Now: clock()}
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w.Emit(Record{Kind: KindTurn, Session: "a", State: "idle"})
+		}()
+	}
+	wg.Wait()
+	b, _ := os.ReadFile(filepath.Join(dir, "records-2026-10-13.jsonl"))
+	seen := map[string]bool{}
+	for _, l := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+		r, err := Decode([]byte(l))
+		if err != nil || seen[r.At] {
+			t.Fatal(err, r.At)
+		}
+		seen[r.At] = true
+	}
+	if len(seen) != 50 {
+		t.Fatal(len(seen))
+	}
+}
+
+// Sub-millisecond clock steps must still persist distinct, increasing stamps.
+func TestSubMillisecondTimestamps(t *testing.T) {
+	dir := t.TempDir()
+	cur := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	w := &Writer{Dir: dir, Config: true, Getenv: env(nil), Now: func() time.Time {
+		cur = cur.Add(100 * time.Microsecond)
+		return cur
+	}}
+	for i := 0; i < 20; i++ {
+		w.Emit(Record{Kind: KindTurn, Session: "a", State: "idle"})
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "records-2026-10-13.jsonl"))
+	prev := ""
+	for _, l := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+		r, err := Decode([]byte(l))
+		if err != nil || r.At <= prev {
+			t.Fatal(err, r.At, prev)
+		}
+		prev = r.At
+	}
+}
+
+func TestTurnsDedupedPerSession(t *testing.T) {
+	dir := t.TempDir()
+	w := &Writer{Dir: dir, Config: true, Getenv: env(nil), Now: clock()}
+	w.Emit(Record{Kind: KindTurn, Session: "a", TurnID: "t1", State: "done"})
+	w.Emit(Record{Kind: KindTurn, Session: "b", TurnID: "t1", State: "done"})
+	d, err := BuildDigest(dir, "2026-10-13")
+	if err != nil || d.Turns != 2 {
+		t.Fatal(err, d.Turns)
+	}
+}
+
+func TestWriteDigestCreatesDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "new", "r")
+	w := &Writer{Dir: dir, Config: true, Getenv: env(nil), Now: clock()}
+	if on, err := w.WriteDigest("2026-10-13"); !on || err != nil {
+		t.Fatal(on, err)
 	}
 }

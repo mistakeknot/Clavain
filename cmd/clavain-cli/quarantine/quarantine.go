@@ -3,8 +3,9 @@
 // and advance a cursor. Modeled on joelhooks/rat-king pi-ratking quarantine.ts.
 //
 // Safety by construction: the API never accepts a body. Callers hand over only
-// the body length; Source, Reason and ID are restricted to short code tokens so
-// free text (and therefore payload content) cannot enter a record. Not wired
+// the body length; Source and ID are restricted to short code tokens and Reason
+// to a closed set of codes, so free text (and therefore payload content) cannot
+// enter a record. Not wired
 // into live hooks.
 package quarantine
 
@@ -23,8 +24,16 @@ import (
 
 var token = regexp.MustCompile(`^[a-z0-9][a-z0-9_.:-]{0,63}$`)
 
-// ErrBadToken is returned when Source, Reason or ID is not a short code token.
-var ErrBadToken = errors.New("quarantine: field must match [a-z0-9][a-z0-9_.:-]{0,63}")
+// ErrBadToken is returned when Source or ID is not a short code token, or
+// Reason is not one of the known reason codes.
+var ErrBadToken = errors.New("quarantine: field must match [a-z0-9][a-z0-9_.:-]{0,63}, and reason must be a known code")
+
+// reasons is the closed set of Reason codes. Token syntax cannot tell metadata
+// from a secret-shaped string, so only these values are ever persisted.
+var reasons = map[string]bool{
+	"unverifiable": true, "bad-json": true, "truncated": true, "sig-mismatch": true,
+	"schema-mismatch": true, "oversize": true, "empty": true, "unauthorized": true,
+}
 
 // Record is the only thing ever written. There is deliberately no body field.
 type Record struct {
@@ -60,9 +69,11 @@ func (s *Store) now() time.Time {
 
 func ok(v string) bool { return token.MatchString(v) }
 
+func okReason(v string) bool { return reasons[v] }
+
 // Quarantine writes a record for it and advances the cursor to it.Seq.
 func (s *Store) Quarantine(it Item) (Record, error) {
-	if !ok(it.Source) || !ok(it.Reason) || (it.ID != "" && !ok(it.ID)) || it.Seq < 0 {
+	if !ok(it.Source) || !okReason(it.Reason) || (it.ID != "" && !ok(it.ID)) || it.Seq < 0 {
 		return Record{}, ErrBadToken
 	}
 	r := Record{Seq: it.Seq, ID: it.ID, Source: it.Source, Reason: it.Reason,
@@ -84,11 +95,22 @@ func (s *Store) Quarantine(it Item) (Record, error) {
 }
 
 func writeFile(path string, b []byte) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	tmp := f.Name()
+	_, err = f.Write(b)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		os.Remove(tmp)
+	}
+	return err
 }
 
 // Cursor returns the highest sequence number processed (-1 when none).
@@ -115,13 +137,28 @@ func (s *Store) Advance(seq int64) (int64, error) {
 	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
 		return cur, err
 	}
-	b, _ := json.Marshal(struct {
-		Seq int64 `json:"seq"`
-	}{seq})
-	if err := writeFile(filepath.Join(s.Dir, "cursor.json"), b); err != nil {
+	lock, err := os.OpenFile(filepath.Join(s.Dir, "cursor.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
 		return cur, err
 	}
-	return seq, nil
+	defer lock.Close()
+	// Read-modify-write under an exclusive file lock so concurrent writers
+	// cannot lose progress.
+	err = withFileLock(lock, func() error {
+		cur = s.Cursor()
+		if seq <= cur {
+			return nil
+		}
+		b, _ := json.Marshal(struct {
+			Seq int64 `json:"seq"`
+		}{seq})
+		if err := writeFile(filepath.Join(s.Dir, "cursor.json"), b); err != nil {
+			return err
+		}
+		cur = seq
+		return nil
+	})
+	return cur, err
 }
 
 // Failure lets a verifier name a safe reason code. Other errors map to
@@ -141,7 +178,7 @@ func (s *Store) Handle(seq int64, id, source string, body []byte, verify func([]
 	}
 	code := "unverifiable"
 	var f *Failure
-	if errors.As(err, &f) && ok(f.Code) {
+	if errors.As(err, &f) && okReason(f.Code) {
 		code = f.Code
 	}
 	_, qerr := s.Quarantine(Item{Seq: seq, ID: id, Source: source, Reason: code, BodyLen: len(body)})
@@ -180,7 +217,7 @@ func Summarize(dir string) Summary {
 		return sum
 	}
 	var r Record
-	if json.Unmarshal(b, &r) == nil && ok(r.Source) && ok(r.Reason) {
+	if json.Unmarshal(b, &r) == nil && ok(r.Source) && okReason(r.Reason) {
 		sum.Latest = &r
 	}
 	return sum

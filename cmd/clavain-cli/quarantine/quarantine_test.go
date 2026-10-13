@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -128,5 +129,43 @@ func TestFileModes(t *testing.T) {
 	st, _ := os.Stat(filepath.Join(s.Dir, "1.json"))
 	if st.Mode().Perm() != 0o600 {
 		t.Fatal(st.Mode())
+	}
+}
+
+func TestArbitraryTokensRejected(t *testing.T) {
+	s := &Store{Dir: t.TempDir(), Now: fixed}
+	for _, bad := range []string{"hunter2hunter2", "ghp_abcdefghijklmnop", "not-a-known-code"} {
+		if _, err := s.Quarantine(Item{Seq: 1, Source: "hook", Reason: bad}); !errors.Is(err, ErrBadToken) {
+			t.Errorf("reason %q accepted", bad)
+		}
+		ok, err := s.Handle(2, "", "hook", []byte("x"), func([]byte) error { return &Failure{Code: bad} })
+		if ok || err != nil {
+			t.Fatal(ok, err)
+		}
+		if all := allFiles(t, s.Dir); strings.Contains(all, bad) {
+			t.Fatalf("token %q persisted: %s", bad, all)
+		}
+	}
+}
+
+func TestConcurrentAdvance(t *testing.T) {
+	dir := t.TempDir()
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func(n int64) {
+			defer wg.Done()
+			s := &Store{Dir: dir, Now: fixed}
+			if _, err := s.Advance(n); err != nil {
+				t.Error(err)
+			}
+		}(int64(i))
+	}
+	wg.Wait()
+	if got := (&Store{Dir: dir}).Cursor(); got != 99 {
+		t.Fatalf("cursor %d want 99", got)
+	}
+	if m, _ := filepath.Glob(filepath.Join(dir, "*.tmp")); len(m) != 0 {
+		t.Fatalf("leftover temp files: %v", m)
 	}
 }

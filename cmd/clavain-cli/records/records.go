@@ -13,10 +13,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -36,8 +38,13 @@ func Enabled(getenv func(string) string, cfg bool) bool {
 
 var token = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$`)
 
-// Turn states and stop reasons are closed sets.
+// Turn states, stop reasons and friction codes are closed sets. Token syntax
+// cannot tell metadata from a secret-shaped string, so friction is an enum.
 var (
+	frictions = map[string]bool{
+		"retry-loop": true, "approval-wait": true, "tool-error": true, "context-limit": true,
+		"rate-limit": true, "slow-tool": true, "permission-denied": true, "user-interrupt": true,
+	}
 	states      = map[string]bool{"working": true, "idle": true, "blocked": true, "done": true}
 	stopReasons = map[string]bool{"": true, "stop": true, "aborted": true, "error": true, "length": true}
 )
@@ -57,7 +64,7 @@ type Record struct {
 	At         string `json:"at"`
 	State      string `json:"state,omitempty"`       // turn only
 	StopReason string `json:"stop_reason,omitempty"` // turn only
-	Friction   string `json:"friction,omitempty"`    // friction only: code token
+	Friction   string `json:"friction,omitempty"`    // friction only: known code
 }
 
 // Validate checks the schema.
@@ -80,7 +87,7 @@ func (r Record) Validate() error {
 			return errors.New("records: bad turn fields")
 		}
 	case KindFriction:
-		if !token.MatchString(r.Friction) || r.State != "" || r.StopReason != "" {
+		if !frictions[r.Friction] || r.State != "" || r.StopReason != "" {
 			return errors.New("records: bad friction fields")
 		}
 	default:
@@ -97,6 +104,9 @@ func Decode(b []byte) (Record, error) {
 	if err := d.Decode(&r); err != nil {
 		return Record{}, errors.New("records: undecodable")
 	}
+	if _, err := d.Token(); err != io.EOF {
+		return Record{}, errors.New("records: trailing data")
+	}
 	return r, r.Validate()
 }
 
@@ -106,6 +116,7 @@ type Writer struct {
 	Config bool
 	Getenv func(string) string
 	Now    func() time.Time
+	mu     sync.Mutex
 	lastAt time.Time
 }
 
@@ -130,7 +141,11 @@ func (w *Writer) Emit(r Record) (bool, error) {
 		return false, nil
 	}
 	r.Version = "0.1"
-	t := w.now()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	// Compare at the persisted (millisecond) precision so persisted timestamps
+	// strictly increase.
+	t := w.now().Truncate(time.Millisecond)
 	if !t.After(w.lastAt) {
 		t = w.lastAt.Add(time.Millisecond)
 	}
@@ -180,7 +195,8 @@ func BuildDigest(dir, day string) (Digest, error) {
 	}
 	defer f.Close()
 	sessions := map[string]bool{}
-	turns := map[string]bool{}
+	type turnKey struct{ session, id string }
+	turns := map[turnKey]bool{}
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		r, err := Decode(sc.Bytes())
@@ -197,7 +213,7 @@ func BuildDigest(dir, day string) (Digest, error) {
 			d.Stops[r.StopReason]++
 		}
 		if r.TurnID != "" {
-			turns[r.TurnID] = true
+			turns[turnKey{r.Session, r.TurnID}] = true
 		}
 	}
 	d.Sessions, d.Turns = len(sessions), len(turns)
@@ -217,6 +233,9 @@ func (w *Writer) WriteDigest(day string) (bool, error) {
 	}
 	d, err := BuildDigest(w.Dir, day)
 	if err != nil {
+		return false, err
+	}
+	if err := os.MkdirAll(w.Dir, 0o700); err != nil {
 		return false, err
 	}
 	return true, os.WriteFile(filepath.Join(w.Dir, "digest-"+day+".json"), d.Marshal(), 0o600)
