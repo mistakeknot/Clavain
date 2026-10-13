@@ -306,3 +306,82 @@ func TestDuplicateAndEmptyPersistedIDsRejected(t *testing.T) {
 		t.Fatal("Unmarshal must reject an empty id")
 	}
 }
+
+func TestOpenRejectsInvalidPersistedState(t *testing.T) {
+	f := &fakeStore{data: []Ask{{ID: "a", State: "bogus"}}, now: time.UnixMilli(1)}
+	if _, err := Open(f.ports()); err == nil {
+		t.Fatal("Open must reject an unknown state")
+	}
+}
+
+// retainingStore keeps the exact slice it was handed, as a caching adapter might.
+type retainingStore struct {
+	held    []Ask
+	failing bool
+}
+
+func (r *retainingStore) ports(now time.Time) Ports {
+	return Ports{
+		Load: func() ([]Ask, error) { return nil, nil },
+		Save: func(a []Ask) error {
+			r.held = a
+			if r.failing {
+				return errors.New("disk full")
+			}
+			return nil
+		},
+		Now: func() time.Time { return now },
+	}
+}
+
+func (r *retainingStore) scribble() {
+	for i := range r.held {
+		r.held[i].ID = "mutated"
+		r.held[i].State = Closed
+		if r.held[i].DueBy != nil {
+			*r.held[i].DueBy = 0
+		}
+	}
+}
+
+func TestSaveArgumentIsNotJournalOwned(t *testing.T) {
+	r := &retainingStore{}
+	j, err := Open(r.ports(time.UnixMilli(1000)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	due := int64(5000)
+	if _, err := j.Record(Ask{ID: "a", Did: "d", DueBy: &due}); err != nil {
+		t.Fatal(err)
+	}
+	r.scribble()
+	open := j.Open()
+	if len(open) != 1 || open[0].ID != "a" || open[0].State != Pending || *open[0].DueBy != 5000 {
+		t.Fatalf("adapter mutation leaked into journal: %+v", open)
+	}
+	if _, ok, err := j.Reply("a", "d"); err != nil || !ok {
+		t.Fatalf("ask stranded after adapter mutation: ok=%v err=%v", ok, err)
+	}
+	r.scribble()
+	if o := j.Open(); len(o) != 1 || o[0].ID != "a" || o[0].State != Answered {
+		t.Fatalf("adapter mutation leaked after advance: %+v", o)
+	}
+}
+
+func TestFailedSaveWithRetainedArgumentLeavesJournalUnchanged(t *testing.T) {
+	r := &retainingStore{}
+	j, _ := Open(r.ports(time.UnixMilli(1000)))
+	due := int64(5000)
+	if _, err := j.Record(Ask{ID: "a", Did: "d", DueBy: &due}); err != nil {
+		t.Fatal(err)
+	}
+	r.failing = true
+	if err := j.Ack("a"); err == nil {
+		t.Fatal("expected save error")
+	}
+	r.scribble()
+	o := j.Open()
+	if len(o) != 1 || o[0].ID != "a" || o[0].State != Pending || *o[0].DueBy != 5000 {
+		t.Fatalf("failed save changed journal state: %+v", o)
+	}
+}

@@ -126,14 +126,16 @@ func Open(p Ports) (*Journal, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := checkIDs(e); err != nil {
+	if err := validate(e); err != nil {
 		return nil, err
 	}
 	return &Journal{ports: p, entries: cloneAll(e)}, nil
 }
 
 func (j *Journal) persist(next []Ask) error {
-	if err := j.ports.Save(next); err != nil {
+	// Hand the port its own copy: an adapter that retains its argument must not
+	// be able to mutate journal state, even after a failed save.
+	if err := j.ports.Save(cloneAll(next)); err != nil {
 		return err
 	}
 	j.entries = next
@@ -278,13 +280,18 @@ func Unmarshal(b []byte) ([]Ask, error) {
 	if err := json.Unmarshal(b, &a); err != nil {
 		return nil, err
 	}
-	for _, x := range a {
-		if _, ok := transitions[x.State]; !ok {
-			return nil, fmt.Errorf("asks: invalid state %q for %q", x.State, x.ID)
-		}
-	}
-	if err := checkIDs(a); err != nil {
+	if err := validate(a); err != nil {
 		return nil, err
 	}
 	return a, nil
+}
+
+// validate rejects persisted entries with an unknown state or a bad id.
+func validate(a []Ask) error {
+	for _, x := range a {
+		if _, ok := transitions[x.State]; !ok {
+			return fmt.Errorf("asks: invalid state %q for %q", x.State, x.ID)
+		}
+	}
+	return checkIDs(a)
 }
