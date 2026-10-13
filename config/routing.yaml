@@ -309,11 +309,11 @@ dispatch:
       # foundational-invariants or difficult-verification (security, data loss,
       # core rules); (2) track review/gauge pass rate and defect escapes for 48h
       # after landing and revert this seat to xhigh (its pre-PR value) if either
-      # regresses. `roles.escalation` (line 142) also resolves to this seat, so
+      # regresses. `roles.escalation` (line 198) also resolves to this seat, so
       # two-strikes capability-failure escalation runs at this same effort.
-      # Neither the effort-by-reason nor the 48h-revert rule is enforced by the
-      # router/dispatch code — both are agent-discipline-only until a real
-      # mechanism lands.
+      # The effort-by-reason rule is enforced by `effort_floors`; the 48h-revert
+      # rule is not enforced by the router/dispatch code and is
+      # agent-discipline-only until a real mechanism lands.
       # planning-opus, not review-opus (mk-9yyt). Chains are walked transitively:
       # while the authoring head pointed at a plan-review profile, every seat added
       # to the review lane also became reachable from planning, and a frontier-
@@ -409,8 +409,6 @@ dispatch:
       # mk ruling 2026-09-25: Codex exhaustion must never block development.
       # Sonnet, not Opus — same seat routine-sol already falls back to for this
       # role; scoped/routine work doesn't need the Opus floor.
-      # token-efficiency cut (bead mk-42j9.20): read-only/exploration
-      # tier, high -> medium.
       fallbacks: [routine-sonnet]
       description: Scoped read-only tasks, exploration, verification, quick reviews
     fast-clavain:
@@ -420,8 +418,6 @@ dispatch:
       reasoning_effort: medium
       service_tier: standard
       # mk ruling 2026-09-25: same seat scout-sol already falls back to.
-      # token-efficiency cut (bead mk-42j9.20): read-only/exploration
-      # tier, high -> medium.
       fallbacks: [scout-sonnet]
       description: Clavain interserve-mode default for read-only/administrative tasks
     deep:
@@ -654,11 +650,8 @@ dispatch:
       role: validation
       backend: kimi
       model: kimi-code/k3
-      reasoning_effort: medium
+      reasoning_effort: high
       service_tier: standard
-      # token-efficiency cut (bead mk-42j9.20): validation seat,
-      # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same
-      # mandatory escalation/48h-revert terms as planning-astra above.
       fallbacks: [validation-sol]
       description: Cross-provider validation fallback
     validation-sol:
@@ -667,9 +660,6 @@ dispatch:
       model: gpt-6.1-sol
       reasoning_effort: medium
       service_tier: standard
-      # token-efficiency cut (bead mk-42j9.20): validation seat,
-      # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same
-      # mandatory escalation/48h-revert terms as planning-astra above.
       fallbacks: [validation-opus, validation-sonnet]
       description: Codex validation fallback when its resolved model differs from the producer
     release-sol:

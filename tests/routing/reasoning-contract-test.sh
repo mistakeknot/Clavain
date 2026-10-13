@@ -159,15 +159,11 @@ jq -e '(.fallback_chain[] | select(.profile_ref == "validation-sol") | .profile.
   || { echo 'FAIL: medium fallback candidate not raised to the floor'; exit 1; }
 
 # A candidate already at or above the floor is left untouched: no rewrite,
-# no no-op entry in the receipt. crosslab-astra stays at xhigh (the
-# mk-42j9.20 cuts moved every validation seat to medium, so none remain at
-# high); it is reachable through the cross-lab-review chain.
-ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=cross-lab-review \
-  --producer-identity=gpt-6-sol --context-file="$work/context.json" > "$work/floor-medium.json"
-jq -e '(.fallback_chain[] | select(.profile_ref == "crosslab-astra") | .profile.reasoning_effort) == "xhigh"
-  and ((.effort_floors_applied // []) | map(select(.profile_ref == "crosslab-astra")) | length) == 0' \
+# no no-op entry in the receipt.
+jq -e '(.fallback_chain[] | select(.profile_ref == "validation-kimi") | .profile.reasoning_effort) == "high"
+  and ((.effort_floors_applied // []) | map(select(.profile_ref == "validation-kimi")) | length) == 0' \
   "$work/floor-medium.json" >/dev/null \
-|| { echo 'FAIL: floor recorded a no-op raise for an already-compliant candidate'; exit 1; }
+  || { echo 'FAIL: floor recorded a no-op raise for an already-compliant candidate'; exit 1; }
 
 # The floor applies to every expanded candidate, including the primary
 # itself -- crosslab-sol is the declared primary for cross-lab-review at
