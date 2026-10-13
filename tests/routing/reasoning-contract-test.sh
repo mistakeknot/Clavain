@@ -159,11 +159,15 @@ jq -e '(.fallback_chain[] | select(.profile_ref == "validation-sol") | .profile.
   || { echo 'FAIL: medium fallback candidate not raised to the floor'; exit 1; }
 
 # A candidate already at or above the floor is left untouched: no rewrite,
-# no no-op entry in the receipt.
-jq -e '(.fallback_chain[] | select(.profile_ref == "validation-kimi") | .profile.reasoning_effort) == "high"
-  and ((.effort_floors_applied // []) | map(select(.profile_ref == "validation-kimi")) | length) == 0' \
+# no no-op entry in the receipt. crosslab-astra stays at xhigh (the
+# mk-42j9.20 cuts moved every validation seat to medium, so none remain at
+# high); it is reachable through the cross-lab-review chain.
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=cross-lab-review \
+  --producer-identity=gpt-6-sol --context-file="$work/context.json" > "$work/floor-medium.json"
+jq -e '(.fallback_chain[] | select(.profile_ref == "crosslab-astra") | .profile.reasoning_effort) == "xhigh"
+  and ((.effort_floors_applied // []) | map(select(.profile_ref == "crosslab-astra")) | length) == 0' \
   "$work/floor-medium.json" >/dev/null \
-  || { echo 'FAIL: floor recorded a no-op raise for an already-compliant candidate'; exit 1; }
+|| { echo 'FAIL: floor recorded a no-op raise for an already-compliant candidate'; exit 1; }
 
 # The floor applies to every expanded candidate, including the primary
 # itself -- crosslab-sol is the declared primary for cross-lab-review at
@@ -246,10 +250,10 @@ jq -e '.profile_ref == "crosslab-sol"
 # An override matching the already-resolved effort is still receipted, with
 # applied true and changed false -- a no-op override is not silently dropped.
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
-  --producer-identity=gpt-6-astra --context-file="$work/routine.json" --effort-override=high \
+  --producer-identity=gpt-6-astra --context-file="$work/routine.json" --effort-override=medium \
   > "$work/override-noop.json"
-jq -e '.effort_override.requested == "high" and .effort_override.applied == true
-  and .effort_override.changed == false and .effort_override.from == "high" and .effort_override.to == "high"' \
+jq -e '.effort_override.requested == "medium" and .effort_override.applied == true
+  and .effort_override.changed == false and .effort_override.from == "medium" and .effort_override.to == "medium"' \
   "$work/override-noop.json" >/dev/null \
   || { echo 'FAIL: no-op override not receipted correctly'; exit 1; }
 
@@ -259,9 +263,8 @@ python3 - "$ROOT/config/routing.yaml" "$work/claude-propagation.yaml" <<'PYFIXTU
 from pathlib import Path
 import sys
 text = Path(sys.argv[1]).read_text()
-needle = '    review-opus:\n      role: plan-review\n      backend: claude\n      model: claude-opus-5-5\n      reasoning_effort: high\n'
-assert text.count(needle) == 1
-text = text.replace(needle, needle.replace('reasoning_effort: high', 'reasoning_effort: medium'))
+needle = '    review-opus:\n      role: plan-review\n      backend: claude\n      model: claude-opus-5-5\n      reasoning_effort: medium\n'
+assert text.count(needle) == 1  # review-opus ships at medium (mk-42j9.20); the floor must raise it
 Path(sys.argv[2]).write_text(text)
 PYFIXTURE
 out="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role plan-review --policy "$work/claude-propagation.yaml" \
