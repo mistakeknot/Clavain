@@ -292,3 +292,19 @@ func TestMidnightBoundaryPartitionsByObservedDay(t *testing.T) {
 		t.Fatalf("digest turns = %d, want 2", d.Turns)
 	}
 }
+
+func TestDigestSkipsOversizedLine(t *testing.T) {
+	dir := t.TempDir()
+	good := `{"version":"0.1","kind":"turn","session":"s","turn_id":"s:1","at":"2026-10-13T09:00:00Z","state":"done"}`
+	body := strings.Repeat("x", 200*1024) + "\n" + good + "\n" + good[:20] // last line truncated, no newline
+	if err := os.WriteFile(filepath.Join(dir, "records-2026-10-13.jsonl"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	d, err := BuildDigest(dir, "2026-10-13")
+	if err != nil {
+		t.Fatalf("oversized line must be skipped, got %v", err)
+	}
+	if d.Turns != 1 || d.States["done"] != 1 {
+		t.Fatalf("digest = %+v, want one done turn", d)
+	}
+}

@@ -2,8 +2,9 @@
 // input could not be parsed or verified, then lets the caller skip the item
 // and advance a cursor. Modeled on joelhooks/rat-king pi-ratking quarantine.ts.
 //
-// Safety by construction: the API never accepts a body. Callers hand over only
-// the body length; Source and ID are restricted to short code tokens and Reason
+// Safety by construction: the body is never persisted. Handle takes the body
+// only to measure it and hand it to the verifier; a record holds just its
+// length. Source and ID are restricted to short code tokens and Reason
 // to a closed set of codes, so free text (and therefore payload content) cannot
 // enter a record. Not wired
 // into live hooks.

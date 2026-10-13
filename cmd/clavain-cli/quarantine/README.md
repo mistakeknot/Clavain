@@ -5,8 +5,8 @@ Pure library (not wired into hooks), modeled on joelhooks/rat-king `pi-ratking`
 writes `<seq>.json` (seq, id, source, reason code, byte length, timestamp;
 never the body), skips the item and advances `cursor.json` (monotonic).
 `Summarize(dir).Line()` gives `quarantined:N latest:<reason>` for a status line.
-The API takes no body: callers pass a length, and source/reason/id must be code
-tokens, so free text cannot reach disk. Non-`Failure` verifier errors map to
+The body is never persisted: `Handle` only measures it and passes it to the
+verifier, and source/reason/id must be code tokens, so free text cannot reach disk. Non-`Failure` verifier errors map to
 `unverifiable` because error text can echo input.
 
 Tests: `go test ./quarantine` (fuzzed-secret no-persist property, token

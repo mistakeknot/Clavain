@@ -10,6 +10,7 @@ package records
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -206,27 +207,44 @@ func BuildDigest(dir, day string) (Digest, error) {
 	sessions := map[string]bool{}
 	type turnKey struct{ session, id string }
 	turns := map[turnKey]bool{}
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		r, err := Decode(sc.Bytes())
-		if err != nil {
+	rd := bufio.NewReaderSize(f, 64*1024)
+	for {
+		line, rerr := rd.ReadSlice('\n')
+		if rerr == bufio.ErrBufferFull {
+			// Oversized line: it cannot be a valid record, so drop the rest of it.
+			for rerr == bufio.ErrBufferFull {
+				_, rerr = rd.ReadSlice('\n')
+			}
+			if rerr != nil {
+				break
+			}
 			continue
 		}
-		sessions[r.Session] = true
-		if r.Kind == KindFriction {
-			d.Friction[r.Friction]++
-			continue
+		if len(line) > 0 {
+			if r, err := Decode(bytes.TrimRight(line, "\r\n")); err == nil {
+				sessions[r.Session] = true
+				if r.Kind == KindFriction {
+					d.Friction[r.Friction]++
+				} else {
+					d.States[r.State]++
+					if r.StopReason != "" {
+						d.Stops[r.StopReason]++
+					}
+					if r.TurnID != "" {
+						turns[turnKey{r.Session, r.TurnID}] = true
+					}
+				}
+			}
 		}
-		d.States[r.State]++
-		if r.StopReason != "" {
-			d.Stops[r.StopReason]++
-		}
-		if r.TurnID != "" {
-			turns[turnKey{r.Session, r.TurnID}] = true
+		if rerr != nil {
+			if rerr != io.EOF {
+				return d, rerr
+			}
+			break
 		}
 	}
 	d.Sessions, d.Turns = len(sessions), len(turns)
-	return d, sc.Err()
+	return d, nil
 }
 
 // Marshal renders the digest deterministically (maps sort by key).
