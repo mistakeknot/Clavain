@@ -20,13 +20,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mistakeknot/clavain-cli/internal/secretshape"
 )
 
-var token = regexp.MustCompile(`^[a-z0-9][a-z0-9_.:-]{0,63}$`)
+var token = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$`)
 
 // ErrBadToken is returned when Source or ID is not a short code token, or
 // Reason is not one of the known reason codes.
-var ErrBadToken = errors.New("quarantine: field must match [a-z0-9][a-z0-9_.:-]{0,63}, and reason must be a known code")
+var ErrBadToken = errors.New("quarantine: field must match [A-Za-z0-9][A-Za-z0-9_.:-]{0,63} and not look like a secret, and reason must be a known code")
 
 // reasons is the closed set of Reason codes. Token syntax cannot tell metadata
 // from a secret-shaped string, so only these values are ever persisted.
@@ -67,7 +69,7 @@ func (s *Store) now() time.Time {
 	return time.Now().UTC()
 }
 
-func ok(v string) bool { return token.MatchString(v) }
+func ok(v string) bool { return token.MatchString(v) && !secretshape.Looks(v) }
 
 func okReason(v string) bool { return reasons[v] }
 

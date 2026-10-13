@@ -169,3 +169,33 @@ func TestConcurrentAdvance(t *testing.T) {
 		t.Fatalf("leftover temp files: %v", m)
 	}
 }
+
+var secretShaped = []string{
+	"ghp_abcdefghijklmnop", "gho_abcdefghijklmnop", "sk-abcdefghijklmnop", "xoxb-12345-abcde",
+	"AKIAABCDEFGHIJKLMNOP", "0123456789abcdef0123456789abcdef", "eyJhbGciOi.eyJzdWIiOiIx.c2lnbmF0dXJl",
+	"src:ghp_abcdefghijklmnop",
+}
+
+func TestSecretShapedIdentifiersRejected(t *testing.T) {
+	s := &Store{Dir: t.TempDir(), Now: fixed}
+	for _, v := range secretShaped {
+		if _, err := s.Quarantine(Item{Seq: 1, Source: v, Reason: "empty"}); !errors.Is(err, ErrBadToken) {
+			t.Errorf("source %q accepted", v)
+		}
+		if _, err := s.Quarantine(Item{Seq: 1, ID: v, Source: "hook", Reason: "empty"}); !errors.Is(err, ErrBadToken) {
+			t.Errorf("id %q accepted", v)
+		}
+	}
+	if strings.Contains(allFiles(t, s.Dir), "ghp_") {
+		t.Error("secret persisted")
+	}
+}
+
+func TestNormalIdentifiersAccepted(t *testing.T) {
+	s := &Store{Dir: t.TempDir(), Now: fixed}
+	for i, v := range []string{"hook", "task-17", "123e4567-e89b-12d3-a456-426614174000", "01ARZ3NDEKTSV4RRFFQ69G5FAV", "t42", "stop.hook:v2"} {
+		if _, err := s.Quarantine(Item{Seq: int64(i + 1), ID: v, Source: v, Reason: "empty"}); err != nil {
+			t.Errorf("%q rejected: %v", v, err)
+		}
+	}
+}

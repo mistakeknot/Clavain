@@ -20,6 +20,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mistakeknot/clavain-cli/internal/secretshape"
 )
 
 // EnvVar is the opt-in environment switch.
@@ -36,7 +38,10 @@ func Enabled(getenv func(string) string, cfg bool) bool {
 	return cfg
 }
 
-var token = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$`)
+var tokenRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$`)
+
+// okToken reports whether v is a short identifier that does not look like a secret.
+func okToken(v string) bool { return tokenRe.MatchString(v) && !secretshape.Looks(v) }
 
 // Turn states, stop reasons and friction codes are closed sets. Token syntax
 // cannot tell metadata from a secret-shaped string, so friction is an enum.
@@ -72,13 +77,13 @@ func (r Record) Validate() error {
 	if r.Version != "0.1" {
 		return errors.New("records: bad version")
 	}
-	if !token.MatchString(r.Session) {
+	if !okToken(r.Session) {
 		return errors.New("records: bad session")
 	}
 	if _, err := time.Parse(time.RFC3339Nano, r.At); err != nil {
 		return errors.New("records: bad at")
 	}
-	if r.TurnID != "" && !token.MatchString(r.TurnID) {
+	if r.TurnID != "" && !okToken(r.TurnID) {
 		return errors.New("records: bad turn_id")
 	}
 	switch r.Kind {
@@ -145,7 +150,11 @@ func (w *Writer) Emit(r Record) (bool, error) {
 	defer w.mu.Unlock()
 	// Compare at the persisted (millisecond) precision so persisted timestamps
 	// strictly increase.
-	t := w.now().Truncate(time.Millisecond)
+	// The file is chosen by the observed day, not the corrected timestamp, so a
+	// correction that crosses midnight cannot move a record to the next day.
+	obs := w.now().Truncate(time.Millisecond)
+	day := obs.Format("2006-01-02")
+	t := obs
 	if !t.After(w.lastAt) {
 		t = w.lastAt.Add(time.Millisecond)
 	}
@@ -158,7 +167,7 @@ func (w *Writer) Emit(r Record) (bool, error) {
 	if err := os.MkdirAll(w.Dir, 0o700); err != nil {
 		return false, err
 	}
-	p := filepath.Join(w.Dir, "records-"+t.Format("2006-01-02")+".jsonl")
+	p := filepath.Join(w.Dir, "records-"+day+".jsonl")
 	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return false, err

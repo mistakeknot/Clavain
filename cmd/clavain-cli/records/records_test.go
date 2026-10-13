@@ -228,3 +228,67 @@ func TestWriteDigestCreatesDir(t *testing.T) {
 		t.Fatal(on, err)
 	}
 }
+
+var secretShaped = []string{
+	"ghp_abcdefghijklmnop", "gho_abcdefghijklmnop", "sk-abcdefghijklmnop", "xoxb-12345-abcde",
+	"AKIAABCDEFGHIJKLMNOP", "0123456789abcdef0123456789abcdef", "eyJhbGciOi.eyJzdWIiOiIx.c2lnbmF0dXJl",
+}
+
+func TestSecretShapedSessionAndTurnRejected(t *testing.T) {
+	dir := t.TempDir()
+	w := &Writer{Dir: dir, Config: true, Getenv: env(nil), Now: clock()}
+	for _, v := range secretShaped {
+		if ok, err := w.Emit(Record{Kind: KindTurn, Session: v, State: "idle"}); ok || err == nil {
+			t.Errorf("session %q accepted", v)
+		}
+		if ok, err := w.Emit(Record{Kind: KindTurn, Session: "s", TurnID: v, State: "idle"}); ok || err == nil {
+			t.Errorf("turn_id %q accepted", v)
+		}
+		line := `{"version":"0.1","kind":"turn","session":"` + v + `","at":"2026-10-13T09:00:00Z","state":"idle"}`
+		if _, err := Decode([]byte(line)); err == nil {
+			t.Errorf("decode accepted session %q", v)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "records-2026-10-13.jsonl")); strings.Contains(string(b), "ghp_") {
+		t.Error("secret persisted")
+	}
+}
+
+func TestNormalIdentifiersAccepted(t *testing.T) {
+	w := &Writer{Dir: t.TempDir(), Config: true, Getenv: env(nil), Now: clock()}
+	for _, v := range []string{"123e4567-e89b-12d3-a456-426614174000", "01ARZ3NDEKTSV4RRFFQ69G5FAV", "t1", "sess_42"} {
+		if ok, err := w.Emit(Record{Kind: KindTurn, Session: v, TurnID: v, State: "idle"}); !ok || err != nil {
+			t.Errorf("%q rejected: %v", v, err)
+		}
+	}
+}
+
+func TestMidnightBoundaryPartitionsByObservedDay(t *testing.T) {
+	dir := t.TempDir()
+	base := time.Date(2026, 10, 13, 23, 59, 59, 999100000, time.UTC)
+	w := &Writer{Dir: dir, Config: true, Getenv: env(nil), Now: func() time.Time { return base }}
+	// Two events inside the same millisecond: the second is corrected past midnight.
+	w.Emit(Record{Kind: KindTurn, Session: "s", TurnID: "t1", State: "done"})
+	w.Now = func() time.Time { return base.Add(100 * time.Microsecond) }
+	w.Emit(Record{Kind: KindTurn, Session: "s", TurnID: "t2", State: "done"})
+	b, err := os.ReadFile(filepath.Join(dir, "records-2026-10-13.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("want 2 records in observed day, got %d", len(lines))
+	}
+	r1, _ := Decode([]byte(lines[0]))
+	r2, _ := Decode([]byte(lines[1]))
+	if r2.At <= r1.At {
+		t.Fatalf("timestamps not increasing: %s %s", r1.At, r2.At)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "records-2026-10-14.jsonl")); err == nil {
+		t.Fatal("record leaked into next day file")
+	}
+	d, _ := BuildDigest(dir, "2026-10-13")
+	if d.Turns != 2 {
+		t.Fatalf("digest turns = %d, want 2", d.Turns)
+	}
+}
