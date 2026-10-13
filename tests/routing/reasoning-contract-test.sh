@@ -246,10 +246,10 @@ jq -e '.profile_ref == "crosslab-sol"
 # An override matching the already-resolved effort is still receipted, with
 # applied true and changed false -- a no-op override is not silently dropped.
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
-  --producer-identity=gpt-6-astra --context-file="$work/routine.json" --effort-override=high \
+  --producer-identity=gpt-6-astra --context-file="$work/routine.json" --effort-override=medium \
   > "$work/override-noop.json"
-jq -e '.effort_override.requested == "high" and .effort_override.applied == true
-  and .effort_override.changed == false and .effort_override.from == "high" and .effort_override.to == "high"' \
+jq -e '.effort_override.requested == "medium" and .effort_override.applied == true
+  and .effort_override.changed == false and .effort_override.from == "medium" and .effort_override.to == "medium"' \
   "$work/override-noop.json" >/dev/null \
   || { echo 'FAIL: no-op override not receipted correctly'; exit 1; }
 
@@ -259,9 +259,8 @@ python3 - "$ROOT/config/routing.yaml" "$work/claude-propagation.yaml" <<'PYFIXTU
 from pathlib import Path
 import sys
 text = Path(sys.argv[1]).read_text()
-needle = '    review-opus:\n      role: plan-review\n      backend: claude\n      model: claude-opus-5-5\n      reasoning_effort: high\n'
-assert text.count(needle) == 1
-text = text.replace(needle, needle.replace('reasoning_effort: high', 'reasoning_effort: medium'))
+needle = '    review-opus:\n      role: plan-review\n      backend: claude\n      model: claude-opus-5-5\n      reasoning_effort: medium\n'
+assert text.count(needle) == 1  # review-opus ships at medium (mk-42j9.20); the floor must raise it
 Path(sys.argv[2]).write_text(text)
 PYFIXTURE
 out="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role plan-review --policy "$work/claude-propagation.yaml" \
