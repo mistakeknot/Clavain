@@ -24,6 +24,13 @@ CLAUDE_LIMIT_MESSAGE = re.compile(
 # Codex's own retries ran out on HTTP 429. Dispatch retries the same model;
 # a persistent 429 does not walk (tests/routing/role-dispatch-test.sh).
 CODEX_EXHAUSTED_429 = re.compile(r"^exceeded retry limit, last status: 429\b")
+# Codex reports a full model pool and an entitlement gap as plain error
+# messages with no code. Both are seat availability, not task failures, so the
+# fallback walk must see them (an unmatched message is terminal_error and
+# suppresses it).
+CODEX_AT_CAPACITY = re.compile(r"\bmodel is at capacity\b", re.IGNORECASE)
+CODEX_ACCOUNT_UNSUPPORTED = re.compile(
+    r"\bmodel is not supported when using Codex with a ChatGPT account\b", re.IGNORECASE)
 STDERR_USAGE_LIMIT = re.compile(
     r"^(?:\x1b\[[0-9;]*m)*(?:ERROR\s*:\s*)?You[’']ve hit your usage limit\."
 )
@@ -165,13 +172,17 @@ def classify(events, stderr=""):
             failures.add("quota_exhausted")
         elif isinstance(error, dict) and CODEX_EXHAUSTED_429.match(str(error.get("message", ""))):
             target.add("rate_limited")
+        elif isinstance(error, dict) and CODEX_AT_CAPACITY.search(str(error.get("message", ""))):
+            target.add("rate_limited")
+        elif isinstance(error, dict) and CODEX_ACCOUNT_UNSUPPORTED.search(str(error.get("message", ""))):
+            target.add("account_access_absent")
         else:
             target.add("terminal_error")
     failures.update(transient_errors)
     if any(STDERR_USAGE_LIMIT.match(line.strip()) for line in stderr.splitlines()):
         failures.add("quota_exhausted")
     for failure in ("terminal_policy", "terminal_configuration", "terminal_error",
-                    "quota_exhausted", "rate_limited"):
+                    "quota_exhausted", "rate_limited", "account_access_absent"):
         if failure in failures:
             return failure
     return ""
