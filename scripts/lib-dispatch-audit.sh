@@ -291,7 +291,6 @@ _write_dispatch_run_receipt() {
   dir="$(dirname "$file")"
   [[ -d "$dir" ]] || (umask 077; mkdir -p "$dir") 2>/dev/null || return 1
   ended_ts="$(date +%s)"
-  [[ "$exit_code" == 0 ]] || outcome=failed
   if [[ -n "${CLAVAIN_DECISION_CONTEXT:-}" && -f "$CLAVAIN_DECISION_CONTEXT" ]]; then
     ctx_hash="$(sha256sum "$CLAVAIN_DECISION_CONTEXT" 2>/dev/null | awk '{print $1}')"
   fi
@@ -299,33 +298,56 @@ _write_dispatch_run_receipt() {
     tokens_in="$(sed -n 's/^Tokens: \([0-9][0-9]*\) in \/ \([0-9][0-9]*\) out.*/\1/p' "$SUMMARY_FILE" | head -1)"
     tokens_out="$(sed -n 's/^Tokens: \([0-9][0-9]*\) in \/ \([0-9][0-9]*\) out.*/\2/p' "$SUMMARY_FILE" | head -1)"
   fi
-  local line
-  line="$(jq -cn --arg role "$ROLE" --arg backend "${ENGINE:-}" --arg model "${MODEL:-}" \
-    --arg effort "${REASONING_EFFORT:-}" --arg producer "${PRODUCER_IDENTITY:-}" \
-    --arg bead "${CLAVAIN_BEAD_ID:-}" --arg ctx "$ctx_hash" \
-    --arg thread "${BB_THREAD_ID:-}" --arg session "${DISPATCH_SESSION_ID:-}" \
-    --arg dispatch "${DISPATCH_ID:-}" --arg attempt "${ATTEMPT_ID:-}" \
-    --arg tin "$tokens_in" --arg tout "$tokens_out" --arg outcome "$outcome" \
-    --argjson rc "$exit_code" --argjson s "${STARTED_TS:-$ended_ts}" --argjson e "$ended_ts" '
-    def nn: if . == "" then null else . end;
-    {schema_version: 1, kind: "dispatch-run-receipt",
-     role: $role, backend: ($backend|nn), model: ($model|nn), effort: ($effort|nn),
-     producer_identity: ($producer|nn), bead_id: ($bead|nn),
-     decision_context_sha256: ($ctx|nn),
-     thread_id: ($thread|nn), session_id: ($session|nn),
-     dispatch_id: ($dispatch|nn), attempt_id: ($attempt|nn),
-     started_at: ($s|todate), ended_at: ($e|todate), exit_code: $rc, outcome: $outcome,
-     tokens_in: (if $tin == "" then null else ($tin|tonumber) end),
-     tokens_out: (if $tout == "" then null else ($tout|tonumber) end)}')" || return 1
   # Serialize appends: large records exceed PIPE_BUF, so concurrent plain
-  # appends can interleave. The lock is held only for the single write, and the
-  # file is created owner-only.
+  # appends can interleave. The lock is held only while the record is built and
+  # appended, and the file is created owner-only. Without flock an equivalent
+  # mkdir lock is used; if no lock can be taken the receipt is skipped rather
+  # than risk an interleaved line. RUN_RECEIPT_SIGFILE, when it holds a status,
+  # overrides the caller's exit code, read under the lock so a signal that
+  # arrives while the append waits is the status that gets recorded.
+  # RUN_RECEIPT_RCFILE receives the status actually committed.
   (
     umask 077
-    exec 9>>"${file}.lock" || exit 1
+    trap '' INT TERM
     if command -v flock >/dev/null 2>&1; then
+      exec 9>>"${file}.lock" || exit 1
       flock -w 10 9 || exit 1
+    else
+      lockd="${file}.lockd"
+      tries=0
+      until mkdir "$lockd" 2>/dev/null; do
+        find "$lockd" -maxdepth 0 -mmin +1 -exec rmdir {} + 2>/dev/null || true
+        tries=$((tries + 1))
+        [[ "$tries" -le 100 ]] || exit 1
+        sleep 0.1
+      done
+      trap 'rmdir "$lockd" 2>/dev/null' EXIT
     fi
-    printf '%s\n' "$line" >> "$file"
+    if [[ -n "${RUN_RECEIPT_SIGFILE:-}" && -s "$RUN_RECEIPT_SIGFILE" ]]; then
+      sig_rc="$(cat "$RUN_RECEIPT_SIGFILE" 2>/dev/null)"
+      [[ "$sig_rc" =~ ^[0-9]+$ ]] && exit_code="$sig_rc"
+    fi
+    [[ "$exit_code" == 0 ]] || outcome=failed
+    line="$(jq -cn --arg role "$ROLE" --arg backend "${ENGINE:-}" --arg model "${MODEL:-}" \
+      --arg effort "${REASONING_EFFORT:-}" --arg producer "${PRODUCER_IDENTITY:-}" \
+      --arg bead "${CLAVAIN_BEAD_ID:-}" --arg ctx "$ctx_hash" \
+      --arg thread "${BB_THREAD_ID:-}" --arg session "${DISPATCH_SESSION_ID:-}" \
+      --arg dispatch "${DISPATCH_ID:-}" --arg attempt "${ATTEMPT_ID:-}" \
+      --arg tin "$tokens_in" --arg tout "$tokens_out" --arg outcome "$outcome" \
+      --argjson rc "$exit_code" --argjson s "${STARTED_TS:-$ended_ts}" --argjson e "$ended_ts" '
+      def nn: if . == "" then null else . end;
+      {schema_version: 1, kind: "dispatch-run-receipt",
+       role: $role, backend: ($backend|nn), model: ($model|nn), effort: ($effort|nn),
+       producer_identity: ($producer|nn), bead_id: ($bead|nn),
+       decision_context_sha256: ($ctx|nn),
+       thread_id: ($thread|nn), session_id: ($session|nn),
+       dispatch_id: ($dispatch|nn), attempt_id: ($attempt|nn),
+       started_at: ($s|todate), ended_at: ($e|todate), exit_code: $rc, outcome: $outcome,
+       tokens_in: (if $tin == "" then null else ($tin|tonumber) end),
+       tokens_out: (if $tout == "" then null else ($tout|tonumber) end)}')" || exit 1
+    printf '%s\n' "$line" >> "$file" || exit 1
+    if [[ -n "${RUN_RECEIPT_RCFILE:-}" ]]; then
+      printf '%s\n' "$exit_code" > "$RUN_RECEIPT_RCFILE" 2>/dev/null || true
+    fi
   )
 }

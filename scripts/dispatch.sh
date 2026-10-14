@@ -213,13 +213,40 @@ _dispatch_on_signal() {
 
 _dispatch_cleanup_state() {
   local _rc=$?
-  # Governed per-run receipt. Armed only once the run has started, written at
-  # most once, and isolated so a failure here never alters the exit status.
+  # Governed per-run receipt. Armed only once the run has started, marked
+  # written only after the append succeeded, and isolated so a failure here
+  # never alters the exit status except to make it agree with the receipt.
   if [[ "${RUN_RECEIPT_ARMED:-false}" == true && "${RUN_RECEIPT_WRITTEN:-false}" != true \
+        && "${RUN_RECEIPT_WRITING:-false}" != true \
         && -n "${ROLE:-}" && "${ROLE_RESOLVED:-}" == true ]]; then
-    RUN_RECEIPT_WRITTEN=true
-    ( set +e; _write_dispatch_run_receipt "$_rc" ) 2>/dev/null || true
+    RUN_RECEIPT_WRITING=true
+    local _sigfile _rcfile _writer _committed=""
+    _sigfile="$(mktemp 2>/dev/null)" || _sigfile=""
+    _rcfile="$(mktemp 2>/dev/null)" || _rcfile=""
+    : > "${_sigfile:-/dev/null}" 2>/dev/null || true
+    # A signal during the write only records its status; the writer reads it
+    # under the receipt lock, so the receipt and the process exit status agree.
+    trap '[[ -z "$_sigfile" ]] || echo 130 > "$_sigfile"' INT
+    trap '[[ -z "$_sigfile" ]] || echo 143 > "$_sigfile"' TERM
+    ( set +e; RUN_RECEIPT_SIGFILE="$_sigfile" RUN_RECEIPT_RCFILE="$_rcfile" \
+        _write_dispatch_run_receipt "$_rc" ) 2>/dev/null &
+    _writer=$!
+    # wait returns early when a trapped signal arrives; wait again for the writer.
+    local _wst=0
+    while :; do
+      _wst=0; wait "$_writer" 2>/dev/null || _wst=$?
+      kill -0 "$_writer" 2>/dev/null || break
+    done
+    if [[ "$_wst" == 0 ]]; then
+      RUN_RECEIPT_WRITTEN=true
+      if [[ -n "$_rcfile" ]]; then _committed="$(cat "$_rcfile" 2>/dev/null || true)"; fi
+    fi
+    rm -f "$_sigfile" "$_rcfile" 2>/dev/null || true
+    if [[ "$_committed" =~ ^[0-9]+$ ]]; then _rc="$_committed"; fi
+    RUN_RECEIPT_WRITING=false
   fi
+  # The EXIT trap exits with this, so the status matches the committed receipt.
+  DISPATCH_FINAL_RC="$_rc"
   rm -f "$STATE_FILE" "${STATE_FILE}.tmp" 2>/dev/null || true
   if [[ -n "${INTERBAND_DISPATCH_FILE:-}" ]]; then
     rm -f "$INTERBAND_DISPATCH_FILE" "${INTERBAND_DISPATCH_FILE}.tmp" 2>/dev/null || true
@@ -2573,7 +2600,7 @@ SUMMARY_FILE=""
 if [[ -n "$OUTPUT" ]]; then
   SUMMARY_FILE="${OUTPUT}.summary"
 fi
-trap _dispatch_cleanup_state EXIT
+trap '_dispatch_cleanup_state; exit "$DISPATCH_FINAL_RC"' EXIT
 trap '_dispatch_on_signal 130' INT
 trap '_dispatch_on_signal 143' TERM
 
@@ -3230,7 +3257,7 @@ chmod 600 "$PROVIDER_EVENTS"
 _dispatch_cleanup_stderr() {
   rm -f "$STDERR_FILE" 2>/dev/null || true
 }
-trap '_dispatch_cleanup_state; _dispatch_cleanup_stderr' EXIT
+trap '_dispatch_cleanup_state; _dispatch_cleanup_stderr; exit "$DISPATCH_FINAL_RC"' EXIT
 trap '_dispatch_on_signal 130' INT
 trap '_dispatch_on_signal 143' TERM
 
@@ -3767,11 +3794,12 @@ if [[ "$VIA" == bb ]]; then
     --dispatch-id "$DISPATCH_ID" --sandbox "$SANDBOX" \
     --timeout "${CLAVAIN_BB_SEAT_TIMEOUT:-$FLERE_TIMEOUT}" <<< "$PROMPT" 2> "$STDERR_FILE" &
   BB_PID=$!
-  trap 'BB_CANCELLED=1; kill -TERM "$BB_PID" 2>/dev/null || true; wait "$BB_PID" || true' INT TERM
+  trap 'BB_CANCELLED=130; kill -TERM "$BB_PID" 2>/dev/null || true; wait "$BB_PID" || true' INT
+  trap 'BB_CANCELLED=143; kill -TERM "$BB_PID" 2>/dev/null || true; wait "$BB_PID" || true' TERM
   wait "$BB_PID"
   BB_EXIT=$?
-  [[ "$BB_CANCELLED" == 0 ]] || BB_EXIT=130
-  trap '_dispatch_cleanup_state; _dispatch_cleanup_stderr' EXIT
+  [[ "$BB_CANCELLED" == 0 ]] || BB_EXIT="$BB_CANCELLED"
+  trap '_dispatch_cleanup_state; _dispatch_cleanup_stderr; exit "$DISPATCH_FINAL_RC"' EXIT
   trap '_dispatch_on_signal 130' INT
   trap '_dispatch_on_signal 143' TERM
   set -e
