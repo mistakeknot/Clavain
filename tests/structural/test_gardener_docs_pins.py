@@ -110,51 +110,56 @@ def test_matching_spelling_variants_are_clean(run, tmp_path):
 
 
 @pytest.mark.parametrize("spec,documented,warns", [
-    ("!=1.2.*", "1.2.3", True),
-    ("!=1.2.*", "2.0.0", False),
-    (">=1.0.0,!=1.0.0", "1.0.0", True),
-    (">=1.0.0,!=1.0.0", "1.0.1", False),
-    (">18.0.0", "18.0.0", True),
-    (">18.0.0", "18.0.1", False),
-    ("==2.0.*", "2.0.7", False),
-    ("==2.0.*", "2.1.0", True),
-    ("*", "9.9.9", False),
-    ("<=1.2", "1.2.5", None),
-    (">1.2", "1.2.5", None),
-    ("<=1.2.0", "1.2.5", True),
-    (">=18.0.0 <20.0.0", "19.0.0", False),
-    (">=18.0.0 <20.0.0", "20.1.0", True),
-    ("18.x", "18.2", False),
-    ("18.x", "17.0.2", True),
-    ("^1 || ^3", "3.2.0", False),
-    ("^1 || ^3", "2.0.0", True),
-    ("^0.2.3", "0.2.9", False),
-    ("^0.2.3", "0.3.0", True),
-    ("~1.4.5", "1.4.9", False),
-    ("~1.4.5", "1.5.0", True),
+    ("18.3.1", "18.3.1", False),
+    ("18.3.1", "18.3", False),
+    ("18.3.1", "18", False),
+    ("18.3.1", "18.4.0", True),
+    ("^18.3.1", "18.3.1", False),
     ("^18.3.1", "18", False),
-    ("^18.3.1", "18.2", True),
+    ("^18.3.1", "17.0.2", True),
+    ("~1.4.5", "1.4", False),
+    ("~1.4.5", "1.5", True),
+    ("v2.0.0", "2.0", False),
+    ("==2.0.0", "2.0.1", True),
+    ("18", "18.9.9", False),
+    ("18", "19.0.0", True),
+    # not plain versions: a note, never a guess (documented value would be flagged if evaluated)
+    ("!=1.2.*", "1.2.3", None),
+    (">=1.0.0,!=1.0.0", "1.0.0", None),
+    (">18.0.0", "18.0.0", None),
+    ("<=1.2", "1.2.5", None),
+    ("==2.0.*", "9.0.0", None),
+    ("*", "9.9.9", None),
+    (">=18.0.0 <20.0.0", "30.0.0", None),
+    ("18.x", "17.0.2", None),
+    ("^1 || ^3", "2.0.0", None),
+    ("1.2.3 - 2.3.4", "9.0.0", None),
+    ("1.2.3.4", "9.0.0", None),
+    ("19.0.0-rc.1", "9.0.0", None),
+    ("owner/repo#v1.2.3", "9.0.0", None),
+    ("latest", "9.0.0", None),
 ])
-def test_npm_constraints(run, tmp_path, spec, documented, warns):
+def test_spec_matching(run, tmp_path, spec, documented, warns):
     (tmp_path / "package.json").write_text(json.dumps({"dependencies": {"lib": spec}}))
     (tmp_path / "AGENTS.md").write_text(f"lib {documented}\n")
     report = json.loads(run(tmp_path, "--json").stdout)
-    if warns is None:  # not evaluated: a note, never a guess
+    if warns is None:
         assert report["drift"] == [] and any(spec in note for note in report["skipped"])
     else:
-        assert bool(report["drift"]) is warns
+        assert bool(report["drift"]) is warns and report["skipped"] == []
 
 
 def test_python_markers_urls_and_ranges(run, tmp_path):
     (tmp_path / "pyproject.toml").write_text(
         '[project]\nname = "x"\ndependencies = [\n'
-        '  "requests; python_version >= \'3.11\'",\n'
+        '  "requests==2.32.3; python_version >= \'3.11\'",\n'
         '  "pkg @ https://example.com/pkg-2.32.3.tar.gz",\n'
         '  "wide>=1.0,<3",\n  "compat~=1.4.2",\n]\n')
-    (tmp_path / "AGENTS.md").write_text("requests 3.11\npkg 2.32.3\nwide 2.5\ncompat 1.4.9\ncompat 1.5\n")
+    (tmp_path / "AGENTS.md").write_text("requests 2.32.3\npkg 9.9.9\nwide 9.5\ncompat 9.4.9\nrequests 2.30.0\n")
     report = json.loads(run(tmp_path, "--json").stdout)
-    assert [(d["name"], d["documented"]) for d in report["drift"]] == [("compat", "1.5")]
-    assert any(note.startswith("pkg") or " pkg " in note for note in report["skipped"])
+    assert [(d["name"], d["line"]) for d in report["drift"]] == [("requests", 5)]
+    assert {n.split()[0] for n in report["skipped"]} == {"pyproject.toml:"}
+    assert len(report["skipped"]) == 3
 
 
 def test_go_single_line_tab_directives_and_replace(run, tmp_path):
@@ -252,10 +257,35 @@ def test_malformed_go_replace_does_not_abort_the_scan(run, tmp_path):
     assert any("malformed replace" in n for n in report["skipped"])
 
 
-def test_python_name_spellings_are_one_package(run, tmp_path):
-    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\ndependencies = ["Foo_Bar==1.0.0", "long.name>=2.0,<3"]\n')
-    (tmp_path / "AGENTS.md").write_text("foo-bar 2.0.0\nfoo_bar 1.0.0\nlong-name 2.5\nlong-name 3.1\n")
-    assert [(d["line"], d["name"]) for d in drift(run, tmp_path)] == [(1, "foo-bar"), (4, "long-name")]
+def test_differing_specs_for_one_name_are_a_note(run, tmp_path):
+    (tmp_path / "package.json").write_text(json.dumps({
+        "dependencies": {"lib": "1.0.0"}, "optionalDependencies": {"lib": "2.0.0"}}))
+    (tmp_path / "AGENTS.md").write_text("lib 1.0.0\n")
+    report = json.loads(run(tmp_path, "--json").stdout)
+    assert report["drift"] == [] and any("differing specs" in n for n in report["skipped"])
+
+
+def test_python_duplicate_name_with_differing_specs_is_a_note(run, tmp_path):
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "x"\ndependencies = ["lib==1.0.0", "lib==2.0.0; python_version < \'3.9\'"]\n')
+    (tmp_path / "AGENTS.md").write_text("lib 1.0.0\n")
+    report = json.loads(run(tmp_path, "--json").stdout)
+    assert report["drift"] == [] and any("differing specs" in n for n in report["skipped"])
+
+
+def test_same_spec_in_two_tables_is_still_checked(run, tmp_path):
+    (tmp_path / "package.json").write_text(json.dumps({
+        "dependencies": {"lib": "1.0.0"}, "peerDependencies": {"lib": "1.0.0"}}))
+    (tmp_path / "AGENTS.md").write_text("lib 2.0.0\n")
+    assert len(drift(run, tmp_path)) == 1
+
+
+def test_go_modules_sharing_a_basename_are_not_compared_by_basename(run, tmp_path):
+    (tmp_path / "go.mod").write_text(
+        "module m\n\ngo 1.25.0\n\nrequire (\n\texample.com/a/log v1.0.0\n\texample.com/b/log v2.0.0\n)\n")
+    (tmp_path / "AGENTS.md").write_text("log 1.0.0\nexample.com/a/log 1.0.0\n")
+    report = json.loads(run(tmp_path, "--json").stdout)
+    assert report["drift"] == []
 
 
 def test_unreadable_manifest_is_a_note(run, tmp_path):

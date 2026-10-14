@@ -42,7 +42,7 @@ Fall back to prose only when none of the stronger options can catch the pattern.
 
 ## Docs-pins check
 
-`scripts/docs-pins.py` in this skill compares versions quoted in `AGENTS.md` and `README.md` (at the root and beside each manifest) with `package.json`, `go.mod` and `pyproject.toml`. A nested document answers to the nearest manifest, in its directory or above, that pins the name; a root document answers to the root manifest when it pins the name, otherwise to every nested manifest that does. Anything it cannot evaluate in full (URLs, VCS refs, `workspace:`, tags, prereleases, hyphen ranges, local `replace` paths, unreadable manifests) is listed as a note, not guessed at. It follows the same idea as a figures test that reads numbers in the docs and compares them with the code, but it is reusable across repositories and reports drift as a **warning**: it prints `WARNING <doc>:<line>: <name> documented as X, manifest pins Y (manifest file)` and exits 0. It never rewrites a document.
+`scripts/docs-pins.py` in this skill compares versions quoted in `AGENTS.md` and `README.md` (at the root and beside each manifest) with `package.json`, `go.mod` and `pyproject.toml`. A nested document answers to the nearest manifest, in its directory or above, that pins the name; a root document answers to the root manifest when it pins the name, otherwise to every nested manifest that does. It compares plain versions only. Anything else (ranges, wildcards, comparators, `||`, URLs, VCS refs, `workspace:`, tags, prereleases, local `replace` paths, unreadable manifests, and a name pinned with differing specs in one manifest) is listed as a note, not guessed at. It follows the same idea as a figures test that reads numbers in the docs and compares them with the code, but it is reusable across repositories and reports drift as a **warning**: it prints `WARNING <doc>:<line>: <name> documented as X, manifest pins Y (manifest file)` and exits 0. It never rewrites a document.
 
 `SKILL_DIR` is the directory this `SKILL.md` was loaded from; `REPO` is the repository being gardened, which need not contain this skill.
 
@@ -52,7 +52,7 @@ python3 -I "$SKILL_DIR/scripts/docs-pins.py" --root "$REPO" --strict   # exit 1 
 python3 -I "$SKILL_DIR/scripts/docs-pins.py" --root "$REPO" --json
 ```
 
-A documented `1.25` matches a pinned `1.25.3` (whole-component prefix), and a documented version that satisfies a range (`^18.3.1`, `>=18 <20`, `18.x`, `~=1.4.2`) matches too. Names are matched in any case, with markdown marks around the version. Resolve a warning by editing the prose to the manifest value, in the same commit as the pin change; do not edit a manifest to match stale prose. A repository may promote the check to a failing test with `--strict` once its drift is zero; that is the repository owner's call.
+A documented `1.25` matches a pinned `1.25.3` (whole-component prefix, either direction); a `^` or `~` pin is compared by its base version (`^18.3.1` is compared as `18.3.1`). Names are matched in any case, as written (Python names are not normalized), with markdown marks around the version. Resolve a warning by editing the prose to the manifest value, in the same commit as the pin change; do not edit a manifest to match stale prose. A repository may promote the check to a failing test with `--strict` once its drift is zero; that is the repository owner's call.
 
 ## Report
 

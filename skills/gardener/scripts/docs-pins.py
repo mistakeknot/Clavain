@@ -13,19 +13,20 @@ the name, otherwise to every nested manifest that does, so one quoting a
 version that differs in any of them is flagged (move the sentence beside the
 manifest it describes). Each warning names the disagreeing manifests.
 
-A documented version agrees with a manifest spec when it satisfies the spec
-(exact, ^, ~, ~=, comparators, 18.x / ==2.0.*, ranges joined by space, comma
-or ||), or abbreviates the spec's lower bound (1.25 for 1.25.3). A spec must
-parse completely to be used: prereleases, hyphen ranges, URLs, VCS refs,
-workspace:, tags and local paths are skipped and listed as notes, never
-guessed at.
+A pin is compared only when the manifest spec is one plain version: 1.25.3,
+v1.25.3, =1.25.3, ==1.25.3, or that version after ^ or ~ (the declared base).
+A documented version agrees when it equals the pin or is a whole-component
+prefix of it, or the other way round (1.25 for 1.25.3, 18 for ^18.3.1).
+Everything else is listed as a note and never guessed at: ranges, comparators,
+wildcards, || alternatives, prereleases, URLs, VCS refs, workspace:, tags, local
+paths, versions with more than three parts, and a name pinned with different
+specs in one manifest. Python package names are matched as written, ignoring case.
 
 Usage: python3 -I docs-pins.py [--root DIR] [--strict] [--json]
 """
 from __future__ import annotations
 
 import argparse
-import functools
 import json
 import os
 import re
@@ -37,16 +38,10 @@ from typing import Any
 SKIP_DIRS = {".git", "node_modules", "vendor", ".venv", "dist", "build", "target", ".agent_sources"}
 DOC_NAMES = ("AGENTS.md", "README.md")
 VERSION_RE = r"\d+(?:\.\d+)*"
-TOKEN_RE = re.compile(
-    r"(?P<op>\^|~>|~=|~|===|==|!=|>=|<=|>|<|=)?\s*v?"
-    r"(?P<ver>\d+(?:\.(?:\d+|[xX*]))*|[xX*])"
-)
-LOWER_OPS = {"", "=", "==", "===", "^", "~", "~>", "~=", ">=", ">"}
-WILDCARD_OPS = {"", "=", "==", "!="}
+SPEC_RE = re.compile(r"(?:\^|~|==?)?\s*v?(\d+(?:\.\d+){0,2})")
 MANIFESTS = ("package.json", "go.mod", "pyproject.toml")
 READ_ERRORS = (OSError, ValueError, TypeError, AttributeError, KeyError)  # decode errors are ValueErrors
 
-Part = int | None
 Pins = dict[str, list[str]]  # name -> specs
 
 
@@ -65,12 +60,18 @@ def is_reference(spec: str) -> bool:
             or re.match(r"[A-Za-z][A-Za-z0-9+.-]*:", spec) is not None)
 
 
-def add(pins: Pins, skipped: list[str], name: str, spec: str, max_parts: int | None = 3) -> None:
-    """Record a pin, or a note when the spec is not fully understood (npm and Go versions have at most three parts)."""
-    if is_reference(spec) or parse_spec(spec, max_parts) is None:
+def add(pins: Pins, skipped: list[str], name: str, spec: str) -> None:
+    """Record a pin, or a note when the spec is not one plain version."""
+    if is_reference(spec) or SPEC_RE.fullmatch(spec.strip()) is None:
         skipped.append(f"{name} {spec.strip()}".strip())
     else:
         pins.setdefault(name, []).append(spec.strip())
+
+
+def drop_ambiguous(pins: Pins, skipped: list[str]) -> None:
+    """A name pinned with different specs (npm overrides, extras, same Go module basename) is not compared."""
+    for name in [n for n, specs in pins.items() if len(set(specs)) > 1]:
+        skipped.append(f"{name} pinned with differing specs: {', '.join(sorted(set(pins.pop(name))))}")
 
 
 def package_json_pins(path: Path) -> tuple[Pins, list[str]]:
@@ -85,6 +86,7 @@ def package_json_pins(path: Path) -> tuple[Pins, list[str]]:
             raise ValueError(f"{key} is not an object")
         for name, spec in table.items():
             add(pins, skipped, name, str(spec))
+    drop_ambiguous(pins, skipped)
     return pins, skipped
 
 
@@ -121,8 +123,6 @@ def go_mod_pins(path: Path) -> tuple[Pins, list[str]]:
             directive, entry = fields[0], fields[1:]
         if directive == "go" and entry:
             add(pins, skipped, "Go", go_version(entry[0]))
-        elif directive == "toolchain" and entry:
-            add(pins, skipped, "Go", go_version(entry[0].removeprefix("go")))
         elif directive == "require" and len(entry) >= 2:
             required[entry[0]] = go_version(entry[1])
         elif directive == "replace" and "=>" in entry:
@@ -144,6 +144,7 @@ def go_mod_pins(path: Path) -> tuple[Pins, list[str]]:
             version = rule[1]
         for alias in go_aliases(module):
             add(pins, skipped, alias, version)
+    drop_ambiguous(pins, skipped)
     return pins, skipped
 
 
@@ -164,108 +165,22 @@ def pyproject_pins(path: Path) -> tuple[Pins, list[str]]:
         requirement = str(spec).split(";", 1)[0]  # drop the environment marker
         match = re.match(r"\s*([A-Za-z0-9_.-]+)(?:\[[^\]]*\])?\s*(.*)", requirement)
         if match and match.group(2).strip():
-            add(pins, skipped, match.group(1), match.group(2).strip("() "), None)
-    for name in list(pins):  # PEP 503 spellings: Foo_Bar, foo-bar and foo.bar are one package
-        normal = re.sub(r"[-_.]+", "-", name).lower()
-        for alias in {normal, normal.replace("-", "_"), normal.replace("-", ".")} - {name}:
-            pins.setdefault(alias, []).extend(pins[name])
+            add(pins, skipped, match.group(1), match.group(2).strip("() "))
+    drop_ambiguous(pins, skipped)
     return pins, skipped
 
 
 READERS = {"package.json": package_json_pins, "go.mod": go_mod_pins, "pyproject.toml": pyproject_pins}
 
 
-@functools.lru_cache(maxsize=None)
-def parse_spec(spec: str, max_parts: int | None = None) -> tuple[tuple[tuple[str, tuple[Part, ...]], ...], ...] | None:
-    """Alternatives of comparators, or None unless the whole spec is understood."""
-    alternatives = []
-    for alternative in spec.split("||"):
-        tokens = list(TOKEN_RE.finditer(alternative))
-        if not tokens or TOKEN_RE.sub(" ", alternative).strip(" ,\t") != "":
-            return None
-        comparators = []
-        for token in tokens:
-            op, parts = token["op"] or "", tuple(parts_of(token["ver"]))
-            if None in parts and op not in WILDCARD_OPS:
-                return None
-            if max_parts is not None and len(parts) > max_parts:
-                return None
-            if op in ("<=", ">") and len(parts) < 3:
-                return None  # npm widens a partial operand (<=1.2 is <1.3.0), Python does not
-            if op in ("", "=") and None not in parts and len(parts) < 3:
-                parts += (None,) * (3 - len(parts))  # npm: 1.2 means 1.2.x
-            comparators.append((op, parts))
-        alternatives.append(tuple(comparators))
-    return tuple(alternatives)
-
-
-def parts_of(version: str) -> list[Part]:
-    """'1.2.x' -> [1, 2, None]; None marks a wildcard component."""
-    return [None if p in ("x", "X", "*") else int(p) for p in version.split(".")]
-
-
-def padded(values: list[int], size: int) -> tuple[int, ...]:
-    return tuple(values + [0] * (size - len(values)))
-
-
-def prefix_compatible(documented: list[Part] | tuple[Part, ...], pinned: list[Part] | tuple[Part, ...]) -> bool:
-    n = min(len(documented), len(pinned))
-    return list(documented[:n]) == list(pinned[:n])
-
-
-def satisfies(doc: list[Part], op: str, ver: tuple[Part, ...]) -> bool:
-    if None in ver:  # 18.x / 2.0.* / *: match on the concrete prefix
-        matched = prefix_compatible(doc, ver[: ver.index(None)])
-        return not matched if op == "!=" else matched
-    size = max(len(doc), len(ver), 3)
-    d = padded([int(p or 0) for p in doc], size)
-    concrete = [int(p) for p in ver if p is not None]
-    v = padded(concrete, size)
-    n = len(concrete)
-    if op in ("", "=", "==", "==="):
-        return d == v
-    if op == "!=":
-        return d != v
-    if op == ">=":
-        return d >= v
-    if op == ">":
-        return d > v
-    if op == "<=":
-        return d <= v
-    if op == "<":
-        return d < v
-    if op == "^":
-        index = next((i for i, p in enumerate(concrete) if p), n - 1)
-        upper = concrete[:index] + [concrete[index] + 1]
-    elif op == "~=" and n > 1:
-        upper = concrete[: n - 2] + [concrete[n - 2] + 1]
-    elif op == "~=":
-        return d >= v
-    else:  # ~ and ~>
-        upper = [concrete[0] + 1] if n == 1 else [concrete[0], concrete[1] + 1]
-    return v <= d < padded(upper, size)
-
-
-def abbreviates(doc: list[Part], comparators: tuple[tuple[str, tuple[Part, ...]], ...]) -> bool:
-    """True when doc (1.25) is a whole-component prefix of a version the comparators allow (1.25.3)."""
-    lower = next((ver for op, ver in comparators if op in LOWER_OPS and None not in ver), None)
-    if lower is None or len(doc) >= len(lower):
-        return False
-    bumped = list(lower[:-1]) + [int(lower[-1] or 0) + 1]
-    for candidate in (lower, tuple(bumped)):
-        if prefix_compatible(doc, candidate) and all(satisfies(list(candidate), op, ver) for op, ver in comparators):
-            return True
-    return False
-
-
 def agrees(documented: str, spec: str) -> bool | None:
-    """True/False when the spec can be evaluated; None when it cannot."""
-    parsed = parse_spec(spec)
-    if parsed is None:
+    """True/False for a plain version spec; None when the spec is not one."""
+    match = SPEC_RE.fullmatch(spec.strip())
+    if match is None:
         return None
-    doc = parts_of(documented)
-    return any(all(satisfies(doc, op, ver) for op, ver in comparators) or abbreviates(doc, comparators)
-               for comparators in parsed)
+    doc, pin = documented.split("."), match[1].split(".")
+    n = min(len(doc), len(pin))
+    return [int(p) for p in doc[:n]] == [int(p) for p in pin[:n]]
 
 
 def mention_res(name: str) -> list[re.Pattern[str]]:
