@@ -636,7 +636,7 @@ if [[ -n "$BB_PROJECT" && "$BB_PROJECT" =~ ^[A-Za-z][A-Za-z0-9]*$ ]] && command 
         status="unreachable"; reason="${reason:-timed out after ${PER_ROOT_TIMEOUT}s}"
     elif (( rc != 0 )); then
         status="unreachable"; reason="${reason:-bb exited $rc}"
-    elif ! jq -e '.tasks | type == "array" and all(.[]; type == "object")' >/dev/null 2>&1 <<<"${out:-}"; then
+    elif ! jq -e '.tasks | type == "array" and all(.[]; type == "object" and ((.key? // null) | type == "string" and length > 0) and ((.status? // "") | IN("backlog","todo","in_progress","in_review","done","canceled")))' >/dev/null 2>&1 <<<"${out:-}"; then
         status="unreachable"; reason="${reason:-bb returned unparseable output}"
     elif ! cards="$(jq -c --arg root "$bb_root" '
             [.tasks[] | select(.status != "done" and .status != "canceled")

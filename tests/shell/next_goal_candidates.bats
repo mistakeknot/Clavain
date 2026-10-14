@@ -458,6 +458,17 @@ BB_CARDS='{"tasks":[{"key":"AFTM-43","title":"HUD","status":"backlog","priority"
     [ "$(jq '.candidates | length' <<<"$output")" -eq 0 ]
 }
 
+@test "bb board: a task object with no key or no recognized status is a failed lookup" {
+    for body in '{"tasks":[{}]}' '{"tasks":[{"key":"","status":"backlog"}]}' '{"tasks":[{"key":"AFTM-1"}]}' '{"tasks":[{"key":"AFTM-1","status":"weird"}]}' '{"tasks":[{"key":7,"status":"todo"}]}'; do
+        make_bb_list_stub "$body"
+        root="$(make_root quiet '[]')"
+        PATH="$TEST_DIR/stubs:$PATH" CLAVAIN_NEXT_GOAL_ROOTS="$root" run --separate-stderr bash "$SCRIPT_UNDER_TEST" --bb-project AFTM
+        [ "$status" -eq 0 ]
+        [ "$(jq -r '.roots[] | select(.tracker == "bb") | .status' <<<"$output")" = "unreachable" ]
+        [ "$(jq '.candidates | length' <<<"$output")" -eq 0 ]
+    done
+}
+
 @test "bb board: the list stub rejects a call missing its filters" {
     make_bb_list_stub "$BB_CARDS"
     run "$TEST_DIR/stubs/bb" tasks list --project AFTM --json

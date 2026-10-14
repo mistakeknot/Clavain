@@ -268,6 +268,12 @@ bb_show() {
     fi
 }
 
+# True when $2 (bb's raw JSON) is THIS key ($1) with a status the board knows.
+# Shared by the candidate lookup and --out-of so neither accepts another card.
+bb_card_valid() {
+    jq -e --arg id "$1" '.task.key? == $id and ((.task.status? // "") | IN("backlog","todo","in_progress","in_review","done","canceled"))' >/dev/null 2>&1 <<<"$2"
+}
+
 BEADS_JSON="[]"
 DISQUALIFIED="[]"
 ANSWERED=0
@@ -285,7 +291,7 @@ for id in ${IDS[@]+"${IDS[@]}"}; do
         # recognizes. Any other shape is the board failing to answer, and a
         # bead tracker saying "no such bead" cannot stand in for it: bd does
         # not hold board cards, so its not-found proves nothing about one.
-        if jq -e --arg id "$id" '.task.key? == $id and ((.task.status? // "") | IN("backlog","todo","in_progress","in_review","done","canceled"))' >/dev/null 2>&1 <<<"$raw"; then
+        if bb_card_valid "$id" "$raw"; then
             bb_card="$raw"; ANSWERED=1
         elif jq -e '.error.code? == "task_not_found"' >/dev/null 2>&1 <<<"$raw"; then
             ANSWERED=1
@@ -541,12 +547,12 @@ if [[ ${#IDS[@]} -gt 0 ]]; then
                 | (if $beat == "" then null else cand($beat) end) as $bc
                 | (if $beat == "" then null else bead($beat) end) as $bb
                 | (if $rc != null and $rc.in_streak then
-                     (if $beat != "" and $beat != $rec and $bc != null and ($bc.in_streak | not) and $bb.verdict == "ok"
+                     (if $beat != "" and $beat != $rec and $bc != null and ($bc.in_streak | not) and $bc.root_epic != null and $bb.verdict == "ok"
                       then {verdict: "warn",
                             reason: ("continues the lineage of " + ids($rc) + " (" + $rc.root_epic + "); allowed because it beat " + $beat + " (" + $bc.root_epic + ")")}
                       else {verdict: "disqualified",
                             reason: ("continues the lineage of " + ($rc.streak | length | tostring) + " of the last " + ($w | tostring)
-                                     + " closed goals (" + ids($rc) + ", epic " + $rc.root_epic + ") — name the open out-of-lineage candidate it beat with --beat, or recommend that one")}
+                                     + " closed goals (" + ids($rc) + ", epic " + $rc.root_epic + ") — name the open out-of-lineage candidate it beat with --beat (its lineage must be known), or recommend that one")}
                       end)
                    else null end) as $ro
                 | ([$cands[] | select(.in_streak)]) as $ins
@@ -608,7 +614,7 @@ for src in ${OUT_OF[@]+"${OUT_OF[@]}"}; do
     fi
     if [[ "$label" == "text" && "$src" =~ $BB_KEY_RE ]] && have_bb; then
         raw="$(bb_show "$src")"
-        if jq -e '.task.key? // empty' >/dev/null 2>&1 <<<"$raw"; then
+        if bb_card_valid "$src" "$raw"; then
             label="card $src"; body="$(jq -r '.task.description // ""' <<<"$raw")"
         fi
     fi

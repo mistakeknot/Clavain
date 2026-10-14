@@ -655,3 +655,25 @@ STUB
     [ "$(jq -r '.lineage.candidates[] | select(.id=="AFTM-38") | .in_streak' <<<"$output")" = "false" ]
     [ "$(jq -r '[.disqualified[] | select(contains("every candidate shares"))] | length' <<<"$output")" = "0" ]
 }
+
+@test "bb card: --beat naming an unknown-lineage card does not satisfy the override" {
+    make_lineage_bd_stub open labeled
+    make_ic_stub '"E1"'
+    make_bb_stub
+    BB_STUB_STATUS=backlog run bash "$SCRIPT" --recommend c1 --beat AFTM-38 c1 AFTM-38
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.ok' <<<"$output")" = "false" ]
+    [ "$(jq -r '.beads[] | select(.id=="c1") | .verdict' <<<"$output")" = "disqualified" ]
+}
+
+@test "bb card: --out-of rejects a card whose key is not the one requested" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    cat > "$STUB_DIR/bb" <<'STUB'
+#!/usr/bin/env bash
+printf '{"task":{"key":"OTHER-1","title":"x","status":"backlog","priority":"high","description":"OUT: wrongcard thing"}}\n'
+STUB
+    chmod +x "$STUB_DIR/bb"
+    run bash "$SCRIPT" --out-of AFTM-38 --text "/goal x"
+    [[ "$output" != *"card AFTM-38"* ]]
+    [[ "$output" != *"wrongcard"* ]]
+}
