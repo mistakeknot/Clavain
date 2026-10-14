@@ -68,13 +68,18 @@ _review_receipt_prepare() {
 # or BLOCK; prints nothing (rc 1) when there is no acceptable VERDICT line, so
 # no receipt is written. No Markdown is parsed: the output must contain no code
 # fence (three backticks or tildes) and no HTML comment delimiter anywhere, and
-# the ruling must be the last non-blank line, start at column 0 and follow a
+# NUL bytes are rejected; the ruling must be the last non-blank line, start at column 0 and follow a
 # blank line (or begin the file). Reviews that quote fences or comments get no
 # receipt rather than a guess at what they render as.
 _review_receipt_verdict() {
   local out="$1" last
   [[ -f "$out" ]] || return 1
-  grep -qE '```|~~~|<!--|-->' "$out" && return 1
+  # Continue only on grep status 1 (no delimiter found); a match or any scan
+  # error rejects. NUL bytes are rejected first: shell capture would drop them.
+  local rc
+  [[ "$(LC_ALL=C tr -d '\000' <"$out" | wc -c)" == "$(wc -c <"$out")" ]] || return 1
+  LC_ALL=C grep -qE '```|~~~|<!--|-->' "$out"; rc=$?
+  [[ $rc -eq 1 ]] || return 1
   last="$(awk '
     { sub(/\r$/, "") }
     $0 ~ /[^[:space:]]/ { last = $0; lastok = (blank || NR == 1); blank = 0; next }

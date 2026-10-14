@@ -142,3 +142,12 @@ teardown() { rm -rf "$T"; }
     ls "$T/reviews/o__r" | grep -vq '^\.' || true
     [ -z "$(find "$T/reviews/o__r" -name '.new.*')" ]
 }
+
+@test "verdict: NUL bytes and delimiter-scan errors never yield a receipt" {
+    printf 'Findings\n\nVERDICT: P\000ASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    printf '\000VERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    printf '```\nx\n\nVERDICT: PASS\n' > "$OUT"
+    grep() { return 2; }
+    run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    unset -f grep
+}
