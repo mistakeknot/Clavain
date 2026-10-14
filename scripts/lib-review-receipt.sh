@@ -64,38 +64,22 @@ _review_receipt_prepare() {
   [[ "$RR_DIFF_SHA256" =~ ^[0-9a-f]{64}$ ]] || return 1
 }
 
-# Strict verdict from the reviewer's final non-blank line outside a code fence.
-# Prints PASS, "PASS WITH NOTES" or BLOCK. Prints nothing (rc 1) when there is
-# no VERDICT line, so no receipt is written.
+# Strict verdict from the reviewer's final line. Prints PASS, "PASS WITH NOTES"
+# or BLOCK; prints nothing (rc 1) when there is no acceptable VERDICT line, so
+# no receipt is written. No Markdown is parsed: the output must contain no code
+# fence (three backticks or tildes) and no HTML comment delimiter anywhere, and
+# the ruling must be the last non-blank line, start at column 0 and follow a
+# blank line (or begin the file). Reviews that quote fences or comments get no
+# receipt rather than a guess at what they render as.
 _review_receipt_verdict() {
   local out="$1" last
   [[ -f "$out" ]] || return 1
-  # Last non-blank line outside a code fence. Fence openers are recognised
-  # behind any quote or list container prefix, so a fence opened in a list item
-  # or quote hides the rest; a closer must repeat the opening char, be at least
-  # as long and carry no text. The ruling must also start at column 0 and
-  # follow a blank line (or begin the file), which ends any lazy quote or list
-  # continuation. Anything doubtful yields no verdict, hence no receipt.
+  grep -qE '```|~~~|<!--|-->' "$out" && return 1
   last="$(awk '
     { sub(/\r$/, "") }
-    incomment { if (index($0, "-->")) incomment = 0; blank = 0; next }
-    {
-      if (match($0, /^[ \t>]*([-*+]|[0-9]+[.)])?[ \t]*(```+|~~~+)/)) {
-        seg = substr($0, RSTART, RLENGTH); pre = seg; sub(/[`~].*$/, "", pre); sub(/^[^`~]*/, "", seg)
-        rest = substr($0, RSTART + RLENGTH); ch = substr(seg, 1, 1)
-        # A prefixed (quote/list) fence is a different container from a bare
-        # one: only a same-kind line can close it, anything else is content.
-        pf = (pre ~ /[>*+0-9-]/) ? 1 : 0
-        if (open == "") { if (!(ch == "`" && index(rest, "`"))) { open = ch; olen = length(seg); opf = pf } ; blank = 0; next }
-        if (ch == open && length(seg) >= olen && pf == opf && rest ~ /^[ \t]*$/) { open = ""; blank = 1 }
-        next
-      }
-      if (open != "") next
-      if (index($0, "<!--")) { if (!index($0, "-->")) incomment = 1; blank = 0; next }
-      if ($0 ~ /[^[:space:]]/) { last = $0; lastok = (blank || NR == 1); blank = 0 }
-      else blank = 1
-    }
-    END { if (open == "" && !incomment && lastok) print last }' "$out")"
+    $0 ~ /[^[:space:]]/ { last = $0; lastok = (blank || NR == 1); blank = 0; next }
+    { blank = 1 }
+    END { if (lastok) print last }' "$out")"
   local re='^(\*\*|__)?[Vv][Ee][Rr][Dd][Ii][Cc][Tt][[:space:]]*:(\*\*|__)?[[:space:]]*(([^[:space:]*_`.]|[^[:space:]*_`].*[^[:space:]*_`.]))(\*\*|__)?[[:space:]]*$'
   [[ "$last" =~ $re ]] || return 1
   local v="${BASH_REMATCH[3]}"

@@ -91,14 +91,6 @@ teardown() { rm -rf "$T"; }
     [[ "$output" == *"--repo-id"* ]]
 }
 
-@test "verdict: quoted, indented and mismatched-fence PASS never count" {
-    printf '> VERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
-    printf '    VERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
-    printf '```\n~~~\nVERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
-    printf '```\nx\n```\nVERDICT: PASS\n' > "$OUT"; [ "$(_review_receipt_verdict "$OUT")" = PASS ]
-    printf '**VERDICT: PASS WITH NOTES**\n' > "$OUT"; [ "$(_review_receipt_verdict "$OUT")" = "PASS WITH NOTES" ]
-}
-
 @test "prepare rejects conflicting merges" {
     git -C "$R" checkout -q -b other "$BASE"
     echo x > "$R/a"; git -C "$R" commit -qam x
@@ -119,23 +111,15 @@ teardown() { rm -rf "$T"; }
     [ "$RR_DIFF_SHA256" != e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 ]
 }
 
-@test "verdict: list-nested fences and lazy quote continuations never count" {
-    printf -- '- ```text\n  VERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
-    printf '> Quoted evidence:\nVERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
-    printf 'Notes\nVERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+@test "verdict: fences, HTML comments, quotes and indentation never yield a receipt" {
+    for body in '```\nx\n```\n\nVERDICT: PASS\n' '~~~\n\nVERDICT: PASS\n' '```text\n    ```\n\nVERDICT: PASS\n' \
+        '<!-- example\n--> <!--\n\nVERDICT: PASS\n' '<!--\n\nVERDICT: PASS\n' '<!-- n -->\n\nVERDICT: PASS\n' \
+        '> VERDICT: PASS\n' '    VERDICT: PASS\n' '> Quoted:\nVERDICT: PASS\n' 'Notes\nVERDICT: PASS\n' \
+        '- ```text\n  VERDICT: PASS\n'; do
+        printf -- "$body" > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    done
     printf '> Quoted\n\nVERDICT: PASS\n' > "$OUT"; [ "$(_review_receipt_verdict "$OUT")" = PASS ]
-}
-
-@test "verdict: prefixed fence lines do not close a bare fence; HTML comments hide verdicts" {
-    printf '```text\n> ```\n\nVERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
-    printf '```text\n- ```\n\nVERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
-    printf '<!--\n\nVERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
-    printf '<!-- note -->\n\nVERDICT: PASS\n' > "$OUT"; [ "$(_review_receipt_verdict "$OUT")" = PASS ]
-    printf 'x\n\n<!-- a\nb -->\n\nVERDICT: BLOCK\n' > "$OUT"; [ "$(_review_receipt_verdict "$OUT")" = BLOCK ]
-    # Deliberately conservative: a list fence closed by an indented line is not
-    # recognised as closed, so no verdict (and no receipt) follows.
-    printf -- '- ```\n  x\n  ```\n\nVERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
-    printf -- '- ```\n  x\n- ```\n\nVERDICT: PASS\n' > "$OUT"; [ "$(_review_receipt_verdict "$OUT")" = PASS ]
+    printf '**VERDICT: PASS WITH NOTES**\n' > "$OUT"; [ "$(_review_receipt_verdict "$OUT")" = "PASS WITH NOTES" ]
 }
 
 @test "write refuses an existing directory or directory symlink at the receipt path" {
