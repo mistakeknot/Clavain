@@ -63,8 +63,10 @@ _load() {
     [ "$status" -eq 0 ]
     [[ "$output" == error$'\t'* ]]
     # The nonzero-exit fallback also yields "error" — require the scanned
-    # stderr text so this pins the prefix scan, not the fallback.
-    [[ "$output" == *"something went wrong"* ]]
+    # stderr line so this pins the prefix scan, not the fallback. Free text is
+    # redacted to <word> placeholders by design; the ERROR prefix survives.
+    [[ "$output" == *"ERROR:"* ]]
+    [[ "$output" != *"something went wrong"* ]]
 }
 
 # rc=0 gating (25e2b44): an executor QUOTING error-shaped text — grep results,

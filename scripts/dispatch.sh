@@ -3059,7 +3059,7 @@ _extract_verdict() {
             local _prev=""
             while [[ "$last_line" != "$_prev" ]]; do
                 _prev="$last_line"
-                last_line="$(sed -E 's/^\*\*(.*)\*\*$/\1/; s/^__(.*)__$/\1/; s/^`(.*)`$/\1/; s/^(\*\*|__|`)([A-Za-z]+[[:space:]]*:)\1([[:space:]]*)/\2 /' <<< "$last_line")"
+                last_line="$(sed -E 's/^(\*\*|__)([A-Za-z]+[[:space:]]*:)\1[[:space:]]*(\*\*|__)([^*_]*)\3$/\2 \4/; s/^(\*\*|__)([A-Za-z]+)\1[[:space:]]*:[[:space:]]*(\*\*|__)([^*_]*)\3$/\2: \4/; s/^\*\*([^*]*)\*\*$/\1/; s/^__(.*)__$/\1/; s/^`(.*)`$/\1/; s/^(\*\*|__|`)([A-Za-z]+[[:space:]]*:)\1([[:space:]]*)/\2 /' <<< "$last_line")"
                 last_line="${last_line%"${last_line##*[![:space:]]}"}"
             done
             if [[ "${last_line^^}" =~ ^VERDICT[[:space:]]*:[[:space:]]*PASS([[:space:]]+WITH[[:space:]]+NOTES)?[[:space:]]*$ ]]; then
@@ -3156,6 +3156,16 @@ sys.stdout.write(mod.redact_text(sys.stdin.read()))
 ' "$script_dir/provider-errors.py" 2>/dev/null || printf '<redacted>'
 }
 
+# Print a provider stderr capture to our stderr, redacted. The capture may hold
+# credentials or echoed prompt text; the raw file is only ever read for
+# classification and removed on exit.
+_emit_provider_stderr() {
+    local f="${1:-}"
+    [[ -n "$f" && -s "$f" ]] || return 0
+    _redact_provider_text < "$f" >&2 || true
+    printf '\n' >&2
+}
+
 _provider_error_text() {
     local events_file="${1:-}" raw="${2:-}"
     [[ -n "$events_file" && -s "$events_file" ]] || return 1
@@ -3193,7 +3203,11 @@ _detect_codex_error() {
         fi
         if [[ -n "$line" ]]; then
             line=$(printf '%s' "$line" | sed -E 's/\x1b\[[0-9;]*m//g' | tr -d '\r' | head -c 300)
-            if grep -qE '\b429\b' <<< "$line"; then
+            # Classify on the raw line, then redact before it is stored.
+            local http_retry=0
+            ! grep -qE '\b429\b' <<< "$line" || http_retry=1
+            line=$(printf '%s' "$line" | _redact_provider_text)
+            if [[ "$http_retry" == 1 ]]; then
                 kind="retry"
                 detail="Codex HTTP 429 (rate limited): $line"
             else
@@ -3206,7 +3220,7 @@ _detect_codex_error() {
         if [[ -z "$kind" ]]; then
             line=$(grep -m1 -E '^[[:space:]]*ERROR[[:space:]:]' "$stderr_file" 2>/dev/null || true)
             if [[ -n "$line" ]]; then
-                line=$(printf '%s' "$line" | sed -E 's/\x1b\[[0-9;]*m//g' | tr -d '\r' | head -c 300)
+                line=$(printf '%s' "$line" | sed -E 's/\x1b\[[0-9;]*m//g' | tr -d '\r' | head -c 300 | _redact_provider_text)
                 kind="error"
                 detail="$line"
             fi
@@ -3287,7 +3301,8 @@ _write_error_verdict() {
     esac
 
     if [[ -f "$verdict_file" ]]; then
-        cp "$verdict_file" "${verdict_file}.pre-error" 2>/dev/null || true
+        # The prior verdict may carry provider text from an earlier write.
+        _redact_provider_text < "$verdict_file" > "${verdict_file}.pre-error" 2>/dev/null || true
     fi
 
     cat > "$verdict_file" <<VERDICT
@@ -3855,7 +3870,7 @@ if [[ "$VIA" == bb ]]; then
   [[ "$BB_CANCELLED" == 0 ]] || BB_EXIT=130
   trap '_dispatch_cleanup_state; _dispatch_cleanup_stderr' EXIT INT TERM
   set -e
-  [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
+  _emit_provider_stderr "$STDERR_FILE"
   _extract_verdict "$OUTPUT"
   [[ "$BB_EXIT" == 0 ]] || _write_error_verdict "$OUTPUT" error 'BB execution evidence incomplete; inspect seat receipt'
   _post_dispatch_validate "$WORKDIR"
@@ -3896,7 +3911,7 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
     fi
   fi
   KIMI_EXIT="${PIPESTATUS[0]}"
-  [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
+  _emit_provider_stderr "$STDERR_FILE"
   [[ -n "${PROMPT_STDIN_FILE:-}" ]] && rm -f "$PROMPT_STDIN_FILE"
   set -e
   SEAT_MUTATED=""
@@ -3960,7 +3975,7 @@ elif [[ "$HAS_GAWK" == true ]]; then
     "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
     CODEX_EXIT="${PIPESTATUS[0]}"
   fi
-  [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
+  _emit_provider_stderr "$STDERR_FILE"
   set -e
 
   # Write summary from bash if awk didn't (fallback for short/failed runs)
@@ -4004,7 +4019,7 @@ else
     "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS"
     CODEX_EXIT="${PIPESTATUS[0]}"
   fi
-  [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
+  _emit_provider_stderr "$STDERR_FILE"
   set -e
 
   _dispatch_sync_interband_from_legacy

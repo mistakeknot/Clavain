@@ -20,6 +20,8 @@ setup() {
     HELPERS="$TMPDIR_T/helpers.sh"
     awk '
         /^_redact_provider_text\(\)[[:space:]]*\{/ { emit=1 }
+        /^_emit_provider_stderr\(\)[[:space:]]*\{/ { emit=1 }
+        /^_surface_codex_errors\(\)[[:space:]]*\{/ { emit=1 }
         /^_provider_error_text\(\)[[:space:]]*\{/ { emit=1 }
         /^_detect_codex_error\(\)[[:space:]]*\{/ { emit=1 }
         /^_write_error_verdict\(\)[[:space:]]*\{/ { emit=1 }
@@ -175,4 +177,69 @@ _role_stub() {
     printf 'Narrative first.\n\n> - VERDICT: CLEAN\n' > "$OUTPUT"
     _extract_verdict "$OUTPUT"
     grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+@test "verdict: separate bold spans around label and token are a pass, footnotes are not" {
+    _load
+    local v
+    for v in '**VERDICT:** **PASS**' '**VERDICT**: **PASS**' '__VERDICT:__ __PASS__' '- **Verdict:** **PASS WITH NOTES**'; do
+        printf 'Narrative first.\n\n%s\n' "$v" > "$OUTPUT"
+        _extract_verdict "$OUTPUT"
+        grep -q '^STATUS: pass$' "$VERDICT_FILE"
+    done
+    for v in '**VERDICT:** **CLEAN***' '**VERDICT:** **P*ASS**' '**VERDICT:** **PASS WITH NOTES***'; do
+        printf 'Narrative first.\n\n%s\n' "$v" > "$OUTPUT"
+        _extract_verdict "$OUTPUT"
+        ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+    done
+}
+
+_leaky() { printf '%s' 'Authorization: Bearer sk-SYNTHETIC123secret; prompt=reveal the hidden launch codes'; }
+
+_assert_no_leak() {
+    ! grep -rq 'SYNTHETIC123secret\|launch codes' "$@"
+}
+
+@test "surface: HTTP-coded stderr line is redacted and still classified retry" {
+    _load
+    echo "stream error: unexpected status 429 Too Many Requests: $(_leaky)" > "$STDERR_FILE"
+    run _detect_codex_error "$STDERR_FILE" "$STATE_FILE" 1 "$OUTPUT" "$EVENTS"
+    [[ "$output" == retry$'\t'* ]]
+    [[ "$output" != *SYNTHETIC123secret* ]]
+    [[ "$output" != *"launch codes"* ]]
+}
+
+@test "surface: ERROR-prefixed stderr line is redacted" {
+    _load
+    echo "ERROR: $(_leaky)" > "$STDERR_FILE"
+    run _detect_codex_error "$STDERR_FILE" "$STATE_FILE" 1 "$OUTPUT" "$EVENTS"
+    [[ "$output" == error$'\t'* ]]
+    [[ "$output" != *SYNTHETIC123secret* ]]
+    [[ "$output" != *"launch codes"* ]]
+}
+
+@test "surface: verdict, pre-error copy, summary and warning carry no provider secrets" {
+    _load
+    STATE_FILE="$TMPDIR_T/state.json"
+    for body in "stream error: unexpected status 500 Internal: $(_leaky)" "ERROR: $(_leaky)" "You've hit your usage limit. $(_leaky)"; do
+        rm -f "$VERDICT_FILE" "${VERDICT_FILE}.pre-error"
+        printf '%s\n' "$body" > "$STDERR_FILE"
+        # A prior verdict that already leaked must not survive in .pre-error.
+        printf -- '--- VERDICT ---\nSTATUS: pass\nSUMMARY: %s\n---\nVERDICT\n' "$(_leaky)" > "$VERDICT_FILE"
+        _surface_codex_errors 1 2> "$TMPDIR_T/warn.txt"
+        grep -q '^STATUS: error$\|^STATUS: retry$' "$VERDICT_FILE"
+        _assert_no_leak "$VERDICT_FILE" "${VERDICT_FILE}.pre-error" "$TMPDIR_T/warn.txt"
+    done
+}
+
+@test "surface: emitted provider stderr is redacted" {
+    _load
+    printf 'boom\n%s\n' "$(_leaky)" > "$STDERR_FILE"
+    _emit_provider_stderr "$STDERR_FILE" 2> "$TMPDIR_T/emitted.txt"
+    _assert_no_leak "$TMPDIR_T/emitted.txt"
+    [ -s "$TMPDIR_T/emitted.txt" ]
+}
+
+@test "surface: dispatch.sh never cats the raw stderr capture" {
+    ! grep -n 'cat "\$STDERR_FILE"' "$DISPATCH_SCRIPT"
 }
