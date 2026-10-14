@@ -78,18 +78,24 @@ _review_receipt_verdict() {
   # continuation. Anything doubtful yields no verdict, hence no receipt.
   last="$(awk '
     { sub(/\r$/, "") }
+    incomment { if (index($0, "-->")) incomment = 0; blank = 0; next }
     {
       if (match($0, /^[ \t>]*([-*+]|[0-9]+[.)])?[ \t]*(```+|~~~+)/)) {
-        seg = substr($0, RSTART, RLENGTH); sub(/^[^`~]*/, "", seg)
+        seg = substr($0, RSTART, RLENGTH); pre = seg; sub(/[`~].*$/, "", pre); sub(/^[^`~]*/, "", seg)
         rest = substr($0, RSTART + RLENGTH); ch = substr(seg, 1, 1)
-        if (open == "") { if (!(ch == "`" && index(rest, "`"))) { open = ch; olen = length(seg) } ; blank = 0; next }
-        else if (ch == open && length(seg) >= olen && rest ~ /^[ \t]*$/) { open = ""; blank = 1; next }
+        # A prefixed (quote/list) fence is a different container from a bare
+        # one: only a same-kind line can close it, anything else is content.
+        pf = (pre ~ /[>*+0-9-]/) ? 1 : 0
+        if (open == "") { if (!(ch == "`" && index(rest, "`"))) { open = ch; olen = length(seg); opf = pf } ; blank = 0; next }
+        if (ch == open && length(seg) >= olen && pf == opf && rest ~ /^[ \t]*$/) { open = ""; blank = 1 }
+        next
       }
-      if (open == "" && $0 ~ /[^[:space:]]/) { last = $0; lastok = (blank || NR == 1); blank = 0 }
-      else if ($0 !~ /[^[:space:]]/) blank = 1
-      else blank = 0
+      if (open != "") next
+      if (index($0, "<!--")) { if (!index($0, "-->")) incomment = 1; blank = 0; next }
+      if ($0 ~ /[^[:space:]]/) { last = $0; lastok = (blank || NR == 1); blank = 0 }
+      else blank = 1
     }
-    END { if (open == "" && lastok) print last }' "$out")"
+    END { if (open == "" && !incomment && lastok) print last }' "$out")"
   local re='^(\*\*|__)?[Vv][Ee][Rr][Dd][Ii][Cc][Tt][[:space:]]*:(\*\*|__)?[[:space:]]*(([^[:space:]*_`.]|[^[:space:]*_`].*[^[:space:]*_`.]))(\*\*|__)?[[:space:]]*$'
   [[ "$last" =~ $re ]] || return 1
   local v="${BASH_REMATCH[3]}"

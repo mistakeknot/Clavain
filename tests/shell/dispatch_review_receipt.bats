@@ -126,6 +126,18 @@ teardown() { rm -rf "$T"; }
     printf '> Quoted\n\nVERDICT: PASS\n' > "$OUT"; [ "$(_review_receipt_verdict "$OUT")" = PASS ]
 }
 
+@test "verdict: prefixed fence lines do not close a bare fence; HTML comments hide verdicts" {
+    printf '```text\n> ```\n\nVERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    printf '```text\n- ```\n\nVERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    printf '<!--\n\nVERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    printf '<!-- note -->\n\nVERDICT: PASS\n' > "$OUT"; [ "$(_review_receipt_verdict "$OUT")" = PASS ]
+    printf 'x\n\n<!-- a\nb -->\n\nVERDICT: BLOCK\n' > "$OUT"; [ "$(_review_receipt_verdict "$OUT")" = BLOCK ]
+    # Deliberately conservative: a list fence closed by an indented line is not
+    # recognised as closed, so no verdict (and no receipt) follows.
+    printf -- '- ```\n  x\n  ```\n\nVERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    printf -- '- ```\n  x\n- ```\n\nVERDICT: PASS\n' > "$OUT"; [ "$(_review_receipt_verdict "$OUT")" = PASS ]
+}
+
 @test "write refuses an existing directory or directory symlink at the receipt path" {
     _review_receipt_prepare "$R"
     mkdir -p "$T/reviews/o__r" "$T/elsewhere"
