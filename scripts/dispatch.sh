@@ -206,6 +206,14 @@ _dispatch_sync_interband_from_legacy() {
 }
 
 _dispatch_cleanup_state() {
+  local _rc=$?
+  # Governed per-run receipt. Armed only once the run has started, written at
+  # most once, and isolated so a failure here never alters the exit status.
+  if [[ "${RUN_RECEIPT_ARMED:-false}" == true && "${RUN_RECEIPT_WRITTEN:-false}" != true \
+        && -n "${ROLE:-}" && "${ROLE_RESOLVED:-}" == true ]]; then
+    RUN_RECEIPT_WRITTEN=true
+    ( set +e; _write_dispatch_run_receipt "$_rc" ) 2>/dev/null || true
+  fi
   rm -f "$STATE_FILE" "${STATE_FILE}.tmp" 2>/dev/null || true
   if [[ -n "${INTERBAND_DISPATCH_FILE:-}" ]]; then
     rm -f "$INTERBAND_DISPATCH_FILE" "${INTERBAND_DISPATCH_FILE}.tmp" 2>/dev/null || true
@@ -2568,6 +2576,7 @@ if ! touch "$STATE_FILE" 2>/dev/null; then
 fi
 
 STARTED_TS="$(date +%s)"
+RUN_RECEIPT_ARMED=true
 
 # Initial state
 _dispatch_write_state_files "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "starting" "0" "0" "0"

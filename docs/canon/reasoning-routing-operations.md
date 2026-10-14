@@ -278,6 +278,21 @@ directory with `CLAVAIN_INTERSTAT_BEAD_DIR`. IDs accept only letters, digits,
 underscore, period, colon, and hyphen; invalid candidates are ignored. The
 receipt records `bead_source` as `flag`, `env`, `interstat-session`, or `none`.
 
+### Per-run dispatch receipt
+
+Each governed dispatch (a `--role` run past resolution) appends one JSON object
+to a single JSONL file, `${CLAVAIN_DISPATCH_RECEIPT_FILE:-${XDG_STATE_HOME:-$HOME/.local/state}/clavain/dispatch-receipts.jsonl}`,
+when the run ends. `schema_version` is 1. Fields: `role`, `backend`, `model`,
+`effort`, `producer_identity`, `bead_id`, `decision_context_sha256` (the hash of
+the `CLAVAIN_DECISION_CONTEXT` file, never its content), `thread_id`,
+`session_id`, `dispatch_id`, `attempt_id`, `started_at` and `ended_at` (UTC),
+`exit_code`, `outcome` (`completed` or `failed`), and `tokens_in`/`tokens_out`
+when the backend reported them. Absent values are `null`. The receipt holds
+identifiers and counts only: no prompt text, secrets or file contents. Writing
+is best-effort and isolated, so a write failure never changes the dispatch exit
+status or verdict. Tokens by role over a period is a `jq` group-by on this file,
+for example `jq -s 'group_by(.role)[] | {role: .[0].role, in: (map(.tokens_in // 0) | add)}'`.
+
 Terminal receipts also expose `result.findings`. A model-authored verdict count
 has precedence; otherwise the parser counts top-level severity-tagged headings
 in the output body. A clean body produces observed zeroes. Ambiguous, missing,
