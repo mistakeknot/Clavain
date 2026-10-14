@@ -150,4 +150,12 @@ teardown() { rm -rf "$T"; }
     grep() { return 2; }
     run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
     unset -f grep
+    printf 'Findings\n\nVERDICT: P\000ASS\n' > "$OUT"
+    wc() { return 127; }
+    run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    unset -f wc
+    cmp() { return 127; }
+    run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    printf 'ok\n\nVERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    unset -f cmp
 }

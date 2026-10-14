@@ -77,7 +77,7 @@ _review_receipt_verdict() {
   # Continue only on grep status 1 (no delimiter found); a match or any scan
   # error rejects. NUL bytes are rejected first: shell capture would drop them.
   local rc
-  [[ "$(LC_ALL=C tr -d '\000' <"$out" | wc -c)" == "$(wc -c <"$out")" ]] || return 1
+  LC_ALL=C tr -d '\000' <"$out" | cmp -s - "$out" || return 1
   LC_ALL=C grep -qE '```|~~~|<!--|-->' "$out"; rc=$?
   [[ $rc -eq 1 ]] || return 1
   last="$(awk '
