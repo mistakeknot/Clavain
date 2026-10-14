@@ -9,7 +9,7 @@ Load this router once at the first substantive task and reuse it on resume unles
 
 Read the selected `docs/canon/reasoning-routing.md` before substantive planning or execution and record its accountable decision context. It contains the binding classification, role, frontier, reviewer, failure, evidence and authority rules. Code behavior changes and execution of plans count even when small. Select installed skills by actual task, read each selected body before applying it, and retain all unique specialist and companion capabilities. Trivial requests stay lightweight. Load reference detail only as needed.
 
-## Quick Router — 26 skills, 6 agents, and 58 commands
+## Quick Router — 27 skills, 6 agents, and 58 commands
 
 In Codex, read the selected skill's full `SKILL.md` from its path in the current catalog. Claude slash commands are not shell commands or Codex APIs. In Claude Code, invoke the corresponding Skill tool or installed command. Names below are capability hints; resolve the installed path before use.
 
@@ -26,6 +26,7 @@ Routes compose across phases. Fixing a bug requires `intertest:systematic-debugg
 | Audit or consolidate docs | `interscribe:interscribe` | `interwatch:doc-watch` for drift |
 | Review code or plan | `clavain:code-review-discipline` | `clavain:plan-reviewer` or the Interflux deeper-review engine |
 | Prepare an authorized release | `intertest:verification-before-completion` | `clavain:landing-a-change` and release procedure |
+| Repository upkeep (lint-first cleanup, baselines, docs-pins drift) | `clavain:gardener` | `clavain:upstream-sync-engine` for approved dependency bumps |
 | Choose next work | `internext:next-work` | `interphase:beads-workflow` |
 | Operate portfolio agency | `clavain:remontoire` | Only for portfolio operations |
 
