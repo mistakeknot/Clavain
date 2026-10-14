@@ -38,6 +38,7 @@ SERVICE_TIER=""
 MINIMUM_CODEX_VERSION=""
 FALLBACK_REASON=""
 PRODUCER_IDENTITY=""
+RR_REPO=""; RR_REPO_ID=""; RR_PR=""; RR_HEAD=""; RR_BASE=""
 VALIDATOR_RELATIONSHIP=""
 CAPACITY_SUBSTITUTE_JSON=""
 RECHECK_ITEMS=""
@@ -100,6 +101,7 @@ DISPATCH_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INTERBAND_DISPATCH_FILE=""
 DISPATCH_SESSION_ID="${DISPATCH_SESSION_ID:-${CLAUDE_SESSION_ID:-${CODEX_THREAD_ID:-}}}"
 source "${DISPATCH_SCRIPT_DIR}/lib-dispatch-audit.sh"
+source "${DISPATCH_SCRIPT_DIR}/lib-review-receipt.sh"
 source "${DISPATCH_SCRIPT_DIR}/lib-bb.sh"
 
 _bb_role_sandbox_allowed() {
@@ -213,6 +215,12 @@ _dispatch_on_signal() {
 
 _dispatch_cleanup_state() {
   local _rc=$?
+  # Review receipt (mk-zek32): only the resolved child that ran the review
+  # writes it. A requested receipt that cannot be written fails the run, so a
+  # caller never mistakes "no file" for a clean review.
+  if [[ "${ROLE_RESOLVED:-}" == true && "${ROLE:-}" == cross-lab-review ]] && _review_receipt_requested; then
+    _review_receipt_write "${OUTPUT:-}" "$_rc" || { [[ "$_rc" != 0 ]] || _rc=1; }
+  fi
   # Governed per-run receipt, best-effort. A signal before the write only sets
   # _sig_rc; the record is built after the status is final, and INT/TERM are
   # ignored just for the short append, so the receipt and the exit status agree.
@@ -293,6 +301,12 @@ Options:
   --context-file <PATH>        Structured reasoning decision context
   --policy-profile <NAME>      Declared policy overlay (pilot requires campaign scope)
   --producer-identity <ID>      Producer backend/model identity for validator audit records
+  --repo OWNER/NAME --repo-id ID --pr N --head SHA --base SHA
+                                Write a review receipt (cross-lab-review only; all five
+                                required; -C must hold both commits). One JSON file per
+                                PR head under ${CLAVAIN_REVIEW_RECEIPT_DIR:-~/.local/state/clavain/reviews},
+                                mode 0600, never overwritten. No file for a same-lab,
+                                substitute or verdict-less review; the run then exits 1.
   --plan <FILE>                 The contract the seat must read. It must exist before any
                                   model runs; for --to claude its directory is added as a
                                   readable root (--add-dir) so a plan outside -C is readable
@@ -1289,6 +1303,17 @@ while [[ $# -gt 0 ]]; do
       esac
       shift 2
       ;;
+    --repo|--repo-id|--pr|--head|--base)
+      require_arg "$1" "${2:-}"
+      case "$1" in
+        --repo) RR_REPO="$2" ;;
+        --repo-id) RR_REPO_ID="$2" ;;
+        --pr) RR_PR="$2" ;;
+        --head) RR_HEAD="$2" ;;
+        --base) RR_BASE="$2" ;;
+      esac
+      shift 2
+      ;;
     --phase)
       require_arg "$1" "${2:-}"
       PHASE="$2"
@@ -1547,6 +1572,16 @@ fi
 # the canonical --review-packet ROLE_PASSTHROUGH already injected below).
 if [[ -n "$REVIEW_INPUT" || -n "$REVIEW_PACKET" ]]; then
   _dispatch_prepare_review_packet "${1:-}" || exit 1
+fi
+
+# Review receipt (mk-zek32): all five flags or none, cross-lab-review only.
+# Validated and derived before any model runs, so a bad flag fails fast.
+if _review_receipt_requested; then
+  if [[ "$ROLE" != cross-lab-review ]]; then
+    echo "Error: --repo/--repo-id/--pr/--head/--base apply to --role cross-lab-review only" >&2
+    exit 1
+  fi
+  _review_receipt_prepare "${WORKDIR:-.}" || exit 1
 fi
 
 # A role is a complete Intercore-owned execution contract. The outer invocation
