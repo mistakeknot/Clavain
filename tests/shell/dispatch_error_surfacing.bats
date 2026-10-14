@@ -17,6 +17,7 @@ setup() {
     # Extract the helpers into a sourced snippet (stop before the invocation block)
     HELPERS="$TMPDIR_T/helpers.sh"
     awk '
+        /^_provider_error_text\(\)[[:space:]]*\{/ { emit=1 }
         /^_detect_codex_error\(\)[[:space:]]*\{/ { emit=1 }
         /^_write_error_verdict\(\)[[:space:]]*\{/ { emit=1 }
         /^_extract_verdict\(\)[[:space:]]*\{/ { emit=1 }

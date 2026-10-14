@@ -679,6 +679,15 @@ _dispatch_role_profile() {
     echo "Error: jq is required for --role dispatch" >&2
     return 1
   }
+  if [[ -n "${CLAVAIN_DECISION_CONTEXT:-}" ]]; then
+    if [[ "$CLAVAIN_DECISION_CONTEXT" == *[\{\[]* && ! -e "$CLAVAIN_DECISION_CONTEXT" ]]; then
+      echo "Error: CLAVAIN_DECISION_CONTEXT / --context-file must be the path of a JSON file, not inline JSON" >&2
+      return 1
+    elif [[ ! -f "$CLAVAIN_DECISION_CONTEXT" || ! -r "$CLAVAIN_DECISION_CONTEXT" ]]; then
+      echo "Error: CLAVAIN_DECISION_CONTEXT / --context-file '$CLAVAIN_DECISION_CONTEXT' is not a readable file" >&2
+      return 1
+    fi
+  fi
   local policy_source="${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
   _dispatch_routing_precheck "$role" "$policy_source" || return 1
   local headroom='{"status":"unknown"}' advice exclusions='[]' evidence derived base_context
@@ -697,10 +706,20 @@ _dispatch_role_profile() {
   [[ -z "$PRODUCER_IDENTITY" ]] || route_cmd+=(--producer-identity="$PRODUCER_IDENTITY")
   # Resolve against the control-plane checkout, not the task repository (which
   # can live outside Sylveste and need not carry its own routing.yaml).
-  resolved="$("${route_cmd[@]}" "${context_args[@]}")" || {
-    echo "Error: Intercore could not resolve dispatch role '$role'" >&2
+  local context_note=""
+  local route_err
+  route_err="$(mktemp "${TMPDIR:-/tmp}/clavain-route-err.XXXXXX")" || return 1
+  if ! resolved="$("${route_cmd[@]}" "${context_args[@]}" 2> "$route_err")"; then
+    [[ ! -s "$route_err" ]] || cat "$route_err" >&2
+    if grep -qiE 'unknown field|json:' "$route_err" 2>/dev/null; then
+      context_note=" (the decision context was rejected: it has an unknown key or invalid JSON; see the error above)"
+    fi
+    rm -f "$route_err"
+    echo "Error: Intercore could not resolve dispatch role '$role'$context_note" >&2
     return 1
-  }
+  fi
+  [[ ! -s "$route_err" ]] || cat "$route_err" >&2
+  rm -f "$route_err"
   if [[ "$(jq -r '.status' <<< "$headroom")" == known ]]; then
     advice="$(jq -cn --argjson snapshot "$headroom" --argjson route "$resolved" '{snapshot:$snapshot,route:$route}' |
       bash "$DISPATCH_SCRIPT_DIR/pool-headroom.sh" --stdin --role "$role")" || return 1
@@ -3032,10 +3051,13 @@ _extract_verdict() {
                 $0 ~ /[^[:space:]]/ { last = $0 }
                 END { if (open == "") print last }
             ' "$output_file" 2>/dev/null)" || last_line=""
-            if [[ "${last_line^^}" =~ ^VERDICT:[[:space:]]*PASS[[:space:]]*$ ]]; then
+            # Markdown dressing (bold, backticks, list/quote markers) is
+            # decoration; strip it from the final line before matching.
+            last_line="$(sed -E 's/\r$//; s/^[[:space:]>#*+•-]+//; s/[`*]//g; s/[[:space:]]+$//' <<< "$last_line")"
+            if [[ "${last_line^^}" =~ ^VERDICT[[:space:]]*:[[:space:]]*PASS([[:space:]]+WITH[[:space:]]+NOTES)?[[:space:]]*$ ]]; then
                 status="pass"
                 summary="Validator replay PASS."
-            elif [[ "${last_line^^}" =~ ^VERDICT:[[:space:]]*CLEAN[[:space:]]*$ ]]; then
+            elif [[ "${last_line^^}" =~ ^VERDICT[[:space:]]*:[[:space:]]*CLEAN[[:space:]]*$ ]]; then
                 status="pass"
                 summary="Agent reports clean completion."
             fi
@@ -3106,8 +3128,23 @@ _extract_verdict() {
 #   error  — codex exec failed visibly (HTTP 4xx/5xx, ERROR line, non-zero exit)
 #   retry  — HTTP 429 rate-limit (caller can back off)
 #   warn   — codex exited 0 but produced zero turns/messages/commands
+# Last provider error message from a codex JSONL event stream (turn.failed or
+# error events), single-line and length-capped. Prints "<event type>\t<text>".
+_provider_error_text() {
+    local events_file="${1:-}"
+    [[ -n "$events_file" && -s "$events_file" ]] || return 1
+    command -v jq >/dev/null 2>&1 || return 1
+    local out
+    out=$(jq -Rr 'fromjson? | select(type == "object" and (.type == "turn.failed" or .type == "error"))
+        | [.type, ((.error | if type == "object" then .message else . end) // .message // "" | tostring)] | @tsv' \
+        "$events_file" 2>/dev/null | awk -F'\t' 'NF >= 2 && $2 != "" { last = $0 } END { if (last != "") print last }') || return 1
+    [[ -n "$out" ]] || return 1
+    printf '%s' "$out" | tr -d '\r' | sed -E 's/\x1b\[[0-9;]*m//g' | head -c 400
+}
+
 _detect_codex_error() {
     local stderr_file="$1" state_file="$2" exit_code="${3:-0}" output_file="${4:-}"
+    local events_file="${5:-${PROVIDER_EVENTS:-}}"
     local kind="" detail="" line=""
 
     # Stderr pattern-scan only when the process actually failed. An executor's
@@ -3146,7 +3183,32 @@ _detect_codex_error() {
 
     if [[ -z "$kind" && "$exit_code" != "0" ]]; then
         kind="error"
-        detail="codex exec exited $exit_code (no stderr error pattern matched)"
+        # The real cause is usually in the JSONL events (turn.failed / error)
+        # or a usage-limit line on stderr, not in an ERROR/HTTP pattern.
+        local ev_text="" ev_type="" ev_msg=""
+        ev_text=$(_provider_error_text "$events_file" || true)
+        if [[ -n "$ev_text" ]]; then
+            ev_type="${ev_text%%$'\t'*}"
+            ev_msg="${ev_text#*$'\t'}"
+            if [[ "$ev_type" == "turn.failed" ]]; then
+                if grep -qiE 'content[ _-]?filter|cyber|safety|flagged|policy' <<< "$ev_msg"; then
+                    detail="codex turn.failed (content filter): $ev_msg"
+                else
+                    detail="codex turn.failed: $ev_msg"
+                fi
+            else
+                detail="codex provider error: $ev_msg"
+            fi
+        else
+            line=""
+            [[ ! -f "$stderr_file" ]] || line=$(grep -m1 -iE "hit your usage limit|usage limit" "$stderr_file" 2>/dev/null || true)
+            if [[ -n "$line" ]]; then
+                line=$(printf '%s' "$line" | sed -E 's/\x1b\[[0-9;]*m//g' | tr -d '\r' | head -c 300)
+                detail="codex usage limit: $line"
+            else
+                detail="codex exec exited $exit_code (no stderr error pattern matched, no provider error event)"
+            fi
+        fi
     fi
 
     # Zero-output heuristic: successful exit but nothing happened → suspicious.
@@ -3684,7 +3746,12 @@ _finalize_dispatch_result() {
   fi
   if [[ -n "$failure_class" ]]; then
     exit_code=1
-    [[ -z "$OUTPUT" ]] || _write_error_verdict "$OUTPUT" error "$failure_class (structured provider event)"
+    if [[ -n "$OUTPUT" ]]; then
+      local provider_text=""
+      provider_text=$(_provider_error_text "$PROVIDER_EVENTS" || true)
+      provider_text="${provider_text#*$'\t'}"
+      _write_error_verdict "$OUTPUT" error "$failure_class (structured provider event)${provider_text:+: $provider_text}"
+    fi
   fi
   if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "$exit_code" != 0 ]]; then
     failure_class=terminal_accounting
