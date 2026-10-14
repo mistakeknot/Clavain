@@ -60,7 +60,7 @@ teardown() { rm -rf "$T"; }
 
 @test "verdict mapping: notes pass, anything else blocks, none writes nothing" {
     _review_receipt_prepare "$R"
-    printf 'x\n**VERDICT: PASS WITH NOTES**\n' > "$OUT"
+    printf 'x\n\n**VERDICT: PASS WITH NOTES**\n' > "$OUT"
     [ "$(_review_receipt_verdict "$OUT")" = "PASS WITH NOTES" ]
     printf 'VERDICT: changes requested\n' > "$OUT"
     [ "$(_review_receipt_verdict "$OUT")" = BLOCK ]
