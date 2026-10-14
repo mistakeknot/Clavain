@@ -28,6 +28,7 @@ Routes compose across phases. Fixing a bug requires `intertest:systematic-debugg
 | Prepare an authorized release | `intertest:verification-before-completion` | `clavain:landing-a-change` and release procedure |
 | Choose next work | `internext:next-work` | `interphase:beads-workflow` |
 | Operate portfolio agency | `clavain:remontoire` | Only for portfolio operations |
+| Call a dependency API | Read the installed source at the pinned version ([source-first.md](references/source-first.md)) | Documentation lookup second; compiler and test output outrank memory |
 
 Every installed unique capability remains eligible beyond this table. Prefer an existing valid plan. Read [routing-tables.md](references/routing-tables.md) for specialty and host detail when needed.
 
