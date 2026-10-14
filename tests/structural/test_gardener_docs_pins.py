@@ -119,6 +119,9 @@ def test_matching_spelling_variants_are_clean(run, tmp_path):
     ("==2.0.*", "2.0.7", False),
     ("==2.0.*", "2.1.0", True),
     ("*", "9.9.9", False),
+    ("<=1.2", "1.2.5", None),
+    (">1.2", "1.2.5", None),
+    ("<=1.2.0", "1.2.5", True),
     (">=18.0.0 <20.0.0", "19.0.0", False),
     (">=18.0.0 <20.0.0", "20.1.0", True),
     ("18.x", "18.2", False),
@@ -135,7 +138,11 @@ def test_matching_spelling_variants_are_clean(run, tmp_path):
 def test_npm_constraints(run, tmp_path, spec, documented, warns):
     (tmp_path / "package.json").write_text(json.dumps({"dependencies": {"lib": spec}}))
     (tmp_path / "AGENTS.md").write_text(f"lib {documented}\n")
-    assert bool(drift(run, tmp_path)) is warns
+    report = json.loads(run(tmp_path, "--json").stdout)
+    if warns is None:  # not evaluated: a note, never a guess
+        assert report["drift"] == [] and any(spec in note for note in report["skipped"])
+    else:
+        assert bool(report["drift"]) is warns
 
 
 def test_python_markers_urls_and_ranges(run, tmp_path):
@@ -227,6 +234,28 @@ def test_odd_manifest_shapes_are_notes(run, tmp_path, content):
     result = run(tmp_path, "--strict")
     assert result.returncode == 0, result.stderr
     assert "package.json: unreadable" in result.stdout
+
+
+def test_four_part_npm_version_is_a_note(run, tmp_path):
+    (tmp_path / "package.json").write_text(json.dumps({"dependencies": {"lib": "1.2.3.4"}}))
+    (tmp_path / "AGENTS.md").write_text("lib 2.0.0\n")
+    report = json.loads(run(tmp_path, "--json").stdout)
+    assert report["drift"] == [] and report["skipped"] == ["package.json: lib 1.2.3.4"]
+
+
+def test_malformed_go_replace_does_not_abort_the_scan(run, tmp_path):
+    (tmp_path / "go.mod").write_text("module m\n\ngo 1.25.0\n\nreplace => ../lib\nreplace ../x =>\n")
+    (tmp_path / "package.json").write_text(json.dumps({"dependencies": {"react": "18.3.1"}}))
+    (tmp_path / "AGENTS.md").write_text("react 17.0.2\nGo 1.24\n")
+    report = json.loads(run(tmp_path, "--json").stdout)
+    assert sorted(d["name"] for d in report["drift"]) == ["Go", "react"]
+    assert any("malformed replace" in n for n in report["skipped"])
+
+
+def test_python_name_spellings_are_one_package(run, tmp_path):
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\ndependencies = ["Foo_Bar==1.0.0", "long.name>=2.0,<3"]\n')
+    (tmp_path / "AGENTS.md").write_text("foo-bar 2.0.0\nfoo_bar 1.0.0\nlong-name 2.5\nlong-name 3.1\n")
+    assert [(d["line"], d["name"]) for d in drift(run, tmp_path)] == [(1, "foo-bar"), (4, "long-name")]
 
 
 def test_unreadable_manifest_is_a_note(run, tmp_path):

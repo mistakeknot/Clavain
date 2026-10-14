@@ -65,8 +65,9 @@ def is_reference(spec: str) -> bool:
             or re.match(r"[A-Za-z][A-Za-z0-9+.-]*:", spec) is not None)
 
 
-def add(pins: Pins, skipped: list[str], name: str, spec: str) -> None:
-    if is_reference(spec) or parse_spec(spec) is None:
+def add(pins: Pins, skipped: list[str], name: str, spec: str, max_parts: int | None = 3) -> None:
+    """Record a pin, or a note when the spec is not fully understood (npm and Go versions have at most three parts)."""
+    if is_reference(spec) or parse_spec(spec, max_parts) is None:
         skipped.append(f"{name} {spec.strip()}".strip())
     else:
         pins.setdefault(name, []).append(spec.strip())
@@ -127,6 +128,9 @@ def go_mod_pins(path: Path) -> tuple[Pins, list[str]]:
         elif directive == "replace" and "=>" in entry:
             at = entry.index("=>")
             left, right = entry[:at], entry[at + 1:]
+            if not left or not right:
+                skipped.append("malformed replace directive")
+                continue
             old = go_version(left[1]) if len(left) > 1 else None
             new = go_version(right[1]) if len(right) > 1 else None  # a local path has no version
             replaced.setdefault(left[0], []).append((old, new))
@@ -160,7 +164,11 @@ def pyproject_pins(path: Path) -> tuple[Pins, list[str]]:
         requirement = str(spec).split(";", 1)[0]  # drop the environment marker
         match = re.match(r"\s*([A-Za-z0-9_.-]+)(?:\[[^\]]*\])?\s*(.*)", requirement)
         if match and match.group(2).strip():
-            add(pins, skipped, match.group(1), match.group(2).strip("() "))
+            add(pins, skipped, match.group(1), match.group(2).strip("() "), None)
+    for name in list(pins):  # PEP 503 spellings: Foo_Bar, foo-bar and foo.bar are one package
+        normal = re.sub(r"[-_.]+", "-", name).lower()
+        for alias in {normal, normal.replace("-", "_"), normal.replace("-", ".")} - {name}:
+            pins.setdefault(alias, []).extend(pins[name])
     return pins, skipped
 
 
@@ -168,7 +176,7 @@ READERS = {"package.json": package_json_pins, "go.mod": go_mod_pins, "pyproject.
 
 
 @functools.lru_cache(maxsize=None)
-def parse_spec(spec: str) -> tuple[tuple[tuple[str, tuple[Part, ...]], ...], ...] | None:
+def parse_spec(spec: str, max_parts: int | None = None) -> tuple[tuple[tuple[str, tuple[Part, ...]], ...], ...] | None:
     """Alternatives of comparators, or None unless the whole spec is understood."""
     alternatives = []
     for alternative in spec.split("||"):
@@ -180,6 +188,10 @@ def parse_spec(spec: str) -> tuple[tuple[tuple[str, tuple[Part, ...]], ...], ...
             op, parts = token["op"] or "", tuple(parts_of(token["ver"]))
             if None in parts and op not in WILDCARD_OPS:
                 return None
+            if max_parts is not None and len(parts) > max_parts:
+                return None
+            if op in ("<=", ">") and len(parts) < 3:
+                return None  # npm widens a partial operand (<=1.2 is <1.3.0), Python does not
             if op in ("", "=") and None not in parts and len(parts) < 3:
                 parts += (None,) * (3 - len(parts))  # npm: 1.2 means 1.2.x
             comparators.append((op, parts))
