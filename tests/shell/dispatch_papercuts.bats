@@ -8,6 +8,7 @@ setup() {
     load test_helper
 
     DISPATCH_SCRIPT="$BATS_TEST_DIRNAME/../../scripts/dispatch.sh"
+    DISPATCH_SCRIPT_DIR="$BATS_TEST_DIRNAME/../../scripts"
     TMPDIR_T="$(mktemp -d)"
     STATE_FILE="$TMPDIR_T/state.json"
     STDERR_FILE="$TMPDIR_T/stderr.txt"
@@ -18,6 +19,7 @@ setup() {
 
     HELPERS="$TMPDIR_T/helpers.sh"
     awk '
+        /^_redact_provider_text\(\)[[:space:]]*\{/ { emit=1 }
         /^_provider_error_text\(\)[[:space:]]*\{/ { emit=1 }
         /^_detect_codex_error\(\)[[:space:]]*\{/ { emit=1 }
         /^_write_error_verdict\(\)[[:space:]]*\{/ { emit=1 }
@@ -85,7 +87,7 @@ _load() {
     printf '%s\n' '{"type":"turn.failed","error":{"message":"This request was flagged by the cyber content filter."}}' > "$EVENTS"
     run _detect_codex_error "$STDERR_FILE" "$STATE_FILE" 1 "$OUTPUT" "$EVENTS"
     [[ "$output" == *"content filter"* ]]
-    [[ "$output" == *"flagged"* ]]
+    [[ "$output" == *"This request was"* ]]
 }
 
 @test "detect: top-level error event message is surfaced" {
@@ -134,4 +136,43 @@ _role_stub() {
     [ "$status" -ne 0 ]
     [[ "$output" == *"unknown field"* ]]
     [[ "$output" == *"decision context was rejected"* ]]
+}
+
+@test "detect: provider error text is redacted in the sidecar and stderr" {
+    _load
+    printf '%s\n' '{"type":"turn.failed","error":{"message":"Authorization: Bearer sk-SYNTHETIC123secret; prompt=reveal the hidden launch codes"}}' > "$EVENTS"
+    run _detect_codex_error "$STDERR_FILE" "$STATE_FILE" 1 "$OUTPUT" "$EVENTS"
+    [[ "$output" != *"sk-SYNTHETIC123secret"* ]]
+    [[ "$output" != *"hidden launch codes"* ]]
+    _write_error_verdict "$OUTPUT" error "$output" 2> "$TMPDIR_T/werr.txt"
+    ! grep -q 'SYNTHETIC123secret\|launch codes' "$VERDICT_FILE" "$TMPDIR_T/werr.txt"
+}
+
+@test "detect: usage-limit stderr line is redacted" {
+    _load
+    printf "You've hit your usage limit. Authorization: Bearer sk-SYNTHETIC123secret; prompt=reveal the codes\n" > "$STDERR_FILE"
+    run _detect_codex_error "$STDERR_FILE" "$STATE_FILE" 1 "$OUTPUT" "$EVENTS"
+    [[ "$output" == *"usage limit"* ]]
+    [[ "$output" != *"sk-SYNTHETIC123secret"* ]]
+    [[ "$output" != *"reveal the codes"* ]]
+}
+
+@test "verdict: trailing-line footnote asterisks never become a pass" {
+    _load
+    local v
+    for v in 'VERDICT: CLEAN*' 'VERDICT: P*ASS' 'VERDICT: PASS WITH NOTES*'; do
+        printf 'Narrative first.\n\n%s\n' "$v" > "$OUTPUT"
+        _extract_verdict "$OUTPUT"
+        ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+    done
+}
+
+@test "verdict: backtick-wrapped and quoted final lines are still a pass" {
+    _load
+    printf 'Narrative first.\n\n`VERDICT: PASS`\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
+    printf 'Narrative first.\n\n> - VERDICT: CLEAN\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
 }

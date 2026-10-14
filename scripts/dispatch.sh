@@ -3051,9 +3051,17 @@ _extract_verdict() {
                 $0 ~ /[^[:space:]]/ { last = $0 }
                 END { if (open == "") print last }
             ' "$output_file" 2>/dev/null)" || last_line=""
-            # Markdown dressing (bold, backticks, list/quote markers) is
-            # decoration; strip it from the final line before matching.
-            last_line="$(sed -E 's/\r$//; s/^[[:space:]>#*+•-]+//; s/[`*]//g; s/[[:space:]]+$//' <<< "$last_line")"
+            # Strip only balanced outer decoration: list/quote/heading markers,
+            # then matching ** / __ / ` wrappers (also around just the label,
+            # as in **Verdict:** PASS). Unbalanced or interior asterisks stay,
+            # so "CLEAN*" and "P*ASS" never become a pass.
+            last_line="$(sed -E 's/\r$//; s/^[[:space:]]*([>#+•-]+[[:space:]]*)+//; s/^[[:space:]]*\*[[:space:]]+//; s/[[:space:]]+$//' <<< "$last_line")"
+            local _prev=""
+            while [[ "$last_line" != "$_prev" ]]; do
+                _prev="$last_line"
+                last_line="$(sed -E 's/^\*\*(.*)\*\*$/\1/; s/^__(.*)__$/\1/; s/^`(.*)`$/\1/; s/^(\*\*|__|`)([A-Za-z]+[[:space:]]*:)\1([[:space:]]*)/\2 /' <<< "$last_line")"
+                last_line="${last_line%"${last_line##*[![:space:]]}"}"
+            done
             if [[ "${last_line^^}" =~ ^VERDICT[[:space:]]*:[[:space:]]*PASS([[:space:]]+WITH[[:space:]]+NOTES)?[[:space:]]*$ ]]; then
                 status="pass"
                 summary="Validator replay PASS."
@@ -3130,8 +3138,26 @@ _extract_verdict() {
 #   warn   — codex exited 0 but produced zero turns/messages/commands
 # Last provider error message from a codex JSONL event stream (turn.failed or
 # error events), single-line and length-capped. Prints "<event type>\t<text>".
+# Redact provider-originated text with provider-errors.py before it reaches a
+# verdict sidecar or stderr. Fails closed to a placeholder when the redactor is
+# unavailable. Reads stdin, writes stdout.
+_redact_provider_text() {
+    local script_dir="${DISPATCH_SCRIPT_DIR:-}"
+    if [[ -z "$script_dir" || ! -f "$script_dir/provider-errors.py" ]]; then
+        printf '<redacted>'
+        return 0
+    fi
+    python3 -c '
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("provider_errors", sys.argv[1])
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+sys.stdout.write(mod.redact_text(sys.stdin.read()))
+' "$script_dir/provider-errors.py" 2>/dev/null || printf '<redacted>'
+}
+
 _provider_error_text() {
-    local events_file="${1:-}"
+    local events_file="${1:-}" raw="${2:-}"
     [[ -n "$events_file" && -s "$events_file" ]] || return 1
     command -v jq >/dev/null 2>&1 || return 1
     local out
@@ -3139,7 +3165,13 @@ _provider_error_text() {
         | [.type, ((.error | if type == "object" then .message else . end) // .message // "" | tostring)] | @tsv' \
         "$events_file" 2>/dev/null | awk -F'\t' 'NF >= 2 && $2 != "" { last = $0 } END { if (last != "") print last }') || return 1
     [[ -n "$out" ]] || return 1
-    printf '%s' "$out" | tr -d '\r' | sed -E 's/\x1b\[[0-9;]*m//g' | head -c 400
+    out=$(printf '%s' "$out" | tr -d '\r' | sed -E 's/\x1b\[[0-9;]*m//g' | head -c 400)
+    if [[ "$raw" == raw ]]; then
+        printf '%s' "$out"
+    else
+        local ev_t="${out%%$'\t'*}" ev_m="${out#*$'\t'}"
+        printf '%s\t%s' "$ev_t" "$(printf '%s' "$ev_m" | _redact_provider_text)"
+    fi
 }
 
 _detect_codex_error() {
@@ -3186,12 +3218,14 @@ _detect_codex_error() {
         # The real cause is usually in the JSONL events (turn.failed / error)
         # or a usage-limit line on stderr, not in an ERROR/HTTP pattern.
         local ev_text="" ev_type="" ev_msg=""
-        ev_text=$(_provider_error_text "$events_file" || true)
+        ev_text=$(_provider_error_text "$events_file" raw || true)
         if [[ -n "$ev_text" ]]; then
             ev_type="${ev_text%%$'\t'*}"
             ev_msg="${ev_text#*$'\t'}"
+            local ev_class_msg="$ev_msg"
+            ev_msg=$(printf '%s' "$ev_msg" | _redact_provider_text)
             if [[ "$ev_type" == "turn.failed" ]]; then
-                if grep -qiE 'content[ _-]?filter|cyber|safety|flagged|policy' <<< "$ev_msg"; then
+                if grep -qiE 'content[ _-]?filter|cyber|safety|flagged|policy' <<< "$ev_class_msg"; then
                     detail="codex turn.failed (content filter): $ev_msg"
                 else
                     detail="codex turn.failed: $ev_msg"
@@ -3203,7 +3237,7 @@ _detect_codex_error() {
             line=""
             [[ ! -f "$stderr_file" ]] || line=$(grep -m1 -iE "hit your usage limit|usage limit" "$stderr_file" 2>/dev/null || true)
             if [[ -n "$line" ]]; then
-                line=$(printf '%s' "$line" | sed -E 's/\x1b\[[0-9;]*m//g' | tr -d '\r' | head -c 300)
+                line=$(printf '%s' "$line" | sed -E 's/\x1b\[[0-9;]*m//g' | tr -d '\r' | head -c 300 | _redact_provider_text)
                 detail="codex usage limit: $line"
             else
                 detail="codex exec exited $exit_code (no stderr error pattern matched, no provider error event)"

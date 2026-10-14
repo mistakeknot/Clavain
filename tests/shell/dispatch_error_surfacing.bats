@@ -8,6 +8,7 @@ setup() {
     load test_helper
 
     DISPATCH_SCRIPT="$BATS_TEST_DIRNAME/../../scripts/dispatch.sh"
+    DISPATCH_SCRIPT_DIR="$BATS_TEST_DIRNAME/../../scripts"
     TMPDIR_T="$(mktemp -d)"
     STATE_FILE="$TMPDIR_T/state.json"
     STDERR_FILE="$TMPDIR_T/stderr.txt"
@@ -17,6 +18,7 @@ setup() {
     # Extract the helpers into a sourced snippet (stop before the invocation block)
     HELPERS="$TMPDIR_T/helpers.sh"
     awk '
+        /^_redact_provider_text\(\)[[:space:]]*\{/ { emit=1 }
         /^_provider_error_text\(\)[[:space:]]*\{/ { emit=1 }
         /^_detect_codex_error\(\)[[:space:]]*\{/ { emit=1 }
         /^_write_error_verdict\(\)[[:space:]]*\{/ { emit=1 }
