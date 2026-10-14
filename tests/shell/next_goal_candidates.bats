@@ -368,3 +368,74 @@ make_backlog_root() {
     [ "$status" -eq 0 ]
     [ "$(jq -r '.roots[0].root' <<<"$output")" = "$(cd "$main" && pwd -P)" ]
 }
+
+# ------------------------------------------------------------ bb tasks board
+#
+# A project whose backlog is the bb tasks board has no bead root to ask. With a
+# project prefix and `bb` on PATH, its open cards join the candidates.
+
+make_bb_list_stub() {
+    # $1 = JSON `bb tasks list` prints; $2 = exit code (default 0). Logs argv.
+    mkdir -p "$TEST_DIR/stubs"
+    printf '%s' "$1" > "$TEST_DIR/bb.out"
+    cat > "$TEST_DIR/stubs/bb" <<EOF
+#!/usr/bin/env bash
+echo "\$*" >> "$TEST_DIR/bb.args"
+if [[ "\$1 \$2" == "tasks list" ]]; then
+  cat "$TEST_DIR/bb.out"
+  exit ${2:-0}
+fi
+exit 2
+EOF
+    chmod +x "$TEST_DIR/stubs/bb"
+}
+
+BB_CARDS='{"tasks":[{"key":"AFTM-43","title":"HUD","status":"backlog","priority":"high"},{"key":"AFTM-44","title":"Old","status":"done","priority":"low"},{"key":"AFTM-45","title":"Cut","status":"canceled","priority":"low"},{"key":"AFTM-46","title":"Going","status":"in_progress","priority":"medium"}]}'
+
+@test "bb board: --bb-project lists open cards, drops done and canceled" {
+    make_bb_list_stub "$BB_CARDS"
+    root="$(make_root quiet '[]')"
+    PATH="$TEST_DIR/stubs:$PATH" CLAVAIN_NEXT_GOAL_ROOTS="$root" run --separate-stderr bash "$SCRIPT_UNDER_TEST" --bb-project AFTM
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '[.candidates[].id] | sort | join(",")' <<<"$output")" = "AFTM-43,AFTM-46" ]
+    [ "$(jq -r '.roots[] | select(.tracker == "bb") | .status' <<<"$output")" = "ok" ]
+    [ "$(jq -r '.tracker_reachable' <<<"$output")" = "true" ]
+    grep -q -- "--project AFTM" "$TEST_DIR/bb.args"
+}
+
+@test "bb board: a card-key scope derives the prefix and is not passed to bd" {
+    make_bb_list_stub "$BB_CARDS"
+    root="$(make_root quiet '[]')"
+    PATH="$TEST_DIR/stubs:$PATH" CLAVAIN_NEXT_GOAL_ROOTS="$root" run --separate-stderr bash "$SCRIPT_UNDER_TEST" AFTM-38
+    [ "$status" -eq 0 ]
+    [ "$(jq '.candidates | length' <<<"$output")" -eq 2 ]
+}
+
+@test "bb board: works when no bd root is reachable at all" {
+    make_bb_list_stub "$BB_CARDS"
+    root="$(make_broken_root broken)"
+    PATH="$TEST_DIR/stubs:$PATH" CLAVAIN_NEXT_GOAL_ROOTS="$root" run --separate-stderr bash "$SCRIPT_UNDER_TEST" --bb-project AFTM
+    [ "$status" -eq 0 ]
+    [ "$(jq '.candidates | length' <<<"$output")" -eq 2 ]
+    [ "$(jq -r '.tracker_reachable' <<<"$output")" = "true" ]
+    [ "$(jq '.lookup_failures | length' <<<"$output")" -eq 1 ]
+}
+
+@test "bb board: a failing bb is an unreachable root, not an empty board" {
+    make_bb_list_stub '' 1
+    root="$(make_root quiet '[]')"
+    PATH="$TEST_DIR/stubs:$PATH" CLAVAIN_NEXT_GOAL_ROOTS="$root" run --separate-stderr bash "$SCRIPT_UNDER_TEST" --bb-project AFTM
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.roots[] | select(.tracker == "bb") | .status' <<<"$output")" = "unreachable" ]
+    [ "$(jq '.lookup_failures | length' <<<"$output")" -eq 1 ]
+}
+
+@test "bb board: no prefix means bb is never called and output is unchanged" {
+    make_bb_list_stub "$BB_CARDS"
+    root="$(make_root quiet '[{"id":"q-1","title":"Q"}]')"
+    PATH="$TEST_DIR/stubs:$PATH" CLAVAIN_NEXT_GOAL_ROOTS="$root" run --separate-stderr bash "$SCRIPT_UNDER_TEST"
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '[.candidates[].id] | join(",")' <<<"$output")" = "q-1" ]
+    [ "$(jq '.roots | length' <<<"$output")" -eq 1 ]
+    [ ! -e "$TEST_DIR/bb.args" ]
+}

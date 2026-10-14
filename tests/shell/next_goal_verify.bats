@@ -472,3 +472,131 @@ EOF
     [ "$status" -eq 3 ]
     [ "$(jq -r '.out_clause.matched[0].source' <<<"$output")" = "goal g-name" ]
 }
+
+# ------------------------------------------------------------ bb tasks cards
+#
+# Projects whose backlog is the bb tasks board use IDs like AFTM-38, which no
+# bd database holds. `bb tasks show <KEY> --json` answers for them. The stub
+# prints a card with the status in $BB_STUB_STATUS, or the real task_not_found
+# payload (exit 1, like the real CLI) for any other key.
+
+make_bb_stub() {
+    cat > "$STUB_DIR/bb" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "tasks show" ]]; then
+  if [[ "$3" == "AFTM-38" ]]; then
+    printf '{"task":{"key":"AFTM-38","title":"card title","description":"OUT: nothing","status":"%s","priority":"high","updatedAt":"2026-09-29T01:22:54.937Z"}}\n' "${BB_STUB_STATUS:-backlog}"
+    exit 0
+  fi
+  printf '{"ok":false,"error":{"code":"task_not_found","message":"task not found: %s"}}\n' "$3"
+  exit 1
+fi
+exit 2
+EOF
+    chmod +x "$STUB_DIR/bb"
+}
+
+# A PATH holding bash and the basics but no bb, for the "bb absent" cases.
+make_bbless_path() {
+    local d t
+    d="$(mktemp -d)"
+    for t in bash env jq git awk sed tr head tail cat date mktemp mv rm mkdir dirname basename timeout sort uniq grep cut wc hostname uname readlink pwd ls tee; do
+        command -v "$t" >/dev/null 2>&1 && ln -s "$(command -v "$t")" "$d/$t"
+    done
+    printf '%s' "$d"
+}
+
+@test "bb card: an open card key is read with bb tasks show and is usable" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_bb_stub
+    BB_STUB_STATUS=backlog run bash "$SCRIPT" AFTM-38
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "ok" ]
+    [ "$(jq -r '.beads[0].id' <<<"$output")" = "AFTM-38" ]
+    [ "$(jq -r '.beads[0].title' <<<"$output")" = "card title" ]
+}
+
+@test "bb card: a done card is disqualified" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_bb_stub
+    BB_STUB_STATUS=done run bash "$SCRIPT" AFTM-38
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "disqualified" ]
+    [[ "$(jq -r '.beads[0].reason' <<<"$output")" == *"already done"* ]]
+}
+
+@test "bb card: a canceled card is disqualified" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_bb_stub
+    BB_STUB_STATUS=canceled run bash "$SCRIPT" AFTM-38
+    [ "$status" -eq 3 ]
+    [[ "$(jq -r '.beads[0].reason' <<<"$output")" == *"already canceled"* ]]
+}
+
+@test "bb card: an in_progress card warns" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_bb_stub
+    BB_STUB_STATUS=in_progress run bash "$SCRIPT" AFTM-38
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "warn" ]
+}
+
+@test "bb card: a card the board does not have is disqualified" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_bb_stub
+    run bash "$SCRIPT" AFTM-999
+    [ "$status" -eq 3 ]
+    [[ "$(jq -r '.beads[0].reason' <<<"$output")" == *"no such bead"* ]]
+}
+
+@test "bb card: works with no bd installed at all" {
+    make_bb_stub
+    local p; p="$(make_bbless_path)"; ln -s "$STUB_DIR/bb" "$p/bb"
+    PATH="$p" BB_STUB_STATUS=backlog run bash "$SCRIPT" AFTM-38
+    rm -rf "$p"
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.available' <<<"$output")" = "true" ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "ok" ]
+}
+
+@test "bb card: a bead ID is still answered by bd and never asks bb" {
+    make_bd_stub "$(bead_json open)"
+    cat > "$STUB_DIR/bb" <<'EOF'
+#!/usr/bin/env bash
+touch "$BB_CALLED"
+exit 1
+EOF
+    chmod +x "$STUB_DIR/bb"
+    BB_CALLED="$WORK_DIR/bb-called" run bash "$SCRIPT" x-1
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "ok" ]
+    [ ! -e "$WORK_DIR/bb-called" ]
+}
+
+@test "bb absent: a card key degrades exactly as before (no such bead)" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    local p; p="$(make_bbless_path)"; ln -s "$STUB_DIR/bd" "$p/bd"
+    PATH="$p" run bash "$SCRIPT" AFTM-38
+    rm -rf "$p"
+    [ "$status" -eq 3 ]
+    [[ "$(jq -r '.beads[0].reason' <<<"$output")" == *"no such bead"* ]]
+}
+
+@test "bb absent and bd absent: still fails open with ok:null" {
+    local p; p="$(make_bbless_path)"
+    unset -f bd bb 2>/dev/null || true
+    PATH="$p" run bash "$SCRIPT" AFTM-38
+    rm -rf "$p"
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.available' <<<"$output")" = "false" ]
+    [ "$(jq -r '.ok' <<<"$output")" = "null" ]
+    [[ "$(jq -r '.reason' <<<"$output")" == *"bd not installed"* ]]
+}
+
+@test "bb card: --out-of a card key reads the card description" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_bb_stub
+    BB_STUB_STATUS=backlog run bash "$SCRIPT" --out-of AFTM-38 --text "/goal x" AFTM-38
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"card AFTM-38"* ]]
+}

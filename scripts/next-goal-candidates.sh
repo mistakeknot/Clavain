@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Collect Next-goal candidates from every bead root reachable from this session.
+# Collect Next-goal candidates from every bead root reachable from this session,
+# plus, when a bb tasks project prefix is given or derivable, that project's
+# open cards from the bb tasks board (see BB TASKS BOARD below).
 #
 # WHY THIS IS A SCRIPT AND NOT THE INLINE BASH IT REPLACES
 #
@@ -50,8 +52,28 @@ MAX_ROOTS="${CLAVAIN_NEXT_GOAL_MAX_ROOTS:-6}"
 # being repaired for.
 ROADMAP_STALE_DAYS="${CLAVAIN_ROADMAP_STALE_DAYS:-7}"
 
-SCOPE="${1:-}"
+# BB TASKS BOARD. Some projects keep their backlog on the bb tasks board
+# (keys like AFTM-38), which bd cannot see. A prefix comes from
+# `--bb-project PREFIX`, CLAVAIN_NEXT_GOAL_BB_PROJECT, or a card-key scope
+# argument (AFTM-38 scopes to AFTM). With a prefix and `bb` on PATH, open cards
+# (not done or canceled) join the candidates and the board is reported as a
+# root. Without `bb` or a prefix nothing here runs and the output is unchanged.
+BB_PROJECT="${CLAVAIN_NEXT_GOAL_BB_PROJECT:-}"
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --bb-project) BB_PROJECT="${2:-}"; shift 2 || shift ;;
+        --bb-project=*) BB_PROJECT="${1#--bb-project=}"; shift ;;
+        *) POSITIONAL+=("$1"); shift ;;
+    esac
+done
+SCOPE="${POSITIONAL[0]:-}"
 [[ "$SCOPE" == --* ]] && SCOPE=""
+if [[ "$SCOPE" =~ ^([A-Z][A-Z0-9]*)-[0-9]+$ ]]; then
+    # A card key is not a bd parent; do not hand it to `bd ready --parent`.
+    [[ -n "$BB_PROJECT" ]] || BB_PROJECT="${BASH_REMATCH[1]}"
+    SCOPE=""
+fi
 
 # ------------------------------------------------------------------ provenance
 #
@@ -595,6 +617,45 @@ for root in "${ROOTS[@]}"; do
          + (if $database == "" then {} else {database: $database} end)
          + (if $reason   == "" then {} else {reason: $reason}     end)')")
 done
+
+# ------------------------------------------------------------ bb tasks board
+#
+# Same three outcomes as a bead root: ok / empty / unreachable. `bb` missing is
+# not a failure and adds nothing; a `bb` that errors or prints non-JSON is an
+# unreachable root, never an empty backlog.
+if [[ -n "$BB_PROJECT" && "$BB_PROJECT" =~ ^[A-Za-z][A-Za-z0-9]*$ ]] && command -v bb >/dev/null 2>&1; then
+    BB_PROJECT="$(printf '%s' "$BB_PROJECT" | tr '[:lower:]' '[:upper:]')"
+    bb_root="bb:$BB_PROJECT"
+    errfile="$(mktemp)"
+    out="$(timeout "$PER_ROOT_TIMEOUT" bb tasks list --project "$BB_PROJECT" \
+        --status backlog,todo,in_progress,in_review --sort priority --limit "$LIMIT" --json 2>"$errfile")"
+    rc=$?
+    reason="$(head -c 300 "$errfile" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g; s/ $//')"
+    rm -f "$errfile"
+    if (( rc == 124 )); then
+        status="unreachable"; reason="${reason:-timed out after ${PER_ROOT_TIMEOUT}s}"
+    elif (( rc != 0 )); then
+        status="unreachable"; reason="${reason:-bb exited $rc}"
+    elif ! jq -e '.tasks | type == "array"' >/dev/null 2>&1 <<<"${out:-}"; then
+        status="unreachable"; reason="${reason:-bb returned unparseable output}"
+    else
+        # Belt and braces: drop closed cards even if the status filter is ignored.
+        cards="$(jq -c --arg root "$bb_root" '
+            [.tasks[] | select(.status != "done" and .status != "canceled")
+             | {id: .key, title, status, priority, issue_type: null, tracker: "bb", _root: $root}]' <<<"$out")"
+        count="$(jq 'length' <<<"$cards")"
+        status="ok"; reason=""
+        (( count == 0 )) && status="empty"
+        CANDIDATE_SETS+=("$cards")
+    fi
+    if [[ "$status" == "unreachable" ]]; then
+        FAILURES+=("$(jq -cn --arg root "$bb_root" --arg reason "$reason" '{root: $root, reason: $reason}')")
+    fi
+    ROOT_REPORTS+=("$(jq -cn --arg root "$bb_root" --arg prefix "$BB_PROJECT" --arg status "$status" \
+        --arg reason "$reason" --argjson ready "${count:-0}" \
+        '{root: $root, status: $status, ready: (if $status == "unreachable" then 0 else $ready end), prefix: $prefix, tracker: "bb"}
+         + (if $reason == "" then {} else {reason: $reason} end)')")
+fi
 
 # ---------------------------------------------------------------- assemble
 

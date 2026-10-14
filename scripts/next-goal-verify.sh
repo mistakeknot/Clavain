@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 #
 # next-goal-verify.sh — re-read every candidate a Next-goal block is about to
-# cite, at source, immediately before it is emitted.
+# cite, at source, immediately before it is emitted. Candidates are beads (bd)
+# or, for projects whose backlog is the bb tasks board, cards (KEY-N, read with
+# `bb tasks show`; a done or canceled card is closed).
 #
 # WHY THIS EXISTS, and why it is NOT the same check as the provenance receipt.
 #
@@ -81,7 +83,7 @@
 # Usage:
 #   next-goal-verify.sh [--recommend <id>] [--beat <id>] [--text <goal text>]
 #                       [--out-of <bead|file|text>]... [--out-override <reason>]
-#                       <bead-id> [<bead-id>...]
+#                       <bead-id|card-key> [<id>...]
 #   next-goal-verify.sh --path apps/web/components/x/ <bead-id>     # see --path
 #   next-goal-verify.sh --recommend mk-12 --beat mk-40 mk-12 mk-40  # see LINEAGE
 #   next-goal-verify.sh --recommend mk-12 --text "/goal ..." --out-of mk-9 mk-12  # see OUT CLAUSE
@@ -175,8 +177,22 @@ command -v jq >/dev/null 2>&1 || unavailable "jq not installed"
 # whole run report `available: false` on any host without bd — surrendering the
 # half of the check that was still perfectly answerable. Caught on a CI runner
 # that has no bd: a paths-only invocation returned no `paths` array at all.
-if [[ ${#IDS[@]} -gt 0 ]]; then
-    command -v bd >/dev/null 2>&1 || unavailable "bd not installed"
+#
+# BB TASKS CARDS — a project whose backlog lives on the bb tasks board has IDs
+# like AFTM-38, which no bd database holds. An ID shaped like a card key is
+# read with `bb tasks show`: first when the key is upper-case (bead IDs never
+# are), and as a fallback when bd is missing or never answered for it. Without
+# `bb` on PATH none of this runs and the script behaves exactly as before.
+have_bb() { command -v bb >/dev/null 2>&1; }
+BB_KEY_RE='^[A-Z][A-Z0-9]*-[0-9]+$'
+if [[ ${#IDS[@]} -gt 0 ]] && ! command -v bd >/dev/null 2>&1; then
+    # Without bd, only a run made entirely of card-shaped IDs can be answered.
+    bb_only=0
+    if have_bb; then
+        bb_only=1
+        for id in "${IDS[@]}"; do [[ "$id" =~ $BB_KEY_RE ]] || { bb_only=0; break; }; done
+    fi
+    [[ $bb_only -eq 1 ]] || unavailable "bd not installed"
 fi
 
 # ---------------------------------------------------------------- root discovery
@@ -241,6 +257,17 @@ bd_show() {
     fi
 }
 
+bb_show() {
+    # $1 = card key. Prints bb's raw JSON, or nothing. A missing card exits 1
+    # but still prints {"ok":false,"error":{"code":"task_not_found"}} on stdout;
+    # like bd, the payload is the answer, not the exit status.
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$BD_TIMEOUT" bb tasks show "$1" --json 2>/dev/null
+    else
+        bb tasks show "$1" --json 2>/dev/null
+    fi
+}
+
 BEADS_JSON="[]"
 DISQUALIFIED="[]"
 ANSWERED=0
@@ -248,22 +275,62 @@ ANSWERED=0
 for id in ${IDS[@]+"${IDS[@]}"}; do
     found=""
     found_root=""
+    bb_card=""
+    bd_answered=0
+    if [[ "$id" =~ $BB_KEY_RE ]] && have_bb; then
+        raw="$(bb_show "$id")"
+        if jq -e '.task.key? // empty' >/dev/null 2>&1 <<<"$raw"; then
+            bb_card="$raw"; ANSWERED=1
+        elif jq -e '.error.code? == "task_not_found"' >/dev/null 2>&1 <<<"$raw"; then
+            ANSWERED=1
+        fi
+    fi
     for root in ${ROOTS[@]+"${ROOTS[@]}"}; do
+        [[ -n "$bb_card" ]] && break
+        command -v bd >/dev/null 2>&1 || break
         raw="$(bd_show "$root" "$id")"
         [[ -z "$raw" ]] && continue
         # An array means bd resolved it. An object carries {"error": ...}.
         if jq -e 'type == "array" and length > 0' >/dev/null 2>&1 <<<"$raw"; then
-            found="$raw"; found_root="$root"; ANSWERED=1; break
+            found="$raw"; found_root="$root"; ANSWERED=1; bd_answered=1; break
         fi
         # A parseable error object is still a TRACKER ANSWERING — it looked and
         # said no. That is the only thing that earns the right to call an id
         # nonexistent below, and it is a different fact from silence.
         if jq -e 'type == "object" and has("error")' >/dev/null 2>&1 <<<"$raw"; then
-            ANSWERED=1
+            ANSWERED=1; bd_answered=1
         fi
     done
 
-    if [[ -z "$found" ]]; then
+    # Fallback: no bd tracker answered for a card-shaped id (bd absent, no
+    # root, or an unreachable one), so ask the bb tasks board.
+    if [[ -z "$found" && -z "$bb_card" && $bd_answered -eq 0 && "$id" =~ $BB_KEY_RE ]] && have_bb; then
+        raw="$(bb_show "$id")"
+        if jq -e '.task.key? // empty' >/dev/null 2>&1 <<<"$raw"; then
+            bb_card="$raw"; ANSWERED=1
+        elif jq -e '.error.code? == "task_not_found"' >/dev/null 2>&1 <<<"$raw"; then
+            ANSWERED=1
+        fi
+    fi
+
+    if [[ -n "$bb_card" ]]; then
+        entry="$(jq -c --arg id "$id" '
+            .task
+            | {id: $id, root: null, tracker: "bb", status, issue_type: null, priority,
+               parent: null, title: (.title // ""),
+               closed_at: (if .status == "done" or .status == "canceled" then .updatedAt else null end)}
+            | . + (
+                if   .status == "done" or .status == "canceled"
+                then {verdict: "disqualified",
+                      reason: ("already " + .status + (if .closed_at then " (" + .closed_at + ")" else "" end)
+                               + " — proposing it recommends work that is already done")}
+                elif .status == "in_progress" or .status == "in_review"
+                then {verdict: "warn",
+                      reason: ("already " + .status + " — usable only if the goal is to finish it, and say so")}
+                else {verdict: "ok", reason: "open"}
+                end)
+        ' <<<"$bb_card")"
+    elif [[ -z "$found" ]]; then
         entry="$(jq -cn --arg id "$id" \
             '{id: $id, root: null, status: null, verdict: "disqualified",
               reason: "no such bead in any reachable tracker — do not cite an ID that cannot be read back"}')"
@@ -448,6 +515,7 @@ if [[ ${#IDS[@]} -gt 0 ]]; then
                     '. + [{id: $id, root_epic: (if $r == "" then null else $r end), streak: $s,
                            in_streak: (($s | length) >= $m)}]' <<<"$CAND_OUT")"
             done < <(jq -r '.[] | select(.verdict == "ok" or .verdict == "warn")
+                             | select(.root != null)
                              | [.id, .root, (.parent // "")] | @tsv' <<<"$BEADS_JSON")
 
             # The decision. --beat is not a bypass: it names an OPEN candidate
@@ -529,6 +597,12 @@ for src in ${OUT_OF[@]+"${OUT_OF[@]}"}; do
                 label="bead $src"; body="$(jq -r '.[0].description // ""' <<<"$raw")"; break
             fi
         done
+    fi
+    if [[ "$label" == "text" && "$src" =~ $BB_KEY_RE ]] && have_bb; then
+        raw="$(bb_show "$src")"
+        if jq -e '.task.key? // empty' >/dev/null 2>&1 <<<"$raw"; then
+            label="card $src"; body="$(jq -r '.task.description // ""' <<<"$raw")"
+        fi
     fi
     if [[ "$label" == "text" && -f "$src" ]]; then
         label="file $src"; body="$(cat "$src" 2>/dev/null)"
