@@ -54,7 +54,8 @@ def test_json_output(run, repo):
     (repo / "AGENTS.md").write_text("line one\nreact 17.0.2\n")
     drift = json.loads(run(repo, "--json").stdout)["drift"]
     assert drift == [{"doc": "AGENTS.md", "line": 2, "name": "react",
-                      "documented": "17.0.2", "pinned": ["^18.3.1"]}]
+                      "documented": "17.0.2", "pinned": ["^18.3.1"],
+                      "manifests": ["package.json"]}]
 
 
 def test_nested_manifest_uses_its_own_readme(run, repo):
@@ -109,6 +110,15 @@ def test_matching_spelling_variants_are_clean(run, tmp_path):
 
 
 @pytest.mark.parametrize("spec,documented,warns", [
+    ("!=1.2.*", "1.2.3", True),
+    ("!=1.2.*", "2.0.0", False),
+    (">=1.0.0,!=1.0.0", "1.0.0", True),
+    (">=1.0.0,!=1.0.0", "1.0.1", False),
+    (">18.0.0", "18.0.0", True),
+    (">18.0.0", "18.0.1", False),
+    ("==2.0.*", "2.0.7", False),
+    ("==2.0.*", "2.1.0", True),
+    ("*", "9.9.9", False),
     (">=18.0.0 <20.0.0", "19.0.0", False),
     (">=18.0.0 <20.0.0", "20.1.0", True),
     ("18.x", "18.2", False),
@@ -154,8 +164,69 @@ def test_go_single_line_tab_directives_and_replace(run, tmp_path):
 
 def test_bare_major_exception_binds_to_the_match(run, tmp_path):
     (tmp_path / "package.json").write_text(json.dumps({"dependencies": {"react": "18.3.1"}}))
-    (tmp_path / "AGENTS.md").write_text("react 2 times; contact team@example.com\nreact@17\n")
+    (tmp_path / "AGENTS.md").write_text("react 2 times; contact team@example.com\nreact@17\nreact@18\n")
+    assert [d["line"] for d in drift(run, tmp_path)] == [2]  # react@18 matches 18.3.1 by prefix
+
+
+@pytest.mark.parametrize("manifest_spec,line", [
+    ("19.0.0-rc.1", "react 19.0.0-rc.1"),
+    ("19.0.0", "react 19.0.0-rc.1"),
+    ("1.2.3 - 2.3.4", "react 2.0.0"),
+    ("owner/repo#v1.2.3", "react 1.2.3"),
+])
+def test_prereleases_and_unsupported_specs_are_noted_not_guessed(run, tmp_path, manifest_spec, line):
+    (tmp_path / "package.json").write_text(json.dumps({"dependencies": {"react": manifest_spec}}))
+    (tmp_path / "AGENTS.md").write_text(line + "\n")
+    result = run(tmp_path, "--json", "--strict")
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert json.loads(result.stdout)["drift"] == []
+
+
+@pytest.mark.parametrize("quoted,disagrees", [("17.0.2", "packages/api/package.json"),
+                                              ("18.3.1", "packages/web/package.json")])
+def test_root_doc_flags_a_disagreeing_nested_manifest(run, tmp_path, quoted, disagrees):
+    for sub, version in (("web", "17.0.2"), ("api", "18.3.1")):
+        (tmp_path / "packages" / sub).mkdir(parents=True)
+        (tmp_path / "packages" / sub / "package.json").write_text(
+            json.dumps({"dependencies": {"react": version}}))
+    (tmp_path / "README.md").write_text(f"react {quoted}\n")
+    result = run(tmp_path, "--json", "--strict")
+    assert result.returncode == 1
+    (found,) = json.loads(result.stdout)["drift"]
+    assert found["manifests"] == [disagrees]
+
+
+def test_prerelease_in_docs_is_not_read_as_its_release(run, tmp_path):
+    (tmp_path / "package.json").write_text(json.dumps({"dependencies": {"react": "18.3.1"}}))
+    (tmp_path / "AGENTS.md").write_text("react 19.0.0-rc.1 is being trialled\n")
+    assert drift(run, tmp_path) == []
+
+
+def test_nearest_manifest_wins_for_nested_docs(run, tmp_path):
+    (tmp_path / "package.json").write_text(json.dumps({"dependencies": {"react": "18.3.1"}}))
+    web = tmp_path / "web"
+    web.mkdir()
+    (web / "package.json").write_text(json.dumps({"dependencies": {"react": "17.0.2"}}))
+    (web / "README.md").write_text("react 17.0.2\n")
+    assert drift(run, tmp_path) == []
+
+
+def test_go_replacements_are_per_source_version(run, tmp_path):
+    (tmp_path / "go.mod").write_text(
+        "module example.com/app\n\ngo 1.25.0\n\nrequire example.com/lib v1.0.0\n"
+        "replace example.com/lib v1.0.0 => example.com/lib v1.1.0\n"
+        "replace example.com/lib v2.0.0 => example.com/lib v2.1.0\n")
+    (tmp_path / "AGENTS.md").write_text("lib 1.1.0\nlib 1.0.0\n")
     assert [d["line"] for d in drift(run, tmp_path)] == [2]
+
+
+@pytest.mark.parametrize("content", ["[]", "null", '{"dependencies": ["react"]}', '{"dependencies": 3}'])
+def test_odd_manifest_shapes_are_notes(run, tmp_path, content):
+    (tmp_path / "package.json").write_text(content)
+    (tmp_path / "AGENTS.md").write_text("react 17.0.2\n")
+    result = run(tmp_path, "--strict")
+    assert result.returncode == 0, result.stderr
+    assert "package.json: unreadable" in result.stdout
 
 
 def test_unreadable_manifest_is_a_note(run, tmp_path):
