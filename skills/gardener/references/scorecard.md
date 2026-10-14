@@ -15,7 +15,7 @@ This is a one-round technique. It does **not** authorize a standing hill-climb t
 
 ## Scorecard template
 
-Fill in only the lines that apply to the repository. Each row names the command.
+Fill in only the lines that apply to the repository. Each row names the command. `SKILL_DIR` is the gardener skill directory (see its docs-pins section).
 
 ```
 Scorecard — <repo> @ <short sha> — <UTC date>
@@ -25,7 +25,7 @@ Scorecard — <repo> @ <short sha> — <UTC date>
 | Lint findings / baseline | <lint command> | <n> / <baseline n> |
 | Escape hatches (type assertions, ignores) | <count command> | <n> |
 | Tests that assert nothing / example tests that should be properties | <command> | <n> |
-| Docs-pins drift | python3 -I skills/gardener/scripts/docs-pins.py --root . | <n> warnings |
+| Docs-pins drift | python3 -I "$SKILL_DIR/scripts/docs-pins.py" --root . | <n> warnings |
 | Production signal (errors, latency) vs last round | <observability query> | <values> or not measured |
 | Needs owner sign-off (listed, not started) | — | <list> |
 ```
