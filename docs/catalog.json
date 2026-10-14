@@ -1,7 +1,7 @@
 {
-  "generated": "2026-10-13T21:23:26Z",
+  "generated": "2026-10-14T22:23:03Z",
   "counts": {
-    "skills": 26,
+    "skills": 27,
     "agents": 6,
     "commands": 58,
     "hooks": 22,
@@ -45,6 +45,10 @@
     {
       "name": "galiana",
       "description": "Inspect engineering discipline metrics, defect escapes, overrides, cost, and agent scorecards."
+    },
+    {
+      "name": "gardener",
+      "description": "Use for repository upkeep \u2014 turning a recurring bad pattern into a lint rule before cleaning it up, shrink-only baselines, one-dependency-family commits, and a docs-pins check for versions quoted in AGENTS.md and READMEs."
     },
     {
       "name": "interop-with-gsd",
