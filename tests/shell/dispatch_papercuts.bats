@@ -72,6 +72,37 @@ _load() {
     ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
 }
 
+@test "verdict: blockquoted unclosed fence ending in a quoted verdict is warn" {
+    _load
+    printf 'Narrative.\n\n> ```\n> VERDICT: PASS\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
+@test "verdict: list-item unclosed fence ending in a listed verdict is warn" {
+    _load
+    printf 'Narrative.\n\n- ```\n- VERDICT: PASS\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
+@test "verdict: blockquoted closed fence then a real final verdict is a pass" {
+    _load
+    printf 'Narrative.\n\n> ```\n> example\n> ```\n\nVERDICT: PASS\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+@test "verdict: plain unprefixed fences behave as before" {
+    _load
+    printf 'Narrative.\n\n```\nVERDICT: PASS\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+    printf 'Narrative.\n\n```\nx\n```\nVERDICT: PASS\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
 @test "detect: exit 1 with turn.failed event surfaces the provider message" {
     _load
     printf '%s\n' '{"type":"turn.started"}' \

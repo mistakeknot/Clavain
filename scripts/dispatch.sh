@@ -3035,10 +3035,13 @@ _extract_verdict() {
                 { sub(/\r$/, "") }
                 {
                     line = $0
-                    if (match(line, /^ ? ? ?(```+|~~~+)/)) {
-                        run = substr(line, RSTART, RLENGTH)
-                        sub(/^ +/, "", run)
+                    # tolerate the same blockquote / list-item prefixes the
+                    # sed below strips, so a prefixed fence is still a fence
+                    if (match(line, /^ ? ? ?(>[ ]*|[-+*][ ]+|•[ ]+)*(```+|~~~+)/)) {
                         rest = substr(line, RSTART + RLENGTH)
+                        run = substr(line, RSTART, RLENGTH)
+                        match(run, /(```+|~~~+)$/)
+                        run = substr(run, RSTART)
                         ch = substr(run, 1, 1)
                         if (open == "") {
                             # a backtick fence info string may not contain a
