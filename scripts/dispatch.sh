@@ -213,37 +213,24 @@ _dispatch_on_signal() {
 
 _dispatch_cleanup_state() {
   local _rc=$?
-  # Governed per-run receipt. Armed only once the run has started, marked
-  # written only after the append succeeded, and isolated so a failure here
-  # never alters the exit status except to make it agree with the receipt.
+  # Governed per-run receipt, best-effort. A signal before the write only sets
+  # _sig_rc; the record is built after the status is final, and INT/TERM are
+  # ignored just for the short append, so the receipt and the exit status agree.
+  # A failed write never changes the exit status.
   if [[ "${RUN_RECEIPT_ARMED:-false}" == true && "${RUN_RECEIPT_WRITTEN:-false}" != true \
-        && "${RUN_RECEIPT_WRITING:-false}" != true \
         && -n "${ROLE:-}" && "${ROLE_RESOLVED:-}" == true ]]; then
-    RUN_RECEIPT_WRITING=true
-    local _sigfile _rcfile _writer _committed=""
-    _sigfile="$(mktemp 2>/dev/null)" || _sigfile=""
-    _rcfile="$(mktemp 2>/dev/null)" || _rcfile=""
-    : > "${_sigfile:-/dev/null}" 2>/dev/null || true
-    # A signal during the write only records its status; the writer reads it
-    # under the receipt lock, so the receipt and the process exit status agree.
-    trap '[[ -z "$_sigfile" ]] || echo 130 > "$_sigfile"' INT
-    trap '[[ -z "$_sigfile" ]] || echo 143 > "$_sigfile"' TERM
-    ( set +e; RUN_RECEIPT_SIGFILE="$_sigfile" RUN_RECEIPT_RCFILE="$_rcfile" \
-        _write_dispatch_run_receipt "$_rc" ) 2>/dev/null &
-    _writer=$!
-    # wait returns early when a trapped signal arrives; wait again for the writer.
-    local _wst=0
+    RUN_RECEIPT_WRITTEN=true
+    local _sig_rc="" _used="" _line=""
+    trap '_sig_rc=130' INT
+    trap '_sig_rc=143' TERM
     while :; do
-      _wst=0; wait "$_writer" 2>/dev/null || _wst=$?
-      kill -0 "$_writer" 2>/dev/null || break
+      _used="${_sig_rc:-$_rc}"
+      _line="$(_build_dispatch_run_receipt "$_used" 2>/dev/null)" || _line=""
+      trap '' INT TERM
+      [[ "${_sig_rc:-$_rc}" == "$_used" ]] && break
     done
-    if [[ "$_wst" == 0 ]]; then
-      RUN_RECEIPT_WRITTEN=true
-      if [[ -n "$_rcfile" ]]; then _committed="$(cat "$_rcfile" 2>/dev/null || true)"; fi
-    fi
-    rm -f "$_sigfile" "$_rcfile" 2>/dev/null || true
-    if [[ "$_committed" =~ ^[0-9]+$ ]]; then _rc="$_committed"; fi
-    RUN_RECEIPT_WRITING=false
+    [[ -z "$_line" ]] || _append_dispatch_run_receipt "$_line" 2>/dev/null || true
+    [[ -z "$_sig_rc" ]] || _rc="$_sig_rc"
   fi
   # The EXIT trap exits with this, so the status matches the committed receipt.
   DISPATCH_FINAL_RC="$_rc"
