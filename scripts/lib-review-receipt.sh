@@ -70,22 +70,27 @@ _review_receipt_prepare() {
 _review_receipt_verdict() {
   local out="$1" last
   [[ -f "$out" ]] || return 1
-  # Last non-blank line outside a code fence. A closer must repeat the opening
-  # char, be at least as long and carry no text; an unclosed fence hides the
-  # rest. Quoted (>) and 4+-space-indented lines are never a ruling.
+  # Last non-blank line outside a code fence. Fence openers are recognised
+  # behind any quote or list container prefix, so a fence opened in a list item
+  # or quote hides the rest; a closer must repeat the opening char, be at least
+  # as long and carry no text. The ruling must also start at column 0 and
+  # follow a blank line (or begin the file), which ends any lazy quote or list
+  # continuation. Anything doubtful yields no verdict, hence no receipt.
   last="$(awk '
     { sub(/\r$/, "") }
     {
-      if (match($0, /^ ? ? ?(```+|~~~+)/)) {
-        run = substr($0, RSTART, RLENGTH); sub(/^ +/, "", run)
-        rest = substr($0, RSTART + RLENGTH); ch = substr(run, 1, 1)
-        if (open == "") { if (!(ch == "`" && index(rest, "`"))) { open = ch; olen = length(run) } ; next }
-        else if (ch == open && length(run) >= olen && rest ~ /^[ \t]*$/) { open = ""; next }
+      if (match($0, /^[ \t>]*([-*+]|[0-9]+[.)])?[ \t]*(```+|~~~+)/)) {
+        seg = substr($0, RSTART, RLENGTH); sub(/^[^`~]*/, "", seg)
+        rest = substr($0, RSTART + RLENGTH); ch = substr(seg, 1, 1)
+        if (open == "") { if (!(ch == "`" && index(rest, "`"))) { open = ch; olen = length(seg) } ; blank = 0; next }
+        else if (ch == open && length(seg) >= olen && rest ~ /^[ \t]*$/) { open = ""; blank = 1; next }
       }
-      if (open == "" && $0 ~ /[^[:space:]]/) last = $0
+      if (open == "" && $0 ~ /[^[:space:]]/) { last = $0; lastok = (blank || NR == 1); blank = 0 }
+      else if ($0 !~ /[^[:space:]]/) blank = 1
+      else blank = 0
     }
-    END { if (open == "") print last }' "$out")"
-  local re='^ {0,3}(\*\*|__)?[Vv][Ee][Rr][Dd][Ii][Cc][Tt][[:space:]]*:(\*\*|__)?[[:space:]]*(([^[:space:]*_`.]|[^[:space:]*_`].*[^[:space:]*_`.]))(\*\*|__)?[[:space:]]*$'
+    END { if (open == "" && lastok) print last }' "$out")"
+  local re='^(\*\*|__)?[Vv][Ee][Rr][Dd][Ii][Cc][Tt][[:space:]]*:(\*\*|__)?[[:space:]]*(([^[:space:]*_`.]|[^[:space:]*_`].*[^[:space:]*_`.]))(\*\*|__)?[[:space:]]*$'
   [[ "$last" =~ $re ]] || return 1
   local v="${BASH_REMATCH[3]}"
   case "${v^^}" in
@@ -150,7 +155,7 @@ _review_receipt_write() {
   # appears complete or not at all.
   local tmpf
   tmpf="$(umask 077; mktemp "$dir/.new.XXXXXX")" || { echo "review receipt: cannot create temp file in $dir" >&2; return 1; }
-  if ! printf '%s\n' "$tmp" > "$tmpf" || ! ln "$tmpf" "$file" 2>/dev/null; then
+  if ! printf '%s\n' "$tmp" > "$tmpf" || ! ln -T "$tmpf" "$file" 2>/dev/null; then
     rm -f "$tmpf"
     echo "review receipt: not written ($file already exists or is unwritable)" >&2
     return 1

@@ -119,6 +119,25 @@ teardown() { rm -rf "$T"; }
     [ "$RR_DIFF_SHA256" != e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 ]
 }
 
+@test "verdict: list-nested fences and lazy quote continuations never count" {
+    printf -- '- ```text\n  VERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    printf '> Quoted evidence:\nVERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    printf 'Notes\nVERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    printf '> Quoted\n\nVERDICT: PASS\n' > "$OUT"; [ "$(_review_receipt_verdict "$OUT")" = PASS ]
+}
+
+@test "write refuses an existing directory or directory symlink at the receipt path" {
+    _review_receipt_prepare "$R"
+    mkdir -p "$T/reviews/o__r" "$T/elsewhere"
+    mkdir "$T/reviews/o__r/7-$HEAD_SHA.json"
+    run _review_receipt_write "$OUT" 0; [ "$status" -ne 0 ]
+    rmdir "$T/reviews/o__r/7-$HEAD_SHA.json"
+    ln -s "$T/elsewhere" "$T/reviews/o__r/7-$HEAD_SHA.json"
+    run _review_receipt_write "$OUT" 0; [ "$status" -ne 0 ]
+    [ -z "$(find "$T/elsewhere" "$T/reviews/o__r" -name '.new.*')" ]
+    [ -z "$(ls -A "$T/elsewhere")" ]
+}
+
 @test "write refuses to go through an existing symlink" {
     _review_receipt_prepare "$R"
     mkdir -p "$T/reviews/o__r"; ln -s /dev/null "$T/reviews/o__r/7-$HEAD_SHA.json"
