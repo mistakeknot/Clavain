@@ -489,7 +489,7 @@ make_bb_stub() {
 if [[ "$1 $2" == "tasks show" ]]; then
   case " $* " in *" --json "*) ;; *) echo "stub: bb tasks show needs --json" >&2; exit 2 ;; esac
   if [[ "$3" == "AFTM-38" ]]; then
-    printf '{"task":{"key":"AFTM-38","title":"card title","description":"OUT: nothing","status":"%s","priority":"high","updatedAt":"2026-09-29T01:22:54.937Z"}}\n' "${BB_STUB_STATUS:-backlog}"
+    printf '{"task":{"key":"AFTM-38","title":"card title","description":"OUT: nothing","status":"%s","priority":"high","updatedAt":%s}}\n' "${BB_STUB_STATUS:-backlog}" "${BB_STUB_UPDATED:-\"2026-09-29T01:22:54.937Z\"}"
     exit 0
   fi
   printf '{"ok":false,"error":{"code":"task_not_found","message":"task not found: %s"}}\n' "$3"
@@ -527,6 +527,32 @@ make_bbless_path() {
     [ "$status" -eq 3 ]
     [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "disqualified" ]
     [[ "$(jq -r '.beads[0].reason' <<<"$output")" == *"already done"* ]]
+}
+
+@test "bb card: a numeric updatedAt on a done card is stringified, not fatal" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_bb_stub
+    BB_STUB_UPDATED=1788000300 BB_STUB_STATUS=done run bash "$SCRIPT" AFTM-38
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "disqualified" ]
+    [[ "$(jq -r '.beads[0].reason' <<<"$output")" == *"already done (1788000300)"* ]]
+}
+
+@test "bb card: a null updatedAt on a done card is still disqualified" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_bb_stub
+    BB_STUB_UPDATED=null BB_STUB_STATUS=done run bash "$SCRIPT" AFTM-38
+    [ "$status" -eq 3 ]
+    [[ "$(jq -r '.beads[0].reason' <<<"$output")" == "already done"* ]]
+}
+
+@test "bb card: an object-valued updatedAt never yields empty output" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_bb_stub
+    BB_STUB_UPDATED='{"x":1}' BB_STUB_STATUS=done run bash "$SCRIPT" AFTM-38
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "disqualified" ]
+    [ "$(jq -r '.available' <<<"$output")" = "true" ]
 }
 
 @test "bb card: a canceled card is disqualified" {

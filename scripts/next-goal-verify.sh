@@ -323,11 +323,15 @@ for id in ${IDS[@]+"${IDS[@]}"}; do
     fi
 
     if [[ -n "$bb_card" ]]; then
+        # Every bb field that reaches a string is coerced first: a number is
+        # stringified, null or an object/array becomes absent. Concatenating
+        # the raw value would abort jq and leave stdout empty.
         entry="$(jq -c --arg id "$id" '
+            def s: if type == "string" then . elif type == "number" or type == "boolean" then tostring else null end;
             .task
             | {id: $id, root: null, tracker: "bb", status, issue_type: null, priority,
-               parent: null, title: (.title // ""),
-               closed_at: (if .status == "done" or .status == "canceled" then .updatedAt else null end)}
+               parent: null, title: ((.title | s) // ""),
+               closed_at: (if .status == "done" or .status == "canceled" then (.updatedAt | s) else null end)}
             | . + (
                 if   .status == "done" or .status == "canceled"
                 then {verdict: "disqualified",
@@ -345,9 +349,10 @@ for id in ${IDS[@]+"${IDS[@]}"}; do
               reason: "no such bead in any reachable tracker — do not cite an ID that cannot be read back"}')"
     else
         entry="$(jq -c --arg root "$found_root" '
+            def s: if type == "string" then . elif type == "number" or type == "boolean" then tostring else null end;
             .[0]
             | {id, root: $root, status, issue_type, priority, parent: (.parent // null),
-               title: (.title // ""), closed_at: (.closed_at // null)}
+               title: ((.title | s) // ""), closed_at: (.closed_at | s)}
             | . + (
                 if   .status == "closed"
                 then {verdict: "disqualified",
@@ -366,7 +371,11 @@ for id in ${IDS[@]+"${IDS[@]}"}; do
                 end)
         ' <<<"$found")"
     fi
-    BEADS_JSON="$(jq -c --argjson e "$entry" '. + [$e]' <<<"$BEADS_JSON")"
+    # A projection that produced nothing is verification failing, not a verdict.
+    jq -e 'type == "object"' >/dev/null 2>&1 <<<"$entry" \
+        || unavailable "could not project tracker data for $id"
+    BEADS_JSON="$(jq -c --argjson e "$entry" '. + [$e]' <<<"$BEADS_JSON")" \
+        || unavailable "could not record tracker data for $id"
 done
 
 # SILENCE IS NOT A VERDICT — and this script shipped its first draft getting
@@ -608,14 +617,14 @@ for src in ${OUT_OF[@]+"${OUT_OF[@]}"}; do
         for root in ${ROOTS[@]+"${ROOTS[@]}"}; do
             raw="$(bd_show "$root" "$src")"
             if jq -e 'type == "array" and length > 0' >/dev/null 2>&1 <<<"$raw"; then
-                label="bead $src"; body="$(jq -r '.[0].description // ""' <<<"$raw")"; break
+                label="bead $src"; body="$(jq -r '.[0].description | if type == "string" then . else "" end' <<<"$raw")"; break
             fi
         done
     fi
     if [[ "$label" == "text" && "$src" =~ $BB_KEY_RE ]] && have_bb; then
         raw="$(bb_show "$src")"
         if bb_card_valid "$src" "$raw"; then
-            label="card $src"; body="$(jq -r '.task.description // ""' <<<"$raw")"
+            label="card $src"; body="$(jq -r '.task.description | if type == "string" then . else "" end' <<<"$raw")"
         fi
     fi
     if [[ "$label" == "text" && -f "$src" ]]; then
@@ -632,7 +641,7 @@ fi
 # often explains that it is OUT of the goal that spawned it, and would match.
 REC_TITLE=""
 if [[ -n "$RECOMMEND" ]]; then
-    REC_TITLE="$(jq -r --arg id "$RECOMMEND" 'first(.[] | select(.id == $id)) | .title // ""' <<<"$BEADS_JSON")"
+    REC_TITLE="$(jq -r --arg id "$RECOMMEND" 'first(.[] | select(.id == $id)) | (.title | if type == "string" then . else "" end)' <<<"$BEADS_JSON")"
 fi
 
 OUT_JSON="$(jq -cn \
@@ -744,7 +753,9 @@ PAYLOAD="$(jq -cn \
                  + (if $out.verdict == "warn" then [($out.subject // "<text>")] else [] end)),
       lineage: $lineage,
       out_clause: $out,
-      ok: (($disq | length) == 0)}')"
+      ok: (($disq | length) == 0)}')" || PAYLOAD=""
+jq -e 'type == "object"' >/dev/null 2>&1 <<<"$PAYLOAD" \
+    || unavailable "could not assemble the verification result"
 
 if [[ "$(jq -r '.ok' <<<"$PAYLOAD")" == "true" ]]; then
     emit_and_exit "$PAYLOAD" 0
