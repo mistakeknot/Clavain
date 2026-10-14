@@ -205,6 +205,12 @@ _dispatch_sync_interband_from_legacy() {
   fi
 }
 
+# A signal ends the run with the conventional 128+n status. The EXIT trap then
+# runs once with that status, so a signalled run is never receipted as completed.
+_dispatch_on_signal() {
+  exit "$1"
+}
+
 _dispatch_cleanup_state() {
   local _rc=$?
   # Governed per-run receipt. Armed only once the run has started, written at
@@ -2567,7 +2573,9 @@ SUMMARY_FILE=""
 if [[ -n "$OUTPUT" ]]; then
   SUMMARY_FILE="${OUTPUT}.summary"
 fi
-trap _dispatch_cleanup_state EXIT INT TERM
+trap _dispatch_cleanup_state EXIT
+trap '_dispatch_on_signal 130' INT
+trap '_dispatch_on_signal 143' TERM
 
 # Validate state file path is writable
 if ! touch "$STATE_FILE" 2>/dev/null; then
@@ -3222,7 +3230,9 @@ chmod 600 "$PROVIDER_EVENTS"
 _dispatch_cleanup_stderr() {
   rm -f "$STDERR_FILE" 2>/dev/null || true
 }
-trap '_dispatch_cleanup_state; _dispatch_cleanup_stderr' EXIT INT TERM
+trap '_dispatch_cleanup_state; _dispatch_cleanup_stderr' EXIT
+trap '_dispatch_on_signal 130' INT
+trap '_dispatch_on_signal 143' TERM
 
 _surface_codex_errors() {
   local exit_code="$1"
@@ -3761,7 +3771,9 @@ if [[ "$VIA" == bb ]]; then
   wait "$BB_PID"
   BB_EXIT=$?
   [[ "$BB_CANCELLED" == 0 ]] || BB_EXIT=130
-  trap '_dispatch_cleanup_state; _dispatch_cleanup_stderr' EXIT INT TERM
+  trap '_dispatch_cleanup_state; _dispatch_cleanup_stderr' EXIT
+  trap '_dispatch_on_signal 130' INT
+  trap '_dispatch_on_signal 143' TERM
   set -e
   [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
   _extract_verdict "$OUTPUT"

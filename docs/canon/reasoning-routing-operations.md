@@ -290,7 +290,12 @@ the `CLAVAIN_DECISION_CONTEXT` file, never its content), `thread_id`,
 when the backend reported them. Absent values are `null`. The receipt holds
 identifiers and counts only: no prompt text, secrets or file contents. Writing
 is best-effort and isolated, so a write failure never changes the dispatch exit
-status or verdict. Tokens by role over a period is a `jq` group-by on this file,
+status or verdict. Appends are serialized with `flock` on a sibling `.lock` file, and the
+directory and files are created owner-only (0700 and 0600). A run killed by
+SIGINT or SIGTERM is receipted once with `exit_code` 130 or 143 and outcome
+`failed`. Runs dispatched with `--via zaka` write no receipt: they hand off to a
+steerable session and exit before the run has an outcome, so a receipt there
+would claim a completion that has not happened. Tokens by role over a period is a `jq` group-by on this file,
 for example `jq -s 'group_by(.role)[] | {role: .[0].role, in: (map(.tokens_in // 0) | add)}'`.
 
 Terminal receipts also expose `result.findings`. A model-authored verdict count

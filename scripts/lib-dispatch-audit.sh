@@ -289,7 +289,7 @@ _write_dispatch_run_receipt() {
   local exit_code="$1" file dir ended_ts ctx_hash="" tokens_in="" tokens_out="" outcome=completed
   file="${CLAVAIN_DISPATCH_RECEIPT_FILE:-${XDG_STATE_HOME:-$HOME/.local/state}/clavain/dispatch-receipts.jsonl}"
   dir="$(dirname "$file")"
-  mkdir -p "$dir" 2>/dev/null || return 1
+  [[ -d "$dir" ]] || (umask 077; mkdir -p "$dir") 2>/dev/null || return 1
   ended_ts="$(date +%s)"
   [[ "$exit_code" == 0 ]] || outcome=failed
   if [[ -n "${CLAVAIN_DECISION_CONTEXT:-}" && -f "$CLAVAIN_DECISION_CONTEXT" ]]; then
@@ -299,7 +299,8 @@ _write_dispatch_run_receipt() {
     tokens_in="$(sed -n 's/^Tokens: \([0-9][0-9]*\) in \/ \([0-9][0-9]*\) out.*/\1/p' "$SUMMARY_FILE" | head -1)"
     tokens_out="$(sed -n 's/^Tokens: \([0-9][0-9]*\) in \/ \([0-9][0-9]*\) out.*/\2/p' "$SUMMARY_FILE" | head -1)"
   fi
-  jq -cn --arg role "$ROLE" --arg backend "${ENGINE:-}" --arg model "${MODEL:-}" \
+  local line
+  line="$(jq -cn --arg role "$ROLE" --arg backend "${ENGINE:-}" --arg model "${MODEL:-}" \
     --arg effort "${REASONING_EFFORT:-}" --arg producer "${PRODUCER_IDENTITY:-}" \
     --arg bead "${CLAVAIN_BEAD_ID:-}" --arg ctx "$ctx_hash" \
     --arg thread "${BB_THREAD_ID:-}" --arg session "${DISPATCH_SESSION_ID:-}" \
@@ -315,5 +316,16 @@ _write_dispatch_run_receipt() {
      dispatch_id: ($dispatch|nn), attempt_id: ($attempt|nn),
      started_at: ($s|todate), ended_at: ($e|todate), exit_code: $rc, outcome: $outcome,
      tokens_in: (if $tin == "" then null else ($tin|tonumber) end),
-     tokens_out: (if $tout == "" then null else ($tout|tonumber) end)}' >> "$file"
+     tokens_out: (if $tout == "" then null else ($tout|tonumber) end)}')" || return 1
+  # Serialize appends: large records exceed PIPE_BUF, so concurrent plain
+  # appends can interleave. The lock is held only for the single write, and the
+  # file is created owner-only.
+  (
+    umask 077
+    exec 9>>"${file}.lock" || exit 1
+    if command -v flock >/dev/null 2>&1; then
+      flock -w 10 9 || exit 1
+    fi
+    printf '%s\n' "$line" >> "$file"
+  )
 }

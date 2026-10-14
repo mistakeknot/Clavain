@@ -21,6 +21,7 @@ setup() {
     cat > "$T/bin/claude" <<'FAKE'
 #!/usr/bin/env bash
 cat > /dev/null
+if [[ -n "${FAKE_SLEEP:-}" ]]; then echo $$ > "$FAKE_PIDFILE"; sleep "$FAKE_SLEEP" & wait $!; fi
 jq -cn --arg body "${FAKE_BODY:-done}" '{type:"result",subtype:"success",is_error:false,result:$body}'
 exit "${FAKE_EXIT:-0}"
 FAKE
@@ -88,4 +89,39 @@ governed() {
     run bash "$DISPATCH" --to claude --model m1 -C "$T/repo" --prompt-file "$T/prompt.md" -o "$T/out.md"
     [ "$status" -eq 0 ]
     [ ! -e "$T/state/receipts.jsonl" ]
+}
+
+@test "the receipt directory is created 0700 and the file 0600 whatever the umask" {
+    umask 022
+    run governed
+    [ "$status" -eq 0 ]
+    [ "$(stat -c %a "$T/state")" = 700 ]
+    [ "$(stat -c %a "$T/state/receipts.jsonl")" = 600 ]
+}
+
+@test "concurrent appends with very large records stay one valid JSON object per line" {
+    source "$ROOT/scripts/lib-dispatch-audit.sh"
+    ROLE=validation ENGINE=claude REASONING_EFFORT=high
+    MODEL="$(head -c 24576 /dev/zero | tr '\0' 'm')"
+    export ROLE ENGINE REASONING_EFFORT MODEL
+    n=40
+    for i in $(seq 1 $n); do
+        ( _write_dispatch_run_receipt 0 ) &
+    done
+    wait
+    [ "$(wc -l < "$T/state/receipts.jsonl")" -eq $n ]
+    [ "$(jq -c . "$T/state/receipts.jsonl" | wc -l)" -eq $n ]
+}
+
+@test "a TERM-signalled run is receipted once as failed with the signal status" {
+    FAKE_PIDFILE="$T/claude.pid" FAKE_SLEEP=30 governed >/dev/null 2>&1 &
+    pid=$!
+    for _ in $(seq 1 50); do [ -s "$T/claude.pid" ] && break; sleep 0.2; done
+    [ -s "$T/claude.pid" ]
+    pkill -TERM -P "$pid"
+    kill -TERM "$(cat "$T/claude.pid")" 2>/dev/null || true
+    wait "$pid" || true
+    [ "$(wc -l < "$T/state/receipts.jsonl")" -eq 1 ]
+    [ "$(jq -r .outcome "$T/state/receipts.jsonl")" = failed ]
+    [ "$(jq -r .exit_code "$T/state/receipts.jsonl")" -ne 0 ]
 }
