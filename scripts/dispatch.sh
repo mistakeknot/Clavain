@@ -707,6 +707,15 @@ _dispatch_role_profile() {
     echo "Error: jq is required for --role dispatch" >&2
     return 1
   }
+  if [[ -n "${CLAVAIN_DECISION_CONTEXT:-}" ]]; then
+    if [[ "$CLAVAIN_DECISION_CONTEXT" == *[\{\[]* && ! -e "$CLAVAIN_DECISION_CONTEXT" ]]; then
+      echo "Error: CLAVAIN_DECISION_CONTEXT / --context-file must be the path of a JSON file, not inline JSON" >&2
+      return 1
+    elif [[ ! -f "$CLAVAIN_DECISION_CONTEXT" || ! -r "$CLAVAIN_DECISION_CONTEXT" ]]; then
+      echo "Error: CLAVAIN_DECISION_CONTEXT / --context-file '$CLAVAIN_DECISION_CONTEXT' is not a readable file" >&2
+      return 1
+    fi
+  fi
   local policy_source="${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
   _dispatch_routing_precheck "$role" "$policy_source" || return 1
   local headroom='{"status":"unknown"}' advice exclusions='[]' evidence derived base_context
@@ -725,10 +734,20 @@ _dispatch_role_profile() {
   [[ -z "$PRODUCER_IDENTITY" ]] || route_cmd+=(--producer-identity="$PRODUCER_IDENTITY")
   # Resolve against the control-plane checkout, not the task repository (which
   # can live outside Sylveste and need not carry its own routing.yaml).
-  resolved="$("${route_cmd[@]}" "${context_args[@]}")" || {
-    echo "Error: Intercore could not resolve dispatch role '$role'" >&2
+  local context_note=""
+  local route_err
+  route_err="$(mktemp "${TMPDIR:-/tmp}/clavain-route-err.XXXXXX")" || return 1
+  if ! resolved="$("${route_cmd[@]}" "${context_args[@]}" 2> "$route_err")"; then
+    [[ ! -s "$route_err" ]] || cat "$route_err" >&2
+    if grep -qiE 'unknown field|json:' "$route_err" 2>/dev/null; then
+      context_note=" (the decision context was rejected: it has an unknown key or invalid JSON; see the error above)"
+    fi
+    rm -f "$route_err"
+    echo "Error: Intercore could not resolve dispatch role '$role'$context_note" >&2
     return 1
-  }
+  fi
+  [[ ! -s "$route_err" ]] || cat "$route_err" >&2
+  rm -f "$route_err"
   if [[ "$(jq -r '.status' <<< "$headroom")" == known ]]; then
     advice="$(jq -cn --argjson snapshot "$headroom" --argjson route "$resolved" '{snapshot:$snapshot,route:$route}' |
       bash "$DISPATCH_SCRIPT_DIR/pool-headroom.sh" --stdin --role "$role")" || return 1
@@ -3047,10 +3066,13 @@ _extract_verdict() {
                 { sub(/\r$/, "") }
                 {
                     line = $0
-                    if (match(line, /^ ? ? ?(```+|~~~+)/)) {
-                        run = substr(line, RSTART, RLENGTH)
-                        sub(/^ +/, "", run)
+                    # tolerate the same blockquote / list-item prefixes the
+                    # sed below strips, so a prefixed fence is still a fence
+                    if (match(line, /^ ? ? ?(>[ ]*|[-+*][ ]+|•[ ]+)*(```+|~~~+)/)) {
                         rest = substr(line, RSTART + RLENGTH)
+                        run = substr(line, RSTART, RLENGTH)
+                        match(run, /(```+|~~~+)$/)
+                        run = substr(run, RSTART)
                         ch = substr(run, 1, 1)
                         if (open == "") {
                             # a backtick fence info string may not contain a
@@ -3063,10 +3085,21 @@ _extract_verdict() {
                 $0 ~ /[^[:space:]]/ { last = $0 }
                 END { if (open == "") print last }
             ' "$output_file" 2>/dev/null)" || last_line=""
-            if [[ "${last_line^^}" =~ ^VERDICT:[[:space:]]*PASS[[:space:]]*$ ]]; then
+            # Strip only balanced outer decoration: list/quote/heading markers,
+            # then matching ** / __ / ` wrappers (also around just the label,
+            # as in **Verdict:** PASS). Unbalanced or interior asterisks stay,
+            # so "CLEAN*" and "P*ASS" never become a pass.
+            last_line="$(sed -E 's/\r$//; s/^[[:space:]]*([>#+•-]+[[:space:]]*)+//; s/^[[:space:]]*\*[[:space:]]+//; s/[[:space:]]+$//' <<< "$last_line")"
+            local _prev=""
+            while [[ "$last_line" != "$_prev" ]]; do
+                _prev="$last_line"
+                last_line="$(sed -E 's/^(\*\*|__)([A-Za-z]+[[:space:]]*:)\1[[:space:]]*(\*\*|__)([^*_]*)\3$/\2 \4/; s/^(\*\*|__)([A-Za-z]+)\1[[:space:]]*:[[:space:]]*(\*\*|__)([^*_]*)\3$/\2: \4/; s/^\*\*([^*]*)\*\*$/\1/; s/^__(.*)__$/\1/; s/^`(.*)`$/\1/; s/^(\*\*|__|`)([A-Za-z]+[[:space:]]*:)\1([[:space:]]*)/\2 /' <<< "$last_line")"
+                last_line="${last_line%"${last_line##*[![:space:]]}"}"
+            done
+            if [[ "${last_line^^}" =~ ^VERDICT[[:space:]]*:[[:space:]]*PASS([[:space:]]+WITH[[:space:]]+NOTES)?[[:space:]]*$ ]]; then
                 status="pass"
                 summary="Validator replay PASS."
-            elif [[ "${last_line^^}" =~ ^VERDICT:[[:space:]]*CLEAN[[:space:]]*$ ]]; then
+            elif [[ "${last_line^^}" =~ ^VERDICT[[:space:]]*:[[:space:]]*CLEAN[[:space:]]*$ ]]; then
                 status="pass"
                 summary="Agent reports clean completion."
             fi
@@ -3137,8 +3170,57 @@ _extract_verdict() {
 #   error  — codex exec failed visibly (HTTP 4xx/5xx, ERROR line, non-zero exit)
 #   retry  — HTTP 429 rate-limit (caller can back off)
 #   warn   — codex exited 0 but produced zero turns/messages/commands
+# Last provider error message from a codex JSONL event stream (turn.failed or
+# error events), single-line and length-capped. Prints "<event type>\t<text>".
+# Redact provider-originated text with provider-errors.py before it reaches a
+# verdict sidecar or stderr. Fails closed to a placeholder when the redactor is
+# unavailable. Reads stdin, writes stdout.
+_redact_provider_text() {
+    local script_dir="${DISPATCH_SCRIPT_DIR:-}"
+    if [[ -z "$script_dir" || ! -f "$script_dir/provider-errors.py" ]]; then
+        printf '<redacted>'
+        return 0
+    fi
+    python3 -c '
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("provider_errors", sys.argv[1])
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+sys.stdout.write(mod.redact_text(sys.stdin.read()))
+' "$script_dir/provider-errors.py" 2>/dev/null || printf '<redacted>'
+}
+
+# Print a provider stderr capture to our stderr, redacted. The capture may hold
+# credentials or echoed prompt text; the raw file is only ever read for
+# classification and removed on exit.
+_emit_provider_stderr() {
+    local f="${1:-}"
+    [[ -n "$f" && -s "$f" ]] || return 0
+    _redact_provider_text < "$f" >&2 || true
+    printf '\n' >&2
+}
+
+_provider_error_text() {
+    local events_file="${1:-}" raw="${2:-}"
+    [[ -n "$events_file" && -s "$events_file" ]] || return 1
+    command -v jq >/dev/null 2>&1 || return 1
+    local out
+    out=$(jq -Rr 'fromjson? | select(type == "object" and (.type == "turn.failed" or .type == "error"))
+        | [.type, ((.error | if type == "object" then .message else . end) // .message // "" | tostring)] | @tsv' \
+        "$events_file" 2>/dev/null | awk -F'\t' 'NF >= 2 && $2 != "" { last = $0 } END { if (last != "") print last }') || return 1
+    [[ -n "$out" ]] || return 1
+    out=$(printf '%s' "$out" | tr -d '\r' | sed -E 's/\x1b\[[0-9;]*m//g' | head -c 400)
+    if [[ "$raw" == raw ]]; then
+        printf '%s' "$out"
+    else
+        local ev_t="${out%%$'\t'*}" ev_m="${out#*$'\t'}"
+        printf '%s\t%s' "$ev_t" "$(printf '%s' "$ev_m" | _redact_provider_text)"
+    fi
+}
+
 _detect_codex_error() {
     local stderr_file="$1" state_file="$2" exit_code="${3:-0}" output_file="${4:-}"
+    local events_file="${5:-${PROVIDER_EVENTS:-}}"
     local kind="" detail="" line=""
 
     # Stderr pattern-scan only when the process actually failed. An executor's
@@ -3155,7 +3237,11 @@ _detect_codex_error() {
         fi
         if [[ -n "$line" ]]; then
             line=$(printf '%s' "$line" | sed -E 's/\x1b\[[0-9;]*m//g' | tr -d '\r' | head -c 300)
-            if grep -qE '\b429\b' <<< "$line"; then
+            # Classify on the raw line, then redact before it is stored.
+            local http_retry=0
+            ! grep -qE '\b429\b' <<< "$line" || http_retry=1
+            line=$(printf '%s' "$line" | _redact_provider_text)
+            if [[ "$http_retry" == 1 ]]; then
                 kind="retry"
                 detail="Codex HTTP 429 (rate limited): $line"
             else
@@ -3168,7 +3254,7 @@ _detect_codex_error() {
         if [[ -z "$kind" ]]; then
             line=$(grep -m1 -E '^[[:space:]]*ERROR[[:space:]:]' "$stderr_file" 2>/dev/null || true)
             if [[ -n "$line" ]]; then
-                line=$(printf '%s' "$line" | sed -E 's/\x1b\[[0-9;]*m//g' | tr -d '\r' | head -c 300)
+                line=$(printf '%s' "$line" | sed -E 's/\x1b\[[0-9;]*m//g' | tr -d '\r' | head -c 300 | _redact_provider_text)
                 kind="error"
                 detail="$line"
             fi
@@ -3177,7 +3263,34 @@ _detect_codex_error() {
 
     if [[ -z "$kind" && "$exit_code" != "0" ]]; then
         kind="error"
-        detail="codex exec exited $exit_code (no stderr error pattern matched)"
+        # The real cause is usually in the JSONL events (turn.failed / error)
+        # or a usage-limit line on stderr, not in an ERROR/HTTP pattern.
+        local ev_text="" ev_type="" ev_msg=""
+        ev_text=$(_provider_error_text "$events_file" raw || true)
+        if [[ -n "$ev_text" ]]; then
+            ev_type="${ev_text%%$'\t'*}"
+            ev_msg="${ev_text#*$'\t'}"
+            local ev_class_msg="$ev_msg"
+            ev_msg=$(printf '%s' "$ev_msg" | _redact_provider_text)
+            if [[ "$ev_type" == "turn.failed" ]]; then
+                if grep -qiE 'content[ _-]?filter|cyber|safety|flagged|policy' <<< "$ev_class_msg"; then
+                    detail="codex turn.failed (content filter): $ev_msg"
+                else
+                    detail="codex turn.failed: $ev_msg"
+                fi
+            else
+                detail="codex provider error: $ev_msg"
+            fi
+        else
+            line=""
+            [[ ! -f "$stderr_file" ]] || line=$(grep -m1 -iE "hit your usage limit|usage limit" "$stderr_file" 2>/dev/null || true)
+            if [[ -n "$line" ]]; then
+                line=$(printf '%s' "$line" | sed -E 's/\x1b\[[0-9;]*m//g' | tr -d '\r' | head -c 300 | _redact_provider_text)
+                detail="codex usage limit: $line"
+            else
+                detail="codex exec exited $exit_code (no stderr error pattern matched, no provider error event)"
+            fi
+        fi
     fi
 
     # Zero-output heuristic: successful exit but nothing happened → suspicious.
@@ -3222,7 +3335,8 @@ _write_error_verdict() {
     esac
 
     if [[ -f "$verdict_file" ]]; then
-        cp "$verdict_file" "${verdict_file}.pre-error" 2>/dev/null || true
+        # The prior verdict may carry provider text from an earlier write.
+        _redact_provider_text < "$verdict_file" > "${verdict_file}.pre-error" 2>/dev/null || true
     fi
 
     cat > "$verdict_file" <<VERDICT
@@ -3717,7 +3831,12 @@ _finalize_dispatch_result() {
   fi
   if [[ -n "$failure_class" ]]; then
     exit_code=1
-    [[ -z "$OUTPUT" ]] || _write_error_verdict "$OUTPUT" error "$failure_class (structured provider event)"
+    if [[ -n "$OUTPUT" ]]; then
+      local provider_text=""
+      provider_text=$(_provider_error_text "$PROVIDER_EVENTS" || true)
+      provider_text="${provider_text#*$'\t'}"
+      _write_error_verdict "$OUTPUT" error "$failure_class (structured provider event)${provider_text:+: $provider_text}"
+    fi
   fi
   if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "$exit_code" != 0 ]]; then
     failure_class=terminal_accounting
@@ -3790,7 +3909,7 @@ if [[ "$VIA" == bb ]]; then
   trap '_dispatch_on_signal 130' INT
   trap '_dispatch_on_signal 143' TERM
   set -e
-  [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
+  _emit_provider_stderr "$STDERR_FILE"
   _extract_verdict "$OUTPUT"
   [[ "$BB_EXIT" == 0 ]] || _write_error_verdict "$OUTPUT" error 'BB execution evidence incomplete; inspect seat receipt'
   _post_dispatch_validate "$WORKDIR"
@@ -3831,7 +3950,7 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
     fi
   fi
   KIMI_EXIT="${PIPESTATUS[0]}"
-  [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
+  _emit_provider_stderr "$STDERR_FILE"
   [[ -n "${PROMPT_STDIN_FILE:-}" ]] && rm -f "$PROMPT_STDIN_FILE"
   set -e
   SEAT_MUTATED=""
@@ -3895,7 +4014,7 @@ elif [[ "$HAS_GAWK" == true ]]; then
     "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
     CODEX_EXIT="${PIPESTATUS[0]}"
   fi
-  [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
+  _emit_provider_stderr "$STDERR_FILE"
   set -e
 
   # Write summary from bash if awk didn't (fallback for short/failed runs)
@@ -3939,7 +4058,7 @@ else
     "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS"
     CODEX_EXIT="${PIPESTATUS[0]}"
   fi
-  [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
+  _emit_provider_stderr "$STDERR_FILE"
   set -e
 
   _dispatch_sync_interband_from_legacy
