@@ -159,3 +159,15 @@ teardown() { rm -rf "$T"; }
     printf 'ok\n\nVERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
     unset -f cmp
 }
+
+@test "verdict: awk and tr exit statuses fail closed" {
+    printf 'x\n\nVERDICT: BLOCK\n' > "$OUT"
+    awk() { printf 'VERDICT: PASS\n'; return 2; }
+    run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    unset -f awk
+    tr() { command tr "$@"; return 2; }
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"
+    run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    unset -f tr
+    run _review_receipt_verdict "$OUT"; [ "$status" -eq 0 ]
+}

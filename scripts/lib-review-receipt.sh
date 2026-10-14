@@ -77,14 +77,15 @@ _review_receipt_verdict() {
   # Continue only on grep status 1 (no delimiter found); a match or any scan
   # error rejects. NUL bytes are rejected first: shell capture would drop them.
   local rc
-  LC_ALL=C tr -d '\000' <"$out" | cmp -s - "$out" || return 1
+  LC_ALL=C tr -d '\000' <"$out" | cmp -s - "$out"
+  [[ "${PIPESTATUS[0]}" -eq 0 && "${PIPESTATUS[1]}" -eq 0 ]] || return 1
   LC_ALL=C grep -qE '```|~~~|<!--|-->' "$out"; rc=$?
   [[ $rc -eq 1 ]] || return 1
   last="$(awk '
     { sub(/\r$/, "") }
     $0 ~ /[^[:space:]]/ { last = $0; lastok = (blank || NR == 1); blank = 0; next }
     { blank = 1 }
-    END { if (lastok) print last }' "$out")"
+    END { if (lastok) print last }' "$out")" || return 1
   local re='^(\*\*|__)?[Vv][Ee][Rr][Dd][Ii][Cc][Tt][[:space:]]*:(\*\*|__)?[[:space:]]*(([^[:space:]*_`.]|[^[:space:]*_`].*[^[:space:]*_`.]))(\*\*|__)?[[:space:]]*$'
   [[ "$last" =~ $re ]] || return 1
   local v="${BASH_REMATCH[3]}"
