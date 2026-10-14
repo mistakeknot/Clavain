@@ -215,6 +215,12 @@ _dispatch_on_signal() {
 
 _dispatch_cleanup_state() {
   local _rc=$?
+  # Review receipt (mk-zek32): only the resolved child that ran the review
+  # writes it. A requested receipt that cannot be written fails the run, so a
+  # caller never mistakes "no file" for a clean review.
+  if [[ "${ROLE_RESOLVED:-}" == true && "${ROLE:-}" == cross-lab-review ]] && _review_receipt_requested; then
+    _review_receipt_write "${OUTPUT:-}" "$_rc" || { [[ "$_rc" != 0 ]] || _rc=1; }
+  fi
   # Governed per-run receipt, best-effort. A signal before the write only sets
   # _sig_rc; the record is built after the status is final, and INT/TERM are
   # ignored just for the short append, so the receipt and the exit status agree.
@@ -233,12 +239,6 @@ _dispatch_cleanup_state() {
     done
     [[ -z "$_line" ]] || _append_dispatch_run_receipt "$_line" 2>/dev/null || true
     [[ -z "$_sig_rc" ]] || _rc="$_sig_rc"
-  fi
-  # Review receipt (mk-zek32): only the resolved child that ran the review
-  # writes it. A requested receipt that cannot be written fails the run, so a
-  # caller never mistakes "no file" for a clean review.
-  if [[ "${ROLE_RESOLVED:-}" == true && "${ROLE:-}" == cross-lab-review ]] && _review_receipt_requested; then
-    _review_receipt_write "${OUTPUT:-}" "$_rc" || { [[ "$_rc" != 0 ]] || _rc=1; }
   fi
   # The EXIT trap exits with this, so the status matches the committed receipt.
   DISPATCH_FINAL_RC="$_rc"

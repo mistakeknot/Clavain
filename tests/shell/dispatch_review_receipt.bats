@@ -90,3 +90,40 @@ teardown() { rm -rf "$T"; }
     [ "$status" -ne 0 ]
     [[ "$output" == *"--repo-id"* ]]
 }
+
+@test "verdict: quoted, indented and mismatched-fence PASS never count" {
+    printf '> VERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    printf '    VERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    printf '```\n~~~\nVERDICT: PASS\n' > "$OUT"; run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    printf '```\nx\n```\nVERDICT: PASS\n' > "$OUT"; [ "$(_review_receipt_verdict "$OUT")" = PASS ]
+    printf '**VERDICT: PASS WITH NOTES**\n' > "$OUT"; [ "$(_review_receipt_verdict "$OUT")" = "PASS WITH NOTES" ]
+}
+
+@test "prepare rejects conflicting merges" {
+    git -C "$R" checkout -q -b other "$BASE"
+    echo x > "$R/a"; git -C "$R" commit -qam x
+    X="$(git -C "$R" rev-parse HEAD)"
+    git -C "$R" checkout -q main
+    git -C "$R" checkout -q -b y "$BASE"; echo y > "$R/a"; git -C "$R" commit -qam y
+    Y="$(git -C "$R" rev-parse HEAD)"
+    RR_BASE="$X" RR_HEAD="$Y"; run _review_receipt_prepare "$R"
+    [ "$status" -ne 0 ]
+}
+
+@test "diff hash ignores textconv and rejects a failed diff" {
+    printf '*.bin diff=bad\n' > "$R/.gitattributes"
+    echo 1 > "$R/f.bin"; git -C "$R" add -A; git -C "$R" commit -qm bin
+    git -C "$R" config diff.bad.textconv false
+    RR_HEAD="$(git -C "$R" rev-parse HEAD)"
+    _review_receipt_prepare "$R"
+    [ "$RR_DIFF_SHA256" != e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 ]
+}
+
+@test "write refuses to go through an existing symlink" {
+    _review_receipt_prepare "$R"
+    mkdir -p "$T/reviews/o__r"; ln -s /dev/null "$T/reviews/o__r/7-$HEAD_SHA.json"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -ne 0 ]
+    ls "$T/reviews/o__r" | grep -vq '^\.' || true
+    [ -z "$(find "$T/reviews/o__r" -name '.new.*')" ]
+}

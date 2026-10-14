@@ -47,12 +47,20 @@ _review_receipt_prepare() {
   done
   RR_HEAD_TREE="$("${g[@]}" rev-parse --verify "${RR_HEAD}^{tree}" 2>/dev/null)" || return 1
   # Tree git would produce by merging head onto base; no worktree touched.
-  RR_MERGE_TREE="$("${g[@]}" merge-tree --write-tree "$RR_BASE" "$RR_HEAD" 2>/dev/null | head -1)"
-  [[ "$RR_MERGE_TREE" =~ ^[0-9a-f]{40}$ ]] || {
+  local mt mt_rc
+  mt="$("${g[@]}" merge-tree --write-tree "$RR_BASE" "$RR_HEAD" 2>/dev/null)"; mt_rc=$?
+  RR_MERGE_TREE="${mt%%$'\n'*}"
+  [[ "$mt_rc" == 0 && "$RR_MERGE_TREE" =~ ^[0-9a-f]{40}$ ]] || {
     echo "Error: head does not merge cleanly onto base; no expected merge tree" >&2; return 1; }
-  RR_DIFF_STAT="$("${g[@]}" diff --no-ext-diff --no-renames --shortstat "$RR_BASE" "$RR_HEAD" 2>/dev/null | sed 's/^ *//')"
-  # sha256 of the raw diff bytes, with no shell capture in between.
-  RR_DIFF_SHA256="$("${g[@]}" diff --no-ext-diff --no-renames --binary "$RR_BASE" "$RR_HEAD" 2>/dev/null | sha256sum | cut -d' ' -f1)"
+  RR_DIFF_STAT="$("${g[@]}" diff --no-ext-diff --no-textconv --no-renames --shortstat "$RR_BASE" "$RR_HEAD" 2>/dev/null)" || {
+    echo "Error: git diff --shortstat failed" >&2; return 1; }
+  RR_DIFF_STAT="${RR_DIFF_STAT#"${RR_DIFF_STAT%%[![:space:]]*}"}"
+  # sha256 of the raw diff bytes, with no shell capture in between. Both stages
+  # must succeed, or a failed diff would attest the empty-stream digest.
+  local dsum
+  dsum="$("${g[@]}" diff --no-ext-diff --no-textconv --no-renames --binary "$RR_BASE" "$RR_HEAD" 2>/dev/null | sha256sum; printf ' %s' "${PIPESTATUS[0]}")"
+  [[ "${dsum##* }" == 0 ]] || { echo "Error: git diff failed; no diff hash" >&2; return 1; }
+  RR_DIFF_SHA256="${dsum%% *}"
   [[ "$RR_DIFF_SHA256" =~ ^[0-9a-f]{64}$ ]] || return 1
 }
 
@@ -62,17 +70,25 @@ _review_receipt_prepare() {
 _review_receipt_verdict() {
   local out="$1" last
   [[ -f "$out" ]] || return 1
+  # Last non-blank line outside a code fence. A closer must repeat the opening
+  # char, be at least as long and carry no text; an unclosed fence hides the
+  # rest. Quoted (>) and 4+-space-indented lines are never a ruling.
   last="$(awk '
     { sub(/\r$/, "") }
-    /^[ ]{0,3}(```+|~~~+)/ { f = !f; next }
-    !f && /[^[:space:]]/ { last = $0 }
-    END { print last }' "$out")"
-  last="$(sed -E 's/^[[:space:]>#*_`-]+//; s/[[:space:]*_`]+$//' <<< "$last")"
-  local up="${last^^}"
-  [[ "$up" =~ ^VERDICT[[:space:]]*:\*{0,2}_{0,2}[[:space:]]*(.+)$ ]] || return 1
-  local v="${BASH_REMATCH[1]}"
-  v="$(sed -E 's/^[[:space:]*_`]+//; s/[[:space:]*_`.]+$//' <<< "$v")"
-  case "$v" in
+    {
+      if (match($0, /^ ? ? ?(```+|~~~+)/)) {
+        run = substr($0, RSTART, RLENGTH); sub(/^ +/, "", run)
+        rest = substr($0, RSTART + RLENGTH); ch = substr(run, 1, 1)
+        if (open == "") { if (!(ch == "`" && index(rest, "`"))) { open = ch; olen = length(run) } ; next }
+        else if (ch == open && length(run) >= olen && rest ~ /^[ \t]*$/) { open = ""; next }
+      }
+      if (open == "" && $0 ~ /[^[:space:]]/) last = $0
+    }
+    END { if (open == "") print last }' "$out")"
+  local re='^ {0,3}(\*\*|__)?[Vv][Ee][Rr][Dd][Ii][Cc][Tt][[:space:]]*:(\*\*|__)?[[:space:]]*(([^[:space:]*_`.]|[^[:space:]*_`].*[^[:space:]*_`.]))(\*\*|__)?[[:space:]]*$'
+  [[ "$last" =~ $re ]] || return 1
+  local v="${BASH_REMATCH[3]}"
+  case "${v^^}" in
     PASS) echo PASS ;;
     "PASS WITH NOTES") echo "PASS WITH NOTES" ;;
     *) echo BLOCK ;;
@@ -129,11 +145,17 @@ _review_receipt_write() {
      producer_identity: $producer, reviewer_identity: $reviewer, validator_relationship: ($rel|nn),
      verdict: $verdict, policy_hash: $policy,
      dispatch_id: ($did|nn), attempt_id: ($aid|nn), created_at: $now}')" || return 1
-  # Exclusive create: noclobber makes > fail if the file exists.
-  if ! ( set -o noclobber; umask 077; printf '%s\n' "$tmp" > "$file" ) 2>/dev/null; then
+  # Exclusive create: write a private temp file, then hard-link it into place.
+  # link(2) fails on any existing entry, symlinks included, and the receipt
+  # appears complete or not at all.
+  local tmpf
+  tmpf="$(umask 077; mktemp "$dir/.new.XXXXXX")" || { echo "review receipt: cannot create temp file in $dir" >&2; return 1; }
+  if ! printf '%s\n' "$tmp" > "$tmpf" || ! ln "$tmpf" "$file" 2>/dev/null; then
+    rm -f "$tmpf"
     echo "review receipt: not written ($file already exists or is unwritable)" >&2
     return 1
   fi
+  rm -f "$tmpf"
   echo "review receipt: $file" >&2
   return 0
 }
