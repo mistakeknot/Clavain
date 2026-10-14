@@ -273,6 +273,27 @@ def test_python_duplicate_name_with_differing_specs_is_a_note(run, tmp_path):
     assert report["drift"] == [] and any("differing specs" in n for n in report["skipped"])
 
 
+@pytest.mark.parametrize("override", [">=2.0.0", "workspace:*", "github:o/r#v2.0.0", "2.x", "latest"])
+def test_unsupported_override_still_makes_the_name_ambiguous(run, tmp_path, override):
+    (tmp_path / "package.json").write_text(json.dumps({
+        "dependencies": {"lib": "1.0.0"}, "optionalDependencies": {"lib": override}}))
+    (tmp_path / "AGENTS.md").write_text("lib 2.0.0\n")
+    result = run(tmp_path, "--json", "--strict")
+    report = json.loads(result.stdout)
+    assert result.returncode == 0 and report["drift"] == []
+    assert any("differing specs" in n for n in report["skipped"])
+
+
+def test_python_unsupported_duplicate_makes_the_name_ambiguous(run, tmp_path):
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "x"\ndependencies = ["lib==1.0.0", "lib>=2.0.0; python_version < \'3.9\'"]\n')
+    (tmp_path / "AGENTS.md").write_text("lib 2.0.0\n")
+    result = run(tmp_path, "--json", "--strict")
+    report = json.loads(result.stdout)
+    assert result.returncode == 0 and report["drift"] == []
+    assert any("differing specs" in n for n in report["skipped"])
+
+
 def test_same_spec_in_two_tables_is_still_checked(run, tmp_path):
     (tmp_path / "package.json").write_text(json.dumps({
         "dependencies": {"lib": "1.0.0"}, "peerDependencies": {"lib": "1.0.0"}}))

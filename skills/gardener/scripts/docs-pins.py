@@ -61,17 +61,23 @@ def is_reference(spec: str) -> bool:
 
 
 def add(pins: Pins, skipped: list[str], name: str, spec: str) -> None:
-    """Record a pin, or a note when the spec is not one plain version."""
-    if is_reference(spec) or SPEC_RE.fullmatch(spec.strip()) is None:
-        skipped.append(f"{name} {spec.strip()}".strip())
-    else:
-        pins.setdefault(name, []).append(spec.strip())
+    """Record every spec for a name; `drop_ambiguous` decides afterwards which can be compared."""
+    pins.setdefault(name, []).append(spec.strip())
 
 
 def drop_ambiguous(pins: Pins, skipped: list[str]) -> None:
-    """A name pinned with different specs (npm overrides, extras, same Go module basename) is not compared."""
-    for name in [n for n, specs in pins.items() if len(set(specs)) > 1]:
-        skipped.append(f"{name} pinned with differing specs: {', '.join(sorted(set(pins.pop(name))))}")
+    """A name pinned with different specs (npm overrides, extras, same Go module basename) is not compared,
+    whatever the specs are. A name left with one spec is compared only when it is one plain version."""
+    for name in list(pins):
+        specs = set(pins.pop(name))
+        if len(specs) > 1:
+            skipped.append(f"{name} pinned with differing specs: {', '.join(sorted(specs))}")
+            continue
+        spec = specs.pop()
+        if is_reference(spec) or SPEC_RE.fullmatch(spec) is None:
+            skipped.append(f"{name} {spec}".strip())
+        else:
+            pins[name] = [spec]
 
 
 def package_json_pins(path: Path) -> tuple[Pins, list[str]]:
