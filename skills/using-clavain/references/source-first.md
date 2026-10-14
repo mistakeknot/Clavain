@@ -6,12 +6,12 @@ Read a dependency's installed source before you use its API. Memory of a library
 
 Before writing code that calls a dependency, read the version this repo actually resolves:
 
-1. Find the pinned version in the lockfile or manifest (`package-lock.json`, `pnpm-lock.yaml`, `go.sum`, `Cargo.lock`, `uv.lock`).
+1. Find the pinned version in the lockfile or manifest (`package-lock.json`, `pnpm-lock.yaml`, `go.mod`, `Cargo.lock`, `uv.lock`). For Go, `go.sum` is a checksum ledger and can list versions the build does not use; ask the toolchain instead (below).
 2. Read the installed copy at that version:
    - Node: `node_modules/<pkg>`. Read its `AGENTS.md` or `README` first, then the exported types and source.
-   - Go: `$(go env GOMODCACHE)/<module>@<version>`.
+   - Go: run `go list -m -json <module>` and read its `Dir` (the resolved source, which honors `replace` directives and path escaping) and `Version`.
    - Python: the package under the active environment's `site-packages`.
-   - Rust: `~/.cargo/registry/src/*/<crate>-<version>`.
+   - Rust: run `cargo metadata --format-version 1` and read the package's `manifest_path` directory. This covers custom `CARGO_HOME`, git, path and vendored sources; the default registry cache is `$CARGO_HOME/registry/src/*/<crate>-<version>`.
 3. Use a documentation lookup tool (such as context7) only second, to find where to look or to fill gaps the source leaves. Check that it names the pinned version.
 4. When memory, docs and the installed source disagree, the installed source wins. Compiler, type-checker, linter and test output outrank memory too: if they reject your call, change the call.
 
