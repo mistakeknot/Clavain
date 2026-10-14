@@ -103,6 +103,24 @@ def test_codex_exhausted_429_retries_is_rate_limited():
     assert provider_errors.classify(events) == "rate_limited"
 
 
+@pytest.mark.parametrize("message,expected", [
+    ("Selected model is at capacity. Please try a different model.", "rate_limited"),
+    ('{"detail":"The \'gpt-6.1-sol\' model is not supported when using Codex with a ChatGPT account."}',
+     "account_access_absent"),
+    ("model server exploded", "terminal_error"),
+])
+def test_codex_seat_availability_errors_walk_the_chain(message, expected):
+    # Captured 2026-10-14 from crosslab-sol: both messages arrive as plain
+    # error events with no code and were terminal_error, which suppressed the
+    # fallback walk (bead mk-zek32 follow-up, vizier ruling relayed 2026-10-14).
+    events = [
+        {"type": "turn.started"},
+        {"type": "error", "message": message},
+        {"type": "turn.failed", "error": {"message": message}},
+    ]
+    assert provider_errors.classify(events) == expected
+
+
 def test_recovered_codex_429_is_not_a_failure():
     events = [
         {"type": "error", "message": CODEX_EXHAUSTED_429},
