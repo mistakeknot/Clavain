@@ -25,6 +25,7 @@ if [[ "$1" == "where" ]]; then
     echo "  database: $(cat "$PWD/.beads/dbpath" 2>/dev/null || echo "$PWD/.beads/dolt")"
     exit 0
 fi
+echo "$*" >> "${BD_ARGS_LOG:-/dev/null}"
 if [[ -f "$PWD/.beads/fail" ]]; then
     cat "$PWD/.beads/fail" >&2
     exit 1
@@ -33,6 +34,7 @@ cat "$PWD/.beads/ready.json" 2>/dev/null || echo "[]"
 EOF
     chmod +x "$BD_STUB"
     export CLAVAIN_NEXT_GOAL_BD="$BD_STUB"
+    export BD_ARGS_LOG="$TEST_DIR/bd.args"
 }
 
 teardown() {
@@ -382,6 +384,10 @@ make_bb_list_stub() {
 #!/usr/bin/env bash
 echo "\$*" >> "$TEST_DIR/bb.args"
 if [[ "\$1 \$2" == "tasks list" ]]; then
+  case " \$* " in *" --status backlog,todo,in_progress,in_review "*) ;; *) echo "stub: missing --status" >&2; exit 2 ;; esac
+  case " \$* " in *" --sort priority "*) ;; *) echo "stub: missing --sort" >&2; exit 2 ;; esac
+  case " \$* " in *" --limit "[0-9]*" "*) ;; *) echo "stub: missing --limit" >&2; exit 2 ;; esac
+  case " \$* " in *" --json "*) ;; *) echo "stub: missing --json" >&2; exit 2 ;; esac
   cat "$TEST_DIR/bb.out"
   exit ${2:-0}
 fi
@@ -409,6 +415,8 @@ BB_CARDS='{"tasks":[{"key":"AFTM-43","title":"HUD","status":"backlog","priority"
     PATH="$TEST_DIR/stubs:$PATH" CLAVAIN_NEXT_GOAL_ROOTS="$root" run --separate-stderr bash "$SCRIPT_UNDER_TEST" AFTM-38
     [ "$status" -eq 0 ]
     [ "$(jq '.candidates | length' <<<"$output")" -eq 2 ]
+    grep -q -- "^ready --json" "$BD_ARGS_LOG"
+    ! grep -q -- "AFTM" "$BD_ARGS_LOG"
 }
 
 @test "bb board: works when no bd root is reachable at all" {
@@ -438,4 +446,20 @@ BB_CARDS='{"tasks":[{"key":"AFTM-43","title":"HUD","status":"backlog","priority"
     [ "$(jq -r '[.candidates[].id] | join(",")' <<<"$output")" = "q-1" ]
     [ "$(jq '.roots | length' <<<"$output")" -eq 1 ]
     [ ! -e "$TEST_DIR/bb.args" ]
+}
+
+@test "bb board: task entries that are not objects are a failed lookup, not an empty board" {
+    make_bb_list_stub '{"tasks":["junk"]}'
+    root="$(make_root quiet '[]')"
+    PATH="$TEST_DIR/stubs:$PATH" CLAVAIN_NEXT_GOAL_ROOTS="$root" run --separate-stderr bash "$SCRIPT_UNDER_TEST" --bb-project AFTM
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.roots[] | select(.tracker == "bb") | .status' <<<"$output")" = "unreachable" ]
+    [ "$(jq '.lookup_failures | length' <<<"$output")" -eq 1 ]
+    [ "$(jq '.candidates | length' <<<"$output")" -eq 0 ]
+}
+
+@test "bb board: the list stub rejects a call missing its filters" {
+    make_bb_list_stub "$BB_CARDS"
+    run "$TEST_DIR/stubs/bb" tasks list --project AFTM --json
+    [ "$status" -eq 2 ]
 }

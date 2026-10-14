@@ -271,18 +271,26 @@ bb_show() {
 BEADS_JSON="[]"
 DISQUALIFIED="[]"
 ANSWERED=0
+BB_UNRESOLVED=""
 
 for id in ${IDS[@]+"${IDS[@]}"}; do
     found=""
     found_root=""
     bb_card=""
     bd_answered=0
+    bb_unanswered=0
     if [[ "$id" =~ $BB_KEY_RE ]] && have_bb; then
         raw="$(bb_show "$id")"
-        if jq -e '.task.key? // empty' >/dev/null 2>&1 <<<"$raw"; then
+        # A card counts only when the board returns THIS key with a status it
+        # recognizes. Any other shape is the board failing to answer, and a
+        # bead tracker saying "no such bead" cannot stand in for it: bd does
+        # not hold board cards, so its not-found proves nothing about one.
+        if jq -e --arg id "$id" '.task.key? == $id and ((.task.status? // "") | IN("backlog","todo","in_progress","in_review","done","canceled"))' >/dev/null 2>&1 <<<"$raw"; then
             bb_card="$raw"; ANSWERED=1
         elif jq -e '.error.code? == "task_not_found"' >/dev/null 2>&1 <<<"$raw"; then
             ANSWERED=1
+        else
+            bb_unanswered=1
         fi
     fi
     for root in ${ROOTS[@]+"${ROOTS[@]}"}; do
@@ -298,19 +306,14 @@ for id in ${IDS[@]+"${IDS[@]}"}; do
         # said no. That is the only thing that earns the right to call an id
         # nonexistent below, and it is a different fact from silence.
         if jq -e 'type == "object" and has("error")' >/dev/null 2>&1 <<<"$raw"; then
-            ANSWERED=1; bd_answered=1
+            [[ $bb_unanswered -eq 0 ]] && ANSWERED=1
+            bd_answered=1
         fi
     done
 
-    # Fallback: no bd tracker answered for a card-shaped id (bd absent, no
-    # root, or an unreachable one), so ask the bb tasks board.
-    if [[ -z "$found" && -z "$bb_card" && $bd_answered -eq 0 && "$id" =~ $BB_KEY_RE ]] && have_bb; then
-        raw="$(bb_show "$id")"
-        if jq -e '.task.key? // empty' >/dev/null 2>&1 <<<"$raw"; then
-            bb_card="$raw"; ANSWERED=1
-        elif jq -e '.error.code? == "task_not_found"' >/dev/null 2>&1 <<<"$raw"; then
-            ANSWERED=1
-        fi
+    # A card key the board could not answer is unresolved, whatever bd said.
+    if [[ $bb_unanswered -eq 1 && -z "$found" ]]; then
+        BB_UNRESOLVED="${BB_UNRESOLVED:+$BB_UNRESOLVED, }$id"
     fi
 
     if [[ -n "$bb_card" ]]; then
@@ -370,6 +373,9 @@ done
 # worse than no gate: it is confidently wrong in the direction that drops real
 # work, and next-goal-candidates.sh carries ten lines of comment on the same
 # distinction one level out. Found by running it on a host missing `awk`.
+if [[ -n "$BB_UNRESOLVED" ]]; then
+    unavailable "bb tasks board did not answer for card key(s) $BB_UNRESOLVED, so their existence cannot be established"
+fi
 if [[ ${#IDS[@]} -gt 0 && $ANSWERED -eq 0 ]]; then
     unavailable "no bead root reachable, so a live candidate cannot be told from a closed one"
 fi
@@ -506,7 +512,10 @@ if [[ ${#IDS[@]} -gt 0 ]]; then
             CAND_OUT="[]"
             while IFS=$'\t' read -r cid croot cparent; do
                 [[ -z "$cid" ]] && continue
-                root_epic_of "$croot" "$cid" "$cparent"
+                # A board card has no bead lineage to walk. It stays in the run
+                # as a candidate of unknown lineage, so it can never be hidden
+                # behind a run judged on the beads alone.
+                if [[ "$croot" == "-" ]]; then ROOT_EPIC=""; else root_epic_of "$croot" "$cid" "$cparent"; fi
                 streak="[]"
                 if [[ -n "$ROOT_EPIC" ]]; then
                     streak="$(jq -c --arg r "$ROOT_EPIC" '[.[] | select(any(.roots[]; . == $r)) | .id]' <<<"$WINDOW_OUT")"
@@ -515,8 +524,7 @@ if [[ ${#IDS[@]} -gt 0 ]]; then
                     '. + [{id: $id, root_epic: (if $r == "" then null else $r end), streak: $s,
                            in_streak: (($s | length) >= $m)}]' <<<"$CAND_OUT")"
             done < <(jq -r '.[] | select(.verdict == "ok" or .verdict == "warn")
-                             | select(.root != null)
-                             | [.id, .root, (.parent // "")] | @tsv' <<<"$BEADS_JSON")
+                             | [.id, (.root // "-"), (.parent // "")] | @tsv' <<<"$BEADS_JSON")
 
             # The decision. --beat is not a bypass: it names an OPEN candidate
             # OUTSIDE the streak that was weighed and lost, verified in this same

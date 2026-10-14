@@ -636,14 +636,15 @@ if [[ -n "$BB_PROJECT" && "$BB_PROJECT" =~ ^[A-Za-z][A-Za-z0-9]*$ ]] && command 
         status="unreachable"; reason="${reason:-timed out after ${PER_ROOT_TIMEOUT}s}"
     elif (( rc != 0 )); then
         status="unreachable"; reason="${reason:-bb exited $rc}"
-    elif ! jq -e '.tasks | type == "array"' >/dev/null 2>&1 <<<"${out:-}"; then
+    elif ! jq -e '.tasks | type == "array" and all(.[]; type == "object")' >/dev/null 2>&1 <<<"${out:-}"; then
         status="unreachable"; reason="${reason:-bb returned unparseable output}"
+    elif ! cards="$(jq -c --arg root "$bb_root" '
+            [.tasks[] | select(.status != "done" and .status != "canceled")
+             | {id: .key, title, status, priority, issue_type: null, tracker: "bb", _root: $root}]' <<<"$out" 2>/dev/null)" \
+         || ! count="$(jq 'length' <<<"$cards" 2>/dev/null)"; then
+        status="unreachable"; reason="${reason:-bb returned cards that could not be read}"
     else
         # Belt and braces: drop closed cards even if the status filter is ignored.
-        cards="$(jq -c --arg root "$bb_root" '
-            [.tasks[] | select(.status != "done" and .status != "canceled")
-             | {id: .key, title, status, priority, issue_type: null, tracker: "bb", _root: $root}]' <<<"$out")"
-        count="$(jq 'length' <<<"$cards")"
         status="ok"; reason=""
         (( count == 0 )) && status="empty"
         CANDIDATE_SETS+=("$cards")
