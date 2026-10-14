@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 #
 # next-goal-verify.sh — re-read every candidate a Next-goal block is about to
-# cite, at source, immediately before it is emitted.
+# cite, at source, immediately before it is emitted. Candidates are beads (bd)
+# or, for projects whose backlog is the bb tasks board, cards (KEY-N, read with
+# `bb tasks show`; a done or canceled card is closed).
 #
 # WHY THIS EXISTS, and why it is NOT the same check as the provenance receipt.
 #
@@ -81,7 +83,7 @@
 # Usage:
 #   next-goal-verify.sh [--recommend <id>] [--beat <id>] [--text <goal text>]
 #                       [--out-of <bead|file|text>]... [--out-override <reason>]
-#                       <bead-id> [<bead-id>...]
+#                       <bead-id|card-key> [<id>...]
 #   next-goal-verify.sh --path apps/web/components/x/ <bead-id>     # see --path
 #   next-goal-verify.sh --recommend mk-12 --beat mk-40 mk-12 mk-40  # see LINEAGE
 #   next-goal-verify.sh --recommend mk-12 --text "/goal ..." --out-of mk-9 mk-12  # see OUT CLAUSE
@@ -175,8 +177,22 @@ command -v jq >/dev/null 2>&1 || unavailable "jq not installed"
 # whole run report `available: false` on any host without bd — surrendering the
 # half of the check that was still perfectly answerable. Caught on a CI runner
 # that has no bd: a paths-only invocation returned no `paths` array at all.
-if [[ ${#IDS[@]} -gt 0 ]]; then
-    command -v bd >/dev/null 2>&1 || unavailable "bd not installed"
+#
+# BB TASKS CARDS — a project whose backlog lives on the bb tasks board has IDs
+# like AFTM-38, which no bd database holds. An ID shaped like a card key is
+# read with `bb tasks show`: first when the key is upper-case (bead IDs never
+# are), and as a fallback when bd is missing or never answered for it. Without
+# `bb` on PATH none of this runs and the script behaves exactly as before.
+have_bb() { command -v bb >/dev/null 2>&1; }
+BB_KEY_RE='^[A-Z][A-Z0-9]*-[0-9]+$'
+if [[ ${#IDS[@]} -gt 0 ]] && ! command -v bd >/dev/null 2>&1; then
+    # Without bd, only a run made entirely of card-shaped IDs can be answered.
+    bb_only=0
+    if have_bb; then
+        bb_only=1
+        for id in "${IDS[@]}"; do [[ "$id" =~ $BB_KEY_RE ]] || { bb_only=0; break; }; done
+    fi
+    [[ $bb_only -eq 1 ]] || unavailable "bd not installed"
 fi
 
 # ---------------------------------------------------------------- root discovery
@@ -241,37 +257,102 @@ bd_show() {
     fi
 }
 
+bb_show() {
+    # $1 = card key. Prints bb's raw JSON, or nothing. A missing card exits 1
+    # but still prints {"ok":false,"error":{"code":"task_not_found"}} on stdout;
+    # like bd, the payload is the answer, not the exit status.
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$BD_TIMEOUT" bb tasks show "$1" --json 2>/dev/null
+    else
+        bb tasks show "$1" --json 2>/dev/null
+    fi
+}
+
+# True when $2 (bb's raw JSON) is THIS key ($1) with a status the board knows.
+# Shared by the candidate lookup and --out-of so neither accepts another card.
+bb_card_valid() {
+    jq -e --arg id "$1" '.task.key? == $id and ((.task.status? // "") | IN("backlog","todo","in_progress","in_review","done","canceled"))' >/dev/null 2>&1 <<<"$2"
+}
+
 BEADS_JSON="[]"
 DISQUALIFIED="[]"
 ANSWERED=0
+BB_UNRESOLVED=""
 
 for id in ${IDS[@]+"${IDS[@]}"}; do
     found=""
     found_root=""
+    bb_card=""
+    bd_answered=0
+    bb_unanswered=0
+    if [[ "$id" =~ $BB_KEY_RE ]] && have_bb; then
+        raw="$(bb_show "$id")"
+        # A card counts only when the board returns THIS key with a status it
+        # recognizes. Any other shape is the board failing to answer, and a
+        # bead tracker saying "no such bead" cannot stand in for it: bd does
+        # not hold board cards, so its not-found proves nothing about one.
+        if bb_card_valid "$id" "$raw"; then
+            bb_card="$raw"; ANSWERED=1
+        elif jq -e '.error.code? == "task_not_found"' >/dev/null 2>&1 <<<"$raw"; then
+            ANSWERED=1
+        else
+            bb_unanswered=1
+        fi
+    fi
     for root in ${ROOTS[@]+"${ROOTS[@]}"}; do
+        [[ -n "$bb_card" ]] && break
+        command -v bd >/dev/null 2>&1 || break
         raw="$(bd_show "$root" "$id")"
         [[ -z "$raw" ]] && continue
         # An array means bd resolved it. An object carries {"error": ...}.
         if jq -e 'type == "array" and length > 0' >/dev/null 2>&1 <<<"$raw"; then
-            found="$raw"; found_root="$root"; ANSWERED=1; break
+            found="$raw"; found_root="$root"; ANSWERED=1; bd_answered=1; break
         fi
         # A parseable error object is still a TRACKER ANSWERING — it looked and
         # said no. That is the only thing that earns the right to call an id
         # nonexistent below, and it is a different fact from silence.
         if jq -e 'type == "object" and has("error")' >/dev/null 2>&1 <<<"$raw"; then
-            ANSWERED=1
+            [[ $bb_unanswered -eq 0 ]] && ANSWERED=1
+            bd_answered=1
         fi
     done
 
-    if [[ -z "$found" ]]; then
+    # A card key the board could not answer is unresolved, whatever bd said.
+    if [[ $bb_unanswered -eq 1 && -z "$found" ]]; then
+        BB_UNRESOLVED="${BB_UNRESOLVED:+$BB_UNRESOLVED, }$id"
+    fi
+
+    if [[ -n "$bb_card" ]]; then
+        # Every bb field that reaches a string is coerced first: a number is
+        # stringified, null or an object/array becomes absent. Concatenating
+        # the raw value would abort jq and leave stdout empty.
+        entry="$(jq -c --arg id "$id" '
+            def s: if type == "string" then . elif type == "number" or type == "boolean" then tostring else null end;
+            .task
+            | {id: $id, root: null, tracker: "bb", status, issue_type: null, priority,
+               parent: null, title: ((.title | s) // ""),
+               closed_at: (if .status == "done" or .status == "canceled" then (.updatedAt | s) else null end)}
+            | . + (
+                if   .status == "done" or .status == "canceled"
+                then {verdict: "disqualified",
+                      reason: ("already " + .status + (if .closed_at then " (" + .closed_at + ")" else "" end)
+                               + " — proposing it recommends work that is already done")}
+                elif .status == "in_progress" or .status == "in_review"
+                then {verdict: "warn",
+                      reason: ("already " + .status + " — usable only if the goal is to finish it, and say so")}
+                else {verdict: "ok", reason: "open"}
+                end)
+        ' <<<"$bb_card")"
+    elif [[ -z "$found" ]]; then
         entry="$(jq -cn --arg id "$id" \
             '{id: $id, root: null, status: null, verdict: "disqualified",
               reason: "no such bead in any reachable tracker — do not cite an ID that cannot be read back"}')"
     else
         entry="$(jq -c --arg root "$found_root" '
+            def s: if type == "string" then . elif type == "number" or type == "boolean" then tostring else null end;
             .[0]
             | {id, root: $root, status, issue_type, priority, parent: (.parent // null),
-               title: (.title // ""), closed_at: (.closed_at // null)}
+               title: ((.title | s) // ""), closed_at: (.closed_at | s)}
             | . + (
                 if   .status == "closed"
                 then {verdict: "disqualified",
@@ -290,7 +371,11 @@ for id in ${IDS[@]+"${IDS[@]}"}; do
                 end)
         ' <<<"$found")"
     fi
-    BEADS_JSON="$(jq -c --argjson e "$entry" '. + [$e]' <<<"$BEADS_JSON")"
+    # A projection that produced nothing is verification failing, not a verdict.
+    jq -e 'type == "object"' >/dev/null 2>&1 <<<"$entry" \
+        || unavailable "could not project tracker data for $id"
+    BEADS_JSON="$(jq -c --argjson e "$entry" '. + [$e]' <<<"$BEADS_JSON")" \
+        || unavailable "could not record tracker data for $id"
 done
 
 # SILENCE IS NOT A VERDICT — and this script shipped its first draft getting
@@ -303,6 +388,9 @@ done
 # worse than no gate: it is confidently wrong in the direction that drops real
 # work, and next-goal-candidates.sh carries ten lines of comment on the same
 # distinction one level out. Found by running it on a host missing `awk`.
+if [[ -n "$BB_UNRESOLVED" ]]; then
+    unavailable "bb tasks board did not answer for card key(s) $BB_UNRESOLVED, so their existence cannot be established"
+fi
 if [[ ${#IDS[@]} -gt 0 && $ANSWERED -eq 0 ]]; then
     unavailable "no bead root reachable, so a live candidate cannot be told from a closed one"
 fi
@@ -439,7 +527,10 @@ if [[ ${#IDS[@]} -gt 0 ]]; then
             CAND_OUT="[]"
             while IFS=$'\t' read -r cid croot cparent; do
                 [[ -z "$cid" ]] && continue
-                root_epic_of "$croot" "$cid" "$cparent"
+                # A board card has no bead lineage to walk. It stays in the run
+                # as a candidate of unknown lineage, so it can never be hidden
+                # behind a run judged on the beads alone.
+                if [[ "$croot" == "-" ]]; then ROOT_EPIC=""; else root_epic_of "$croot" "$cid" "$cparent"; fi
                 streak="[]"
                 if [[ -n "$ROOT_EPIC" ]]; then
                     streak="$(jq -c --arg r "$ROOT_EPIC" '[.[] | select(any(.roots[]; . == $r)) | .id]' <<<"$WINDOW_OUT")"
@@ -448,7 +539,7 @@ if [[ ${#IDS[@]} -gt 0 ]]; then
                     '. + [{id: $id, root_epic: (if $r == "" then null else $r end), streak: $s,
                            in_streak: (($s | length) >= $m)}]' <<<"$CAND_OUT")"
             done < <(jq -r '.[] | select(.verdict == "ok" or .verdict == "warn")
-                             | [.id, .root, (.parent // "")] | @tsv' <<<"$BEADS_JSON")
+                             | [.id, (.root // "-"), (.parent // "")] | @tsv' <<<"$BEADS_JSON")
 
             # The decision. --beat is not a bypass: it names an OPEN candidate
             # OUTSIDE the streak that was weighed and lost, verified in this same
@@ -465,12 +556,12 @@ if [[ ${#IDS[@]} -gt 0 ]]; then
                 | (if $beat == "" then null else cand($beat) end) as $bc
                 | (if $beat == "" then null else bead($beat) end) as $bb
                 | (if $rc != null and $rc.in_streak then
-                     (if $beat != "" and $beat != $rec and $bc != null and ($bc.in_streak | not) and $bb.verdict == "ok"
+                     (if $beat != "" and $beat != $rec and $bc != null and ($bc.in_streak | not) and $bc.root_epic != null and $bb.verdict == "ok"
                       then {verdict: "warn",
                             reason: ("continues the lineage of " + ids($rc) + " (" + $rc.root_epic + "); allowed because it beat " + $beat + " (" + $bc.root_epic + ")")}
                       else {verdict: "disqualified",
                             reason: ("continues the lineage of " + ($rc.streak | length | tostring) + " of the last " + ($w | tostring)
-                                     + " closed goals (" + ids($rc) + ", epic " + $rc.root_epic + ") — name the open out-of-lineage candidate it beat with --beat, or recommend that one")}
+                                     + " closed goals (" + ids($rc) + ", epic " + $rc.root_epic + ") — name the open out-of-lineage candidate it beat with --beat (its lineage must be known), or recommend that one")}
                       end)
                    else null end) as $ro
                 | ([$cands[] | select(.in_streak)]) as $ins
@@ -526,9 +617,15 @@ for src in ${OUT_OF[@]+"${OUT_OF[@]}"}; do
         for root in ${ROOTS[@]+"${ROOTS[@]}"}; do
             raw="$(bd_show "$root" "$src")"
             if jq -e 'type == "array" and length > 0' >/dev/null 2>&1 <<<"$raw"; then
-                label="bead $src"; body="$(jq -r '.[0].description // ""' <<<"$raw")"; break
+                label="bead $src"; body="$(jq -r '.[0].description | if type == "string" then . else "" end' <<<"$raw")"; break
             fi
         done
+    fi
+    if [[ "$label" == "text" && "$src" =~ $BB_KEY_RE ]] && have_bb; then
+        raw="$(bb_show "$src")"
+        if bb_card_valid "$src" "$raw"; then
+            label="card $src"; body="$(jq -r '.task.description | if type == "string" then . else "" end' <<<"$raw")"
+        fi
     fi
     if [[ "$label" == "text" && -f "$src" ]]; then
         label="file $src"; body="$(cat "$src" 2>/dev/null)"
@@ -544,7 +641,7 @@ fi
 # often explains that it is OUT of the goal that spawned it, and would match.
 REC_TITLE=""
 if [[ -n "$RECOMMEND" ]]; then
-    REC_TITLE="$(jq -r --arg id "$RECOMMEND" 'first(.[] | select(.id == $id)) | .title // ""' <<<"$BEADS_JSON")"
+    REC_TITLE="$(jq -r --arg id "$RECOMMEND" 'first(.[] | select(.id == $id)) | (.title | if type == "string" then . else "" end)' <<<"$BEADS_JSON")"
 fi
 
 OUT_JSON="$(jq -cn \
@@ -656,7 +753,9 @@ PAYLOAD="$(jq -cn \
                  + (if $out.verdict == "warn" then [($out.subject // "<text>")] else [] end)),
       lineage: $lineage,
       out_clause: $out,
-      ok: (($disq | length) == 0)}')"
+      ok: (($disq | length) == 0)}')" || PAYLOAD=""
+jq -e 'type == "object"' >/dev/null 2>&1 <<<"$PAYLOAD" \
+    || unavailable "could not assemble the verification result"
 
 if [[ "$(jq -r '.ok' <<<"$PAYLOAD")" == "true" ]]; then
     emit_and_exit "$PAYLOAD" 0

@@ -27,7 +27,9 @@ teardown() {
 make_bd_stub() {
     cat > "$STUB_DIR/bd" <<EOF
 #!/usr/bin/env bash
-if [[ "\$1" == "show" ]]; then cat <<'JSON'
+if [[ "\$1" == "show" ]]; then
+case " \$* " in *" --json "*) ;; *) echo "stub: bd show needs --json" >&2; exit 2 ;; esac
+cat <<'JSON'
 $1
 JSON
 exit 0
@@ -57,6 +59,7 @@ make_lineage_bd_stub() {
     cat > "$STUB_DIR/bd" <<EOF
 #!/usr/bin/env bash
 if [[ "\$1" == "show" ]]; then
+  case " \$* " in *" --json "*) ;; *) echo "stub: bd show needs --json" >&2; exit 2 ;; esac
   case "\$2" in
     E1)  echo '[{"id":"E1","title":"epic one","status":"open","issue_type":"epic","priority":1,"parent":null,"labels":[]}]' ;;
     E5)  echo '[{"id":"E5","title":"epic five","status":"open","issue_type":"epic","priority":1,"parent":null,"labels":[]}]' ;;
@@ -471,4 +474,232 @@ EOF
     run bash "$SCRIPT" --recommend x-1 --text "harvest the next eight volumes" x-1
     [ "$status" -eq 3 ]
     [ "$(jq -r '.out_clause.matched[0].source' <<<"$output")" = "goal g-name" ]
+}
+
+# ------------------------------------------------------------ bb tasks cards
+#
+# Projects whose backlog is the bb tasks board use IDs like AFTM-38, which no
+# bd database holds. `bb tasks show <KEY> --json` answers for them. The stub
+# prints a card with the status in $BB_STUB_STATUS, or the real task_not_found
+# payload (exit 1, like the real CLI) for any other key.
+
+make_bb_stub() {
+    cat > "$STUB_DIR/bb" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "tasks show" ]]; then
+  case " $* " in *" --json "*) ;; *) echo "stub: bb tasks show needs --json" >&2; exit 2 ;; esac
+  if [[ "$3" == "AFTM-38" ]]; then
+    printf '{"task":{"key":"AFTM-38","title":"card title","description":"OUT: nothing","status":"%s","priority":"high","updatedAt":%s}}\n' "${BB_STUB_STATUS:-backlog}" "${BB_STUB_UPDATED:-\"2026-09-29T01:22:54.937Z\"}"
+    exit 0
+  fi
+  printf '{"ok":false,"error":{"code":"task_not_found","message":"task not found: %s"}}\n' "$3"
+  exit 1
+fi
+exit 2
+EOF
+    chmod +x "$STUB_DIR/bb"
+}
+
+# A PATH holding bash and the basics but no bb, for the "bb absent" cases.
+make_bbless_path() {
+    local d t
+    d="$(mktemp -d)"
+    for t in bash env jq git awk sed tr head tail cat date mktemp mv rm mkdir dirname basename timeout sort uniq grep cut wc hostname uname readlink pwd ls tee; do
+        command -v "$t" >/dev/null 2>&1 && ln -s "$(command -v "$t")" "$d/$t"
+    done
+    printf '%s' "$d"
+}
+
+@test "bb card: an open card key is read with bb tasks show and is usable" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_bb_stub
+    BB_STUB_STATUS=backlog run bash "$SCRIPT" AFTM-38
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "ok" ]
+    [ "$(jq -r '.beads[0].id' <<<"$output")" = "AFTM-38" ]
+    [ "$(jq -r '.beads[0].title' <<<"$output")" = "card title" ]
+}
+
+@test "bb card: a done card is disqualified" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_bb_stub
+    BB_STUB_STATUS=done run bash "$SCRIPT" AFTM-38
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "disqualified" ]
+    [[ "$(jq -r '.beads[0].reason' <<<"$output")" == *"already done"* ]]
+}
+
+@test "bb card: a numeric updatedAt on a done card is stringified, not fatal" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_bb_stub
+    BB_STUB_UPDATED=1788000300 BB_STUB_STATUS=done run bash "$SCRIPT" AFTM-38
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "disqualified" ]
+    [[ "$(jq -r '.beads[0].reason' <<<"$output")" == *"already done (1788000300)"* ]]
+}
+
+@test "bb card: a null updatedAt on a done card is still disqualified" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_bb_stub
+    BB_STUB_UPDATED=null BB_STUB_STATUS=done run bash "$SCRIPT" AFTM-38
+    [ "$status" -eq 3 ]
+    [[ "$(jq -r '.beads[0].reason' <<<"$output")" == "already done"* ]]
+}
+
+@test "bb card: an object-valued updatedAt never yields empty output" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_bb_stub
+    BB_STUB_UPDATED='{"x":1}' BB_STUB_STATUS=done run bash "$SCRIPT" AFTM-38
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "disqualified" ]
+    [ "$(jq -r '.available' <<<"$output")" = "true" ]
+}
+
+@test "bb card: a canceled card is disqualified" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_bb_stub
+    BB_STUB_STATUS=canceled run bash "$SCRIPT" AFTM-38
+    [ "$status" -eq 3 ]
+    [[ "$(jq -r '.beads[0].reason' <<<"$output")" == *"already canceled"* ]]
+}
+
+@test "bb card: an in_progress card warns" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_bb_stub
+    BB_STUB_STATUS=in_progress run bash "$SCRIPT" AFTM-38
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "warn" ]
+}
+
+@test "bb card: a card the board does not have is disqualified" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_bb_stub
+    run bash "$SCRIPT" AFTM-999
+    [ "$status" -eq 3 ]
+    [[ "$(jq -r '.beads[0].reason' <<<"$output")" == *"no such bead"* ]]
+}
+
+@test "bb card: works with no bd installed at all" {
+    make_bb_stub
+    local p; p="$(make_bbless_path)"; ln -s "$STUB_DIR/bb" "$p/bb"
+    PATH="$p" BB_STUB_STATUS=backlog run bash "$SCRIPT" AFTM-38
+    rm -rf "$p"
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.available' <<<"$output")" = "true" ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "ok" ]
+}
+
+@test "bb card: a bead ID is still answered by bd and never asks bb" {
+    make_bd_stub "$(bead_json open)"
+    cat > "$STUB_DIR/bb" <<'EOF'
+#!/usr/bin/env bash
+touch "$BB_CALLED"
+exit 1
+EOF
+    chmod +x "$STUB_DIR/bb"
+    BB_CALLED="$WORK_DIR/bb-called" run bash "$SCRIPT" x-1
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "ok" ]
+    [ ! -e "$WORK_DIR/bb-called" ]
+}
+
+@test "bb absent: a card key degrades exactly as before (no such bead)" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    local p; p="$(make_bbless_path)"; ln -s "$STUB_DIR/bd" "$p/bd"
+    PATH="$p" run bash "$SCRIPT" AFTM-38
+    rm -rf "$p"
+    [ "$status" -eq 3 ]
+    [[ "$(jq -r '.beads[0].reason' <<<"$output")" == *"no such bead"* ]]
+}
+
+@test "bb absent and bd absent: still fails open with ok:null" {
+    local p; p="$(make_bbless_path)"
+    unset -f bd bb 2>/dev/null || true
+    PATH="$p" run bash "$SCRIPT" AFTM-38
+    rm -rf "$p"
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.available' <<<"$output")" = "false" ]
+    [ "$(jq -r '.ok' <<<"$output")" = "null" ]
+    [[ "$(jq -r '.reason' <<<"$output")" == *"bd not installed"* ]]
+}
+
+@test "bb card: --out-of a card key reads the card description" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_bb_stub
+    BB_STUB_STATUS=backlog run bash "$SCRIPT" --out-of AFTM-38 --text "/goal x" AFTM-38
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"card AFTM-38"* ]]
+}
+
+# ---------------------------------------------- bb card hardening (review)
+
+make_silent_bb_stub() {
+    # A board that fails without printing anything.
+    printf '#!/usr/bin/env bash\nexit 1\n' > "$STUB_DIR/bb"
+    chmod +x "$STUB_DIR/bb"
+}
+
+@test "bb card: a silent board plus a bd not-found stays unavailable, never disqualified" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    make_silent_bb_stub
+    run bash "$SCRIPT" AFTM-38
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.available' <<<"$output")" = "false" ]
+    [ "$(jq -r '.ok' <<<"$output")" = "null" ]
+    [[ "$(jq -r '.reason' <<<"$output")" == *"AFTM-38"* ]]
+}
+
+@test "bb card: a card for a different key is not accepted" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    cat > "$STUB_DIR/bb" <<'STUB'
+#!/usr/bin/env bash
+printf '{"task":{"key":"OTHER-1","title":"x","status":"backlog","priority":"high"}}\n'
+STUB
+    chmod +x "$STUB_DIR/bb"
+    run bash "$SCRIPT" AFTM-38
+    [ "$(jq -r '.available' <<<"$output")" = "false" ]
+}
+
+@test "bb card: a card with no recognized status never gets verdict ok" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    cat > "$STUB_DIR/bb" <<'STUB'
+#!/usr/bin/env bash
+printf '{"task":{"key":"AFTM-38","title":"x","priority":"high"}}\n'
+STUB
+    chmod +x "$STUB_DIR/bb"
+    run bash "$SCRIPT" AFTM-38
+    [ "$(jq -r '.available' <<<"$output")" = "false" ]
+    [ "$(jq -r '[.beads[] | select(.verdict == "ok")] | length' <<<"$output")" = "0" ]
+}
+
+@test "bb card: an unknown-lineage card keeps the run from being judged all-in-lineage" {
+    make_lineage_bd_stub open labeled
+    make_ic_stub '"E1"'
+    make_bb_stub
+    BB_STUB_STATUS=backlog run bash "$SCRIPT" c1 AFTM-38
+    [ "$(jq -r '.lineage.candidates | length' <<<"$output")" = "2" ]
+    [ "$(jq -r '.lineage.candidates[] | select(.id=="AFTM-38") | .in_streak' <<<"$output")" = "false" ]
+    [ "$(jq -r '[.disqualified[] | select(contains("every candidate shares"))] | length' <<<"$output")" = "0" ]
+}
+
+@test "bb card: --beat naming an unknown-lineage card does not satisfy the override" {
+    make_lineage_bd_stub open labeled
+    make_ic_stub '"E1"'
+    make_bb_stub
+    BB_STUB_STATUS=backlog run bash "$SCRIPT" --recommend c1 --beat AFTM-38 c1 AFTM-38
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.ok' <<<"$output")" = "false" ]
+    [ "$(jq -r '.beads[] | select(.id=="c1") | .verdict' <<<"$output")" = "disqualified" ]
+}
+
+@test "bb card: --out-of rejects a card whose key is not the one requested" {
+    make_bd_stub '{"error":"no issues found matching the provided IDs"}'
+    cat > "$STUB_DIR/bb" <<'STUB'
+#!/usr/bin/env bash
+printf '{"task":{"key":"OTHER-1","title":"x","status":"backlog","priority":"high","description":"OUT: wrongcard thing"}}\n'
+STUB
+    chmod +x "$STUB_DIR/bb"
+    run bash "$SCRIPT" --out-of AFTM-38 --text "/goal x"
+    [[ "$output" != *"card AFTM-38"* ]]
+    [[ "$output" != *"wrongcard"* ]]
 }
