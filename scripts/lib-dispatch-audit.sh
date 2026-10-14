@@ -280,3 +280,66 @@ _record_role_routing_decision() {
     return 1
   fi
 }
+
+# Per-run attribution receipt: one JSON object per line appended to a single
+# JSONL file, so "tokens by role this week" is a jq over one file. Fields are
+# identifiers and counts only: never prompt text, secrets or file contents.
+# Best-effort by contract: callers ignore failure. Two steps so a caller can
+# make the exit status final before the record is built: the record is built
+# first, outside any lock, and only the short lock+append runs with INT and TERM
+# ignored. Appends need flock (large records exceed PIPE_BUF, so unlocked
+# appends can interleave); without flock no receipt is written.
+
+# Prints the receipt JSON line for the given exit status.
+_build_dispatch_run_receipt() {
+  local exit_code="$1" ended_ts ctx_hash="" tokens_in="" tokens_out="" outcome=completed line
+  ended_ts="$(date +%s)"
+  if [[ -n "${CLAVAIN_DECISION_CONTEXT:-}" && -f "$CLAVAIN_DECISION_CONTEXT" ]]; then
+    ctx_hash="$(sha256sum "$CLAVAIN_DECISION_CONTEXT" 2>/dev/null | awk '{print $1}')"
+  fi
+  if [[ -n "${SUMMARY_FILE:-}" && -f "$SUMMARY_FILE" ]]; then
+    tokens_in="$(sed -n 's/^Tokens: \([0-9][0-9]*\) in \/ \([0-9][0-9]*\) out.*/\1/p' "$SUMMARY_FILE" | head -1)"
+    tokens_out="$(sed -n 's/^Tokens: \([0-9][0-9]*\) in \/ \([0-9][0-9]*\) out.*/\2/p' "$SUMMARY_FILE" | head -1)"
+  fi
+  [[ "$exit_code" == 0 ]] || outcome=failed
+  line="$(jq -cn --arg role "$ROLE" --arg backend "${ENGINE:-}" --arg model "${MODEL:-}" \
+    --arg effort "${REASONING_EFFORT:-}" --arg producer "${PRODUCER_IDENTITY:-}" \
+    --arg bead "${CLAVAIN_BEAD_ID:-}" --arg ctx "$ctx_hash" \
+    --arg thread "${BB_THREAD_ID:-}" --arg session "${DISPATCH_SESSION_ID:-}" \
+    --arg dispatch "${DISPATCH_ID:-}" --arg attempt "${ATTEMPT_ID:-}" \
+    --arg tin "$tokens_in" --arg tout "$tokens_out" --arg outcome "$outcome" \
+    --argjson rc "$exit_code" --argjson s "${STARTED_TS:-$ended_ts}" --argjson e "$ended_ts" '
+    def nn: if . == "" then null else . end;
+    {schema_version: 1, kind: "dispatch-run-receipt",
+     role: $role, backend: ($backend|nn), model: ($model|nn), effort: ($effort|nn),
+     producer_identity: ($producer|nn), bead_id: ($bead|nn),
+     decision_context_sha256: ($ctx|nn),
+     thread_id: ($thread|nn), session_id: ($session|nn),
+     dispatch_id: ($dispatch|nn), attempt_id: ($attempt|nn),
+     started_at: ($s|todate), ended_at: ($e|todate), exit_code: $rc, outcome: $outcome,
+     tokens_in: (if $tin == "" then null else ($tin|tonumber) end),
+     tokens_out: (if $tout == "" then null else ($tout|tonumber) end)}')"
+  printf '%s\n' "$line"
+}
+
+# Appends one prebuilt line. INT and TERM are ignored only here.
+_append_dispatch_run_receipt() {
+  local line="$1" file dir
+  command -v flock >/dev/null 2>&1 || return 1
+  file="${CLAVAIN_DISPATCH_RECEIPT_FILE:-${XDG_STATE_HOME:-$HOME/.local/state}/clavain/dispatch-receipts.jsonl}"
+  dir="$(dirname "$file")"
+  [[ -d "$dir" ]] || (umask 077; mkdir -p "$dir") 2>/dev/null || return 1
+  (
+    umask 077
+    trap '' INT TERM
+    exec 9>>"${file}.lock" || exit 1
+    flock -w 10 9 || exit 1
+    printf '%s\n' "$line" >> "$file" || exit 1
+  )
+}
+
+_write_dispatch_run_receipt() {
+  local line
+  line="$(_build_dispatch_run_receipt "$1")" || return 1
+  _append_dispatch_run_receipt "$line"
+}

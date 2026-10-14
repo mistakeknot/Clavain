@@ -205,7 +205,35 @@ _dispatch_sync_interband_from_legacy() {
   fi
 }
 
+# A signal ends the run with the conventional 128+n status. The EXIT trap then
+# runs once with that status, so a signalled run is never receipted as completed.
+_dispatch_on_signal() {
+  exit "$1"
+}
+
 _dispatch_cleanup_state() {
+  local _rc=$?
+  # Governed per-run receipt, best-effort. A signal before the write only sets
+  # _sig_rc; the record is built after the status is final, and INT/TERM are
+  # ignored just for the short append, so the receipt and the exit status agree.
+  # A failed write never changes the exit status.
+  if [[ "${RUN_RECEIPT_ARMED:-false}" == true && "${RUN_RECEIPT_WRITTEN:-false}" != true \
+        && -n "${ROLE:-}" && "${ROLE_RESOLVED:-}" == true ]]; then
+    RUN_RECEIPT_WRITTEN=true
+    local _sig_rc="" _used="" _line=""
+    trap '_sig_rc=130' INT
+    trap '_sig_rc=143' TERM
+    while :; do
+      _used="${_sig_rc:-$_rc}"
+      _line="$(_build_dispatch_run_receipt "$_used" 2>/dev/null)" || _line=""
+      trap '' INT TERM
+      [[ "${_sig_rc:-$_rc}" == "$_used" ]] && break
+    done
+    [[ -z "$_line" ]] || _append_dispatch_run_receipt "$_line" 2>/dev/null || true
+    [[ -z "$_sig_rc" ]] || _rc="$_sig_rc"
+  fi
+  # The EXIT trap exits with this, so the status matches the committed receipt.
+  DISPATCH_FINAL_RC="$_rc"
   rm -f "$STATE_FILE" "${STATE_FILE}.tmp" 2>/dev/null || true
   if [[ -n "${INTERBAND_DISPATCH_FILE:-}" ]]; then
     rm -f "$INTERBAND_DISPATCH_FILE" "${INTERBAND_DISPATCH_FILE}.tmp" 2>/dev/null || true
@@ -2559,7 +2587,9 @@ SUMMARY_FILE=""
 if [[ -n "$OUTPUT" ]]; then
   SUMMARY_FILE="${OUTPUT}.summary"
 fi
-trap _dispatch_cleanup_state EXIT INT TERM
+trap '_dispatch_cleanup_state; exit "$DISPATCH_FINAL_RC"' EXIT
+trap '_dispatch_on_signal 130' INT
+trap '_dispatch_on_signal 143' TERM
 
 # Validate state file path is writable
 if ! touch "$STATE_FILE" 2>/dev/null; then
@@ -2568,6 +2598,7 @@ if ! touch "$STATE_FILE" 2>/dev/null; then
 fi
 
 STARTED_TS="$(date +%s)"
+RUN_RECEIPT_ARMED=true
 
 # Initial state
 _dispatch_write_state_files "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "starting" "0" "0" "0"
@@ -3213,7 +3244,9 @@ chmod 600 "$PROVIDER_EVENTS"
 _dispatch_cleanup_stderr() {
   rm -f "$STDERR_FILE" 2>/dev/null || true
 }
-trap '_dispatch_cleanup_state; _dispatch_cleanup_stderr' EXIT INT TERM
+trap '_dispatch_cleanup_state; _dispatch_cleanup_stderr; exit "$DISPATCH_FINAL_RC"' EXIT
+trap '_dispatch_on_signal 130' INT
+trap '_dispatch_on_signal 143' TERM
 
 _surface_codex_errors() {
   local exit_code="$1"
@@ -3748,11 +3781,14 @@ if [[ "$VIA" == bb ]]; then
     --dispatch-id "$DISPATCH_ID" --sandbox "$SANDBOX" \
     --timeout "${CLAVAIN_BB_SEAT_TIMEOUT:-$FLERE_TIMEOUT}" <<< "$PROMPT" 2> "$STDERR_FILE" &
   BB_PID=$!
-  trap 'BB_CANCELLED=1; kill -TERM "$BB_PID" 2>/dev/null || true; wait "$BB_PID" || true' INT TERM
+  trap 'BB_CANCELLED=130; kill -TERM "$BB_PID" 2>/dev/null || true; wait "$BB_PID" || true' INT
+  trap 'BB_CANCELLED=143; kill -TERM "$BB_PID" 2>/dev/null || true; wait "$BB_PID" || true' TERM
   wait "$BB_PID"
   BB_EXIT=$?
-  [[ "$BB_CANCELLED" == 0 ]] || BB_EXIT=130
-  trap '_dispatch_cleanup_state; _dispatch_cleanup_stderr' EXIT INT TERM
+  [[ "$BB_CANCELLED" == 0 ]] || BB_EXIT="$BB_CANCELLED"
+  trap '_dispatch_cleanup_state; _dispatch_cleanup_stderr; exit "$DISPATCH_FINAL_RC"' EXIT
+  trap '_dispatch_on_signal 130' INT
+  trap '_dispatch_on_signal 143' TERM
   set -e
   [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
   _extract_verdict "$OUTPUT"
