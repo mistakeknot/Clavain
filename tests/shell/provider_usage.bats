@@ -1,0 +1,143 @@
+#!/usr/bin/env bats
+# provider_usage.py turns provider evidence into receipt usage fields and says
+# how complete they are. Transports without evidence are reported unavailable.
+
+setup() {
+    ROOT="$BATS_TEST_DIRNAME/../.."
+    F="$ROOT/tests/fixtures/provider-usage"
+    U() { python3 -I "$ROOT/scripts/provider_usage.py" "$@"; }
+}
+
+@test "codex multi-turn sums every category and is complete" {
+    r="$(U --backend codex --events "$F/codex-complete.jsonl")"
+    [ "$(jq -r .usage_status <<< "$r")" = complete ]
+    [ "$(jq -r .usage_basis <<< "$r")" = codex-input-includes-cached ]
+    [ "$(jq -r .tokens_in <<< "$r")" = 1500 ]
+    [ "$(jq -r .tokens_cached_in <<< "$r")" = 1200 ]
+    [ "$(jq -r .tokens_out <<< "$r")" = 70 ]
+    [ "$(jq -r .tokens_reasoning_out <<< "$r")" = 10 ]
+    [ "$(jq -r .tokens_cache_write_in <<< "$r")" = 0 ]
+}
+
+@test "codex absent cache keys stay null" {
+    printf '%s\n' '{"type":"turn.started"}' '{"type":"turn.completed","usage":{"input_tokens":7,"output_tokens":1}}' > "$BATS_TMPDIR/e.jsonl"
+    r="$(U --backend codex --events "$BATS_TMPDIR/e.jsonl")"
+    [ "$(jq -r .tokens_cached_in <<< "$r")" = null ]
+}
+
+@test "codex killed mid-turn with a truncated line is partial" {
+    r="$(U --backend codex --events "$F/codex-killed.jsonl" --exit-code 143)"
+    [ "$(jq -r .usage_status <<< "$r")" = partial ]
+    [ "$(jq -r .tokens_in <<< "$r")" = 1000 ]
+}
+
+@test "codex killed between turns (nonzero exit) is partial" {
+    r="$(U --backend codex --events "$F/codex-complete.jsonl" --exit-code 143)"
+    [ "$(jq -r .usage_status <<< "$r")" = partial ]
+}
+
+@test "codex with no completed turn is unavailable" {
+    : > "$BATS_TMPDIR/empty.jsonl"
+    r="$(U --backend codex --events "$BATS_TMPDIR/empty.jsonl" --exit-code 143)"
+    [ "$(jq -r .usage_status <<< "$r")" = unavailable ]
+}
+
+@test "claude ledger keeps cache categories separate from input" {
+    r="$(U --backend claude --ledger "$F/claude-ledger.jsonl" --dispatch-id d1)"
+    [ "$(jq -r .usage_status <<< "$r")" = complete ]
+    [ "$(jq -r .usage_basis <<< "$r")" = claude-input-excludes-cache ]
+    [ "$(jq -r .tokens_in <<< "$r")" = 10 ]
+    [ "$(jq -r .tokens_cached_in <<< "$r")" = 30 ]
+    [ "$(jq -r .tokens_cache_write_in <<< "$r")" = 20 ]
+}
+
+@test "claude non-terminal ledger is partial" {
+    r="$(U --backend claude --ledger "$F/claude-ledger-partial.jsonl" --dispatch-id d1)"
+    [ "$(jq -r .usage_status <<< "$r")" = partial ]
+}
+
+@test "claude stream-json result is the fallback source" {
+    r="$(U --backend claude --events "$F/claude-stream.jsonl")"
+    [ "$(jq -r .usage_status <<< "$r")" = complete ]
+    [ "$(jq -r .tokens_cached_in <<< "$r")" = 30 ]
+}
+
+@test "BB, Zaka and unknown transports are unavailable, not guessed" {
+    for b in bb zaka kimi ""; do
+        r="$(U --backend "$b" --events "$F/codex-complete.jsonl")"
+        [ "$(jq -r .usage_status <<< "$r")" = unavailable ]
+        [ "$(jq -r .tokens_in <<< "$r")" = null ]
+    done
+}
+
+@test "report counts only complete rows and never goes negative" {
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    {
+      jq -cn --arg t "$now" '{kind:"dispatch-run-receipt",role:"a",started_at:$t,ended_at:$t,usage_status:"complete",usage_basis:"codex-input-includes-cached",tokens_in:100,tokens_cached_in:80,tokens_out:5}'
+      jq -cn --arg t "$now" '{kind:"dispatch-run-receipt",role:"a",started_at:$t,ended_at:$t,usage_status:"partial",tokens_in:999}'
+      jq -cn --arg t "$now" '{kind:"dispatch-run-receipt",role:"a",started_at:$t,ended_at:$t,tokens_in:50}'
+      jq -cn --arg t "$now" '{kind:"dispatch-run-receipt",role:"b",started_at:$t,ended_at:$t,usage_status:"complete",usage_basis:"claude-input-excludes-cache",tokens_in:10,tokens_cached_in:30}'
+    } > "$BATS_TMPDIR/r.jsonl"
+    r="$(python3 -I "$ROOT/scripts/receipt-token-report.py" --file "$BATS_TMPDIR/r.jsonl" --json)"
+    [ "$(jq '.groups|length' <<< "$r")" = 2 ]
+    [ "$(jq '.groups[]|select(.role=="a")|.uncached_in' <<< "$r")" = 20 ]
+    [ "$(jq '.groups[]|select(.role=="b")|.uncached_in' <<< "$r")" = 10 ]
+    [ "$(jq '.excluded.partial' <<< "$r")" = 1 ]
+    [ "$(jq '.excluded["pre-change"]' <<< "$r")" = 1 ]
+}
+
+@test "claude ledger from another dispatch is not attributed" {
+    r="$(U --backend claude --ledger "$F/claude-ledger.jsonl" --dispatch-id other)"
+    [ "$(jq -r .usage_status <<<"$r")" = unavailable ]
+}
+
+@test "codex completed turn with empty usage is not complete" {
+    printf '%s\n' '{"type":"turn.started"}' '{"type":"turn.completed","usage":{"cached_input_tokens":5}}' > "$BATS_TEST_TMPDIR/e.jsonl"
+    r="$(U --backend codex --events "$BATS_TEST_TMPDIR/e.jsonl")"
+    [ "$(jq -r .usage_status <<<"$r")" = partial ]
+}
+
+@test "codex damaged capture is not complete" {
+    cp "$F/codex-complete.jsonl" "$BATS_TEST_TMPDIR/e.jsonl"
+    echo '{"type":"turn.compl' >> "$BATS_TEST_TMPDIR/e.jsonl"
+    r="$(U --backend codex --events "$BATS_TEST_TMPDIR/e.jsonl")"
+    [ "$(jq -r .usage_status <<<"$r")" = partial ]
+}
+
+@test "report keeps unknown metrics unknown" {
+    d="$BATS_TEST_TMPDIR/r.jsonl"; now="$(date -u +%FT%TZ)"
+    printf '{"kind":"dispatch-run-receipt","usage_status":"complete","usage_basis":"codex-input-includes-cached","role":"x","tokens_in":100,"started_at":"%s","ended_at":"%s"}\n' "$now" "$now" > "$d"
+    r="$(python3 -I "$BATS_TEST_DIRNAME/../../scripts/receipt-token-report.py" --file "$d" --json)"
+    [ "$(jq '.groups[0].uncached_in' <<<"$r")" = null ]
+}
+
+@test "codex multi-turn with a turn missing required counts is partial" {
+    printf '%s\n' '{"type":"turn.started"}' '{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":5}}' \
+      '{"type":"turn.started"}' '{"type":"turn.completed","usage":{"output_tokens":7}}' > "$BATS_TEST_TMPDIR/m.jsonl"
+    r="$(U --backend codex --events "$BATS_TEST_TMPDIR/m.jsonl")"
+    [ "$(jq -r .usage_status <<<"$r")" = partial ]
+    [ "$(jq -r .tokens_in <<<"$r")" = null ]
+}
+
+@test "codex optional total is unknown when one turn omits it" {
+    printf '%s\n' '{"type":"turn.started"}' '{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":5,"cached_input_tokens":80}}' \
+      '{"type":"turn.started"}' '{"type":"turn.completed","usage":{"input_tokens":50,"output_tokens":7}}' > "$BATS_TEST_TMPDIR/o.jsonl"
+    r="$(U --backend codex --events "$BATS_TEST_TMPDIR/o.jsonl")"
+    [ "$(jq -r .usage_status <<<"$r")" = complete ]
+    [ "$(jq -r .tokens_in <<<"$r")" = 150 ]
+    [ "$(jq -r .tokens_cached_in <<<"$r")" = null ]
+}
+
+@test "claude ledger followed by a damaged line is partial" {
+    cp "$F/claude-ledger.jsonl" "$BATS_TEST_TMPDIR/l.jsonl"
+    printf '%s\n' '{"type":"usage.cumul' >> "$BATS_TEST_TMPDIR/l.jsonl"
+    r="$(U --backend claude --ledger "$BATS_TEST_TMPDIR/l.jsonl" --dispatch-id d1)"
+    [ "$(jq -r .usage_status <<<"$r")" = partial ]
+}
+
+@test "cached share normalises claude input to total input" {
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    jq -cn --arg t "$now" '{kind:"dispatch-run-receipt",role:"b",started_at:$t,ended_at:$t,usage_status:"complete",usage_basis:"claude-input-excludes-cache",tokens_in:10,tokens_cached_in:30,tokens_cache_write_in:20}' > "$BATS_TEST_TMPDIR/c.jsonl"
+    r="$(python3 -I "$ROOT/scripts/receipt-token-report.py" --file "$BATS_TEST_TMPDIR/c.jsonl" --json)"
+    [ "$(jq '.groups[0].cached_share' <<< "$r")" = 0.5 ]
+}
