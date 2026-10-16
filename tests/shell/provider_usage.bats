@@ -43,7 +43,7 @@ setup() {
 }
 
 @test "claude ledger keeps cache categories separate from input" {
-    r="$(U --backend claude --ledger "$F/claude-ledger.jsonl")"
+    r="$(U --backend claude --ledger "$F/claude-ledger.jsonl" --dispatch-id d1)"
     [ "$(jq -r .usage_status <<< "$r")" = complete ]
     [ "$(jq -r .usage_basis <<< "$r")" = claude-input-excludes-cache ]
     [ "$(jq -r .tokens_in <<< "$r")" = 10 ]
@@ -52,7 +52,7 @@ setup() {
 }
 
 @test "claude non-terminal ledger is partial" {
-    r="$(U --backend claude --ledger "$F/claude-ledger-partial.jsonl")"
+    r="$(U --backend claude --ledger "$F/claude-ledger-partial.jsonl" --dispatch-id d1)"
     [ "$(jq -r .usage_status <<< "$r")" = partial ]
 }
 
@@ -84,4 +84,29 @@ setup() {
     [ "$(jq '.groups[]|select(.role=="b")|.uncached_in' <<< "$r")" = 10 ]
     [ "$(jq '.excluded.partial' <<< "$r")" = 1 ]
     [ "$(jq '.excluded["pre-change"]' <<< "$r")" = 1 ]
+}
+
+@test "claude ledger from another dispatch is not attributed" {
+    r="$(U --backend claude --ledger "$F/claude-ledger.jsonl" --dispatch-id other)"
+    [ "$(jq -r .usage_status <<<"$r")" = unavailable ]
+}
+
+@test "codex completed turn with empty usage is not complete" {
+    printf '%s\n' '{"type":"turn.started"}' '{"type":"turn.completed","usage":{"cached_input_tokens":5}}' > "$BATS_TEST_TMPDIR/e.jsonl"
+    r="$(U --backend codex --events "$BATS_TEST_TMPDIR/e.jsonl")"
+    [ "$(jq -r .usage_status <<<"$r")" = partial ]
+}
+
+@test "codex damaged capture is not complete" {
+    cp "$F/codex-complete.jsonl" "$BATS_TEST_TMPDIR/e.jsonl"
+    echo '{"type":"turn.compl' >> "$BATS_TEST_TMPDIR/e.jsonl"
+    r="$(U --backend codex --events "$BATS_TEST_TMPDIR/e.jsonl")"
+    [ "$(jq -r .usage_status <<<"$r")" = partial ]
+}
+
+@test "report keeps unknown metrics unknown" {
+    d="$BATS_TEST_TMPDIR/r.jsonl"; now="$(date -u +%FT%TZ)"
+    printf '{"kind":"dispatch-run-receipt","usage_status":"complete","usage_basis":"codex-input-includes-cached","role":"x","tokens_in":100,"started_at":"%s","ended_at":"%s"}\n' "$now" "$now" > "$d"
+    r="$(python3 -I "$BATS_TEST_DIRNAME/../../scripts/receipt-token-report.py" --file "$d" --json)"
+    [ "$(jq '.groups[0].uncached_in' <<<"$r")" = null ]
 }

@@ -20,20 +20,28 @@ CODEX_KEYS = {"input_tokens": "tokens_in", "cached_input_tokens": "tokens_cached
               "output_tokens": "tokens_out", "reasoning_output_tokens": "tokens_reasoning_out"}
 
 
-def _lines(path):
+def _read(path):
+    """Return (dict records, count of unreadable lines or a failed open)."""
+    recs, bad = [], 0
     if not path:
-        return
+        return recs, 0
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
             for raw in fh:
+                if not raw.strip():
+                    continue
                 try:
                     obj = json.loads(raw)
                 except ValueError:
-                    continue  # truncated or non-JSON line
+                    bad += 1  # truncated or non-JSON line: capture is damaged
+                    continue
                 if isinstance(obj, dict):
-                    yield obj
+                    recs.append(obj)
+                else:
+                    bad += 1
     except OSError:
-        return
+        bad += 1
+    return recs, bad
 
 
 def _num(v):
@@ -44,10 +52,21 @@ def unavailable(why):
     return {"usage_status": "unavailable", "usage_basis": None, "usage_note": why}
 
 
+def _finish(res, ok, note_if_not):
+    """complete needs usable input and output counts; anything less is partial."""
+    if ok and (res.get("tokens_in") is None or res.get("tokens_out") is None):
+        ok, note_if_not = False, "usage lacks input or output counts"
+    res["usage_status"] = "complete" if ok else "partial"
+    if not ok:
+        res["usage_note"] = note_if_not
+    return res
+
+
 def codex(events, exit_code):
     started = done = 0
     total = {}
-    for ev in _lines(events):
+    recs, bad = _read(events)
+    for ev in recs:
         kind = ev.get("type")
         if kind == "turn.started":
             started += 1
@@ -59,40 +78,43 @@ def codex(events, exit_code):
                     total[dst] = total.get(dst, 0) + n
     if not done:
         return unavailable("no completed turn in provider events")
-    ok = exit_code == 0 and started <= done
-    out = {"usage_status": "complete" if ok else "partial",
-           "usage_basis": "codex-input-includes-cached"}
-    out.update({dst: total.get(dst) for dst in CODEX_KEYS.values()})
-    return out
+    res = {"usage_basis": "codex-input-includes-cached"}
+    res.update({dst: total.get(dst) for dst in CODEX_KEYS.values()})
+    ok = exit_code == 0 and started <= done and not bad
+    note = "run ended early or capture damaged (%d unreadable line(s))" % bad
+    return _finish(res, ok, note)
 
 
-def claude(events, ledger, exit_code):
-    last = None
-    for rec in _lines(ledger):
-        if rec.get("type") == "usage.cumulative":
-            last = rec
-    if last is not None:
-        ok = bool(last.get("terminal") and last.get("complete"))
-        return {"usage_status": "complete" if ok else "partial",
-                "usage_basis": "claude-input-excludes-cache",
-                "tokens_in": _num(last.get("input_tokens")),
-                "tokens_out": _num(last.get("output_tokens")),
-                "tokens_cached_in": _num(last.get("cache_read_input_tokens")),
-                "tokens_cache_write_in": _num(last.get("cache_creation_input_tokens")),
-                "tokens_reasoning_out": None}
+def _claude_counts(u):
+    return {"usage_basis": "claude-input-excludes-cache",
+            "tokens_in": _num(u.get("input_tokens")),
+            "tokens_out": _num(u.get("output_tokens")),
+            "tokens_cached_in": _num(u.get("cache_read_input_tokens")),
+            "tokens_cache_write_in": _num(u.get("cache_creation_input_tokens")),
+            "tokens_reasoning_out": None}
+
+
+def claude(events, ledger, exit_code, dispatch_id):
+    if ledger:
+        recs, bad = _read(ledger)
+        # The adapter appends to the destination ledger, so bind to this dispatch.
+        mine = [r for r in recs if r.get("type") == "usage.cumulative"
+                and dispatch_id and r.get("dispatch_id") == dispatch_id]
+        if mine:
+            last = mine[-1]
+            res = _claude_counts(last)
+            return _finish(res, bool(last.get("terminal") and last.get("complete")),
+                           "claude accounting not terminal or incomplete")
+        return unavailable("no usage record for this dispatch in the claude ledger")
+    recs, bad = _read(events)
     result = None
-    for ev in _lines(events):
+    for ev in recs:
         if ev.get("type") == "result" and isinstance(ev.get("usage"), dict):
             result = ev["usage"]
     if result is None:
         return unavailable("no claude result usage in provider events")
-    return {"usage_status": "complete" if exit_code == 0 else "partial",
-            "usage_basis": "claude-input-excludes-cache",
-            "tokens_in": _num(result.get("input_tokens")),
-            "tokens_out": _num(result.get("output_tokens")),
-            "tokens_cached_in": _num(result.get("cache_read_input_tokens")),
-            "tokens_cache_write_in": _num(result.get("cache_creation_input_tokens")),
-            "tokens_reasoning_out": None}
+    return _finish(_claude_counts(result), exit_code == 0 and not bad,
+                   "run ended early or capture damaged")
 
 
 def main(argv=None):
@@ -101,11 +123,12 @@ def main(argv=None):
     ap.add_argument("--events", default="")
     ap.add_argument("--ledger", default="")
     ap.add_argument("--exit-code", type=int, default=0)
+    ap.add_argument("--dispatch-id", default="")
     a = ap.parse_args(argv)
     if a.backend == "codex":
         res = codex(a.events, a.exit_code)
     elif a.backend == "claude":
-        res = claude(a.events, a.ledger, a.exit_code)
+        res = claude(a.events, a.ledger, a.exit_code, a.dispatch_id)
     else:
         res = unavailable("transport %r exposes no usage evidence to the receipt" % a.backend)
     json.dump(res, sys.stdout, separators=(",", ":"))

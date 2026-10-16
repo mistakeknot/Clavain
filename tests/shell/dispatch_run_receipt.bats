@@ -180,4 +180,6 @@ governed() {
     [ "$(jq -r .usage_basis <<< "$r")" = claude-input-excludes-cache ]
     [ "$(jq -r .tokens_cached_in <<< "$r")" = 30 ]
     [ "$(jq -r .tokens_cache_write_in <<< "$r")" = 20 ]
+    [ "$(jq -r .tokens_in <<< "$r")" = 10 ]
+    [ "$(jq -r .tokens_out <<< "$r")" = 5 ]
 }
