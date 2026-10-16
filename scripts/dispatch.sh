@@ -74,6 +74,8 @@ NAME=""
 DRY_RUN=false
 KIMI_UNSAFE=false
 CLAUDE_UNSAFE=false
+NO_TOOLS=false  # --no-tools / CLAVAIN_SEAT_TOOLS=none: text-in/text-out Claude seat, every tool disabled
+[[ "${CLAVAIN_SEAT_TOOLS:-}" != none ]] || NO_TOOLS=true
 TASK_CLASS=""
 FLERE_TIMEOUT=120
 PROMPT_FILE=""
@@ -262,6 +264,9 @@ Options:
                                   claude — claude -p one-shot (review seat: reads + runs
                                           commands, file mutation disallowed unless
                                           --claude-unsafe; tier: fast→sonnet, deep→opus)
+                                          --no-tools (or CLAVAIN_SEAT_TOOLS=none) runs a text-in/text-out seat with
+                                          every tool, MCP server and skill disabled; refused (exit 1) for any
+                                          other engine, --via, the BB seat transport or --claude-unsafe
                                           claude seats run with --setting-sources project,local; set CLAVAIN_CLAUDE_KEEP_USER_SETTINGS=1 to keep user settings for direct --to claude
                                   kimi  — kimi -p (second-opinion backend; different
                                           model family. -s/--sandbox, -i/--image and codex
@@ -1157,7 +1162,7 @@ _dispatch_tier_profile() {
     # (governed-contract delivery, ~line 1410) that bare --tier resolution
     # never has — --claude-unsafe grants write authority without claiming
     # that unrelated ic-governance contract.
-    if [[ "$backend" == claude && -n "$role" && "$SANDBOX" != read-only ]]; then
+    if [[ "$backend" == claude && -n "$role" && "$SANDBOX" != read-only && "$NO_TOOLS" != true ]]; then
       case "$role" in
         routine-execution|deep-execution|escalation) resolved_args+=(--claude-unsafe) ;;
       esac
@@ -1393,6 +1398,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --claude-unsafe)
       CLAUDE_UNSAFE=true
+      shift
+      ;;
+    --no-tools)
+      NO_TOOLS=true
       shift
       ;;
     --context-gateway)
@@ -1642,6 +1651,24 @@ if [[ -n "$TIER" ]]; then
     set -e
     exit "$tier_rc"
   fi
+fi
+
+# A tool-free seat is enforced by the Claude CLI's own tool list. Any other
+# engine or transport cannot enforce it, so refuse before any model runs
+# instead of silently granting tools (fail closed). Checked after --role/--tier
+# resolution: those re-invoke this script with the resolved engine (and
+# --no-tools carried through), so the check runs on the resolved profile.
+if [[ "$NO_TOOLS" == true ]]; then
+  if [[ "$ENGINE" != claude || -n "$VIA" || "$CLAUDE_UNSAFE" == true ]]; then
+    _dispatch_write_failure_class unsupported_adapter
+    echo "Error: --no-tools is enforceable only for a direct --to claude seat (not engine '$ENGINE'${VIA:+, via $VIA}, nor with --claude-unsafe)" >&2
+    exit 1
+  fi
+  [[ "$DRY_RUN" == true ]] || { command -v claude >/dev/null 2>&1 && claude --help 2>&1 | grep -q -- '--tools'; } || {
+    _dispatch_write_failure_class unsupported_adapter
+    echo "Error: --no-tools requires a claude CLI that supports --tools; refusing to run with tools enabled" >&2
+    exit 1
+  }
 fi
 
 # Log phase context (stored for future B2 phase-aware dispatch)
@@ -2301,6 +2328,11 @@ if [[ "$VIA" == bb ]]; then
     _dispatch_write_failure_class unsupported_adapter
     exit 1
   fi
+  if [[ "$NO_TOOLS" == true ]]; then
+    echo "Error: --no-tools cannot be enforced through the BB seat transport" >&2
+    _dispatch_write_failure_class unsupported_adapter
+    exit 1
+  fi
   _clavain_in_bb || { echo 'Error: BB seat host is not enrolled' >&2; exit 1; }
   DISPATCH_TRANSPORT=bb
   CMD=(python3 "$DISPATCH_SCRIPT_DIR/bb-seat.py")
@@ -2381,7 +2413,7 @@ elif [[ "$ENGINE" == "claude" ]]; then
 
   # Execution roles may edit within the authorized task. Review roles retain
   # the existing mutation prohibition; an explicit read-only sandbox wins.
-  if [[ "$ROLE_RESOLVED" == true && "$SANDBOX" != read-only ]]; then
+  if [[ "$ROLE_RESOLVED" == true && "$SANDBOX" != read-only && "$NO_TOOLS" != true ]]; then
     case "$ROLE" in routine-execution|deep-execution|escalation) CLAUDE_UNSAFE=true ;; esac
   fi
   CMD=(claude)
@@ -2399,6 +2431,13 @@ elif [[ "$ENGINE" == "claude" ]]; then
   # commands (tests, git diff) without prompting, but cannot mutate files.
   # --claude-unsafe lifts the mutation ban for executor-seat dispatches.
   CMD+=(--permission-mode "${CLAVAIN_CLAUDE_PERMISSION_MODE:-dontAsk}")
+  if [[ "$NO_TOOLS" == true ]]; then
+    # Tool-free profile: the built-in tool list is empty (--tools ""), every
+    # tool is also denied by name, and MCP servers and skills are excluded, so
+    # untrusted prompt text cannot reach a command, file or network call.
+    # Deliberately no --allowedTools and no --add-dir.
+    CMD+=(--tools "" --disallowedTools "Bash,Edit,Write,NotebookEdit,Read,Glob,Grep,Agent,Task,Skill,WebFetch,WebSearch" --strict-mcp-config --disable-slash-commands)
+  else
   # dontAsk denies every tool that is not allowed up front, so without an
   # explicit allowance the seat cannot run one command and its "replay" is a
   # hand trace (Sylveste-soj7). Bash is allowed; the file-mutating tools stay
@@ -2415,9 +2454,10 @@ elif [[ "$ENGINE" == "claude" ]]; then
     CMD+=(--allowedTools "Bash,Edit,Write,NotebookEdit")
     [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]] || CMD+=(--disallowedTools "Agent,Task,Skill")
   fi
+  fi
   # The plan named by --plan usually lives outside -C (a scratchpad); without
   # --add-dir the seat cannot read it under dontAsk and has nothing to replay.
-  if [[ -n "$PLAN_FILE" ]]; then
+  if [[ -n "$PLAN_FILE" && "$NO_TOOLS" != true ]]; then
     PLAN_DIR="$(cd "$(dirname "$PLAN_FILE")" && pwd)"
     CMD+=(--add-dir "$PLAN_DIR")
   fi
