@@ -110,3 +110,34 @@ setup() {
     r="$(python3 -I "$BATS_TEST_DIRNAME/../../scripts/receipt-token-report.py" --file "$d" --json)"
     [ "$(jq '.groups[0].uncached_in' <<<"$r")" = null ]
 }
+
+@test "codex multi-turn with a turn missing required counts is partial" {
+    printf '%s\n' '{"type":"turn.started"}' '{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":5}}' \
+      '{"type":"turn.started"}' '{"type":"turn.completed","usage":{"output_tokens":7}}' > "$BATS_TEST_TMPDIR/m.jsonl"
+    r="$(U --backend codex --events "$BATS_TEST_TMPDIR/m.jsonl")"
+    [ "$(jq -r .usage_status <<<"$r")" = partial ]
+    [ "$(jq -r .tokens_in <<<"$r")" = null ]
+}
+
+@test "codex optional total is unknown when one turn omits it" {
+    printf '%s\n' '{"type":"turn.started"}' '{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":5,"cached_input_tokens":80}}' \
+      '{"type":"turn.started"}' '{"type":"turn.completed","usage":{"input_tokens":50,"output_tokens":7}}' > "$BATS_TEST_TMPDIR/o.jsonl"
+    r="$(U --backend codex --events "$BATS_TEST_TMPDIR/o.jsonl")"
+    [ "$(jq -r .usage_status <<<"$r")" = complete ]
+    [ "$(jq -r .tokens_in <<<"$r")" = 150 ]
+    [ "$(jq -r .tokens_cached_in <<<"$r")" = null ]
+}
+
+@test "claude ledger followed by a damaged line is partial" {
+    cp "$F/claude-ledger.jsonl" "$BATS_TEST_TMPDIR/l.jsonl"
+    printf '%s\n' '{"type":"usage.cumul' >> "$BATS_TEST_TMPDIR/l.jsonl"
+    r="$(U --backend claude --ledger "$BATS_TEST_TMPDIR/l.jsonl" --dispatch-id d1)"
+    [ "$(jq -r .usage_status <<<"$r")" = partial ]
+}
+
+@test "cached share normalises claude input to total input" {
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    jq -cn --arg t "$now" '{kind:"dispatch-run-receipt",role:"b",started_at:$t,ended_at:$t,usage_status:"complete",usage_basis:"claude-input-excludes-cache",tokens_in:10,tokens_cached_in:30,tokens_cache_write_in:20}' > "$BATS_TEST_TMPDIR/c.jsonl"
+    r="$(python3 -I "$ROOT/scripts/receipt-token-report.py" --file "$BATS_TEST_TMPDIR/c.jsonl" --json)"
+    [ "$(jq '.groups[0].cached_share' <<< "$r")" = 0.5 ]
+}

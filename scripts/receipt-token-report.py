@@ -88,8 +88,14 @@ def main(argv=None):
                          ("uncached_in", uncached), ("cache_write_in", lambda r: r.get("tokens_cache_write_in")),
                          ("out", lambda r: r.get("tokens_out")), ("reasoning_out", lambda r: r.get("tokens_reasoning_out"))):
             g[name], g[name + "_known"] = total(rs, None, fn)
-        both = [r for r in rs if r.get("tokens_in") and r.get("tokens_cached_in") is not None]
-        g["cached_share"] = (sum(r["tokens_cached_in"] for r in both) / sum(r["tokens_in"] for r in both)) if both else None
+        # Claude input excludes cache; normalise to total input before comparing backends.
+        def denom(r):
+            if r.get("usage_basis") == "claude-input-excludes-cache":
+                return (r["tokens_in"] + r["tokens_cached_in"] + (r.get("tokens_cache_write_in") or 0))
+            return r["tokens_in"]
+        both = [r for r in rs if r.get("tokens_in") is not None and r.get("tokens_cached_in") is not None]
+        dsum = sum(denom(r) for r in both)
+        g["cached_share"] = (sum(r["tokens_cached_in"] for r in both) / dsum) if dsum else None
         g["claude_zero_may_be_unreported"] = any(r.get("usage_basis") == "claude-input-excludes-cache" for r in rs)
         out.append(g)
     result = {"window_days": a.days, "groups": out, "excluded": dict(excluded),

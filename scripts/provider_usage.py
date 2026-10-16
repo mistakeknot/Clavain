@@ -64,7 +64,7 @@ def _finish(res, ok, note_if_not):
 
 def codex(events, exit_code):
     started = done = 0
-    total = {}
+    total, seen = {}, {}
     recs, bad = _read(events)
     for ev in recs:
         kind = ev.get("type")
@@ -76,10 +76,14 @@ def codex(events, exit_code):
                 n = _num(ev["usage"].get(src))
                 if n is not None:
                     total[dst] = total.get(dst, 0) + n
+                    seen[dst] = seen.get(dst, 0) + 1
     if not done:
         return unavailable("no completed turn in provider events")
     res = {"usage_basis": "codex-input-includes-cached"}
-    res.update({dst: total.get(dst) for dst in CODEX_KEYS.values()})
+    # A total is only a run total when every completed turn reported that count.
+    res.update({dst: (total[dst] if seen.get(dst) == done else None)
+                for dst in CODEX_KEYS.values() if dst in total})
+    res.update({dst: None for dst in CODEX_KEYS.values() if dst not in res})
     ok = exit_code == 0 and started <= done and not bad
     note = "run ended early or capture damaged (%d unreadable line(s))" % bad
     return _finish(res, ok, note)
@@ -103,8 +107,8 @@ def claude(events, ledger, exit_code, dispatch_id):
         if mine:
             last = mine[-1]
             res = _claude_counts(last)
-            return _finish(res, bool(last.get("terminal") and last.get("complete")),
-                           "claude accounting not terminal or incomplete")
+            return _finish(res, bool(last.get("terminal") and last.get("complete")) and not bad,
+                           "claude accounting not terminal or incomplete, or ledger damaged")
         return unavailable("no usage record for this dispatch in the claude ledger")
     recs, bad = _read(events)
     result = None
