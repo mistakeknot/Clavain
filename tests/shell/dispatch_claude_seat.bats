@@ -145,6 +145,22 @@ EOF
     done
 }
 
+@test "no-tools: enforced on the resolved profile when dispatched with --role" {
+    run bash "$DISPATCH" --dry-run --role validation --role-resolved --to claude --model claude-sonnet-5-5 --no-tools -C "$T/repo" "prompt"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"--tools "* ]]
+    [[ "$output" == *"--disallowedTools"* ]]
+    [[ "$output" != *"--allowedTools"* ]]
+}
+
+@test "no-tools: a role resolving to codex or kimi still fails closed" {
+    for to in codex kimi; do
+        run bash "$DISPATCH" --dry-run --role validation --role-resolved --to $to --model m --no-tools -C "$T/repo" "prompt"
+        [ "$status" -eq 1 ]
+        [[ "$output" == *"--no-tools is enforceable only for a direct --to claude seat"* ]]
+    done
+}
+
 @test "no-tools: refuses when the claude CLI cannot enforce --tools" {
     printf '#!/usr/bin/env bash\necho "usage: claude [options]"\n' > "$T/bin/claude"
     chmod +x "$T/bin/claude"

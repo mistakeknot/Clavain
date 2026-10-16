@@ -1534,22 +1534,6 @@ if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
   fi
 fi
 
-# A tool-free seat is enforced by the Claude CLI's own tool list. Any other
-# engine or transport cannot enforce it, so refuse before any model runs
-# instead of silently granting tools (fail closed).
-if [[ "$NO_TOOLS" == true ]]; then
-  if [[ "$ENGINE" != claude || -n "$VIA" || "$CLAUDE_UNSAFE" == true ]]; then
-    _dispatch_write_failure_class unsupported_adapter
-    echo "Error: --no-tools is enforceable only for a direct --to claude seat (not engine '$ENGINE'${VIA:+, via $VIA}, nor with --claude-unsafe)" >&2
-    exit 1
-  fi
-  [[ "$DRY_RUN" == true ]] || { command -v claude >/dev/null 2>&1 && claude --help 2>&1 | grep -q -- '--tools'; } || {
-    _dispatch_write_failure_class unsupported_adapter
-    echo "Error: --no-tools requires a claude CLI that supports --tools; refusing to run with tools enabled" >&2
-    exit 1
-  }
-fi
-
 if [[ "$ENGINE" == "flere" ]]; then
   if [[ -n "$VIA" || -n "$TIER" || -n "$ROLE" || -n "$REASONING_EFFORT" || -n "$SERVICE_TIER" || ${#IMAGES[@]} -gt 0 || ${#EXTRA_ARGS[@]} -gt 0 || "$KIMI_UNSAFE" == true || "$CLAUDE_UNSAFE" == true ]]; then
     echo "Error: Flere fixed worker rejects routing inference, alternate transports, images and passthrough flags" >&2
@@ -1667,6 +1651,24 @@ if [[ -n "$TIER" ]]; then
     set -e
     exit "$tier_rc"
   fi
+fi
+
+# A tool-free seat is enforced by the Claude CLI's own tool list. Any other
+# engine or transport cannot enforce it, so refuse before any model runs
+# instead of silently granting tools (fail closed). Checked after --role/--tier
+# resolution: those re-invoke this script with the resolved engine (and
+# --no-tools carried through), so the check runs on the resolved profile.
+if [[ "$NO_TOOLS" == true ]]; then
+  if [[ "$ENGINE" != claude || -n "$VIA" || "$CLAUDE_UNSAFE" == true ]]; then
+    _dispatch_write_failure_class unsupported_adapter
+    echo "Error: --no-tools is enforceable only for a direct --to claude seat (not engine '$ENGINE'${VIA:+, via $VIA}, nor with --claude-unsafe)" >&2
+    exit 1
+  fi
+  [[ "$DRY_RUN" == true ]] || { command -v claude >/dev/null 2>&1 && claude --help 2>&1 | grep -q -- '--tools'; } || {
+    _dispatch_write_failure_class unsupported_adapter
+    echo "Error: --no-tools requires a claude CLI that supports --tools; refusing to run with tools enabled" >&2
+    exit 1
+  }
 fi
 
 # Log phase context (stored for future B2 phase-aware dispatch)
