@@ -1,0 +1,4 @@
+{"type":"turn.started"}
+{"type":"turn.completed","usage":{"input_tokens":1000,"cached_input_tokens":800,"output_tokens":50}}
+{"type":"turn.started"}
+{"type":"item.completed"

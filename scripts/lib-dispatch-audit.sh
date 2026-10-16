@@ -302,7 +302,18 @@ _build_dispatch_run_receipt() {
     tokens_out="$(sed -n 's/^Tokens: \([0-9][0-9]*\) in \/ \([0-9][0-9]*\) out.*/\2/p' "$SUMMARY_FILE" | head -1)"
   fi
   [[ "$exit_code" == 0 ]] || outcome=failed
-  line="$(jq -cn --arg role "$ROLE" --arg backend "${ENGINE:-}" --arg model "${MODEL:-}" \
+  # Usage categories come from provider evidence, not the display parser, so
+  # they survive a missing gawk or --output. Failure leaves the fields unset.
+  local usage_json="{}" usage_script
+  usage_script="$(dirname "${BASH_SOURCE[0]}")/provider_usage.py"
+  if [[ -f "$usage_script" ]] && command -v python3 >/dev/null 2>&1; then
+    usage_json="$(python3 -I "$usage_script" --backend "${ENGINE:-}" \
+      --events "${PROVIDER_EVENTS:-}" \
+      --ledger "$([[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]] && printf '%s' "${CLAVAIN_REVIEW_EVENTS:-}")" \
+      --exit-code "$exit_code" 2>/dev/null)" || usage_json="{}"
+    jq -e type >/dev/null 2>&1 <<< "$usage_json" || usage_json="{}"
+  fi
+  line="$(jq -cn --argjson usage "$usage_json" --arg role "$ROLE" --arg backend "${ENGINE:-}" --arg model "${MODEL:-}" \
     --arg effort "${REASONING_EFFORT:-}" --arg producer "${PRODUCER_IDENTITY:-}" \
     --arg bead "${CLAVAIN_BEAD_ID:-}" --arg ctx "$ctx_hash" \
     --arg thread "${BB_THREAD_ID:-}" --arg session "${DISPATCH_SESSION_ID:-}" \
@@ -318,7 +329,9 @@ _build_dispatch_run_receipt() {
      dispatch_id: ($dispatch|nn), attempt_id: ($attempt|nn),
      started_at: ($s|todate), ended_at: ($e|todate), exit_code: $rc, outcome: $outcome,
      tokens_in: (if $tin == "" then null else ($tin|tonumber) end),
-     tokens_out: (if $tout == "" then null else ($tout|tonumber) end)}')"
+     tokens_out: (if $tout == "" then null else ($tout|tonumber) end)}
+    + ($usage | {usage_status, usage_basis, tokens_cached_in, tokens_cache_write_in,
+                 tokens_reasoning_out} | with_entries(select(.value != null)))')"
   printf '%s\n' "$line"
 }
 

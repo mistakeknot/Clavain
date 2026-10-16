@@ -22,7 +22,7 @@ setup() {
 #!/usr/bin/env bash
 cat > /dev/null
 if [[ -n "${FAKE_SLEEP:-}" ]]; then echo $$ > "$FAKE_PIDFILE"; sleep "$FAKE_SLEEP" & wait $!; fi
-jq -cn --arg body "${FAKE_BODY:-done}" '{type:"result",subtype:"success",is_error:false,result:$body}'
+jq -cn --arg body "${FAKE_BODY:-done}" --argjson u "${FAKE_USAGE:-null}" '{type:"result",subtype:"success",is_error:false,result:$body} + (if $u then {usage:$u} else {} end)'
 exit "${FAKE_EXIT:-0}"
 FAKE
     chmod +x "$T/bin/ic" "$T/bin/claude"
@@ -162,4 +162,22 @@ governed() {
     wait "$pid" || rc=$?
     [ "$(wc -l < "$T/state/receipts.jsonl")" -eq 1 ]
     [ "$(jq -r .exit_code "$T/state/receipts.jsonl")" -eq "$rc" ]
+}
+
+@test "a result without usage evidence is receipted as unavailable, not guessed" {
+    run governed
+    [ "$status" -eq 0 ]
+    r="$(cat "$T/state/receipts.jsonl")"
+    [ "$(jq -r .usage_status <<< "$r")" = unavailable ]
+    [ "$(jq -r .tokens_cached_in <<< "$r")" = null ]
+}
+
+@test "claude provider usage lands in the receipt with its basis" {
+    FAKE_USAGE='{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":30,"cache_creation_input_tokens":20}' run governed
+    [ "$status" -eq 0 ]
+    r="$(cat "$T/state/receipts.jsonl")"
+    [ "$(jq -r .usage_status <<< "$r")" = complete ]
+    [ "$(jq -r .usage_basis <<< "$r")" = claude-input-excludes-cache ]
+    [ "$(jq -r .tokens_cached_in <<< "$r")" = 30 ]
+    [ "$(jq -r .tokens_cache_write_in <<< "$r")" = 20 ]
 }
