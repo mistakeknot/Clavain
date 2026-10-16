@@ -15,7 +15,7 @@ Codex), writes a snapshot, and checks the thresholds in a JSON config:
 
 Share checks read the whole window (`window_hours`) and are skipped when it
 burned less than `share_min_weighted`, so a quiet window cannot breach on a
-handful of calls. Any threshold left out of the config is off. A breach is
+handful of calls. Any threshold left out of the config, or set to null, is off. A breach is
 messaged once per `realert_hours`; an hour with no breach sends nothing, so a
 quiet watch costs no model tokens.
 
@@ -50,6 +50,8 @@ KNOWN_KEYS = {
 DEFAULTS = {"window_hours": 6, "consecutive_hours": 2, "share_min_weighted": 5_000_000,
             "realert_hours": 6, "keep_days": 30, "retired_models": []}
 ALERT_KEYS = {"thread_title_prefix", "bb"}
+# Thresholds and the audit, each off when left out or set to null.
+OPTIONAL_KEYS = {"hourly_burn_max", "main_opus_share_max", "large_context_share_max", "audit_command", "alert"}
 # A stored alert time this far ahead of now means the clock moved; the breach is
 # treated as never alerted rather than silenced until the clock catches up.
 CLOCK_SKEW = dt.timedelta(minutes=5)
@@ -90,7 +92,8 @@ def check_config(config: dict) -> list[str]:
         return isinstance(value, (int, float)) and not isinstance(value, bool)
 
     def need(key, ok, what):
-        if key in config and config[key] is not None and not ok(config[key]):
+        # Only a threshold can be switched off with null; a required setting cannot.
+        if key in config and not (config[key] is None and key in OPTIONAL_KEYS) and not ok(config[key]):
             problems.append(f"{key} must be {what}")
 
     whole = lambda v: isinstance(v, int) and not isinstance(v, bool) and v >= 1

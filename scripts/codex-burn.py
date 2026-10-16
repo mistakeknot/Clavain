@@ -45,6 +45,23 @@ def lineage(cwd: str) -> str:
 def tokens(value) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
 
+def transcript_files(root: Path, unreadable: list[str]):
+    """Every *.jsonl under root, sorted, reporting each directory that cannot be listed.
+
+    Path.rglob silently skips a directory it cannot list, which would make a
+    transcript tree hidden by a permission change look like a quiet hour.
+    """
+    found = []
+
+    def failed(err: OSError):
+        if not isinstance(err, FileNotFoundError):
+            unreadable.append(f"{err.filename}: {err}")
+
+    for directory, _, names in os.walk(root, onerror=failed):
+        found.extend(Path(directory) / name for name in names if name.endswith(".jsonl"))
+    return sorted(found)
+
+
 
 def sessions(root: Path, since: dt.datetime, until: dt.datetime, unreadable: list[str] | None = None):
     """Yield (originator, lineage, [(model, usage), ...]) for each session with calls in the window.
@@ -54,7 +71,7 @@ def sessions(root: Path, since: dt.datetime, until: dt.datetime, unreadable: lis
     disappears between listing and reading is skipped; any other read error is
     appended to `unreadable`.
     """
-    for path in sorted(root.rglob("*.jsonl")):
+    for path in transcript_files(root, unreadable if unreadable is not None else []):
         try:
             if dt.datetime.fromtimestamp(path.stat().st_mtime, dt.timezone.utc) < since:
                 continue

@@ -38,6 +38,23 @@ def tokens(value) -> int:
     """A token count, or 0 for anything that is not a non-negative integer."""
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
 
+def transcript_files(root: Path, unreadable: list[str]):
+    """Every *.jsonl under root, sorted, reporting each directory that cannot be listed.
+
+    Path.rglob silently skips a directory it cannot list, which would make a
+    transcript tree hidden by a permission change look like a quiet hour.
+    """
+    found = []
+
+    def failed(err: OSError):
+        if not isinstance(err, FileNotFoundError):
+            unreadable.append(f"{err.filename}: {err}")
+
+    for directory, _, names in os.walk(root, onerror=failed):
+        found.extend(Path(directory) / name for name in names if name.endswith(".jsonl"))
+    return sorted(found)
+
+
 
 def responses(root: Path, since: dt.datetime, until: dt.datetime):
     """(one row per API response in the window, oldest first; the last call before the
@@ -51,7 +68,7 @@ def responses(root: Path, since: dt.datetime, until: dt.datetime):
     seen: dict[tuple, dict] = {}
     before: dict[Path, dt.datetime] = {}
     unreadable: list[str] = []
-    for path in sorted(root.rglob("*.jsonl")):
+    for path in transcript_files(root, unreadable):
         try:
             if dt.datetime.fromtimestamp(path.stat().st_mtime, dt.timezone.utc) < since:
                 continue

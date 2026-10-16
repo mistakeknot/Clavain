@@ -264,6 +264,27 @@ def test_unreadable_transcript_is_not_a_quiet_hour(tmp_path):
     assert not log.exists() and not (state / "snapshots").exists()
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root lists directories whatever their mode")
+def test_unlistable_directory_is_not_a_quiet_hour(tmp_path):
+    claude, codex, state, log = watch_env(tmp_path, {"hourly_burn_max": 1_000_000})
+    busy_hours(claude)
+    write(codex, "2026/10/16/a.jsonl", *codex_lines("/p", "gpt-6.1-sol", ("2026-10-16T10:30:00Z", 10, 0, 1)))
+    hidden = [claude / WORKSPACE, codex / "2026"]
+    for directory in hidden:
+        directory.chmod(0)
+    try:
+        r = watch(tmp_path, claude, codex, state)
+        assert r.returncode == 2 and "unreadable" in r.stderr, r.stderr
+        for script, root, text in ((DECOMPOSE, claude, "unreadable transcript"), (CODEX, codex, "unreadable session log")):
+            r = subprocess.run([sys.executable, str(script), "--root", str(root), "--since", "2026-10-16T10:00Z",
+                                "--until", "2026-10-16T12:00Z"], capture_output=True, text=True)
+            assert r.returncode == 2 and text in r.stderr, r.stderr
+    finally:
+        for directory in hidden:
+            directory.chmod(0o755)
+    assert not log.exists() and not (state / "snapshots").exists()
+
+
 def test_codex_repeated_snapshot_counts_once(tmp_path):
     usage = dict(input_tokens=1000, cached_input_tokens=0, output_tokens=1, reasoning_output_tokens=0)
     event = lambda ts: json.dumps(dict(type="event_msg", timestamp=ts, payload=dict(type="token_count", info=dict(
@@ -286,6 +307,11 @@ def test_codex_repeated_snapshot_counts_once(tmp_path):
     ({"main_opus_share_max": 50}, "main_opus_share_max must be a share"),
     ({"alert": {"thread_title_prefix": "", "bb": "bb"}}, "alert.thread_title_prefix must be"),
     ({"alert": {"thread_title_prefx": "x"}}, "alert has unknown keys: thread_title_prefx"),
+    ({"window_hours": None}, "window_hours must be a whole number"),
+    ({"retired_models": None}, "retired_models must be a list"),
+    ({"share_min_weighted": None}, "share_min_weighted must be a number"),
+    ({"realert_hours": None}, "realert_hours must be a positive number"),
+    ({"keep_days": None}, "keep_days must be a positive number"),
 ])
 def test_bad_config_values_cannot_assess(tmp_path, bad, text):
     claude, codex, state, log = watch_env(tmp_path, {})
@@ -293,6 +319,14 @@ def test_bad_config_values_cannot_assess(tmp_path, bad, text):
     (tmp_path / "config.json").write_text(json.dumps({**config, **bad}))
     r = watch(tmp_path, claude, codex, state)
     assert r.returncode == 2 and text in r.stderr, r.stderr
+
+
+def test_null_threshold_is_off(tmp_path):
+    claude, codex, state, log = watch_env(tmp_path, {"hourly_burn_max": None, "main_opus_share_max": None,
+                                                     "audit_command": None, "alert": None})
+    busy_hours(claude)
+    r = watch(tmp_path, claude, codex, state)
+    assert r.returncode == 0 and not log.exists(), r.stderr
 
 
 @pytest.mark.parametrize("stored", ["not json", "[]", '{"hourly_burn": "2026-10-16T11:00:00"}', '{"hourly_burn": 5}'])
