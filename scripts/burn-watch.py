@@ -24,18 +24,22 @@ The message goes to the one unarchived bb thread whose title starts with
 so a steward handoff needs no config change.
 
 Exit status follows the rig-report convention: 0 when the watch ran (with or
-without a breach), 2 when it could not assess or could not deliver an alert.
+without a breach), 2 when it could not assess or could not deliver an alert. A
+transcript it could not read, a damaged alert state or another run holding the
+lock is "could not assess", never a quiet hour. --dry-run writes nothing.
 """
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import fcntl
 import importlib.util
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 HERE = Path(__file__).resolve().parent
 KNOWN_KEYS = {
@@ -45,6 +49,10 @@ KNOWN_KEYS = {
 }
 DEFAULTS = {"window_hours": 6, "consecutive_hours": 2, "share_min_weighted": 5_000_000,
             "realert_hours": 6, "keep_days": 30, "retired_models": []}
+ALERT_KEYS = {"thread_title_prefix", "bb"}
+# A stored alert time this far ahead of now means the clock moved; the breach is
+# treated as never alerted rather than silenced until the clock catches up.
+CLOCK_SKEW = dt.timedelta(minutes=5)
 
 
 class CannotAssess(Exception):
@@ -69,9 +77,47 @@ def read_config(path: Path) -> dict:
     if unknown:
         raise CannotAssess(f"config {path} has unknown keys: {', '.join(unknown)}")
     config = {**DEFAULTS, **raw}
-    if config["consecutive_hours"] > config["window_hours"]:
-        raise CannotAssess("consecutive_hours must not exceed window_hours")
+    problems = check_config(config)
+    if problems:
+        raise CannotAssess(f"config {path}: " + "; ".join(problems))
     return config
+
+
+def check_config(config: dict) -> list[str]:
+    problems = []
+
+    def number(value):
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+    def need(key, ok, what):
+        if key in config and config[key] is not None and not ok(config[key]):
+            problems.append(f"{key} must be {what}")
+
+    whole = lambda v: isinstance(v, int) and not isinstance(v, bool) and v >= 1
+    need("window_hours", whole, "a whole number of hours, at least 1")
+    need("consecutive_hours", whole, "a whole number of hours, at least 1")
+    need("hourly_burn_max", lambda v: number(v) and v > 0, "a positive number")
+    need("main_opus_share_max", lambda v: number(v) and 0 < v <= 1, "a share above 0 and at most 1")
+    need("large_context_share_max", lambda v: number(v) and 0 < v <= 1, "a share above 0 and at most 1")
+    need("share_min_weighted", lambda v: number(v) and v >= 0, "a number, 0 or more")
+    need("realert_hours", lambda v: number(v) and v > 0, "a positive number of hours")
+    need("keep_days", lambda v: number(v) and v > 0, "a positive number of days")
+    strings = lambda v: isinstance(v, list) and all(isinstance(x, str) and x for x in v)
+    need("retired_models", strings, "a list of non-empty strings")
+    need("audit_command", lambda v: strings(v) and v, "a non-empty list of non-empty strings")
+    alert = config.get("alert")
+    if alert is not None:
+        if not isinstance(alert, dict):
+            problems.append("alert must be an object")
+        else:
+            if set(alert) - ALERT_KEYS:
+                problems.append("alert has unknown keys: " + ", ".join(sorted(set(alert) - ALERT_KEYS)))
+            for key in ALERT_KEYS:
+                if key in alert and not (isinstance(alert[key], str) and alert[key]):
+                    problems.append(f"alert.{key} must be a non-empty string")
+    if not problems and config["consecutive_hours"] > config["window_hours"]:
+        problems.append("consecutive_hours must not exceed window_hours")
+    return problems
 
 
 def stamp(moment: dt.datetime) -> str:
@@ -117,13 +163,52 @@ def evaluate(config: dict, claude: dict, codex: dict | None, until: dt.datetime)
     return breaches
 
 
-def due(breaches: list[dict], state: dict, now: dt.datetime, realert_hours: float) -> list[dict]:
+def read_state(path: Path) -> dict[str, dt.datetime]:
+    """Last alert time per breach key. A damaged file is reported, not reset: resetting
+    it would resend every alert, and ignoring it could silence them."""
+    try:
+        raw = json.loads(path.read_text())
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as err:
+        raise CannotAssess(f"alert state {path} is unreadable ({err}); inspect it, or remove it to re-alert") from err
+    state = {}
+    if isinstance(raw, dict):
+        for key, value in raw.items():
+            try:
+                moment = dt.datetime.fromisoformat(value)
+            except (TypeError, ValueError):
+                break
+            if moment.tzinfo is None:
+                break
+            state[key] = moment
+        else:
+            return state
+    raise CannotAssess(f"alert state {path} is not a map of breach to ISO 8601 time with zone; "
+                       "inspect it, or remove it to re-alert")
+
+
+def due(breaches: list[dict], state: dict[str, dt.datetime], now: dt.datetime, realert_hours: float) -> list[dict]:
     fresh = []
     for breach in breaches:
         last = state.get(breach["key"])
-        if last is None or now - dt.datetime.fromisoformat(last) >= dt.timedelta(hours=realert_hours):
+        if last is None or last > now + CLOCK_SKEW or now - last >= dt.timedelta(hours=realert_hours):
             fresh.append(breach)
     return fresh
+
+
+def write_atomic(path: Path, text: str) -> None:
+    """Replace `path` whole, so an interrupted run leaves the old file or the new one."""
+    handle = tempfile.NamedTemporaryFile("w", dir=path.parent, prefix=f".{path.name}.", delete=False)
+    try:
+        with handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(handle.name, path)
+    except BaseException:
+        Path(handle.name).unlink(missing_ok=True)
+        raise
 
 
 def resolve_thread(bb: str, prefix: str) -> str:
@@ -175,9 +260,9 @@ def message(breaches: list[dict], claude: dict, codex: dict | None, snapshot: Pa
 
 def prune(directory: Path, now: dt.datetime, keep_days: float) -> None:
     cutoff = now - dt.timedelta(days=keep_days)
-    for path in directory.glob("*.json"):
+    for path in [*directory.glob("*.json"), *directory.glob("*.md")]:
         try:
-            taken = dt.datetime.strptime(path.stem, "%Y-%m-%dT%H%MZ").replace(tzinfo=dt.timezone.utc)
+            taken = dt.datetime.strptime(path.name[:16], "%Y-%m-%dT%H%MZ").replace(tzinfo=dt.timezone.utc)
         except ValueError:
             continue
         if taken < cutoff:
@@ -191,43 +276,65 @@ def run(args) -> int:
     since = until - dt.timedelta(hours=config["window_hours"])
     if not args.claude_root.is_dir():
         raise CannotAssess(f"no Claude transcript directory at {args.claude_root}")
+    if args.dry_run:
+        return assess(args, config, now, since, until)
+    try:
+        args.state_dir.mkdir(parents=True, exist_ok=True)
+        with open(args.state_dir / "lock", "w") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as err:
+                raise CannotAssess(f"another burn-watch run holds {args.state_dir / 'lock'}") from err
+            return assess(args, config, now, since, until)
+    except OSError as err:
+        raise CannotAssess(f"state directory {args.state_dir}: {err}") from err
+
+
+def assess(args, config: dict, now: dt.datetime, since: dt.datetime, until: dt.datetime) -> int:
+    """Read the window, check thresholds, and unless this is a dry run alert and record.
+    Outside a dry run the caller holds the state-directory lock."""
     claude = load("burn-decompose").decompose(args.claude_root, since, until, top=10)
     codex = load("codex-burn").report(args.codex_root, since, until, top=10) if args.codex_root.is_dir() else None
+    unreadable = claude["unreadable"] + (codex["unreadable"] if codex else [])
+    if unreadable:
+        raise CannotAssess(f"{len(unreadable)} transcript(s) unreadable, first: {unreadable[0]}")
     breaches = evaluate(config, claude, codex, until)
-
-    snapshots = args.state_dir / "snapshots"
-    snapshots.mkdir(parents=True, exist_ok=True)
-    snapshot = snapshots / f"{until:%Y-%m-%dT%H%MZ}.json"
     state_path = args.state_dir / "alerted.json"
-    try:
-        state = json.loads(state_path.read_text()) if state_path.exists() else {}
-    except ValueError:
-        state = {}
+    state = read_state(state_path)
     fresh = due(breaches, state, now, config["realert_hours"])
+    snapshots = args.state_dir / "snapshots"
+    snapshot = snapshots / f"{until:%Y-%m-%dT%H%MZ}.json"
+
+    if args.dry_run:
+        if fresh:
+            print(message(fresh, claude, codex, snapshot), end="")
+        print(f"burn-watch {stamp(since)}..{stamp(until)} (dry run, nothing written or sent): "
+              f"Claude {claude['per_hour'] / 1e6:.1f}M/h, {len(breaches)} breach(es), {len(fresh)} would alert")
+        return 0
+
+    snapshots.mkdir(parents=True, exist_ok=True)
     record = {"taken_at": now.isoformat().replace("+00:00", "Z"), "config": str(args.config),
               "claude": claude, "codex": codex, "breaches": breaches,
-              "alerted": [b["key"] for b in fresh], "alert_thread": None, "dry_run": args.dry_run}
+              "alerted": [], "alert_thread": None}
     error = None
     if fresh:
-        body = message(fresh, claude, codex, snapshot)
-        alert_file = args.state_dir / "last-alert.md"
-        alert_file.write_text(body)
-        if args.dry_run:
-            print(body, end="")
+        alert_file = snapshots / f"{until:%Y-%m-%dT%H%MZ}-alert-{now:%H%M%S}.md"
+        write_atomic(alert_file, message(fresh, claude, codex, snapshot))
+        record["alert_file"] = str(alert_file)
+        try:
+            record["alert_thread"] = send(config, alert_file)
+        except CannotAssess as err:
+            error = str(err)
+            record["alert_error"] = error
         else:
-            try:
-                record["alert_thread"] = send(config, alert_file)
-                state.update({b["key"]: now.isoformat() for b in fresh})
-                state_path.write_text(json.dumps(state, indent=2) + "\n")
-            except CannotAssess as err:
-                error = str(err)
-                record["alerted"] = []
-                record["alert_error"] = error
-    snapshot.write_text(json.dumps(record, indent=2) + "\n")
+            record["alerted"] = [b["key"] for b in fresh]
+            stored = {key: moment.isoformat() for key, moment in state.items()}
+            stored.update({b["key"]: now.isoformat() for b in fresh})
+            write_atomic(state_path, json.dumps(stored, indent=2) + "\n")
+    write_atomic(snapshot, json.dumps(record, indent=2) + "\n")
     prune(snapshots, now, config["keep_days"])
-    summary = (f"burn-watch {stamp(since)}..{stamp(until)}: Claude {claude['per_hour'] / 1e6:.1f}M/h, "
-               f"{len(breaches)} breach(es), {len(record['alerted'])} alerted")
-    print(summary)
+    print(f"burn-watch {stamp(since)}..{stamp(until)}: Claude {claude['per_hour'] / 1e6:.1f}M/h, "
+          f"{len(breaches)} breach(es), {len(record['alerted'])} alerted")
     if error:
         print(f"burn-watch: could not deliver alert: {error}", file=sys.stderr)
         return 2
@@ -242,7 +349,8 @@ def main(argv=None) -> int:
     parser.add_argument("--codex-root", type=Path, default=Path(os.path.expanduser("~/.codex/sessions")))
     parser.add_argument("--now", type=lambda v: dt.datetime.fromisoformat(v.replace("Z", "+00:00")),
                         help="pretend the run happens at this ISO 8601 time (tests)")
-    parser.add_argument("--dry-run", action="store_true", help="print any alert instead of sending it")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="print any alert instead of sending it; write no snapshot, state or alert file")
     args = parser.parse_args(argv)
     try:
         return run(args)

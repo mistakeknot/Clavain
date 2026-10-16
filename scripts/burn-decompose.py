@@ -8,8 +8,8 @@ on Opus in main sessions; and how much ran above 100k context. It uses
 burn-report.py's weights, lineage rule and dedup rule (one count per message
 id and request id, each field at its largest streamed value).
 
-A write is classed by the gap since the previous call in the same transcript:
-the first call writes the session prefix, a call more than 5 minutes after the
+A write is classed by the gap since the previous call in the same transcript,
+including a call just before the window: the first call writes the session prefix, a call more than 5 minutes after the
 previous one is a cold rewrite, and any other write is incremental. The 5-minute
 gap matches the short cache TTL; a session writing 1-hour entries keeps its
 cache across longer gaps, so read cold rewrites together with the TTL split.
@@ -34,46 +34,72 @@ COLD_GAP = dt.timedelta(minutes=5)
 LARGE_CONTEXT = 100_000
 
 
-def responses(root: Path, since: dt.datetime, until: dt.datetime) -> list[dict]:
-    """One row per API response in the window, oldest first."""
+def tokens(value) -> int:
+    """A token count, or 0 for anything that is not a non-negative integer."""
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+
+def responses(root: Path, since: dt.datetime, until: dt.datetime):
+    """(one row per API response in the window, oldest first; the last call before the
+    window in each transcript; transcripts that could not be read).
+
+    The previous call matters for classing the first write in the window: without
+    it a call one minute after the window opens would look like a session start.
+    A transcript that disappears between listing and reading is skipped; any other
+    read error is reported, so a caller can refuse to call the window quiet.
+    """
     seen: dict[tuple, dict] = {}
+    before: dict[Path, dt.datetime] = {}
+    unreadable: list[str] = []
     for path in sorted(root.rglob("*.jsonl")):
         try:
             if dt.datetime.fromtimestamp(path.stat().st_mtime, dt.timezone.utc) < since:
                 continue
             handle = path.open(errors="ignore")
-        except OSError:
+        except FileNotFoundError:
             continue
-        with handle:
-            for line in handle:
-                if '"usage"' not in line:
-                    continue
-                try:
-                    event = json.loads(line)
-                    moment = br.parse_time(event["timestamp"])
-                except (ValueError, KeyError, TypeError, AttributeError):
-                    continue
-                message = event.get("message")
-                if not isinstance(message, dict) or not (since <= moment < until):
-                    continue
-                usage, model = message.get("usage"), message.get("model")
-                if not isinstance(usage, dict) or model == "<synthetic>":
-                    continue
-                key = (message.get("id"), event.get("requestId"))
-                row = seen.get(key)
-                if row is None:
-                    row = seen[key] = {
-                        "path": path, "time": moment, "model": model or "unknown",
-                        "sub": "subagents" in path.relative_to(root).parts,
-                        "usage": dict.fromkeys(WEIGHTS, 0), "ttl_5m": 0, "ttl_1h": 0,
-                    }
-                row["sub"] = row["sub"] or bool(event.get("isSidechain"))
-                for field in WEIGHTS:
-                    row["usage"][field] = max(row["usage"][field], usage.get(field) or 0)
-                ttl = usage.get("cache_creation") or {}
-                row["ttl_5m"] = max(row["ttl_5m"], ttl.get("ephemeral_5m_input_tokens") or 0)
-                row["ttl_1h"] = max(row["ttl_1h"], ttl.get("ephemeral_1h_input_tokens") or 0)
-    return sorted(seen.values(), key=lambda r: r["time"])
+        except OSError as err:
+            unreadable.append(f"{path}: {err}")
+            continue
+        try:
+            with handle:
+                for line in handle:
+                    if '"usage"' not in line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                        moment = br.parse_time(event["timestamp"])
+                    except (ValueError, KeyError, TypeError, AttributeError):
+                        continue
+                    message = event.get("message")
+                    if not isinstance(message, dict):
+                        continue
+                    usage, model = message.get("usage"), message.get("model")
+                    if not isinstance(usage, dict) or model == "<synthetic>":
+                        continue
+                    if moment < since:
+                        before[path] = max(before.get(path, moment), moment)
+                        continue
+                    if moment >= until:
+                        continue
+                    key = (message.get("id"), event.get("requestId"))
+                    row = seen.get(key)
+                    if row is None:
+                        row = seen[key] = {
+                            "path": path, "time": moment, "model": model if isinstance(model, str) and model else "unknown",
+                            "sub": "subagents" in path.relative_to(root).parts,
+                            "usage": dict.fromkeys(WEIGHTS, 0), "ttl_5m": 0, "ttl_1h": 0,
+                        }
+                    row["sub"] = row["sub"] or bool(event.get("isSidechain"))
+                    for field in WEIGHTS:
+                        row["usage"][field] = max(row["usage"][field], tokens(usage.get(field)))
+                    ttl = usage.get("cache_creation")
+                    ttl = ttl if isinstance(ttl, dict) else {}
+                    row["ttl_5m"] = max(row["ttl_5m"], tokens(ttl.get("ephemeral_5m_input_tokens")))
+                    row["ttl_1h"] = max(row["ttl_1h"], tokens(ttl.get("ephemeral_1h_input_tokens")))
+        except OSError as err:
+            unreadable.append(f"{path}: {err}")
+    return sorted(seen.values(), key=lambda r: r["time"]), before, unreadable
 
 
 def weighted(usage: dict) -> float:
@@ -89,7 +115,7 @@ def short_model(model: str) -> str:
 
 
 def decompose(root: Path, since: dt.datetime, until: dt.datetime, top: int = 20) -> dict:
-    rows = responses(root, since, until)
+    rows, before, unreadable = responses(root, since, until)
     total = 0.0
     by_role = collections.Counter()
     classes = collections.Counter()
@@ -99,7 +125,7 @@ def decompose(root: Path, since: dt.datetime, until: dt.datetime, top: int = 20)
     by_hour = collections.Counter()
     lineages = collections.defaultdict(collections.Counter)
     sessions = collections.defaultdict(set)
-    last_call: dict[Path, dt.datetime] = {}
+    last_call: dict[Path, dt.datetime] = dict(before)
     main = main_opus = large = 0.0
     for row in rows:
         usage, w = row["usage"], weighted(row["usage"])
@@ -145,6 +171,7 @@ def decompose(root: Path, since: dt.datetime, until: dt.datetime, top: int = 20)
         "until": until.isoformat().replace("+00:00", "Z"),
         "weights": WEIGHTS,
         "calls": len(rows),
+        "unreadable": unreadable,
         "weighted_total": round(total),
         "per_hour": round(total / hours),
         "main_opus_share": share(main_opus, main),
@@ -208,7 +235,9 @@ def main(argv=None) -> int:
         parser.error(f"no transcript directory at {args.root}")
     data = decompose(args.root, since, until, args.top)
     print(json.dumps(data, indent=2) if args.json else render(data))
-    return 0
+    for problem in data["unreadable"]:
+        print(f"unreadable transcript: {problem}", file=sys.stderr)
+    return 2 if data["unreadable"] else 0
 
 
 if __name__ == "__main__":

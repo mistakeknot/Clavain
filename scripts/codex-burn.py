@@ -42,40 +42,63 @@ def lineage(cwd: str) -> str:
     return Path(cwd).name if cwd else "unknown"
 
 
-def sessions(root: Path, since: dt.datetime, until: dt.datetime):
-    """Yield (originator, lineage, [(model, usage), ...]) for each session with calls in the window."""
+def tokens(value) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+
+def sessions(root: Path, since: dt.datetime, until: dt.datetime, unreadable: list[str] | None = None):
+    """Yield (originator, lineage, [(model, usage), ...]) for each session with calls in the window.
+
+    A token_count can repeat the previous snapshot (same total_token_usage) without
+    a new call, so one whose total has not changed is not counted again. A log that
+    disappears between listing and reading is skipped; any other read error is
+    appended to `unreadable`.
+    """
     for path in sorted(root.rglob("*.jsonl")):
         try:
             if dt.datetime.fromtimestamp(path.stat().st_mtime, dt.timezone.utc) < since:
                 continue
             handle = path.open(errors="ignore")
-        except OSError:
+        except FileNotFoundError:
             continue
-        origin, cwd, model, calls = "unknown", "", "unknown", []
-        with handle:
-            for line in handle:
-                try:
-                    event = json.loads(line)
-                except ValueError:
-                    continue
-                if not isinstance(event, dict):
-                    continue
-                payload = event.get("payload") or {}
-                if not isinstance(payload, dict):
-                    continue
-                if event.get("type") == "session_meta":
-                    origin = payload.get("originator") or origin
-                    cwd = payload.get("cwd") or cwd
-                elif event.get("type") == "turn_context":
-                    model = payload.get("model") or model
-                elif payload.get("type") == "token_count" and isinstance(payload.get("info"), dict):
+        except OSError as err:
+            if unreadable is not None:
+                unreadable.append(f"{path}: {err}")
+            continue
+        origin, cwd, model, calls, last_total = "unknown", "", "unknown", [], None
+        try:
+            with handle:
+                for line in handle:
                     try:
-                        moment = parse_time(event["timestamp"])
-                    except (KeyError, TypeError, ValueError, AttributeError):
+                        event = json.loads(line)
+                    except ValueError:
                         continue
-                    usage = payload["info"].get("last_token_usage")
-                    if since <= moment < until and isinstance(usage, dict):
-                        calls.append((model, usage))
+                    if not isinstance(event, dict):
+                        continue
+                    payload = event.get("payload") or {}
+                    if not isinstance(payload, dict):
+                        continue
+                    if event.get("type") == "session_meta":
+                        origin = payload.get("originator") or origin
+                        cwd = payload.get("cwd") or cwd
+                    elif event.get("type") == "turn_context":
+                        model = payload.get("model") or model
+                    elif payload.get("type") == "token_count" and isinstance(payload.get("info"), dict):
+                        total = payload["info"].get("total_token_usage")
+                        if total is not None and total == last_total:
+                            continue
+                        last_total = total
+                        try:
+                            moment = parse_time(event["timestamp"])
+                        except (KeyError, TypeError, ValueError, AttributeError):
+                            continue
+                        usage = payload["info"].get("last_token_usage")
+                        if since <= moment < until and isinstance(usage, dict):
+                            calls.append((model, {field: tokens(usage.get(field)) for field in FIELDS}))
+        except OSError as err:
+            if unreadable is not None:
+                unreadable.append(f"{path}: {err}")
+            continue
         if calls:
             yield origin, lineage(cwd), calls
 
@@ -86,7 +109,8 @@ def report(root: Path, since: dt.datetime, until: dt.datetime, top: int = 15) ->
     models = collections.Counter()
     per_session = []
     count = 0
-    for origin, line_name, calls in sessions(root, since, until):
+    unreadable: list[str] = []
+    for origin, line_name, calls in sessions(root, since, until, unreadable):
         count += 1
         session_input = 0
         for model, usage in calls:
@@ -111,6 +135,7 @@ def report(root: Path, since: dt.datetime, until: dt.datetime, top: int = 15) ->
         "since": since.isoformat().replace("+00:00", "Z"),
         "until": until.isoformat().replace("+00:00", "Z"),
         "sessions": count,
+        "unreadable": unreadable,
         "totals": {field: totals[field] for field in FIELDS},
         "cached_share": round(totals["cached_input_tokens"] / totals["input_tokens"], 4) if totals["input_tokens"] else 0.0,
         "median_session_input": round(statistics.median(per_session)) if per_session else 0,
@@ -155,7 +180,9 @@ def main(argv=None) -> int:
         parser.error(f"no Codex session directory at {args.root}")
     data = report(args.root, since, until, args.top)
     print(json.dumps(data, indent=2) if args.json else render(data))
-    return 0
+    for problem in data["unreadable"]:
+        print(f"unreadable session log: {problem}", file=sys.stderr)
+    return 2 if data["unreadable"] else 0
 
 
 if __name__ == "__main__":

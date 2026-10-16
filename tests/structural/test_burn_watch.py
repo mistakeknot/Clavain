@@ -1,8 +1,12 @@
 """Burn decomposition, Codex token counts and the hourly burn watch, on synthetic logs."""
+import fcntl
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 DECOMPOSE = ROOT / "scripts/burn-decompose.py"
@@ -21,8 +25,11 @@ def claude_line(msg, ts, model="claude-sonnet-5-5", sidechain=False, ttl_1h=0, *
 def codex_lines(cwd, model, *calls, originator="codex_exec"):
     lines = [json.dumps(dict(type="session_meta", timestamp=calls[0][0], payload=dict(originator=originator, cwd=cwd))),
              json.dumps(dict(type="turn_context", timestamp=calls[0][0], payload=dict(model=model)))]
+    total = 0
     for ts, inp, cached, out in calls:
+        total += inp
         lines.append(json.dumps(dict(type="event_msg", timestamp=ts, payload=dict(type="token_count", info=dict(
+            total_token_usage=dict(input_tokens=total),
             last_token_usage=dict(input_tokens=inp, cached_input_tokens=cached, output_tokens=out,
                                   reasoning_output_tokens=0))))))
     return lines
@@ -165,12 +172,21 @@ def test_retired_codex_model_and_share_floor(tmp_path):
     assert "Opus share" not in body.split("\n\n")[1]
 
 
-def test_dry_run_prints_and_does_not_send(tmp_path):
-    claude, codex, state, log = watch_env(tmp_path, {"hourly_burn_max": 1_000_000})
+def test_dry_run_prints_and_writes_nothing(tmp_path):
+    claude, codex, state, log = watch_env(tmp_path, {"hourly_burn_max": 1_000_000, "keep_days": 1})
     busy_hours(claude)
     r = watch(tmp_path, claude, codex, state, "2026-10-16T12:05:00Z", "--dry-run")
-    assert r.returncode == 0 and "Burn watch: 1 threshold breach" in r.stdout
-    assert not log.exists() and not (state / "alerted.json").exists()
+    assert r.returncode == 0 and "Burn watch: 1 threshold breach" in r.stdout and "1 would alert" in r.stdout
+    assert not log.exists() and not state.exists()
+    # After a real alert, a dry run in the same hour leaves its evidence alone and prunes nothing.
+    r = watch(tmp_path, claude, codex, state)
+    assert r.returncode == 0 and "1 alerted" in r.stdout
+    old = state / "snapshots/2026-10-01T0000Z.json"
+    old.write_text("{}")
+    before = {p.name: p.read_bytes() for p in state.rglob("*") if p.is_file()}
+    r = watch(tmp_path, claude, codex, state, "2026-10-16T12:30:00Z", "--dry-run")
+    assert r.returncode == 0 and "0 would alert" in r.stdout
+    assert {p.name: p.read_bytes() for p in state.rglob("*") if p.is_file()} == before
 
 
 def test_cannot_assess_cases(tmp_path):
@@ -187,10 +203,14 @@ def test_cannot_assess_cases(tmp_path):
     assert not (state / "alerted.json").exists()
     snap = json.loads((state / "snapshots/2026-10-16T1200Z.json").read_text())
     assert snap["alerted"] == [] and "found 2" in snap["alert_error"]
-    # A failed send also stays unrecorded.
+    # A failed send also stays unrecorded, and the next run delivers it.
     claude, codex, state, log = watch_env(tmp_path, {"hourly_burn_max": 1_000_000}, tell_exit=1)
     r = watch(tmp_path, claude, codex, state)
     assert r.returncode == 2 and not (state / "alerted.json").exists()
+    claude, codex, state, log = watch_env(tmp_path, {"hourly_burn_max": 1_000_000})
+    r = watch(tmp_path, claude, codex, state, "2026-10-16T12:20:00Z")
+    assert r.returncode == 0 and "1 alerted" in r.stdout
+    assert set(json.loads((state / "alerted.json").read_text())) == {"hourly_burn"}
 
 
 def test_audit_command_findings_and_failure(tmp_path):
@@ -204,3 +224,105 @@ def test_audit_command_findings_and_failure(tmp_path):
     audit.write_text("#!/bin/sh\nexit 4\n")
     r = watch(tmp_path, claude, codex, tmp_path / "state2")
     assert r.returncode == 2 and "audit command exited 4" in r.stderr
+
+
+def test_decompose_edges(tmp_path):
+    write(tmp_path, f"{WORKSPACE}/main.jsonl",
+          # Before the window: not counted, but it is the previous call for the 10:01 write.
+          claude_line("p0", "2026-10-16T09:59:00Z", cache_creation_input_tokens=50),
+          claude_line("e1", "2026-10-16T10:00:00Z", cache_read_input_tokens=100_000),
+          claude_line("e1", "2026-10-16T10:00:00Z", cache_read_input_tokens=100_000, output_tokens=7),
+          claude_line("e2", "2026-10-16T10:01:00Z", cache_creation_input_tokens=80),
+          claude_line("e3", "2026-10-16T11:00:00Z", output_tokens=1000))
+    write(tmp_path, f"{WORKSPACE}/bad.jsonl",
+          json.dumps(dict(type="assistant", requestId="r-b", timestamp="2026-10-16T10:30:00Z", message=dict(
+              id="b", model="claude-sonnet-5-5", usage=dict(output_tokens="9", cache_creation="bad")))))
+    data = run_json(DECOMPOSE, "--root", str(tmp_path), "--since", "2026-10-16T10:00Z", "--until", "2026-10-16T11:00Z")
+    # e1 streamed twice counts once at its largest values; e3 at the window end is out; the
+    # malformed call counts with zero tokens.
+    assert data["calls"] == 3 and data["unreadable"] == []
+    assert data["by_class"]["output"] == 35
+    assert data["by_class"]["incremental_write"] == 100 and data["by_class"].get("session_start_write", 0) == 0
+    # Exactly 100k context counts as large.
+    assert data["large_context_share"] == round(10_035 / data["weighted_total"], 4)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads files whatever their mode")
+def test_unreadable_transcript_is_not_a_quiet_hour(tmp_path):
+    claude, codex, state, log = watch_env(tmp_path, {"hourly_burn_max": 1_000_000})
+    busy_hours(claude)
+    locked = claude / f"{WORKSPACE}/s.jsonl"
+    locked.chmod(0)
+    try:
+        r = watch(tmp_path, claude, codex, state)
+        assert r.returncode == 2 and "unreadable" in r.stderr
+        r = subprocess.run([sys.executable, str(DECOMPOSE), "--root", str(claude), "--since", "2026-10-16T10:00Z",
+                            "--until", "2026-10-16T12:00Z"], capture_output=True, text=True)
+        assert r.returncode == 2 and "unreadable transcript" in r.stderr
+    finally:
+        locked.chmod(0o644)
+    assert not log.exists() and not (state / "snapshots").exists()
+
+
+def test_codex_repeated_snapshot_counts_once(tmp_path):
+    usage = dict(input_tokens=1000, cached_input_tokens=0, output_tokens=1, reasoning_output_tokens=0)
+    event = lambda ts: json.dumps(dict(type="event_msg", timestamp=ts, payload=dict(type="token_count", info=dict(
+        total_token_usage=dict(input_tokens=1000), last_token_usage=usage))))
+    write(tmp_path, "2026/10/16/a.jsonl",
+          json.dumps(dict(type="session_meta", timestamp="2026-10-16T10:00:00Z", payload=dict(originator="x", cwd="/p"))),
+          json.dumps(dict(type="turn_context", timestamp="2026-10-16T10:00:00Z", payload=dict(model="gpt-6.1-sol"))),
+          event("2026-10-16T10:01:00Z"),
+          json.dumps(dict(type="turn_context", timestamp="2026-10-16T10:02:00Z", payload=dict(model="gpt-5.6-sol"))),
+          event("2026-10-16T10:02:00Z"))
+    data = run_json(CODEX, "--root", str(tmp_path), "--since", "2026-10-16T10:00Z", "--until", "2026-10-16T11:00Z")
+    assert data["totals"]["input_tokens"] == 1000 and data["models"] == {"gpt-6.1-sol": 1}
+
+
+@pytest.mark.parametrize("bad, text", [
+    ({"consecutive_hours": "2"}, "consecutive_hours must be a whole number"),
+    ({"consecutive_hours": 0}, "consecutive_hours must be a whole number"),
+    ({"realert_hours": -1}, "realert_hours must be a positive number"),
+    ({"retired_models": "opus"}, "retired_models must be a list"),
+    ({"main_opus_share_max": 50}, "main_opus_share_max must be a share"),
+    ({"alert": {"thread_title_prefix": "", "bb": "bb"}}, "alert.thread_title_prefix must be"),
+    ({"alert": {"thread_title_prefx": "x"}}, "alert has unknown keys: thread_title_prefx"),
+])
+def test_bad_config_values_cannot_assess(tmp_path, bad, text):
+    claude, codex, state, log = watch_env(tmp_path, {})
+    config = json.loads((tmp_path / "config.json").read_text())
+    (tmp_path / "config.json").write_text(json.dumps({**config, **bad}))
+    r = watch(tmp_path, claude, codex, state)
+    assert r.returncode == 2 and text in r.stderr, r.stderr
+
+
+@pytest.mark.parametrize("stored", ["not json", "[]", '{"hourly_burn": "2026-10-16T11:00:00"}', '{"hourly_burn": 5}'])
+def test_damaged_alert_state_cannot_assess(tmp_path, stored):
+    claude, codex, state, log = watch_env(tmp_path, {"hourly_burn_max": 1_000_000})
+    busy_hours(claude)
+    state.mkdir()
+    (state / "alerted.json").write_text(stored)
+    r = watch(tmp_path, claude, codex, state)
+    assert r.returncode == 2 and "alert state" in r.stderr
+    assert not log.exists() and (state / "alerted.json").read_text() == stored
+
+
+def test_future_alert_time_does_not_silence(tmp_path):
+    claude, codex, state, log = watch_env(tmp_path, {"hourly_burn_max": 1_000_000})
+    busy_hours(claude)
+    state.mkdir()
+    (state / "alerted.json").write_text(json.dumps({"hourly_burn": "2099-01-01T00:00:00+00:00"}))
+    r = watch(tmp_path, claude, codex, state)
+    assert r.returncode == 0 and "1 alerted" in r.stdout
+    assert json.loads((state / "alerted.json").read_text())["hourly_burn"].startswith("2026-10-16T12:05")
+
+
+def test_second_run_refuses_while_the_lock_is_held(tmp_path):
+    claude, codex, state, log = watch_env(tmp_path, {"hourly_burn_max": 1_000_000})
+    busy_hours(claude)
+    state.mkdir()
+    with open(state / "lock", "w") as held:
+        fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        r = watch(tmp_path, claude, codex, state)
+    assert r.returncode == 2 and "another burn-watch run" in r.stderr and not log.exists()
+    r = watch(tmp_path, claude, codex, state)
+    assert r.returncode == 0 and "1 alerted" in r.stdout
