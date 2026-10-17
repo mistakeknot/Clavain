@@ -112,6 +112,8 @@ Reached when `route_mode` is `"bead"` or `"text"`.
 
 ### 4a: Fast-Path Heuristics
 
+**Decision maps first.** If the bead's labels include `wayfinder:map`, display `Route: /clavain:wayfind <id> — decision map, not build work` and stop; the user starts it. In text mode, when the request names a destination but its route needs decisions across several sessions, suggest `/clavain:wayfind "<idea>"` alongside the table's route. Never start it.
+
 First match wins. **Row order is semantically significant** — rows 1-4 are terminal (conf 1.0), rows 5+ are advisory. Do not reorder.
 
 | Condition | Route | Conf |

@@ -1,9 +1,9 @@
 {
-  "generated": "2026-10-14T22:23:03Z",
+  "generated": "2026-10-17T06:33:54Z",
   "counts": {
     "skills": 27,
     "agents": 6,
-    "commands": 58,
+    "commands": 59,
     "hooks": 22,
     "mcp_servers": 0,
     "review": 2,
@@ -375,6 +375,10 @@
     {
       "name": "verify",
       "description": "Run completion verification before claiming work is done"
+    },
+    {
+      "name": "wayfind",
+      "description": "Chart or work a decision map in beads for an effort whose destination is known but whose route spans many sessions"
     },
     {
       "name": "work",

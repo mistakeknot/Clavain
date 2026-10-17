@@ -38,6 +38,7 @@ Mark each `[x]` as you complete it. After Phase 5, strategy is **done** — no f
 <strategy_input> #$ARGUMENTS </strategy_input>
 
 Resolve input:
+0. Argument is a bead labelled `wayfinder:map` → run `"${CLAUDE_PLUGIN_ROOT}/scripts/wayfind.py" lint <id>`. Proceed only when it exits 0 and reports `cleared`; otherwise stop and point to `/clavain:wayfind <id>`. Use the map's Destination and Out of scope as the problem and non-goals, and its closed decision tickets (`bd list --parent <id> --all`, each ticket's resolution comment) as the brainstorm. Skip superseded and invalidated tickets.
 1. Argument is a file path → read it as brainstorm doc
    - Argument is not a valid path on disk (feature description or inline text) → use it as the idea text and proceed without a brainstorm doc
 2. No argument + bead ID set → `clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "brainstorm" 2>/dev/null`
