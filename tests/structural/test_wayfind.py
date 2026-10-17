@@ -433,12 +433,58 @@ def test_resolve_frees_the_lease_for_the_next_hitl_ticket(beads, tmp_path, capsy
     assert run(beads, "--actor", "agent-b", "ready", map_id, "--claim", "--json") == 0
     out = json.loads(capsys.readouterr().out)
     assert out["claimed"] is None and out["frontier"] == [] and out["lease"] == "agent-a"
-    assert run(beads, "resolve", first, "--answer", "yes", "--source", "card pick") == 0
+    assert run(beads, "--actor", "agent-a", "resolve", first, "--answer", "yes", "--source", "card pick") == 0
     assert bd.show(map_id)["status"] == "open"
     capsys.readouterr()
     assert run(beads, "--actor", "agent-b", "ready", map_id, "--claim", "--json") == 0
     second = json.loads(capsys.readouterr().out)
     assert second["claimed"] not in (None, first) and second["lease"] == "agent-b"
+
+
+@needs_bd
+def test_only_the_holder_frees_the_lease(beads, tmp_path, capsys):
+    bd, map_id = chart_map(beads, tmp_path, [{"type": "grilling", "title": "G1"},
+                                             {"type": "grilling", "title": "G2"},
+                                             {"type": "grilling", "title": "G3"}])
+    g1, g2, g3 = (ticket_id(bd, map_id, t) for t in ("G1", "G2", "G3"))
+    a, b = two_actors(beads)
+    claimed, held = wayfind.claim_one(a, map_id, [bd.show(g1)])
+    assert claimed["id"] == g1 and held is None
+    assert run(beads, "--actor", "agent-a", "resolve", g1, "--answer", "yes", "--source", "card pick") == 0
+    assert bd.show(map_id)["status"] == "open"
+    # A takes the lease for its next ticket and pauses before claiming it ...
+    a.claim(map_id)
+    # ... while B retries the old resolution. That must not free A's new lease.
+    capsys.readouterr()
+    assert run(beads, "--actor", "agent-b", "resolve", g1, "--answer", "yes", "--source", "card pick") == 0
+    assert "nothing to do" in capsys.readouterr().out
+    assert bd.show(map_id)["assignee"] == "agent-a"
+    claimed, held = wayfind.claim_one(b, map_id, [bd.show(g3)])
+    assert claimed is None and "leased to agent-a" in held
+    claimed, held = wayfind.claim_one(a, map_id, [bd.show(g2)])
+    assert claimed["id"] == g2 and held is None
+    # B resolving A's ticket leaves the lease with A, whose next ready reuses it.
+    assert run(beads, "--actor", "agent-b", "resolve", g2, "--answer", "no", "--source", "card pick") == 0
+    assert bd.show(map_id)["assignee"] == "agent-a"
+    capsys.readouterr()
+    assert run(beads, "--actor", "agent-a", "ready", map_id, "--claim", "--json") == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["claimed"] == g3 and out["lease"] == "agent-a"
+    report = wayfind.evaluate(bd, map_id, 7, 14)
+    assert report["errors"] == [] and report["hitl_in_flight"] == [g3]
+
+
+@needs_bd
+def test_lint_reports_conflicting_records_on_an_open_ticket(beads, tmp_path):
+    bd, map_id = chart_map(beads, tmp_path, [{"type": "research", "title": "R"}])
+    r = ticket_id(bd, map_id, "R")
+    for answer in ("one", "two"):
+        payload = {"v": 1, "kind": "resolved", "answer_sha256": wayfind.hashlib.sha256(answer.encode()).hexdigest(),
+                   "summary": answer, "source": "", "supersedes": ""}
+        bd.comment(r, f"Resolution:\n{answer}\n\n{wayfind.record_line(payload)}\n")
+    errors = wayfind.evaluate(bd, map_id, 7, 14)["errors"]
+    assert any(f"{r}: conflicting resolution records on an open ticket" in e for e in errors)
+    assert run(beads, "resolve", r, "--answer", "one") == wayfind.EXIT_RULE
 
 
 @needs_bd

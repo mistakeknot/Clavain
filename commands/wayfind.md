@@ -30,8 +30,10 @@ prototype, revisit) close only with `--source`; a revisit closes only with
 `--supersedes` naming a resolved decision of the same map; a blocked ticket
 cannot close; `chart` refuses past the open-ticket cap; `ready` hands out one
 HITL ticket per map at a time, because whoever claims one also claims the map
-epic itself as a lease, which `resolve` frees. Batching questions, keeping fog
-far, and leaving prototype picks to the owner are on you.
+epic itself as a lease. `resolve` frees the lease only when the holder runs
+it; if another session resolves the ticket, the holder's next `ready` reuses
+the lease. Batching questions, keeping fog far, and leaving prototype picks to
+the owner are on you.
 
 Decisions live on the tickets, not in the map body: `resolve` posts a
 resolution record as a comment on the ticket it closes, and

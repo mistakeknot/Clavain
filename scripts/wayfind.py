@@ -691,15 +691,20 @@ def check_supersedes(bd: Bd, old_id: str, ticket_id: str, map_id: str) -> dict:
     return old
 
 
-def release_lease(bd: Bd, map_id: str, ticket_id: str, holder: str | None) -> bool:
-    """Free the map lease held for a HITL ticket that just closed, unless its holder still needs it."""
-    if not holder:
+def release_lease(bd: Bd, map_id: str, ticket_id: str, me: str | None) -> bool:
+    """Free the map lease when the caller holds it and holds no other HITL ticket of the map.
+
+    Only the holder frees its own lease. Another session cannot tell the lease taken for this
+    ticket from one the holder took a moment ago for its next ticket, so it leaves the lease
+    alone; the holder's next `ready` reuses it, and lint warns while it sits idle.
+    """
+    if not me:
         return False
     current = bd.show(map_id)
-    if current.get("status") != "in_progress" or current.get("assignee") != holder:
+    if current.get("status") != "in_progress" or current.get("assignee") != me:
         return False
     if any(t["id"] != ticket_id and t.get("status") == "in_progress" and ticket_type(t) in HITL_TYPES
-           and t.get("assignee") == holder for t in map_tickets(bd, map_id)):
+           and t.get("assignee") == me for t in map_tickets(bd, map_id)):
         return False
     bd.release(map_id)
     return True
@@ -784,7 +789,7 @@ def cmd_resolve(bd: Bd, args) -> int:
         if SUPERSEDED_LABEL not in (old.get("labels") or []):
             bd.add_label(old["id"], SUPERSEDED_LABEL)
             steps += 1
-    if kind in HITL_TYPES and release_lease(bd, map_id, args.ticket, ticket.get("assignee")):
+    if kind in HITL_TYPES and release_lease(bd, map_id, args.ticket, bd.whoami()):
         steps += 1
 
     verb = "invalidated" if args.invalidated else "resolved"
@@ -836,6 +841,15 @@ def evaluate(bd: Bd, map_id: str, cap: int, max_age_days: int, now: dt.datetime 
             errors.append(f"{t['id']}: needs exactly one type label, has {labels or 'none'}")
         if MAP_LABEL in (t.get("labels") or []):
             warnings.append(f"{t['id']}: carries {MAP_LABEL}; only the map should")
+
+    # A resolve that stopped part way leaves its record on a still-open ticket.
+    for t in open_tickets:
+        records, malformed = parse_records(bd.comments(t["id"]))
+        if malformed:
+            errors.append(f"{t['id']}: malformed wayfind resolution record")
+        if any(r != records[0] for r in records[1:]):
+            errors.append(f"{t['id']}: conflicting resolution records on an open ticket (two sessions "
+                          "recorded different answers); wayfind cannot resolve it, so ask the owner which stands")
 
     # Decisions come from the resolution records on the closed tickets.
     record_of: dict[str, dict] = {}
