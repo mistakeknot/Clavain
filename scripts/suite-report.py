@@ -178,6 +178,11 @@ def compare_baseline(r: Result, baseline: dict) -> tuple[list[str], list[str]]:
     Known limit, stated rather than hidden: TAP carries no file name, so growth
     is matched by REASON, not by file. A new identity under an allowed reason is
     permitted even if it came from a different file sharing that reason.
+
+    A reason the historical run never had is accepted only through
+    `accepted_additions`, which names each case by identity. It is the
+    counterpart of `accepted_improvements`: a reviewed, cited delta beside the
+    run's record, never an edit to it.
     """
     errors, warnings = [], []
     base_cases = baseline.get("skipped_cases", {}) or {}
@@ -187,10 +192,29 @@ def compare_baseline(r: Result, baseline: dict) -> tuple[list[str], list[str]]:
         for spec in (baseline.get("allowed_growth", {}) or {}).values()
         if isinstance(spec, dict) and spec.get("reason")
     }
+    additions = baseline.get("accepted_additions", {}) or {}
 
     for reason, count in r.skip_reasons.items():
         if reason not in base_reasons:
-            errors.append(f"new skip reason: {reason!r} ({count} case(s))")
+            spec = additions.get(reason)
+            if not isinstance(spec, dict):
+                errors.append(f"new skip reason: {reason!r} ({count} case(s))")
+                continue
+            listed = set(spec.get("cases") or [])
+            unlisted = [i for i, rsn in r.skipped_cases.items()
+                        if rsn == reason and i not in listed]
+            for ident in unlisted:
+                errors.append(f"newly skipped case: {ident!r} ({reason})")
+            # skipped_cases is keyed by name, so a later case with the same
+            # name overwrites an earlier skip's reason. Count only the listed
+            # cases actually seen skipping for this reason; any skip beyond
+            # them is one no identity accounts for.
+            covered = sum(1 for i in listed if r.skipped_cases.get(i) == reason)
+            if count - len(unlisted) > covered:
+                errors.append(
+                    f"skips increased for {reason!r}: {covered} accepted case(s) "
+                    f"observed, {count} skipped"
+                )
             continue
         if count > base_reasons[reason] and reason not in growth_reasons:
             errors.append(
@@ -203,8 +227,20 @@ def compare_baseline(r: Result, baseline: dict) -> tuple[list[str], list[str]]:
         if reason in growth_reasons:
             continue
         if reason not in base_reasons:
-            continue  # already reported as a new reason
+            continue  # already reported as a new reason or an addition
         errors.append(f"newly skipped case: {ident!r} ({reason})")
+
+    # An accepted addition that no longer skips is stale. Say so, so the entry
+    # is removed instead of silently pre-approving a later skip.
+    for reason, spec in additions.items():
+        if reason in base_reasons or not isinstance(spec, dict):
+            continue
+        for ident in spec.get("cases") or []:
+            if r.skipped_cases.get(ident) != reason:
+                warnings.append(
+                    f"accepted addition no longer skipped: {ident!r} ({reason}); "
+                    "remove it from accepted_additions"
+                )
 
     # A reviewed decrease is recorded as an ACCEPTED DELTA, not by editing the
     # historical run's record. The baseline stays a faithful account of the run
