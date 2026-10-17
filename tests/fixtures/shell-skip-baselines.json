@@ -318,5 +318,16 @@
         "skipped": 282
       }
     }
+  },
+  "accepted_additions": {
+    "set CLAVAIN_REAL_CLAUDE_TEST=1 (spends one small Claude call)": {
+      "cases": [
+        "no-tools: a real seat is launched without tools and a tool request is refused (real claude)"
+      ],
+      "why": "tests/shell/dispatch_claude_seat.bats checks the --no-tools seat against a real claude CLI, which spends a model call and needs credentials, so it is opt-in and skips on a hosted runner by design. Its stub-backed siblings in the same file run in CI and pass. No assertion that used to run here stopped running.",
+      "source": "bead mk-sqqtu; skip added in e5ea740e (bead mk-ek44y)",
+      "first_observed_in_run": "39052673146",
+      "accepted_on": "2026-10-17"
+    }
   }
 }

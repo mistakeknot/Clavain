@@ -318,3 +318,65 @@ def test_an_unaccepted_improvement_still_warns(tmp_path):
     proc, d = report(tmp_path, tap("ok 1 a", "ok 2 b"),
                      extra=["--actions-skip-baseline", str(base)])
     assert proc.returncode == WARN, json.dumps(d)[:600]
+
+
+def _addition_base(tmp_path, additions):
+    base = tmp_path / "base.json"
+    base.write_text(json.dumps({
+        "run_id": "34150176247", "plan": 1, "skipped": 1,
+        "reason_counts": {"yq not available (standalone CI)": 1},
+        "skipped_cases": {"held": "yq not available (standalone CI)"},
+        "allowed_growth": {},
+        "accepted_additions": additions,
+    }))
+    return base
+
+
+REAL = "set CLAVAIN_REAL_CLAUDE_TEST=1 (spends one small Claude call)"
+
+
+def test_an_accepted_addition_passes_without_rewriting_history(tmp_path):
+    """A reviewed new reason is a cited delta beside the run's record, named by
+    case identity, not an edit to reason_counts (mk-sqqtu)."""
+    base = _addition_base(tmp_path, {REAL: {"cases": ["real seat"], "why": "opt-in"}})
+    proc, d = report(tmp_path, tap(
+        "ok 1 held # skip yq not available (standalone CI)",
+        f"ok 2 real seat # skip {REAL}",
+    ), extra=["--actions-skip-baseline", str(base)])
+    assert proc.returncode == PASS, json.dumps(d)[:600]
+
+
+def test_an_accepted_addition_does_not_cover_another_case(tmp_path):
+    """[negative control] Acceptance is by identity: a second case under the
+    same reason is still a finding."""
+    base = _addition_base(tmp_path, {REAL: {"cases": ["real seat"], "why": "opt-in"}})
+    proc, d = report(tmp_path, tap(
+        "ok 1 held # skip yq not available (standalone CI)",
+        f"ok 2 real seat # skip {REAL}",
+        f"ok 3 another real seat # skip {REAL}",
+    ), extra=["--actions-skip-baseline", str(base)])
+    assert proc.returncode == FAIL, json.dumps(d)[:600]
+    assert "another real seat" in json.dumps(d)
+
+
+def test_an_addition_for_another_reason_does_not_cover_a_new_one(tmp_path):
+    """[negative control] Acceptance is per reason."""
+    base = _addition_base(tmp_path, {"some other reason": {"cases": ["real seat"]}})
+    proc, d = report(tmp_path, tap(
+        "ok 1 held # skip yq not available (standalone CI)",
+        f"ok 2 real seat # skip {REAL}",
+    ), extra=["--actions-skip-baseline", str(base)])
+    assert proc.returncode == FAIL, json.dumps(d)[:600]
+    assert "new skip reason" in json.dumps(d)
+
+
+def test_a_stale_accepted_addition_warns(tmp_path):
+    """An accepted case that now runs is surfaced, so the entry is removed
+    rather than left to pre-approve a later skip."""
+    base = _addition_base(tmp_path, {REAL: {"cases": ["real seat"], "why": "opt-in"}})
+    proc, d = report(tmp_path, tap(
+        "ok 1 held # skip yq not available (standalone CI)",
+        "ok 2 real seat",
+    ), extra=["--actions-skip-baseline", str(base)])
+    assert proc.returncode == WARN, json.dumps(d)[:600]
+    assert "no longer skipped" in json.dumps(d)
