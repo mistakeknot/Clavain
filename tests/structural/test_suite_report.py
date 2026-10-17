@@ -380,3 +380,18 @@ def test_a_stale_accepted_addition_warns(tmp_path):
     ), extra=["--actions-skip-baseline", str(base)])
     assert proc.returncode == WARN, json.dumps(d)[:600]
     assert "no longer skipped" in json.dumps(d)
+
+
+def test_a_duplicate_name_cannot_hide_a_skip_behind_an_addition(tmp_path):
+    """[negative control] Cases are keyed by name, so a later case with the
+    same name overwrites an earlier skip's reason. A skip under an accepted
+    reason that no observed accepted case accounts for still fails, rather
+    than passing with only the stale-entry warning (mk-sqqtu review)."""
+    base = _addition_base(tmp_path, {REAL: {"cases": ["real seat"], "why": "opt-in"}})
+    proc, d = report(tmp_path, tap(
+        f"ok 1 held # skip {REAL}",
+        "ok 2 held # skip yq not available (standalone CI)",
+        "ok 3 real seat",
+    ), extra=["--actions-skip-baseline", str(base)])
+    assert proc.returncode == FAIL, json.dumps(d)[:600]
+    assert "skips increased" in json.dumps(d)

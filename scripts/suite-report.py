@@ -205,9 +205,15 @@ def compare_baseline(r: Result, baseline: dict) -> tuple[list[str], list[str]]:
                         if rsn == reason and i not in listed]
             for ident in unlisted:
                 errors.append(f"newly skipped case: {ident!r} ({reason})")
-            if not unlisted and count > len(listed):
+            # skipped_cases is keyed by name, so a later case with the same
+            # name overwrites an earlier skip's reason. Count only the listed
+            # cases actually seen skipping for this reason; any skip beyond
+            # them is one no identity accounts for.
+            covered = sum(1 for i in listed if r.skipped_cases.get(i) == reason)
+            if count - len(unlisted) > covered:
                 errors.append(
-                    f"skips increased for {reason!r}: {len(listed)} -> {count}"
+                    f"skips increased for {reason!r}: {covered} accepted case(s) "
+                    f"observed, {count} skipped"
                 )
             continue
         if count > base_reasons[reason] and reason not in growth_reasons:
