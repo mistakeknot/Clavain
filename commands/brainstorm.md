@@ -52,6 +52,8 @@ Clear requirements indicators: specific acceptance criteria, referenced existing
 
 If clear and tier >= 2: AskUserQuestion — "Requirements seem detailed enough to plan. Run `/clavain:write-plan` instead, or explore further?"
 
+If the open questions clearly need answers from several sessions, or depend on each other (a decision map, not a brainstorm), AskUserQuestion: "This looks like several sessions of decisions. Chart it with `/clavain:wayfind` instead, or brainstorm it here?" Wayfind is user-invoked, so only suggest it.
+
 ### Phase 0.5: Complexity Classification (Sprint Only)
 
 If in a sprint (`bd state "$CLAVAIN_BEAD_ID" sprint` == `"true"`):
