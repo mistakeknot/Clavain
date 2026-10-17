@@ -29,8 +29,17 @@ enforces: targets change only with `--source`; HITL tickets (grilling,
 prototype, revisit) close only with `--source`; a revisit closes only with
 `--supersedes` naming a resolved decision of the same map; a blocked ticket
 cannot close; `chart` refuses past the open-ticket cap; `ready` hands out one
-HITL ticket per map at a time. Batching questions, keeping fog far, and
-leaving prototype picks to the owner are on you.
+HITL ticket per map at a time, because whoever claims one also claims the map
+epic itself as a lease, which `resolve` frees. Batching questions, keeping fog
+far, and leaving prototype picks to the owner are on you.
+
+Decisions live on the tickets, not in the map body: `resolve` posts a
+resolution record as a comment on the ticket it closes, and
+`wayfind lint <map> --json` lists them under `decisions`. Only `chart` writes
+the map body. It rereads the body before writing and checks the write
+afterwards, so two charts on one map at once are detected, not prevented:
+rerun the one that reports it. The `--source` checks detect an edit made
+without a cited source; they do not authenticate the source.
 
 <BEHAVIORAL-RULES>
 1. **The owner sets the targets.** Destination, Out of scope and any
@@ -93,7 +102,9 @@ leaving prototype picks to the owner are on you.
    already hold a ticket on the map (a crashed session, say), it resumes that
    one instead. If the frontier is empty or the claim is held, report what
    blocks it and stop. To free a ticket someone abandoned, run
-   `bd update <ticket> --status open --assignee ""`.
+   `bd update <ticket> --status open --assignee ""`; free an abandoned map
+   lease (lint warns about it) the same way with the map ID. bd lets the same
+   actor claim twice, so parallel sessions need distinct `--actor` names.
 3. **Resolve it by type:**
    - `grilling`: send the round (rule 2). Resolve only on the owner's answer.
    - `prototype`: build the variants somewhere disposable, present them, and
@@ -110,7 +121,9 @@ leaving prototype picks to the owner are on you.
    `--source` is required for grilling, prototype and revisit tickets, and
    `--supersedes` for a revisit. Use `--invalidated` when the question no
    longer applies. If `resolve` fails part way, rerun it with the same
-   arguments: it finishes the missing steps and refuses a different answer.
+   arguments: it finishes the missing steps and refuses a different answer,
+   summary, source or `--supersedes`. To change a recorded decision, open a
+   revisit ticket.
 5. **Graduate fog.** For each fog item the answer made precise, add a ticket
    with `chart --map <map> --tickets next.json`, listing the item under
    `graduate`. Close out-of-scope items; they never graduate.
@@ -119,5 +132,6 @@ leaving prototype picks to the owner are on you.
 ## Exit
 
 When `wayfind lint` reports `cleared`, run `/clavain:strategy <map-id>`. It
-reads the closed decision tickets as its brainstorm input. `/clavain:campaign`
+reads the closed decision tickets and their resolution records as its
+brainstorm input. `/clavain:campaign`
 refuses map epics, because decision tickets are not build work.

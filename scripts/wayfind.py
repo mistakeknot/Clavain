@@ -7,13 +7,19 @@ body conventions plus four subcommands built from `bd`. The loop that uses it
 is commands/wayfind.md.
 
 A map is a beads epic labelled wayfinder:map. Each child is one decision
-ticket carrying exactly one type label. The map body has five sections; the
+ticket carrying exactly one type label. The map body has four sections; the
 Destination and Out of scope sections are the targets, and a hash of them is
 stored in the body so `lint` can tell when they changed without a cited source.
+Only `chart` writes the map body. Decisions live on the tickets: `resolve`
+posts a resolution record as a comment on the ticket it closes, and `lint`
+derives the map's decisions from those records.
+
+While a HITL ticket is in flight, its claimant also holds the map epic itself
+as a claim (the lease), so at most one HITL ticket per map is handed out.
 
     wayfind chart   create a map, add tickets to it, or retarget it
     wayfind ready   list the frontier, or claim one ticket from it
-    wayfind resolve record a ticket's answer, close it, update the map
+    wayfind resolve record a ticket's answer and close it
     wayfind lint    check the map's rules and report whether it converges
 
 Exit codes: 0 ok, 1 rule violation (the request is well formed but a map rule
@@ -41,10 +47,12 @@ HITL_TYPES = frozenset({"grilling", "prototype", "revisit"})
 INVALIDATED_LABEL = "wayfinder:invalidated"
 SUPERSEDED_LABEL = "wayfinder:superseded"
 
-SECTIONS = ("Destination", "Out of scope", "Notes", "Decisions so far", "Not yet specified")
+SECTIONS = ("Destination", "Out of scope", "Notes", "Not yet specified")
 TARGET_SECTIONS = ("Destination", "Out of scope")
 MAP_MARKER = "<!-- wayfind:map v1 -->"
 TARGETS_RE = re.compile(r"<!-- wayfind:targets sha256=([0-9a-f]{64}) source=(.*?) -->")
+RECORD_RE = re.compile(r"<!-- wayfind:resolution v1 (.*?) -->")
+SUPERSEDED_BY_RE = re.compile(r"^Superseded by (\S+)\.$", re.MULTILINE)
 
 DEFAULT_CAP = 7          # design choice: open tickets per map before chart refuses
 DEFAULT_MAX_AGE_DAYS = 14  # design choice: no resolution for this long is stale
@@ -242,13 +250,35 @@ def set_bullets(items: list[str]) -> str:
     return "\n".join(f"- {item}" for item in items)
 
 
-def decision_lines(sections: dict[str, str]) -> list[str]:
-    text = sections.get("Decisions so far", "")
-    return [] if is_placeholder(text) else bullets(text)
+def record_line(payload: dict) -> str:
+    """The machine-readable last line of a resolution comment.
+
+    JSON never needs a literal '>' outside a string, and inside one it is escaped,
+    so the payload cannot close the HTML comment that carries it.
+    """
+    text = json.dumps(payload, sort_keys=True, ensure_ascii=False).replace(">", "\\u003e")
+    return f"<!-- wayfind:resolution v1 {text} -->"
 
 
-def decision_for(lines: list[str], ticket_id: str) -> str | None:
-    return next((ln for ln in lines if ln.startswith(f"{ticket_id} ")), None)
+def parse_records(comments: list[dict]) -> tuple[list[dict], int]:
+    """Return (resolution records, count of malformed ones) found in a ticket's comments."""
+    records, malformed = [], 0
+    for comment in comments:
+        for match in RECORD_RE.finditer(comment.get("text") or ""):
+            try:
+                payload = json.loads(match.group(1))
+            except json.JSONDecodeError:
+                malformed += 1
+                continue
+            if isinstance(payload, dict) and payload.get("v") == 1 and payload.get("kind") in ("resolved", "invalidated"):
+                records.append(payload)
+            else:
+                malformed += 1
+    return records, malformed
+
+
+def superseded_by(comments: list[dict]) -> list[str]:
+    return [m.group(1) for c in comments for m in SUPERSEDED_BY_RE.finditer(c.get("text") or "")]
 
 
 def is_placeholder(text: str) -> bool:
@@ -402,6 +432,55 @@ def ticket_body(ticket: dict, map_id: str) -> str:
     return "\n".join(parts) + "\n"
 
 
+def apply_edits(sections: dict[str, str], spec: dict, destination: str | None,
+                out_of_scope: str | None) -> list[str]:
+    """Apply one chart run's body edits to sections in place; return the resulting fog."""
+    if destination is not None:
+        sections["Destination"] = destination.strip()
+    if out_of_scope is not None:
+        sections["Out of scope"] = out_of_scope.strip()
+    fog = [] if is_placeholder(sections.get("Not yet specified", "")) else bullets(sections["Not yet specified"])
+    for item in spec["graduate"]:
+        if item not in fog:
+            raise WayfindError(f"cannot graduate {item!r}: not in Not yet specified")
+        fog.remove(item)
+    fog += [item for item in spec["fog"] if item not in fog]
+    sections["Not yet specified"] = set_bullets(fog)
+    if spec["notes"].strip():
+        notes = "" if is_placeholder(sections.get("Notes", "")) else sections["Notes"]
+        sections["Notes"] = (notes + "\n" + spec["notes"].strip()).strip()
+    return fog
+
+
+def write_map_body(bd: Bd, map_id: str, base: dict[str, str], marker: tuple[str, str] | None, spec: dict,
+                   destination: str | None, out_of_scope: str | None, source: str,
+                   created: dict[str, str]) -> list[str]:
+    """Rebase this run's edits onto the body as it is now, write it, and read it back.
+
+    bd has no compare-and-set, so a write that races another chart run in the window
+    between the re-read and the write is detected by the read-back, not prevented.
+    """
+    done = ", ".join(f"{k}={v}" for k, v in created.items()) or "none"
+    fresh_body = bd.show(map_id).get("description") or ""
+    fresh = parse_body(fresh_body)
+    if targets_marker(fresh_body) != marker or targets_digest(fresh) != targets_digest(base):
+        raise WayfindError(f"map {map_id} was retargeted while this chart ran; created {done}; the map body "
+                           "was not written. Rerun with only the fog, graduate and notes edits")
+    sections = dict(fresh)
+    try:
+        fog = apply_edits(sections, spec, destination, out_of_scope)
+    except WayfindError as exc:
+        raise WayfindError(f"{exc} (the map body changed while this chart ran); created {done}; "
+                           "the map body was not written") from exc
+    body = render_body(sections, source)
+    bd.set_description(map_id, body)
+    written = bd.show(map_id).get("description") or ""
+    if parse_body(written) != parse_body(body) or targets_marker(written) != targets_marker(body):
+        raise WayfindError(f"map {map_id}: another write landed on the body at the same time; created {done}. "
+                           "Run wayfind lint, then rerun the fog, graduate and notes edits that are missing")
+    return fog
+
+
 def cmd_chart(bd: Bd, args) -> int:
     # Every check runs before the first write, so a refused or malformed request changes nothing.
     spec = load_spec(args.tickets)
@@ -413,18 +492,14 @@ def cmd_chart(bd: Bd, args) -> int:
         issue = load_map(bd, args.map)
         map_id = args.map
         body = issue.get("description") or ""
-        sections = parse_body(body)
+        base = parse_body(body)
         marker = targets_marker(body)
         source = marker[1] if marker else ""
         if not retarget:
-            check_targets(map_id, body, sections)
+            check_targets(map_id, body, base)
         if retarget:
             if not args.source:
                 raise RuleError("changing Destination or Out of scope needs --source (the owner's card pick or a ruling)")
-            if destination is not None:
-                sections["Destination"] = destination.strip()
-            if out_of_scope is not None:
-                sections["Out of scope"] = out_of_scope.strip()
             source = args.source
         existing = map_tickets(bd, map_id)
     else:
@@ -432,22 +507,13 @@ def cmd_chart(bd: Bd, args) -> int:
             raise WayfindError("a new map needs --title and --destination (or --destination-file)")
         if not args.source:
             raise RuleError("a new map needs --source: where the owner set the Destination")
-        sections = {"Destination": destination.strip(), "Out of scope": (out_of_scope or "").strip(),
-                    "Notes": "", "Decisions so far": "", "Not yet specified": ""}
+        base = {"Destination": "", "Out of scope": "", "Notes": "", "Not yet specified": ""}
+        marker = None
         source = args.source
         map_id = None
         existing = []
-
-    fog = [] if is_placeholder(sections.get("Not yet specified", "")) else bullets(sections["Not yet specified"])
-    for item in spec["graduate"]:
-        if item not in fog:
-            raise WayfindError(f"cannot graduate {item!r}: not in Not yet specified")
-        fog.remove(item)
-    fog += [item for item in spec["fog"] if item not in fog]
-    sections["Not yet specified"] = set_bullets(fog)
-    if spec["notes"].strip():
-        notes = "" if is_placeholder(sections.get("Notes", "")) else sections["Notes"]
-        sections["Notes"] = (notes + "\n" + spec["notes"].strip()).strip()
+    sections = dict(base)
+    fog = apply_edits(sections, spec, destination, out_of_scope)
 
     tickets = creation_order(spec["tickets"], {t["id"] for t in existing})
     open_now = [t for t in existing if t.get("status") != "closed"]
@@ -482,7 +548,7 @@ def cmd_chart(bd: Bd, args) -> int:
                            "only the tickets not yet created, keeping fog and graduate as they were") from exc
 
     if args.map:
-        bd.set_description(map_id, render_body(sections, source))
+        fog = write_map_body(bd, map_id, base, marker, spec, destination, out_of_scope, source, created)
         if retarget:
             bd.comment(map_id, f"Targets changed. Source: {source}")
 
@@ -496,63 +562,85 @@ def cmd_chart(bd: Bd, args) -> int:
 # ---------------------------------------------------------------------------
 
 
-def frontier(bd: Bd, map_id: str) -> tuple[list[dict], list[dict], list[dict]]:
-    """Return (unclaimed frontier, HITL tickets in flight, all in-progress tickets)."""
+def frontier(bd: Bd, map_id: str, map_issue: dict, me: str) -> tuple[list[dict], list[dict], list[dict], str | None]:
+    """Return (unclaimed frontier, HITL tickets in flight, all in-progress tickets, lease holder)."""
     tickets = map_tickets(bd, map_id)
     by_id = {t["id"]: t for t in tickets}
     in_progress = [t for t in tickets if t.get("status") == "in_progress"]
     in_flight = [t for t in in_progress if ticket_type(t) in HITL_TYPES]
     ready = [by_id[i] for i in bd.ready_ids(map_id) if i in by_id and ticket_type(by_id[i])]
-    if in_flight:
+    holder = (map_issue.get("assignee") or None) if map_issue.get("status") == "in_progress" else None
+    if in_flight or (holder is not None and holder != me):
         # One HITL ticket per map at a time: parallel grilling repeats questions.
         ready = [t for t in ready if ticket_type(t) not in HITL_TYPES]
-    return ready, in_flight, in_progress
+    return ready, in_flight, in_progress, holder
 
 
 def claim_one(bd: Bd, map_id: str, ready: list[dict]) -> tuple[dict | None, str | None]:
     """Claim the first frontier ticket. Returns (claimed, held_reason).
 
-    Two agents can both see no HITL ticket in flight and both claim one. After a HITL
-    claim, re-read the map: if another HITL ticket is now in flight with a smaller id,
-    release ours. Both agents apply the same rule, so exactly one keeps its claim.
+    A HITL ticket is claimed only by whoever first claims the map epic itself (the
+    lease). bd's claim is atomic, so of two agents racing for HITL tickets on one map,
+    exactly one gets the lease and the other is held before it claims anything.
     """
     if not ready:
         return None, None
     ticket = ready[0]
+    hitl = ticket_type(ticket) in HITL_TYPES
+    if hitl:
+        try:
+            bd.claim(map_id)
+        except WayfindError as exc:
+            if "already claimed" not in str(exc):
+                raise
+            holder = bd.show(map_id).get("assignee") or "someone else"
+            return None, f"map {map_id} is leased to {holder} for a HITL ticket in flight; rerun ready later"
+        current = bd.show(ticket["id"])
+        rivals = [t["id"] for t in map_tickets(bd, map_id)
+                  if t.get("status") == "in_progress" and ticket_type(t) in HITL_TYPES]
+        if current.get("status") != "open" or current.get("assignee") or rivals:
+            bd.release(map_id)
+            return None, f"{ticket['id']} or another HITL ticket changed since the frontier was read; rerun ready"
     try:
         bd.claim(ticket["id"])
     except WayfindError as exc:
+        if hitl:
+            bd.release(map_id)
         if "already claimed" not in str(exc):
             raise
         return None, f"{ticket['id']} was claimed by someone else first; rerun ready"
-    if ticket_type(ticket) not in HITL_TYPES:
-        return ticket, None
-    _, in_flight, _ = frontier(bd, map_id)
-    rivals = sorted(t["id"] for t in in_flight if t["id"] != ticket["id"])
-    if rivals and rivals[0] < ticket["id"]:
-        bd.release(ticket["id"])
-        return None, f"{rivals[0]} was claimed at the same time; {ticket['id']} released"
     return ticket, None
 
 
 def cmd_ready(bd: Bd, args) -> int:
-    load_map(bd, args.map)
-    ready, in_flight, in_progress = frontier(bd, args.map)
+    map_issue = load_map(bd, args.map)
     me = bd.whoami()
+    ready, in_flight, in_progress, holder = frontier(bd, args.map, map_issue, me)
     mine = [t for t in in_progress if me and t.get("assignee") == me]
     claimed, resumed, held = None, False, None
     if args.claim:
         if mine:
             # Finish what you hold before taking more; a crashed session resumes here.
             claimed, resumed = mine[0], True
+            if ticket_type(claimed) in HITL_TYPES and holder != me:
+                try:
+                    bd.claim(args.map)
+                    holder = me
+                except WayfindError as exc:
+                    if "already claimed" not in str(exc):
+                        raise
+                    held = f"you hold {claimed['id']} but the map lease is held by {holder}; settle it with them"
         else:
             claimed, held = claim_one(bd, args.map, ready)
+            if claimed and ticket_type(claimed) in HITL_TYPES:
+                holder = me  # claim_one took the lease with the ticket
     if args.json:
         print(json.dumps({"map": args.map,
                           "frontier": [{"id": t["id"], "type": ticket_type(t), "title": t.get("title")} for t in ready],
                           "hitl_in_flight": [t["id"] for t in in_flight],
                           "in_progress": [{"id": t["id"], "type": ticket_type(t), "assignee": t.get("assignee")}
                                           for t in in_progress],
+                          "lease": holder,
                           "claimed": claimed["id"] if claimed else None,
                           "resumed": resumed,
                           "held": held}))
@@ -560,7 +648,9 @@ def cmd_ready(bd: Bd, args) -> int:
     for t in in_progress:
         owner = "yours" if t in mine else (t.get("assignee") or "unassigned")
         print(f"in progress: {t['id']} ({ticket_type(t)}, {owner})")
-    if in_flight:
+    if holder:
+        print(f"lease: map held by {holder}{' (you)' if holder == me else ''}")
+    if in_flight or (holder and holder != me):
         print("held: other HITL tickets wait until the one in flight resolves")
     if not ready:
         print("frontier empty")
@@ -578,7 +668,7 @@ def cmd_ready(bd: Bd, args) -> int:
 # ---------------------------------------------------------------------------
 
 
-def check_supersedes(bd: Bd, old_id: str, ticket_id: str, map_id: str, lines: list[str]) -> dict:
+def check_supersedes(bd: Bd, old_id: str, ticket_id: str, map_id: str) -> dict:
     """The replaced decision must be a resolved ticket of the same map, not already replaced by another."""
     if old_id == ticket_id:
         raise RuleError(f"{ticket_id} cannot supersede itself")
@@ -587,11 +677,32 @@ def check_supersedes(bd: Bd, old_id: str, ticket_id: str, map_id: str, lines: li
         raise RuleError(f"{old_id} is not a ticket of map {map_id}")
     if old.get("status") != "closed" or INVALIDATED_LABEL in (old.get("labels") or []):
         raise RuleError(f"{old_id} is not a resolved decision; only a closed, resolved ticket can be superseded")
-    entry = decision_for(lines, old_id) or ""
-    match = re.search(r"\(superseded by (\S+)\)", entry)
-    if match and match.group(1) != ticket_id:
-        raise RuleError(f"{old_id} was already superseded by {match.group(1)}; supersede that one instead")
+    comments = bd.comments(old_id)
+    records, _ = parse_records(comments)
+    if not any(r["kind"] == "resolved" for r in records):
+        raise RuleError(f"{old_id} has no wayfind resolution record, so it is not a decision to supersede")
+    named = superseded_by(comments)
+    others = [x for x in named if x != ticket_id]
+    if others:
+        raise RuleError(f"{old_id} was already superseded by {others[0]}; supersede that one instead")
+    if SUPERSEDED_LABEL in (old.get("labels") or []) and ticket_id not in named:
+        raise RuleError(f"{old_id} is labelled superseded but no comment names the ticket that replaced it; "
+                        "settle that by hand before superseding it again")
     return old
+
+
+def release_lease(bd: Bd, map_id: str, ticket_id: str, holder: str | None) -> bool:
+    """Free the map lease held for a HITL ticket that just closed, unless its holder still needs it."""
+    if not holder:
+        return False
+    current = bd.show(map_id)
+    if current.get("status") != "in_progress" or current.get("assignee") != holder:
+        return False
+    if any(t["id"] != ticket_id and t.get("status") == "in_progress" and ticket_type(t) in HITL_TYPES
+           and t.get("assignee") == holder for t in map_tickets(bd, map_id)):
+        return False
+    bd.release(map_id)
+    return True
 
 
 def cmd_resolve(bd: Bd, args) -> int:
@@ -608,6 +719,8 @@ def cmd_resolve(bd: Bd, args) -> int:
     answer = read_text(args.answer, args.answer_file)
     if not answer or not answer.strip():
         raise WayfindError("resolve needs --answer or --answer-file")
+    if "wayfind:resolution" in answer or SUPERSEDED_BY_RE.search(answer):
+        raise WayfindError("the answer may not contain a wayfind resolution record or a 'Superseded by' line")
     if args.invalidated and args.supersedes:
         raise WayfindError("--invalidated and --supersedes do not combine: an invalidated ticket decides nothing")
     if args.supersedes and kind != "revisit":
@@ -616,67 +729,69 @@ def cmd_resolve(bd: Bd, args) -> int:
         raise RuleError("a revisit ticket resolves with --supersedes naming the decision it replaces")
     if kind in HITL_TYPES and not args.invalidated and not args.source:
         raise RuleError(f"a {kind} ticket resolves only on the owner's answer: pass --source naming it")
-
     body = map_issue.get("description") or ""
-    sections = parse_body(body)
-    check_targets(map_id, body, sections)
-    marker = targets_marker(body)
-    lines = decision_lines(sections)
-    entry = f"{args.ticket} {ticket.get('title', '')}: {args.summary or one_line(answer)}"
-    reason = ("wayfind: invalidated" if args.invalidated
-              else f"wayfind: resolved (source: {args.source})" if args.source else "wayfind: resolved")
+    check_targets(map_id, body, parse_body(body))
 
+    payload = {"v": 1, "kind": "invalidated" if args.invalidated else "resolved",
+               "answer_sha256": hashlib.sha256(answer.strip().encode("utf-8")).hexdigest(),
+               "summary": args.summary or one_line(answer), "source": args.source or "",
+               "supersedes": args.supersedes or ""}
+    records, malformed = parse_records(bd.comments(args.ticket))
+    if malformed:
+        raise RuleError(f"{args.ticket} has a malformed wayfind resolution record; settle it by hand")
+    if any(r != payload for r in records):
+        raise RuleError(f"{args.ticket} already has a resolution recorded with different arguments; rerun with "
+                        "the original arguments, or open a revisit ticket to change the decision")
     closed = ticket.get("status") == "closed"
     if closed:
-        previous = ticket.get("close_reason") or ""
-        if not previous.startswith("wayfind:"):
+        if not (ticket.get("close_reason") or "").startswith("wayfind:"):
             raise RuleError(f"{args.ticket} was closed outside wayfind; reopen it (bd reopen) and resolve it here, "
                             "or open a revisit ticket")
-        if previous.startswith("wayfind: invalidated") != bool(args.invalidated):
-            raise RuleError(f"{args.ticket} is already closed as '{previous}'; open a revisit ticket to change it")
-        recorded = decision_for(lines, args.ticket)
-        if recorded is not None and not recorded.startswith(entry):
-            raise RuleError(f"{args.ticket} is already resolved with a different answer; "
-                            "open a revisit ticket instead of editing it")
+        if not records:
+            raise RuleError(f"{args.ticket} is closed without a resolution record; reopen it (bd reopen) "
+                            "and resolve it here")
     else:
         blockers = [d.get("id") for d in ticket.get("dependencies") or []
                     if d.get("dependency_type") == "blocks" and d.get("status") != "closed"]
         if blockers:
             raise RuleError(f"{args.ticket} is still blocked by {', '.join(blockers)}")
-    old = check_supersedes(bd, args.supersedes, args.ticket, map_id, lines) if args.supersedes else None
+    old = check_supersedes(bd, args.supersedes, args.ticket, map_id) if args.supersedes else None
 
-    source = f"\n\nSource: {args.source}" if args.source else ""
-    note = f"{'Invalidated' if args.invalidated else 'Resolution'}:\n{answer.strip()}{source}"
+    # The record goes first: it is the decision, and every later step can be redone from it.
+    resumed = bool(records)
     steps = 0
+    if not records:
+        source = f"\n\nSource: {args.source}" if args.source else ""
+        note = f"{'Invalidated' if args.invalidated else 'Resolution'}:\n{answer.strip()}{source}"
+        bd.comment(args.ticket, f"{note}\n\n{record_line(payload)}\n")
+        steps += 1
+        records, malformed = parse_records(bd.comments(args.ticket))
+        if malformed or any(r != payload for r in records):
+            raise RuleError(f"{args.ticket}: a different resolution was recorded at the same time; the ticket "
+                            "stays open. Run wayfind lint and settle it with the owner")
+    if args.invalidated and INVALIDATED_LABEL not in (ticket.get("labels") or []):
+        bd.add_label(args.ticket, INVALIDATED_LABEL)
+        steps += 1
     if not closed:
-        if not any((c.get("text") or "").strip() == note.strip() for c in bd.comments(args.ticket)):
-            bd.comment(args.ticket, note)
-        if args.invalidated and INVALIDATED_LABEL not in (ticket.get("labels") or []):
-            bd.add_label(args.ticket, INVALIDATED_LABEL)
+        reason = ("wayfind: invalidated" if args.invalidated
+                  else f"wayfind: resolved (source: {args.source})" if args.source else "wayfind: resolved")
         bd.close(args.ticket, reason)
         steps += 1
-    if old is not None and SUPERSEDED_LABEL not in (old.get("labels") or []):
-        bd.comment(old["id"], f"Superseded by {args.ticket}.")
-        bd.add_label(old["id"], SUPERSEDED_LABEL)
-        steps += 1
-
-    new_lines = list(lines)
     if old is not None:
-        new_lines = [f"{ln} (superseded by {args.ticket})" if ln.startswith(f"{old['id']} ")
-                     and "(superseded by " not in ln else ln for ln in new_lines]
-    if not args.invalidated and decision_for(new_lines, args.ticket) is None:
-        new_lines.append(entry)
-    if new_lines != lines:
-        sections["Decisions so far"] = set_bullets(new_lines)
-        # Write targets back exactly as found; resolve never changes them.
-        bd.set_description(map_id, render_body(sections, marker[1] if marker else ""))
+        if args.ticket not in superseded_by(bd.comments(old["id"])):
+            bd.comment(old["id"], f"Superseded by {args.ticket}.")
+            steps += 1
+        if SUPERSEDED_LABEL not in (old.get("labels") or []):
+            bd.add_label(old["id"], SUPERSEDED_LABEL)
+            steps += 1
+    if kind in HITL_TYPES and release_lease(bd, map_id, args.ticket, ticket.get("assignee")):
         steps += 1
 
     verb = "invalidated" if args.invalidated else "resolved"
     if not steps:
         print(f"{args.ticket} already {verb}; nothing to do")
     else:
-        print(f"{args.ticket} {verb}{' (finished an earlier partial run)' if closed else ''}; map {map_id} updated")
+        print(f"{args.ticket} {verb}{' (finished an earlier partial run)' if resumed else ''}")
     return EXIT_OK
 
 
@@ -713,7 +828,7 @@ def evaluate(bd: Bd, map_id: str, cap: int, max_age_days: int, now: dt.datetime 
     invalidated = [t for t in closed if INVALIDATED_LABEL in (t.get("labels") or [])]
     resolved = [t for t in closed if t not in invalidated]
     in_flight = [t for t in open_tickets if t.get("status") == "in_progress" and ticket_type(t) in HITL_TYPES]
-    lines = decision_lines(sections)
+    holder = (issue.get("assignee") or None) if issue.get("status") == "in_progress" else None
 
     for t in tickets:
         labels = type_labels(t)
@@ -721,24 +836,62 @@ def evaluate(bd: Bd, map_id: str, cap: int, max_age_days: int, now: dt.datetime 
             errors.append(f"{t['id']}: needs exactly one type label, has {labels or 'none'}")
         if MAP_LABEL in (t.get("labels") or []):
             warnings.append(f"{t['id']}: carries {MAP_LABEL}; only the map should")
-    for t in resolved:
-        if ticket_type(t) in HITL_TYPES and "source:" not in (t.get("close_reason") or ""):
-            errors.append(f"{t['id']}: {ticket_type(t)} ticket closed without the owner's answer as its source")
-        if decision_for(lines, t["id"]) is None:
-            errors.append(f"{t['id']}: closed but missing from Decisions so far; finish it by rerunning "
-                          f"wayfind resolve {t['id']} with the same arguments")
-        if ticket_type(t) == "revisit" and not any(f"(superseded by {t['id']})" in ln for ln in lines):
-            errors.append(f"{t['id']}: revisit resolved without superseding a decision")
-        if SUPERSEDED_LABEL in (t.get("labels") or []) and "(superseded by " not in (decision_for(lines, t["id"]) or ""):
-            errors.append(f"{t['id']}: labelled superseded but Decisions so far does not say by what; "
-                          "rerun the revisit's wayfind resolve")
-    for ln in lines:
-        ticket_id = ln.split(" ", 1)[0]
-        if ticket_id in by_id and by_id[ticket_id] not in resolved:
-            errors.append(f"{ticket_id}: listed in Decisions so far but not resolved")
+
+    # Decisions come from the resolution records on the closed tickets.
+    record_of: dict[str, dict] = {}
+    superseders: dict[str, list[str]] = {}
+    for t in closed:
+        records, malformed = parse_records(bd.comments(t["id"]))
+        if malformed:
+            errors.append(f"{t['id']}: malformed wayfind resolution record")
+        if not records:
+            errors.append(f"{t['id']}: closed without a wayfind resolution record; reopen it (bd reopen) "
+                          f"and resolve it with wayfind resolve")
+            continue
+        if any(r != records[0] for r in records[1:]):
+            errors.append(f"{t['id']}: conflicting resolution records; settle it with the owner "
+                          "and record the change with a revisit ticket")
+            continue
+        rec = records[0]
+        record_of[t["id"]] = rec
+        if (rec["kind"] == "invalidated") != (t in invalidated):
+            errors.append(f"{t['id']}: resolution record says {rec['kind']} but the {INVALIDATED_LABEL} label "
+                          "disagrees; rerun its wayfind resolve with the same arguments")
+        if rec["kind"] != "resolved":
+            continue
+        if ticket_type(t) in HITL_TYPES and not rec.get("source"):
+            errors.append(f"{t['id']}: {ticket_type(t)} ticket resolved without the owner's answer as its source")
+        if ticket_type(t) == "revisit":
+            target = rec.get("supersedes") or ""
+            if not target:
+                errors.append(f"{t['id']}: revisit resolved without superseding a decision")
+                continue
+            superseders.setdefault(target, []).append(t["id"])
+            if SUPERSEDED_LABEL not in (by_id.get(target, {}).get("labels") or []):
+                errors.append(f"{t['id']}: supersedes {target}, which is not labelled {SUPERSEDED_LABEL}; "
+                              f"rerun wayfind resolve {t['id']} with the same arguments")
+    for t in tickets:
+        named = superseders.get(t["id"], [])
+        if SUPERSEDED_LABEL in (t.get("labels") or []) and len(named) != 1:
+            errors.append(f"{t['id']}: labelled superseded but named by {len(named)} resolved revisit tickets, "
+                          "not exactly one")
+        elif len(named) > 1:
+            errors.append(f"{t['id']}: superseded by more than one revisit ({', '.join(named)})")
+    decisions = [{"id": t["id"], "title": t.get("title", ""), "summary": record_of[t["id"]].get("summary", ""),
+                  "source": record_of[t["id"]].get("source", ""),
+                  "superseded_by": (superseders.get(t["id"]) or [None])[0]}
+                 for t in resolved if record_of.get(t["id"], {}).get("kind") == "resolved"]
+
     if len(in_flight) > 1:
         errors.append(f"{len(in_flight)} HITL tickets in flight ({', '.join(t['id'] for t in in_flight)}); "
                       "run them one at a time")
+    if holder and not in_flight:
+        warnings.append(f"{map_id}: leased to {holder} with no HITL ticket in flight; if that session is gone, "
+                        f'free it with bd update {map_id} --status open --assignee ""')
+    for t in in_flight:
+        if t.get("assignee") != holder:
+            warnings.append(f"{t['id']}: HITL ticket in flight without the map lease "
+                            f"(lease held by {holder or 'nobody'}); claim HITL tickets with wayfind ready --claim")
     if len(open_tickets) > cap:
         warnings.append(f"{len(open_tickets)} open tickets, above the cap of {cap}; return the far ones to fog")
 
@@ -769,6 +922,8 @@ def evaluate(bd: Bd, map_id: str, cap: int, max_age_days: int, now: dt.datetime 
         "age_days": age_days,
         "idle_days": idle_days,
         "hitl_in_flight": [t["id"] for t in in_flight],
+        "lease": holder,
+        "decisions": decisions,
         "cleared": cleared,
         "errors": errors,
         "warnings": warnings,
@@ -828,11 +983,11 @@ def build_parser() -> argparse.ArgumentParser:
                        help="claim one frontier ticket, or resume the one you already hold")
     ready.add_argument("--json", action="store_true")
 
-    resolve = sub.add_parser("resolve", help="record an answer, close the ticket, update the map")
+    resolve = sub.add_parser("resolve", help="record a ticket's answer and close it")
     resolve.add_argument("ticket")
     resolve.add_argument("--answer")
     resolve.add_argument("--answer-file")
-    resolve.add_argument("--summary", help="one-line entry for Decisions so far")
+    resolve.add_argument("--summary", help="one-line summary kept in the resolution record")
     resolve.add_argument("--source", help="the owner's answer: a card pick, a ruling, a live turn (required for HITL)")
     resolve.add_argument("--invalidated", action="store_true", help="the question no longer applies")
     resolve.add_argument("--supersedes", help="for a revisit ticket (required): the decision it replaces")

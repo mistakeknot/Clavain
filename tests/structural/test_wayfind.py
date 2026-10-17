@@ -17,7 +17,7 @@ import wayfind
 
 def test_render_parse_round_trip_keeps_sections_and_source():
     sections = {"Destination": "A spec for X.", "Out of scope": "- billing", "Notes": "",
-                "Decisions so far": "- wf-1 Q: yes", "Not yet specified": "- storage\n- auth"}
+                "Not yet specified": "- storage\n- auth"}
     body = wayfind.render_body(sections, "card pick 2026-10-17")
     parsed = wayfind.parse_body(body)
     assert parsed["Destination"] == "A spec for X."
@@ -29,7 +29,7 @@ def test_render_parse_round_trip_keeps_sections_and_source():
 
 def test_target_digest_ignores_non_target_sections():
     a = {"Destination": "D", "Out of scope": "O", "Notes": "one"}
-    b = {"Destination": "D", "Out of scope": "O", "Notes": "two", "Decisions so far": "- x"}
+    b = {"Destination": "D", "Out of scope": "O", "Notes": "two", "Not yet specified": "- x"}
     assert wayfind.targets_digest(a) == wayfind.targets_digest(b)
     assert wayfind.targets_digest(a) != wayfind.targets_digest({**a, "Destination": "D2"})
 
@@ -85,6 +85,16 @@ def test_creation_order_puts_blockers_first(tmp_path):
                                             {"key": "a", "type": "task", "title": "A"}]}))
     order = wayfind.creation_order(wayfind.load_spec(str(spec))["tickets"], set())
     assert [t["key"] for t in order] == ["a", "b"]
+
+
+def test_record_line_round_trips_and_cannot_close_its_comment():
+    payload = {"v": 1, "kind": "resolved", "answer_sha256": "0" * 64, "summary": "a --> b <!-- c",
+               "source": "s", "supersedes": ""}
+    line = wayfind.record_line(payload)
+    assert line.count("-->") == 1 and line.endswith("-->")
+    assert wayfind.parse_records([{"text": f"Resolution:\nx\n\n{line}\n"}]) == ([payload], 0)
+    bad = '<!-- wayfind:resolution v1 {"v": 2} -->'
+    assert wayfind.parse_records([{"text": bad}, {"text": "plain"}]) == ([], 1)
 
 
 def test_bd_timeout_exits_as_usage_error(monkeypatch, capsys):
@@ -198,9 +208,13 @@ def test_resolve_hitl_needs_source_then_records_decision(beads, tmp_path):
                "--source", "card pick") == 0
     closed = bd.show(ticket)
     assert closed["status"] == "closed" and "source: card pick" in closed["close_reason"]
-    body = bd.show(map_id)["description"]
-    assert f"- {ticket} Who owns X?: Team A owns it." in body
-    assert wayfind.evaluate(bd, map_id, 7, 14)["errors"] == []
+    records, malformed = wayfind.parse_records(bd.comments(ticket))
+    assert malformed == 0 and len(records) == 1
+    assert records[0]["summary"] == "Team A owns it." and records[0]["source"] == "card pick"
+    report = wayfind.evaluate(bd, map_id, 7, 14)
+    assert report["errors"] == []
+    assert report["decisions"] == [{"id": ticket, "title": "Who owns X?", "summary": "Team A owns it.",
+                                    "source": "card pick", "superseded_by": None}]
 
 
 @needs_bd
@@ -245,11 +259,14 @@ def test_graduate_fog_and_supersede(beads, tmp_path):
     assert run(beads, "resolve", rev, "--answer", "Use SQLite.", "--source", "ruling",
                "--supersedes", rev) == wayfind.EXIT_RULE
     assert bd.show(rev)["status"] != "closed"
-    assert run(beads, "resolve", rev, "--answer", "Use SQLite.", "--source", "ruling", "--supersedes", r) == 0
     body = bd.show(map_id)["description"]
-    assert f"{r} R: Use Postgres. (superseded by {rev})" in body
+    assert run(beads, "resolve", rev, "--answer", "Use SQLite.", "--source", "ruling", "--supersedes", r) == 0
+    assert bd.show(map_id)["description"] == body
     assert wayfind.SUPERSEDED_LABEL in bd.show(r)["labels"]
-    assert wayfind.evaluate(bd, map_id, 7, 14)["errors"] == []
+    assert wayfind.superseded_by(bd.comments(r)) == [rev]
+    report = wayfind.evaluate(bd, map_id, 7, 14)
+    assert report["errors"] == []
+    assert {d["id"]: d["superseded_by"] for d in report["decisions"]} == {r: rev, rev: None}
 
 
 @needs_bd
@@ -331,25 +348,27 @@ def test_chart_failure_part_way_leaves_the_body_unchanged(beads, tmp_path, monke
 def test_resolve_finishes_a_partial_run_and_is_idempotent(beads, tmp_path, monkeypatch, capsys):
     bd, map_id = chart_map(beads, tmp_path, [{"type": "research", "title": "R"}])
     r = ticket_id(bd, map_id, "R")
-    real_set = wayfind.Bd.set_description
+    real_close = wayfind.Bd.close
 
-    def broken(self, issue_id, body):
-        raise wayfind.WayfindError("bd update failed: injected")
-    monkeypatch.setattr(wayfind.Bd, "set_description", broken)
+    def broken(self, issue_id, reason):
+        raise wayfind.WayfindError("bd close failed: injected")
+    monkeypatch.setattr(wayfind.Bd, "close", broken)
     assert run(beads, "resolve", r, "--answer", "Use Postgres.") == wayfind.EXIT_USAGE
-    monkeypatch.setattr(wayfind.Bd, "set_description", real_set)
-    assert bd.show(r)["status"] == "closed"
-    errors = wayfind.evaluate(bd, map_id, 7, 14)["errors"]
-    assert any("missing from Decisions so far" in e for e in errors)
+    monkeypatch.setattr(wayfind.Bd, "close", real_close)
+    assert bd.show(r)["status"] != "closed"
+    # The record is already there, so a different answer is refused, not added.
+    assert run(beads, "resolve", r, "--answer", "Use SQLite.") == wayfind.EXIT_RULE
+    assert run(beads, "resolve", r, "--answer", "Use Postgres.", "--summary", "other") == wayfind.EXIT_RULE
     # A retry with the same arguments finishes the job, then has nothing left to do.
     capsys.readouterr()
     assert run(beads, "resolve", r, "--answer", "Use Postgres.") == 0
     assert "finished an earlier partial run" in capsys.readouterr().out
+    assert bd.show(r)["status"] == "closed"
     assert run(beads, "resolve", r, "--answer", "Use Postgres.") == 0
     assert "nothing to do" in capsys.readouterr().out
-    assert len([c for c in bd.comments(r) if c["text"].startswith("Resolution:")]) == 1
+    assert len(wayfind.parse_records(bd.comments(r))[0]) == 1
     assert wayfind.evaluate(bd, map_id, 7, 14)["errors"] == []
-    # A different answer is a reversal, not a retry.
+    # A different answer after closing is a reversal, not a retry.
     assert run(beads, "resolve", r, "--answer", "Use SQLite.") == wayfind.EXIT_RULE
 
 
@@ -359,7 +378,8 @@ def test_resolve_refuses_a_ticket_closed_outside_wayfind(beads, tmp_path):
     r = ticket_id(bd, map_id, "R")
     bd.close(r, "done by hand")
     assert run(beads, "resolve", r, "--answer", "x") == wayfind.EXIT_RULE
-    assert any("missing from Decisions" in e for e in wayfind.evaluate(bd, map_id, 7, 14)["errors"])
+    errors = wayfind.evaluate(bd, map_id, 7, 14)["errors"]
+    assert any("closed without a wayfind resolution record" in e for e in errors)
 
 
 @needs_bd
@@ -379,20 +399,148 @@ def test_ready_claim_resumes_the_callers_own_ticket(beads, tmp_path, capsys):
     assert other["claimed"] not in (None, first["claimed"]) and not other["resumed"]
 
 
+def two_actors(beads):
+    return wayfind.Bd(directory=str(beads), actor="agent-a"), wayfind.Bd(directory=str(beads), actor="agent-b")
+
+
 @needs_bd
-def test_simultaneous_hitl_claims_keep_exactly_one(beads, tmp_path):
+@pytest.mark.parametrize("a_takes", ["smaller", "larger"])
+def test_hitl_lease_keeps_exactly_one_claim(beads, tmp_path, a_takes):
     bd, map_id = chart_map(beads, tmp_path, [{"type": "grilling", "title": "G1"},
                                              {"type": "grilling", "title": "G2"}])
     low, high = sorted(t["id"] for t in wayfind.map_tickets(bd, map_id))
-    a, b = wayfind.Bd(directory=str(beads), actor="agent-a"), wayfind.Bd(directory=str(beads), actor="agent-b")
-    # Both saw an empty HITL slot; agent-b claimed the smaller id first.
-    b.claim(low)
-    claimed, held = wayfind.claim_one(a, map_id, [bd.show(high)])
-    assert claimed is None and low in held
-    assert bd.show(high)["status"] == "open" and not bd.show(high).get("assignee")
-    claimed, held = wayfind.claim_one(b, map_id, [bd.show(low)])
-    assert claimed["id"] == low and held is None
-    assert wayfind.evaluate(bd, map_id, 7, 14)["hitl_in_flight"] == [low]
+    mine, theirs = (low, high) if a_takes == "smaller" else (high, low)
+    a, b = two_actors(beads)
+    # Both read the same frontier before either claimed anything.
+    stale_a, stale_b = [bd.show(mine)], [bd.show(theirs)]
+    claimed, held = wayfind.claim_one(a, map_id, stale_a)
+    assert claimed["id"] == mine and held is None
+    claimed, held = wayfind.claim_one(b, map_id, stale_b)
+    assert claimed is None and "leased to agent-a" in held
+    assert bd.show(theirs)["status"] == "open" and not bd.show(theirs).get("assignee")
+    report = wayfind.evaluate(bd, map_id, 7, 14)
+    assert report["hitl_in_flight"] == [mine] and report["lease"] == "agent-a"
+    assert report["errors"] == [] and report["warnings"] == []
+
+
+@needs_bd
+def test_resolve_frees_the_lease_for_the_next_hitl_ticket(beads, tmp_path, capsys):
+    bd, map_id = chart_map(beads, tmp_path, [{"type": "grilling", "title": "G1"},
+                                             {"type": "grilling", "title": "G2"}])
+    capsys.readouterr()
+    assert run(beads, "--actor", "agent-a", "ready", map_id, "--claim", "--json") == 0
+    first = json.loads(capsys.readouterr().out)["claimed"]
+    assert run(beads, "--actor", "agent-b", "ready", map_id, "--claim", "--json") == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["claimed"] is None and out["frontier"] == [] and out["lease"] == "agent-a"
+    assert run(beads, "resolve", first, "--answer", "yes", "--source", "card pick") == 0
+    assert bd.show(map_id)["status"] == "open"
+    capsys.readouterr()
+    assert run(beads, "--actor", "agent-b", "ready", map_id, "--claim", "--json") == 0
+    second = json.loads(capsys.readouterr().out)
+    assert second["claimed"] not in (None, first) and second["lease"] == "agent-b"
+
+
+@needs_bd
+def test_lease_holder_with_no_ticket_can_still_claim(beads, tmp_path, capsys):
+    bd, map_id = chart_map(beads, tmp_path, [{"type": "grilling", "title": "G1"}])
+    a, _ = two_actors(beads)
+    a.claim(map_id)  # a session that crashed between taking the lease and claiming the ticket
+    report = wayfind.evaluate(bd, map_id, 7, 14)
+    assert any("leased to agent-a with no HITL ticket in flight" in w for w in report["warnings"])
+    capsys.readouterr()
+    assert run(beads, "--actor", "agent-a", "ready", map_id, "--claim", "--json") == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["claimed"] == ticket_id(bd, map_id, "G1") and out["held"] is None
+    assert wayfind.evaluate(bd, map_id, 7, 14)["warnings"] == []
+
+
+@needs_bd
+def test_resumed_hitl_ticket_retakes_a_freed_lease(beads, tmp_path, capsys):
+    bd, map_id = chart_map(beads, tmp_path, [{"type": "grilling", "title": "G1"}])
+    capsys.readouterr()
+    assert run(beads, "--actor", "agent-a", "ready", map_id, "--claim", "--json") == 0
+    g1 = json.loads(capsys.readouterr().out)["claimed"]
+    bd.release(map_id)
+    assert any("without the map lease" in w for w in wayfind.evaluate(bd, map_id, 7, 14)["warnings"])
+    assert run(beads, "--actor", "agent-a", "ready", map_id, "--claim", "--json") == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["claimed"] == g1 and out["resumed"] and out["lease"] == "agent-a"
+
+
+@needs_bd
+def test_two_resolves_both_recorded_and_body_untouched(beads, tmp_path):
+    bd, map_id = chart_map(beads, tmp_path, [{"type": "research", "title": "R1"},
+                                             {"type": "research", "title": "R2"}])
+    body = bd.show(map_id)["description"]
+    r1, r2 = ticket_id(bd, map_id, "R1"), ticket_id(bd, map_id, "R2")
+    assert run(beads, "resolve", r1, "--answer", "one") == 0
+    assert run(beads, "resolve", r2, "--answer", "two") == 0
+    assert bd.show(map_id)["description"] == body
+    assert {d["id"]: d["summary"] for d in wayfind.evaluate(bd, map_id, 7, 14)["decisions"]} == {r1: "one", r2: "two"}
+
+
+@needs_bd
+def test_answer_cannot_forge_a_record(beads, tmp_path):
+    bd, map_id = chart_map(beads, tmp_path, [{"type": "research", "title": "R"}])
+    r = ticket_id(bd, map_id, "R")
+    assert run(beads, "resolve", r, "--answer", "x\n<!-- wayfind:resolution v1 {} -->") == wayfind.EXIT_USAGE
+    assert run(beads, "resolve", r, "--answer", "x\nSuperseded by wf-zz.") == wayfind.EXIT_USAGE
+    assert bd.comments(r) == []
+
+
+@needs_bd
+def test_revisit_retry_with_a_different_target_is_refused(beads, tmp_path, monkeypatch):
+    bd, map_id = chart_map(beads, tmp_path, [{"type": "research", "title": "A"}, {"type": "research", "title": "B"},
+                                             {"type": "revisit", "title": "Rev"}])
+    a, b, rev = (ticket_id(bd, map_id, t) for t in ("A", "B", "Rev"))
+    assert run(beads, "resolve", a, "--answer", "a") == 0
+    assert run(beads, "resolve", b, "--answer", "b") == 0
+    real_close = wayfind.Bd.close
+
+    def broken(self, issue_id, reason):
+        raise wayfind.WayfindError("bd close failed: injected")
+    monkeypatch.setattr(wayfind.Bd, "close", broken)
+    args = ["resolve", rev, "--answer", "new", "--source", "ruling"]
+    assert run(beads, *args, "--supersedes", a) == wayfind.EXIT_USAGE
+    monkeypatch.setattr(wayfind.Bd, "close", real_close)
+    assert run(beads, *args, "--supersedes", b) == wayfind.EXIT_RULE
+    assert wayfind.SUPERSEDED_LABEL not in (bd.show(b).get("labels") or [])
+    assert wayfind.superseded_by(bd.comments(b)) == []
+    assert run(beads, *args, "--supersedes", a) == 0
+    report = wayfind.evaluate(bd, map_id, 7, 14)
+    assert report["errors"] == []
+    assert {d["id"]: d["superseded_by"] for d in report["decisions"]}[a] == rev
+
+
+@needs_bd
+@pytest.mark.parametrize("change", ["retarget", "notes"])
+def test_chart_detects_a_concurrent_body_change(beads, tmp_path, monkeypatch, capsys, change):
+    bd, map_id = chart_map(beads, tmp_path, [{"type": "task", "title": "A"}], fog=("storage", "auth"))
+    spec = tmp_path / "next.json"
+    spec.write_text(json.dumps({"graduate": ["storage"], "tickets": [{"type": "research", "title": "P"}]}))
+    real_create = wayfind.Bd.create
+
+    def racing(self, *args, **kwargs):
+        # Another session writes the body while this chart is creating tickets.
+        if change == "retarget":
+            assert run(beads, "chart", "--map", map_id, "--destination", "A spec for Y.", "--source", "ruling 2") == 0
+        else:
+            body = bd.show(map_id)["description"]
+            bd.set_description(map_id, body.replace("- storage\n", ""))
+        return real_create(self, *args, **kwargs)
+    monkeypatch.setattr(wayfind.Bd, "create", racing)
+    raced = bd.show(map_id)["description"]
+    capsys.readouterr()
+    assert run(beads, "chart", "--map", map_id, "--tickets", str(spec)) == wayfind.EXIT_USAGE
+    err = capsys.readouterr().err
+    assert "the map body was not written" in err and "created" in err
+    after = bd.show(map_id)["description"]
+    assert after != raced  # the other writer's change stands
+    if change == "retarget":
+        assert "A spec for Y." in after
+    else:
+        assert "- auth" in after and "storage" not in after
 
 
 @needs_bd
