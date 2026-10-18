@@ -18,6 +18,7 @@ Dispatch `clavain:plan-reviewer` subagent to catch issues before they cascade. G
 
 **When mandatory:** After major feature; before merge to main. (Subagent-driven development runs its own per-task review loop; see Integration.)
 **When optional:** When stuck; before refactoring; after fixing complex bug.
+**Before review of risky surfaces:** when the change touches instruction files, hooks, settings, CI workflows or release scripts, run `/clavain:blast-radius` on it first and give the reviewer its writeup and the one fact it proved by running code.
 
 ### How to Request
 

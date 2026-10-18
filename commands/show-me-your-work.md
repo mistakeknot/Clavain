@@ -2,7 +2,6 @@
 name: show-me-your-work
 description: Keep a reviewable decision trail for long-running or unattended work, one TSV row per decision
 argument-hint: "[log path; defaults to decisions.tsv in the work dir]"
-disable-model-invocation: true
 ---
 
 # Show me your work
