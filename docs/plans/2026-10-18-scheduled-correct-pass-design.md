@@ -23,7 +23,7 @@ threads or days) describe the same mistake. One-off entries are left alone.
 1. Cluster entries into candidate classes (cheap model, read-only).
 2. For each class above the threshold, pick the highest barrier level that works,
    in order: structural test or type, pre-commit/pre-push hook, lint rule,
-   script default, router or skill text, memory note (last resort).
+   script default, router or skill text (last resort).
 3. Prove the barrier: it must fail on a reproduction of the mistake and pass on the fix.
 4. Write the barrier on a work branch and open a PR. One class per PR. The PR body
    names the entries, the barrier level chosen and why a higher level was not possible.
