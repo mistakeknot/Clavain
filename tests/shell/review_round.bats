@@ -229,3 +229,12 @@ rr() { bash "$RR" --repo "$R" --base main --head "$HEAD_SHA" --producer-identity
     grep -q '^CI-EXIT: 3' "$OUT/seen-ci-marker"
     [ "$(tail -1 "$OUT/ci.log")" = "CI-EXIT: 3" ]
 }
+
+@test "a body FAIL with a STATUS fail block and a warn sidecar stays a FAIL receipt" {
+    FAKE_STATUS=warn FAKE_BODY='- HIGH: bad\nVERDICT: FAIL\n--- VERDICT ---\nSTATUS: fail\n---\n' run rr
+    [ "$status" -eq 0 ]
+    [ "$(tail -1 "$OUT/receipt.md")" = "VERDICT: FAIL" ]
+    rm -rf "$OUT"
+    FAKE_STATUS=warn FAKE_BODY='- HIGH: bad\nVERDICT: FAIL\n--- VERDICT ---\nSTATUS: pass\n---\n' run rr
+    [ "$status" -eq 3 ]
+}

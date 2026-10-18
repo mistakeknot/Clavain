@@ -186,8 +186,10 @@ for l in "${LENSES[@]}"; do
     # dispatch maps a first-line FAIL to sidecar warn, so warn accepts FAIL too.
     want=; case "$sst" in pass) want="VERDICT: PASS";; warn) want="$last";; fail) want="VERDICT: FAIL";; esac
     [ "$sst" != warn ] || case "$last" in "VERDICT: PASS WITH NOTES"|"VERDICT: FAIL") ;; *) want="VERDICT: PASS WITH NOTES";; esac
-    # A terminal block, when present, must carry the same status as the sidecar.
-    [ "$ndelim" -eq 0 ] || [ "${blkst:-}" = "$sst" ] || tailok=0
+    # A terminal block, when present, must carry the status that matches the body
+    # verdict (not the sidecar: dispatch records a first-line FAIL as warn).
+    bwant=; case "$last" in "VERDICT: PASS") bwant=pass;; "VERDICT: PASS WITH NOTES") bwant=warn;; "VERDICT: FAIL") bwant=fail;; esac
+    [ "$ndelim" -eq 0 ] || [ "${blkst:-}" = "$bwant" ] || tailok=0
     if [ "$tailok" -ne 1 ] || [ "$nver" -ne 1 ] || [ "$fenced" -ne 0 ] || [ "$last" != "$want" ]; then
       v="NONE (verdict line malformed, fenced, or disagrees with sidecar STATUS: $sst)"
     elif [ "$sst" != fail ] && grep -q '^PROVISIONAL:' "$f.verdict" 2>/dev/null; then v="PROVISIONAL"; PROV=1
