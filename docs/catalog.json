@@ -1,9 +1,9 @@
 {
-  "generated": "2026-10-17T06:33:54Z",
+  "generated": "2026-10-18T07:58:33Z",
   "counts": {
     "skills": 27,
     "agents": 6,
-    "commands": 59,
+    "commands": 63,
     "hooks": 22,
     "mcp_servers": 0,
     "review": 2,
@@ -157,6 +157,10 @@
       "description": "Scan open beads for stale trackers already implemented \u2014 deterministic checks then LLM verification."
     },
     {
+      "name": "blast-radius",
+      "description": "Find what a change could break somewhere else before it ships, and prove the one fact it is safe because of by running real code"
+    },
+    {
       "name": "brainstorm",
       "description": "Collaborative brainstorm \u2014 assess clarity, research repo, explore approaches, capture design. Auto-handoff to /write-plan."
     },
@@ -201,6 +205,10 @@
       "description": "Document a recently solved problem to compound your team's knowledge"
     },
     {
+      "name": "correct",
+      "description": "Find the mistakes agents keep repeating in this repo and make each one impossible, at the highest level that works"
+    },
+    {
       "name": "create-agent-skill",
       "description": "Create or edit Claude Code skills with expert guidance on structure and best practices"
     },
@@ -243,6 +251,10 @@
     {
       "name": "goal-form",
       "description": "Collaborative goal-formation ritual: research-first inter-elicitation \u2192 charter \u2192 stakes-routed review \u2192 mint (ic goal) \u2192 /goal handoff"
+    },
+    {
+      "name": "grill-me",
+      "description": "Interview the user relentlessly about a plan or design until every branch of the decision tree is settled"
     },
     {
       "name": "handoff",
@@ -327,6 +339,10 @@
     {
       "name": "setup",
       "description": "Bootstrap Clavain for the active runtime (Codex or Claude Code) and verify health"
+    },
+    {
+      "name": "show-me-your-work",
+      "description": "Keep a reviewable decision trail for long-running or unattended work, one TSV row per decision"
     },
     {
       "name": "smoke-test",
