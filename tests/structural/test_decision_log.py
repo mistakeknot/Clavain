@@ -84,6 +84,12 @@ def test_mkdir_lock_fallback_without_flock(project_root, tmp_path):
     assert not (tmp_path / "f.tsv.lock.d").exists()
 
 
+def _reap(proc):
+    if proc.poll() is None:
+        proc.kill()
+    proc.communicate()
+
+
 def _start(project_root, log, env=None, bash="bash"):
     return subprocess.Popen(
         [bash, str(project_root / "scripts" / "decision-log.sh"), str(log), "p", "d", "w", "e", "r"],
@@ -101,16 +107,21 @@ def test_writer_waits_while_flock_is_held(project_root, tmp_path):
         pytest.skip("flock not installed")
     log = tmp_path / "h.tsv"
     log.touch()
-    with open(log, "a") as held:
-        fcntl.flock(held, fcntl.LOCK_EX)
-        proc = _start(project_root, log)
-        time.sleep(1)
-        assert proc.poll() is None
-        assert log.read_text() == ""
-        fcntl.flock(held, fcntl.LOCK_UN)
-    out, err = proc.communicate(timeout=30)
-    assert proc.returncode == 0, err
-    assert len(log.read_text().splitlines()) == 2
+    proc = None
+    try:
+        with open(log, "a") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            proc = _start(project_root, log)
+            time.sleep(1)
+            assert proc.poll() is None
+            assert log.read_text() == ""
+            fcntl.flock(held, fcntl.LOCK_UN)
+        out, err = proc.communicate(timeout=30)
+        assert proc.returncode == 0, err
+        assert len(log.read_text().splitlines()) == 2
+    finally:
+        if proc is not None:
+            _reap(proc)
 
 
 def test_writer_waits_while_mkdir_lock_is_held(project_root, tmp_path):
@@ -126,11 +137,16 @@ def test_writer_waits_while_mkdir_lock_is_held(project_root, tmp_path):
     lock = tmp_path / "m.tsv.lock.d"
     lock.mkdir()
     proc = _start(project_root, log, env={"PATH": str(bin_dir)}, bash=str(bin_dir / "bash"))
-    time.sleep(1)
-    assert proc.poll() is None
-    assert not log.exists()
-    lock.rmdir()
-    out, err = proc.communicate(timeout=30)
-    assert proc.returncode == 0, err
-    assert len(log.read_text().splitlines()) == 2
-    assert not lock.exists()
+    try:
+        time.sleep(1)
+        assert proc.poll() is None
+        assert not log.exists()
+        lock.rmdir()
+        out, err = proc.communicate(timeout=30)
+        assert proc.returncode == 0, err
+        assert len(log.read_text().splitlines()) == 2
+        assert not lock.exists()
+    finally:
+        _reap(proc)
+        if lock.exists():
+            lock.rmdir()
