@@ -6,6 +6,8 @@ Two sides: requesting reviews and receiving feedback. Technical correctness over
 
 **When:** After major features, before merge, and as SDD's final review (SDD reviews each task with its own `task-reviewer-prompt.md`).
 
+**Risky surfaces:** if the change touches instruction files, hooks, settings, CI workflows or release scripts, run `/clavain:blast-radius` first and give the reviewer its writeup.
+
 1. Get git SHAs: `BASE_SHA=$(git merge-base origin/main HEAD)` (or the commit before the work; never assume `HEAD~1`), `HEAD_SHA=$(git rev-parse HEAD)`
 2. Dispatch `clavain:plan-reviewer` subagent with template from `code-reviewer.md`
 3. Act on feedback: fix Critical immediately, fix Important before proceeding, note Minor for later

@@ -29,6 +29,10 @@ Routes compose across phases. Fixing a bug requires `intertest:systematic-debugg
 | Repository upkeep (lint-first cleanup, baselines, docs-pins drift) | `clavain:gardener` | `clavain:upstream-sync-engine` for approved dependency bumps |
 | Choose next work | `internext:next-work` | `interphase:beads-workflow` |
 | Operate portfolio agency | `clavain:remontoire` | Only for portfolio operations |
+| Requirements are vague or a plan has open branches | `/clavain:grill-me` (invoke only when the user asks; one question at a time) | `clavain:brainstorm` for design capture |
+| Judge what a change could break elsewhere (any PR touching instruction files, hooks, settings or CI gets this before review) | `/clavain:blast-radius` | `clavain:code-review-discipline` |
+| Long-running or unattended work a human reviews later | `/clavain:show-me-your-work` (one TSV row per decision) | `clavain:executing-plans` |
+| The operator corrects the same agent mistake again | `/clavain:correct` (invoke only when the user asks; it proposes repo changes) | `interknow:compound` |
 | Call a dependency API | Read the installed source at the pinned version ([source-first.md](references/source-first.md)) | Documentation lookup second; compiler and test output outrank memory |
 
 Every installed unique capability remains eligible beyond this table. Prefer an existing valid plan. Read [routing-tables.md](references/routing-tables.md) for specialty and host detail when needed.

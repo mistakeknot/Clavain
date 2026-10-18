@@ -2,7 +2,6 @@
 name: blast-radius
 description: Find what a change could break somewhere else before it ships, and prove the one fact it is safe because of by running real code
 argument-hint: "[PR number, commit range or file path; defaults to the current diff]"
-disable-model-invocation: true
 ---
 
 # Blast radius
