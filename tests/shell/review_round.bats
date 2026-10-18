@@ -307,7 +307,8 @@ _lens_expect() { # bv blk sst prov shape
 }
 
 @test "a real FAIL on a PROVISIONAL lens is a FAIL receipt, not PROVISIONAL" {
-    FAKE_PROV=1 FAKE_BODY='- HIGH: bad\nVERDICT: FAIL\n' run bash "$RR" --mode confirm --prior-head "$HEAD_SHA" --repo "$R" --base main --head "$HEAD_SHA" --producer-identity p --out-dir "$OUT"
+    FAKE_PROV=1 FAKE_BODY='- HIGH: bad\nVERDICT: FAIL\n' run bash "$RR" --repo "$R" --base main --head "$HEAD_SHA" --producer-identity p --out-dir "$OUT"
+    [ "$status" -eq 0 ]
     grep -q 'general: FAIL' "$OUT/receipt.md"
     [ "$(tail -1 "$OUT/receipt.md")" = "VERDICT: FAIL" ]
 }
