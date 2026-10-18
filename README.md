@@ -4,7 +4,7 @@
 
 Clavain is a product development agent rig optimized for human/machine comparative advantage — the OS layer of [Sylveste](https://github.com/mistakeknot/Sylveste), an autonomous software development agency platform. It codifies product and engineering discipline into composable workflows for building software from brainstorm to ship, and runs on Claude Code, Codex, Hermes, and Kimi Code, using cross-model second opinions where their different failure modes help. Through knowledge compounding, context freshness monitoring, domain-aware agent generation, and session evidence capture, Clavain gets better at building your project the more you use it.
 
-With 27 skills, 6 agents, and 59 commands, there is a lot here (and it is constantly changing). Before installing, point Claude Code/Codex/your favorite agent at this directory and ask it to review the plugin against how you like to work. If you're on Claude Code, it's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 27 skills, 6 agents, and 63 commands, there is a lot here (and it is constantly changing). Before installing, point Claude Code/Codex/your favorite agent at this directory and ask it to review the plugin against how you like to work. If you're on Claude Code, it's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 ## Install
 
@@ -341,7 +341,7 @@ Agents are specialized execution units dispatched by skills and commands. They r
 
 **Workflow:** PR comment resolution and bug reproduction validation.
 
-### Commands (59)
+### Commands (63)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
@@ -351,6 +351,10 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/project-onboard` | Set up a new/existing project with full automation (beads, docs, observability) |
 | `/setup` | Bootstrap the modpack: install plugins, disable conflicts, verify servers |
 | `/wayfind` | Chart or work a multi-session decision map in beads; hands a cleared map to `/strategy` |
+| `/grill-me` | Interview the user round by round over a plan's decision tree until it is settled; `--docs` records a glossary and decision records |
+| `/blast-radius` | Find what a change could break outside the diff and prove the one fact it is safe because of by running real code |
+| `/correct` | Turn a mistake agents keep repeating into an architecture, type, lint or test barrier, then record the rule |
+| `/show-me-your-work` | Keep a TSV decision trail for long or unattended runs, audited against the transcript and reviewed independently |
 | `/brainstorm` | Explore before planning |
 | `/strategy` | Structure brainstorm into PRD with trackable beads |
 | `/write-plan` | Create implementation plan |

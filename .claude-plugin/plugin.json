@@ -1,7 +1,7 @@
 {
   "name": "clavain",
   "version": "0.6.331",
-  "description": "Self-improving agent rig: codifies product and engineering discipline into composable workflows from brainstorm to ship. Compounds knowledge, generates domain agents, monitors its own docs, and surfaces conservative update drift. Orchestrates Claude, Codex, and Oracle through 6 agents, 59 commands, 27 skills, 0 MCP servers. Factory substrate: CXDB turn DAG, scenario bank with satisfaction scoring, evidence pipeline, agent capability policies. Companions: interspect, interphase, interline, interflux, interpath, interwatch, interslack, interform, intercraft, interdev, interpeer, intertest.",
+  "description": "Self-improving agent rig: codifies product and engineering discipline into composable workflows from brainstorm to ship. Compounds knowledge, generates domain agents, monitors its own docs, and surfaces conservative update drift. Orchestrates Claude, Codex, and Oracle through 6 agents, 63 commands, 27 skills, 0 MCP servers. Factory substrate: CXDB turn DAG, scenario bank with satisfaction scoring, evidence pipeline, agent capability policies. Companions: interspect, interphase, interline, interflux, interpath, interwatch, interslack, interform, intercraft, interdev, interpeer, intertest.",
   "author": {
     "name": "mistakeknot"
   },
@@ -50,12 +50,14 @@
   ],
   "commands": [
     "./commands/bead-sweep.md",
+    "./commands/blast-radius.md",
     "./commands/brainstorm.md",
     "./commands/campaign.md",
     "./commands/changelog.md",
     "./commands/clodex-toggle.md",
     "./commands/codex-bootstrap.md",
     "./commands/compound.md",
+    "./commands/correct.md",
     "./commands/create-agent-skill.md",
     "./commands/debate.md",
     "./commands/deepen.md",
@@ -77,6 +79,7 @@
     "./commands/model-routing.md",
     "./commands/next-goal.md",
     "./commands/goal-form.md",
+    "./commands/grill-me.md",
     "./commands/peers.md",
     "./commands/plan-review.md",
     "./commands/pr-triage.md",
@@ -91,6 +94,7 @@
     "./commands/review-doc.md",
     "./commands/clavain-review.md",
     "./commands/route.md",
+    "./commands/show-me-your-work.md",
     "./commands/setup.md",
     "./commands/smoke-test.md",
     "./commands/sprint-dag.md",
