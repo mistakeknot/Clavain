@@ -51,6 +51,7 @@ def test_quoted_formula_cells_and_concurrent_writers(project_root, tmp_path):
     lines = log2.read_text().splitlines()
     assert len(lines) == 61
     assert lines.count("ts\tphase\tdecision\twhy\tevidence\tresult") == 1
+    assert sorted(line.split("\t")[2] for line in lines[1:]) == sorted(f"d{i}" for i in range(60))
     assert all(len(line.split("\t")) == 6 for line in lines)
 
 
@@ -77,5 +78,75 @@ def test_mkdir_lock_fallback_without_flock(project_root, tmp_path):
     assert set(codes) == {0}
     lines = log.read_text().splitlines()
     assert len(lines) == 31
+    assert lines.count("ts\tphase\tdecision\twhy\tevidence\tresult") == 1
+    assert sorted(line.split("\t")[2] for line in lines[1:]) == sorted(f"d{i}" for i in range(30))
     assert all(len(line.split("\t")) == 6 for line in lines)
     assert not (tmp_path / "f.tsv.lock.d").exists()
+
+
+def _reap(proc):
+    if proc.poll() is None:
+        proc.kill()
+    proc.communicate()
+
+
+def _start(project_root, log, env=None, bash="bash"):
+    return subprocess.Popen(
+        [bash, str(project_root / "scripts" / "decision-log.sh"), str(log), "p", "d", "w", "e", "r"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+    )
+
+
+def test_writer_waits_while_flock_is_held(project_root, tmp_path):
+    import fcntl
+    import shutil
+    import time
+
+    if shutil.which("flock") is None:
+        import pytest
+        pytest.skip("flock not installed")
+    log = tmp_path / "h.tsv"
+    log.touch()
+    proc = None
+    try:
+        with open(log, "a") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            proc = _start(project_root, log)
+            time.sleep(1)
+            assert proc.poll() is None
+            assert log.read_text() == ""
+            fcntl.flock(held, fcntl.LOCK_UN)
+        out, err = proc.communicate(timeout=30)
+        assert proc.returncode == 0, err
+        assert len(log.read_text().splitlines()) == 2
+    finally:
+        if proc is not None:
+            _reap(proc)
+
+
+def test_writer_waits_while_mkdir_lock_is_held(project_root, tmp_path):
+    import os
+    import shutil
+    import time
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for tool in ("bash", "date", "sleep", "mkdir", "rmdir"):
+        os.symlink(shutil.which(tool), bin_dir / tool)
+    log = tmp_path / "m.tsv"
+    lock = tmp_path / "m.tsv.lock.d"
+    lock.mkdir()
+    proc = _start(project_root, log, env={"PATH": str(bin_dir)}, bash=str(bin_dir / "bash"))
+    try:
+        time.sleep(1)
+        assert proc.poll() is None
+        assert not log.exists()
+        lock.rmdir()
+        out, err = proc.communicate(timeout=30)
+        assert proc.returncode == 0, err
+        assert len(log.read_text().splitlines()) == 2
+        assert not lock.exists()
+    finally:
+        _reap(proc)
+        if lock.exists():
+            lock.rmdir()
