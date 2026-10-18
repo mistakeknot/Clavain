@@ -45,4 +45,4 @@ threads or days) describe the same mistake. One-off entries are left alone.
 - Which repos start in scope (suggest Clavain only).
 - Whether memory-derived classes may name mk's wording in public repos (default: no,
   cite the bead only).
-- Whether the pass runs under independently scheduled automation (suggested) or on demand.
+- Whether the pass runs on demand or on a schedule. A schedule must run as independently scheduled automation on the dedicated dev server (standing CI policy), not GitHub Actions.
