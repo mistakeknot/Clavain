@@ -108,7 +108,7 @@ exact_head_wt || { echo "review-round: a gate command changed the worktree" >&2;
 CIPID=
 if [ -n "$CI" ]; then
   if [ "$DRY" = 1 ]; then echo "would start CI: $CI"; else
-    ( (cd "$CIWT" && bash -c "$CI"); rc=$?; echo "CI-EXIT: $rc"; exit "$rc" ) > "$OUT/ci.log" 2>&1 & CIPID=$!
+    ( rc=0; (cd "$CIWT" && bash -c "$CI") || rc=$?; echo "CI-EXIT: $rc"; exit "$rc" ) > "$OUT/ci.log" 2>&1 & CIPID=$!
   fi
 fi
 CINOTE="Tests: you are read-only and cannot run them. "
@@ -163,11 +163,15 @@ for l in "${LENSES[@]}"; do
     # must be the only line-start VERDICT, outside any code fence, and agree
     # with the sidecar status (pass=PASS, warn=PASS WITH NOTES, fail=FAIL).
     ndelim=$(grep -c '^--- VERDICT ---\r\?$' "$f" || true)
-    if [ "$ndelim" -eq 0 ]; then body=$(cat "$f"); tailok=1
+    if [ "$ndelim" -eq 0 ]; then body=$(cat "$f"); tailok=1; blkst=
     elif [ "$ndelim" -eq 1 ]; then
       body=$(awk '/^--- VERDICT ---\r?$/ {exit} {print}' "$f")
       # Terminal block: only key lines, ending in '---', nothing after it.
-      tailok=$(awk 'f&&NF{n++; last=$0; if ($0 !~ /^(STATUS|FILES|FINDINGS|SUMMARY|PROVISIONAL|---)/) bad=1} /^--- VERDICT ---\r?$/{f=1} END{print (!bad && last ~ /^---[ \t\r]*$/) ? 1 : 0}' "$f")
+      # Terminal block must be exactly: STATUS: pass|warn|fail, then '---', nothing else.
+      blk=$(awk 'f&&NF{sub(/\r$/,""); print} /^--- VERDICT ---\r?$/{f=1}' "$f")
+      if [ "$(wc -l <<< "$blk")" -eq 2 ] && [[ "$(sed -n 1p <<< "$blk")" =~ ^STATUS:\ (pass|warn|fail)$ ]] && [ "$(sed -n 2p <<< "$blk")" = "---" ]; then
+        tailok=1; blkst=${BASH_REMATCH[1]}
+      else tailok=0; fi
     else body=$(cat "$f"); tailok=0; fi
     last=$(grep -v '^[[:space:]]*$' <<< "$body" | tail -1 || true)
     # Markdown fence state (backtick or tilde, closing fence at least as long):
@@ -182,6 +186,8 @@ for l in "${LENSES[@]}"; do
     # dispatch maps a first-line FAIL to sidecar warn, so warn accepts FAIL too.
     want=; case "$sst" in pass) want="VERDICT: PASS";; warn) want="$last";; fail) want="VERDICT: FAIL";; esac
     [ "$sst" != warn ] || case "$last" in "VERDICT: PASS WITH NOTES"|"VERDICT: FAIL") ;; *) want="VERDICT: PASS WITH NOTES";; esac
+    # A terminal block, when present, must carry the same status as the sidecar.
+    [ "$ndelim" -eq 0 ] || [ "${blkst:-}" = "$sst" ] || tailok=0
     if [ "$tailok" -ne 1 ] || [ "$nver" -ne 1 ] || [ "$fenced" -ne 0 ] || [ "$last" != "$want" ]; then
       v="NONE (verdict line malformed, fenced, or disagrees with sidecar STATUS: $sst)"
     elif [ "$sst" != fail ] && grep -q '^PROVISIONAL:' "$f.verdict" 2>/dev/null; then v="PROVISIONAL"; PROV=1

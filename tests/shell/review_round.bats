@@ -211,3 +211,21 @@ rr() { bash "$RR" --repo "$R" --base main --head "$HEAD_SHA" --producer-identity
     [ "$status" -eq 11 ]
     [ "$(tail -1 "$OUT/receipt.md")" = "VERDICT: FAIL" ]
 }
+
+@test "a malformed terminal block with STATUS fail cannot hide behind an initial PASS" {
+    FAKE_STATUS=pass FAKE_BODY='VERDICT: PASS\n--- VERDICT ---\nSTATUS: fail\nSUMMARY malformed\n---\n' run rr
+    [ "$status" -eq 3 ]
+    rm -rf "$OUT"
+    FAKE_STATUS=pass FAKE_BODY='ok\nVERDICT: PASS\n--- VERDICT ---\nSTATUS: pass\n---\n---\n' run rr
+    [ "$status" -eq 3 ]
+    rm -rf "$OUT"
+    FAKE_STATUS=pass FAKE_BODY='ok\nVERDICT: PASS\n--- VERDICT ---\nSTATUS: warn\n---\n' run rr
+    [ "$status" -eq 3 ]
+}
+
+@test "a failing CI command still writes its CI-EXIT marker before reviewers finish" {
+    FAKE_WAIT_CI=1 FAKE_BODY='ok\nVERDICT: PASS\n' run rr --ci-cmd 'exit 3'
+    [ "$status" -eq 4 ]
+    grep -q '^CI-EXIT: 3' "$OUT/seen-ci-marker"
+    [ "$(tail -1 "$OUT/ci.log")" = "CI-EXIT: 3" ]
+}
