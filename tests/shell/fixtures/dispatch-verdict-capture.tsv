@@ -1,0 +1,48 @@
+tail	PASS	none	0	pass	0
+tail	PASS	none	1	pass	1
+tail	PASS	pass	0	pass	0
+tail	PASS	pass	1	pass	1
+tail	PASS	warn	0	warn	0
+tail	PASS	warn	1	warn	1
+tail	PASS	fail	0	fail	0
+tail	PASS	fail	1	fail	1
+tail	PASS WITH NOTES	none	0	pass	0
+tail	PASS WITH NOTES	none	1	pass	1
+tail	PASS WITH NOTES	pass	0	pass	0
+tail	PASS WITH NOTES	pass	1	pass	1
+tail	PASS WITH NOTES	warn	0	warn	0
+tail	PASS WITH NOTES	warn	1	warn	1
+tail	PASS WITH NOTES	fail	0	fail	0
+tail	PASS WITH NOTES	fail	1	fail	1
+tail	FAIL	none	0	warn	0
+tail	FAIL	none	1	warn	1
+tail	FAIL	pass	0	pass	0
+tail	FAIL	pass	1	pass	1
+tail	FAIL	warn	0	warn	0
+tail	FAIL	warn	1	warn	1
+tail	FAIL	fail	0	fail	0
+tail	FAIL	fail	1	fail	1
+both	PASS	none	0	pass	0
+both	PASS	none	1	pass	1
+both	PASS	pass	0	pass	0
+both	PASS	pass	1	pass	1
+both	PASS	warn	0	warn	0
+both	PASS	warn	1	warn	1
+both	PASS	fail	0	warn	0
+both	PASS	fail	1	warn	1
+both	PASS WITH NOTES	none	0	pass	0
+both	PASS WITH NOTES	none	1	pass	1
+both	PASS WITH NOTES	pass	0	pass	0
+both	PASS WITH NOTES	pass	1	pass	1
+both	PASS WITH NOTES	warn	0	warn	0
+both	PASS WITH NOTES	warn	1	warn	1
+both	PASS WITH NOTES	fail	0	warn	0
+both	PASS WITH NOTES	fail	1	warn	1
+both	FAIL	none	0	warn	0
+both	FAIL	none	1	warn	1
+both	FAIL	pass	0	warn	0
+both	FAIL	pass	1	warn	1
+both	FAIL	warn	0	warn	0
+both	FAIL	warn	1	warn	1
+both	FAIL	fail	0	warn	0
+both	FAIL	fail	1	warn	1

@@ -42,6 +42,51 @@ export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"   # keep the caller's PATH: dis
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DISPATCH="${REVIEW_ROUND_DISPATCH:-$HERE/dispatch.sh}"
 
+# lens_verdict FILE SIDECAR_STATUS PROVISIONAL(0|1) -> prints the lens verdict:
+# PASS | PASS WITH NOTES | FAIL | PROVISIONAL | NONE (reason). Pure: reads FILE only.
+# Body verdict: strip the reviewer's trailing block; the last non-blank line must
+# be the only line-start VERDICT, outside any code fence. A terminal block, when
+# present, must be exactly STATUS + '---' and carry the status of that body
+# verdict. The sidecar must be one dispatch can produce for that body (dispatch
+# records a first-line FAIL as warn, and a blockless PASS WITH NOTES as pass).
+lens_verdict() {
+  local f=$1 sst=$2 prov=$3 ndelim body blk tailok=1 blkst= last fenced nver bwant ok
+  ndelim=$(grep -c '^--- VERDICT ---\r\?$' "$f" || true)
+  if [ "$ndelim" -eq 0 ]; then body=$(cat "$f")
+  elif [ "$ndelim" -eq 1 ]; then
+    body=$(awk '/^--- VERDICT ---\r?$/ {exit} {print}' "$f")
+    blk=$(awk 'f&&NF{sub(/\r$/,""); print} /^--- VERDICT ---\r?$/{f=1}' "$f")
+    if [ "$(wc -l <<< "$blk")" -eq 2 ] && [[ "$(sed -n 1p <<< "$blk")" =~ ^STATUS:\ (pass|warn|fail)$ ]] && [ "$(sed -n 2p <<< "$blk")" = "---" ]; then
+      blkst=${BASH_REMATCH[1]}
+    else tailok=0; fi
+  else body=$(cat "$f"); tailok=0; fi
+  last=$(grep -v '^[[:space:]]*$' <<< "$body" | tail -1 || true)
+  # Markdown fence state (backtick or tilde, closing fence at least as long):
+  # the verdict line must sit outside every fence and no fence may stay open.
+  fenced=$(awk '
+    { if (match($0,/^ {0,3}(`{3,}|~{3,})/)) { m=substr($0,RSTART,RLENGTH); gsub(/ /,"",m); c=substr(m,1,1); n=length(m)
+        if (!open) { open=1; fc=c; fl=n; next }
+        else if (c==fc && n>=fl) { t=$0; sub(/^ {0,3}/,"",t); sub(/[ \t\r]*$/,"",t); gsub(c,"",t); if (t=="") { open=0; next } } }
+      if (open && $0 ~ /^VERDICT: /) bad=1 }
+    END { print (open||bad) ? 1 : 0 }' <<< "$body")
+  nver=$(grep -c '^VERDICT: ' <<< "$body" || true)
+  bwant=; case "$last" in "VERDICT: PASS") bwant=pass;; "VERDICT: PASS WITH NOTES") bwant=warn;; "VERDICT: FAIL") bwant=fail;; esac
+  [ "$ndelim" -eq 0 ] || [ "$blkst" = "$bwant" ] || tailok=0
+  ok=0
+  case "$last:$sst" in
+    "VERDICT: PASS:pass"|"VERDICT: PASS WITH NOTES:warn"|"VERDICT: FAIL:fail"|"VERDICT: FAIL:warn") ok=1;;
+    "VERDICT: PASS WITH NOTES:pass") [ "$ndelim" -ne 0 ] || ok=1;;
+  esac
+  if [ "$tailok" -ne 1 ] || [ "$nver" -ne 1 ] || [ "$fenced" -ne 0 ] || [ "$ok" -ne 1 ]; then
+    echo "NONE (verdict line malformed, fenced, or disagrees with sidecar STATUS: $sst)"
+  elif [ "$last" = "VERDICT: FAIL" ]; then echo FAIL
+  elif [ "$prov" = 1 ]; then echo PROVISIONAL
+  else echo "${last#VERDICT: }"
+  fi
+}
+[ "${REVIEW_ROUND_SOURCE_ONLY:-}" != 1 ] || return 0 2>/dev/null || exit 0
+
+
 MODE=first; REPO=; BASE=; HEAD=; PRODUCER=; OUT=; PROMPT=; CI=; PRIOR=; PRIOR_HEAD=; DRY=0
 GATES=()
 die() { echo "review-round: $*" >&2; exit 2; }
@@ -159,42 +204,9 @@ for l in "${LENSES[@]}"; do
   if [ "$drc" -ne 0 ]; then v="NONE (dispatch exit $drc)"
   elif ! [[ "$sst" =~ ^(pass|warn|fail)$ ]]; then v="NONE (dispatch sidecar STATUS '${sst:-missing}')"
   else
-    # Body verdict: strip dispatch's trailing block, then the last non-blank line
-    # must be the only line-start VERDICT, outside any code fence, and agree
-    # with the sidecar status (pass=PASS, warn=PASS WITH NOTES, fail=FAIL).
-    ndelim=$(grep -c '^--- VERDICT ---\r\?$' "$f" || true)
-    if [ "$ndelim" -eq 0 ]; then body=$(cat "$f"); tailok=1; blkst=
-    elif [ "$ndelim" -eq 1 ]; then
-      body=$(awk '/^--- VERDICT ---\r?$/ {exit} {print}' "$f")
-      # Terminal block: only key lines, ending in '---', nothing after it.
-      # Terminal block must be exactly: STATUS: pass|warn|fail, then '---', nothing else.
-      blk=$(awk 'f&&NF{sub(/\r$/,""); print} /^--- VERDICT ---\r?$/{f=1}' "$f")
-      if [ "$(wc -l <<< "$blk")" -eq 2 ] && [[ "$(sed -n 1p <<< "$blk")" =~ ^STATUS:\ (pass|warn|fail)$ ]] && [ "$(sed -n 2p <<< "$blk")" = "---" ]; then
-        tailok=1; blkst=${BASH_REMATCH[1]}
-      else tailok=0; fi
-    else body=$(cat "$f"); tailok=0; fi
-    last=$(grep -v '^[[:space:]]*$' <<< "$body" | tail -1 || true)
-    # Markdown fence state (backtick or tilde, closing fence at least as long):
-    # the verdict line must sit outside every fence and no fence may stay open.
-    fenced=$(awk '
-      { if (match($0,/^ {0,3}(`{3,}|~{3,})/)) { m=substr($0,RSTART,RLENGTH); gsub(/ /,"",m); c=substr(m,1,1); n=length(m)
-          if (!open) { open=1; fc=c; fl=n; next }
-          else if (c==fc && n>=fl) { t=$0; sub(/^ {0,3}/,"",t); sub(/[ \t\r]*$/,"",t); gsub(c,"",t); if (t=="") { open=0; next } } }
-        if (open && $0 ~ /^VERDICT: /) bad=1 }
-      END { print (open||bad) ? 1 : 0 }' <<< "$body")
-    nver=$(grep -c '^VERDICT: ' <<< "$body" || true)
-    # dispatch maps a first-line FAIL to sidecar warn, so warn accepts FAIL too.
-    want=; case "$sst" in pass) want="VERDICT: PASS";; warn) want="$last";; fail) want="VERDICT: FAIL";; esac
-    [ "$sst" != warn ] || case "$last" in "VERDICT: PASS WITH NOTES"|"VERDICT: FAIL") ;; *) want="VERDICT: PASS WITH NOTES";; esac
-    # A terminal block, when present, must carry the status that matches the body
-    # verdict (not the sidecar: dispatch records a first-line FAIL as warn).
-    bwant=; case "$last" in "VERDICT: PASS") bwant=pass;; "VERDICT: PASS WITH NOTES") bwant=warn;; "VERDICT: FAIL") bwant=fail;; esac
-    [ "$ndelim" -eq 0 ] || [ "${blkst:-}" = "$bwant" ] || tailok=0
-    if [ "$tailok" -ne 1 ] || [ "$nver" -ne 1 ] || [ "$fenced" -ne 0 ] || [ "$last" != "$want" ]; then
-      v="NONE (verdict line malformed, fenced, or disagrees with sidecar STATUS: $sst)"
-    elif [ "$sst" != fail ] && grep -q '^PROVISIONAL:' "$f.verdict" 2>/dev/null; then v="PROVISIONAL"; PROV=1
-    else v=${last#VERDICT: }
-    fi
+    pl=0; ! grep -q '^PROVISIONAL:' "$f.verdict" 2>/dev/null || pl=1
+    v=$(lens_verdict "$f" "$sst" "$pl")
+    [ "$v" != PROVISIONAL ] || PROV=1
   fi
   case "$v" in NONE*) RC=3;; esac
   VERD+=("$l: $v")
