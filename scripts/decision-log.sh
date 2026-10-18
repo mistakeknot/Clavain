@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Append one row to a show-me-your-work decision log (TSV).
+# Adapted from the log helper in pstack (MIT, Lauren Tan); see THIRD-PARTY-NOTICES.md.
 # Usage: decision-log.sh <logfile> <phase> <decision> <why> <evidence> <result>
 set -euo pipefail
 
@@ -16,17 +17,21 @@ clean() {
   cell=${cell//$'\r'/ }
   cell=${cell//$'\n'/ }
   case "$cell" in
-    [=+@-]*) cell="'$cell" ;;
+    [=+@\"-]*) cell="'$cell" ;;
   esac
   printf '%s' "$cell"
 }
 
-if [ ! -s "$log" ]; then
-  printf 'ts\tphase\tdecision\twhy\tevidence\tresult\n' >> "$log"
-fi
-
-printf '%s' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$log"
+row=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 for cell in "$@"; do
-  printf '\t%s' "$(clean "$cell")" >> "$log"
+  row+=$'\t'$(clean "$cell")
 done
-printf '\n' >> "$log"
+
+# One locked write for header and row, so concurrent callers cannot interleave.
+{
+  flock 9
+  if [ ! -s "$log" ]; then
+    printf 'ts\tphase\tdecision\twhy\tevidence\tresult\n'
+  fi
+  printf '%s\n' "$row"
+} 9>>"$log" >>"$log"

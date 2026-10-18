@@ -37,7 +37,7 @@ SOFTWARE.
 Source: https://github.com/cursor/plugins/tree/main/pstack (its folder carries
 the licence below; mirrored at https://github.com/backnotprop/pstack).
 
-Used in: `commands/blast-radius.md`, `commands/correct.md`,
+Used in: `commands/blast-radius.md`, `commands/correct.md`, `scripts/decision-log.sh`,
 `commands/show-me-your-work.md`.
 
 MIT License

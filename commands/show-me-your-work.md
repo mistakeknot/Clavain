@@ -79,8 +79,9 @@ resolves.
 ## Independent review of the trail
 
 Before handing back, have a reviewer outside the model that did the work read the
-trail and the transcript, through `/clavain:interserve` or packaged
-`scripts/dispatch.sh --role cross-lab-review`. It is a scan for what is
+trail and the transcript, through packaged
+`scripts/dispatch.sh --role cross-lab-review` with `--producer-identity` set to
+the model that did the work. It is a scan for what is
 suboptimal or risky, not a redo:
 
 - Decisions logged with weak or absent evidence.

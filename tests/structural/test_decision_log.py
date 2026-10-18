@@ -32,3 +32,23 @@ def test_wrong_argument_count_is_a_usage_error(project_root, tmp_path):
     result = run(project_root, tmp_path / "d.tsv", "only", "three")
     assert result.returncode == 2
     assert not (tmp_path / "d.tsv").exists()
+
+
+def test_quoted_formula_cells_and_concurrent_writers(project_root, tmp_path):
+    import csv
+    from concurrent.futures import ThreadPoolExecutor
+
+    log = tmp_path / "d.tsv"
+    assert run(project_root, log, "p", '"=1+1"', "w", "e", "r").returncode == 0
+    with open(log, newline="") as fh:
+        rows = list(csv.reader(fh, delimiter="\t"))
+    assert rows[1][2].startswith("'")
+
+    log2 = tmp_path / "c.tsv"
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        codes = list(pool.map(lambda i: run(project_root, log2, "p", f"d{i}", "w", "e", "r").returncode, range(60)))
+    assert set(codes) == {0}
+    lines = log2.read_text().splitlines()
+    assert len(lines) == 61
+    assert lines.count("ts\tphase\tdecision\twhy\tevidence\tresult") == 1
+    assert all(len(line.split("\t")) == 6 for line in lines)

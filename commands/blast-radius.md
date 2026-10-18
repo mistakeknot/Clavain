@@ -60,8 +60,8 @@ function you are worried about.
 5. **Prove the one fact.** Write a script or test that runs the real code, run
    it, and paste what happened.
 6. **For a big or wide change,** ask an independent reviewer the same question
-   through `/clavain:interserve` or packaged `scripts/dispatch.sh --role
-   cross-lab-review`, and merge the answers. Different models catch different
+   through packaged `scripts/dispatch.sh --role cross-lab-review` (with
+   `--producer-identity` set to your own model), and merge the answers. Different models catch different
    real bugs.
 
 ## What to hand back
