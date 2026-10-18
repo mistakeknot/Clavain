@@ -10,8 +10,8 @@ disable-model-invocation: true
 The operator keeps correcting agents in this repo for the same mistakes. Change
 the repo so the next agent can't make them.
 
-Adapted from the correct skill in pstack (MIT License, Copyright (c) 2026
-Lauren Tan, mirrored at backnotprop/pstack). `/clavain:compound` records a
+Adapted from the correct skill in pstack (cursor/plugins, MIT License,
+Copyright (c) 2026 Lauren Tan; see THIRD-PARTY-NOTICES.md). `/clavain:compound` records a
 lesson; this command removes the possibility of the mistake.
 
 Assume every contributor is an agent that sees only the files it opened, copies

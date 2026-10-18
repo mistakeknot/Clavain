@@ -10,8 +10,8 @@ disable-model-invocation: true
 Keep one decision log for work a human reviews after stepping away: autonomous
 runs, multi-phase efforts, anything long enough that the reviewer can't watch it.
 
-Adapted from the show-me-your-work skill in pstack (MIT License, Copyright (c)
-2026 Lauren Tan, mirrored at backnotprop/pstack).
+Adapted from the show-me-your-work skill in pstack (cursor/plugins, MIT License,
+Copyright (c) 2026 Lauren Tan; see THIRD-PARTY-NOTICES.md).
 
 Log: `$ARGUMENTS`, else `decisions.tsv` in the work dir.
 

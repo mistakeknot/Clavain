@@ -598,4 +598,4 @@ Named after one of the protagonists from Alastair Reynolds's [Revelation Space s
 
 ## License
 
-MIT
+MIT. Adapted third-party content and its licences are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

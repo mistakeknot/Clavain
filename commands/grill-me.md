@@ -12,7 +12,7 @@ you share one understanding of it. Nothing is built, planned or edited from
 here; a settled tree goes to `/clavain:strategy` or `/clavain:write-plan`.
 
 Adapted from the grilling, grill-me, grill-with-docs and domain-modeling skills
-in mattpocock/skills (MIT License, Copyright (c) 2026 Matt Pocock).
+in mattpocock/skills (MIT License, Copyright (c) 2026 Matt Pocock; see THIRD-PARTY-NOTICES.md).
 
 Target: `$ARGUMENTS`. With no argument, grill the plan or design in the
 conversation so far.

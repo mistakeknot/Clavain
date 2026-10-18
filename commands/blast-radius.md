@@ -10,8 +10,8 @@ disable-model-invocation: true
 Find what a change breaks somewhere else, before it ships. Use it for "blast
 radius of X", "what could this break", or a small diff you don't trust yet.
 
-Adapted from the blast-radius skill in pstack (MIT License, Copyright (c) 2026
-Lauren Tan, mirrored at backnotprop/pstack).
+Adapted from the blast-radius skill in pstack (cursor/plugins, MIT License,
+Copyright (c) 2026 Lauren Tan; see THIRD-PARTY-NOTICES.md).
 
 Listing the callers is not the job; grep does that in a second. The job is the
 breakage grep won't show you. `/clavain:verify` checks that the work does what
