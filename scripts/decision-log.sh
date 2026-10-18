@@ -27,11 +27,28 @@ for cell in "$@"; do
   row+=$'\t'$(clean "$cell")
 done
 
-# One locked write for header and row, so concurrent callers cannot interleave.
-{
-  flock 9
+append() {
   if [ ! -s "$log" ]; then
     printf 'ts\tphase\tdecision\twhy\tevidence\tresult\n'
   fi
   printf '%s\n' "$row"
-} 9>>"$log" >>"$log"
+}
+
+# One locked write for header and row, so concurrent callers cannot interleave.
+# flock is absent on macOS, so fall back to a mkdir lock there.
+if command -v flock >/dev/null 2>&1; then
+  { flock 9; append; } 9>>"$log" >>"$log"
+else
+  lockdir="$log.lock.d"
+  tries=0
+  until mkdir "$lockdir" 2>/dev/null; do
+    tries=$((tries + 1))
+    if [ "$tries" -gt 600 ]; then
+      echo "decision-log.sh: could not take $lockdir" >&2
+      exit 1
+    fi
+    sleep 0.05
+  done
+  trap 'rmdir "$lockdir"' EXIT
+  append >>"$log"
+fi
