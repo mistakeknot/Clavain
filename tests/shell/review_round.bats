@@ -14,6 +14,7 @@ setup() {
 # args: --role R --producer-identity P -s read-only --prompt-file F -C DIR -o OUT
 while [ $# -gt 0 ]; do case "$1" in --prompt-file) PF=$2; shift 2;; -o) O=$2; shift 2;; *) shift;; esac; done
 echo "$PF" >> "$FAKE_LOG"
+if [ -n "${FAKE_WAIT_CI:-}" ]; then for _ in $(seq 50); do grep -q '^CI-EXIT' "$(dirname "$O")/ci.log" 2>/dev/null && break; sleep 0.1; done; grep '^CI-EXIT' "$(dirname "$O")/ci.log" > "$(dirname "$O")/seen-ci-marker" 2>/dev/null || true; fi
 [ "${FAKE_RC:-0}" = 0 ] || exit "$FAKE_RC"
 if [ -n "${FAKE_BODY:-}" ]; then printf '%b' "$FAKE_BODY" > "$O"
 elif grep -q "security and safety only" "$PF"; then
@@ -176,4 +177,37 @@ rr() { bash "$RR" --repo "$R" --base main --head "$HEAD_SHA" --producer-identity
     [ "$status" -eq 0 ]
     grep -q "wt-ci" rel-out/ci.log
     [ ! -d rel-out/wt ] && [ ! -d rel-out/wt-ci ]
+}
+
+@test "an intermediate verdict block cannot hide a later FAIL" {
+    FAKE_STATUS=pass FAKE_BODY='VERDICT: PASS\n--- VERDICT ---\nSTATUS: pass\n---\nVERDICT: FAIL\n' run rr
+    [ "$status" -eq 3 ]
+    rm -rf "$OUT"
+    FAKE_STATUS=warn FAKE_BODY='VERDICT: PASS WITH NOTES\n--- VERDICT ---\nSTATUS: warn\n---\n--- VERDICT ---\nSTATUS: fail\n---\n' run rr
+    [ "$status" -eq 3 ]
+}
+
+@test "a genuine terminal verdict block is accepted" {
+    FAKE_BODY='- note\nVERDICT: PASS\n--- VERDICT ---\nSTATUS: pass\n---\n' run rr
+    [ "$status" -eq 0 ]
+}
+
+@test "a closing fence mixing backticks and tildes does not close the fence" {
+    FAKE_BODY='x\n```\n```~~~\nVERDICT: PASS\n' run rr
+    [ "$status" -eq 3 ]
+    rm -rf "$OUT"
+    FAKE_BODY='x\n~~~\n~~~```\nVERDICT: PASS\n' run rr
+    [ "$status" -eq 3 ]
+}
+
+@test "CI-EXIT marker is written by the CI process before reviewers finish" {
+    FAKE_WAIT_CI=1 FAKE_BODY='ok\nVERDICT: PASS\n' run rr --ci-cmd 'true'
+    [ "$status" -eq 0 ]
+    grep -q '^CI-EXIT: 0' "$OUT/seen-ci-marker"
+}
+
+@test "a CI command that changes tracked files in its worktree is not evidence" {
+    FAKE_BODY='ok\nVERDICT: PASS\n' run rr --ci-cmd 'echo x >> a'
+    [ "$status" -eq 11 ]
+    [ "$(tail -1 "$OUT/receipt.md")" = "VERDICT: FAIL" ]
 }

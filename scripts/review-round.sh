@@ -108,7 +108,7 @@ exact_head_wt || { echo "review-round: a gate command changed the worktree" >&2;
 CIPID=
 if [ -n "$CI" ]; then
   if [ "$DRY" = 1 ]; then echo "would start CI: $CI"; else
-    (cd "$CIWT" && bash -c "$CI") > "$OUT/ci.log" 2>&1 & CIPID=$!
+    ( (cd "$CIWT" && bash -c "$CI"); rc=$?; echo "CI-EXIT: $rc"; exit "$rc" ) > "$OUT/ci.log" 2>&1 & CIPID=$!
   fi
 fi
 CINOTE="Tests: you are read-only and cannot run them. "
@@ -162,21 +162,27 @@ for l in "${LENSES[@]}"; do
     # Body verdict: strip dispatch's trailing block, then the last non-blank line
     # must be the only line-start VERDICT, outside any code fence, and agree
     # with the sidecar status (pass=PASS, warn=PASS WITH NOTES, fail=FAIL).
-    body=$(awk '/^--- VERDICT ---\r?$/ {exit} {print}' "$f")
+    ndelim=$(grep -c '^--- VERDICT ---\r\?$' "$f" || true)
+    if [ "$ndelim" -eq 0 ]; then body=$(cat "$f"); tailok=1
+    elif [ "$ndelim" -eq 1 ]; then
+      body=$(awk '/^--- VERDICT ---\r?$/ {exit} {print}' "$f")
+      # Terminal block: only key lines, ending in '---', nothing after it.
+      tailok=$(awk 'f&&NF{n++; last=$0; if ($0 !~ /^(STATUS|FILES|FINDINGS|SUMMARY|PROVISIONAL|---)/) bad=1} /^--- VERDICT ---\r?$/{f=1} END{print (!bad && last ~ /^---[ \t\r]*$/) ? 1 : 0}' "$f")
+    else body=$(cat "$f"); tailok=0; fi
     last=$(grep -v '^[[:space:]]*$' <<< "$body" | tail -1 || true)
     # Markdown fence state (backtick or tilde, closing fence at least as long):
     # the verdict line must sit outside every fence and no fence may stay open.
     fenced=$(awk '
       { if (match($0,/^ {0,3}(`{3,}|~{3,})/)) { m=substr($0,RSTART,RLENGTH); gsub(/ /,"",m); c=substr(m,1,1); n=length(m)
           if (!open) { open=1; fc=c; fl=n; next }
-          else if (c==fc && n>=fl && $0 ~ /^ {0,3}[`~]+[ \t]*$/) { open=0; next } }
+          else if (c==fc && n>=fl) { t=$0; sub(/^ {0,3}/,"",t); sub(/[ \t\r]*$/,"",t); gsub(c,"",t); if (t=="") { open=0; next } } }
         if (open && $0 ~ /^VERDICT: /) bad=1 }
       END { print (open||bad) ? 1 : 0 }' <<< "$body")
     nver=$(grep -c '^VERDICT: ' <<< "$body" || true)
     # dispatch maps a first-line FAIL to sidecar warn, so warn accepts FAIL too.
     want=; case "$sst" in pass) want="VERDICT: PASS";; warn) want="$last";; fail) want="VERDICT: FAIL";; esac
     [ "$sst" != warn ] || case "$last" in "VERDICT: PASS WITH NOTES"|"VERDICT: FAIL") ;; *) want="VERDICT: PASS WITH NOTES";; esac
-    if [ "$nver" -ne 1 ] || [ "$fenced" -ne 0 ] || [ "$last" != "$want" ]; then
+    if [ "$tailok" -ne 1 ] || [ "$nver" -ne 1 ] || [ "$fenced" -ne 0 ] || [ "$last" != "$want" ]; then
       v="NONE (verdict line malformed, fenced, or disagrees with sidecar STATUS: $sst)"
     elif [ "$sst" != fail ] && grep -q '^PROVISIONAL:' "$f.verdict" 2>/dev/null; then v="PROVISIONAL"; PROV=1
     else v=${last#VERDICT: }
@@ -188,10 +194,11 @@ done
 CIRC=0
 if [ -n "$CIPID" ]; then
   wait "$CIPID" || CIRC=$?
-  echo "CI-EXIT: $CIRC" >> "$OUT/ci.log"
   [ "$CIRC" -eq 0 ] || RC=4
 fi
 [ "$RC" -ne 0 ] || [ "$PROV" -eq 0 ] || RC=5
+ci_wt_ok() { [ -z "$CIPID" ] || { [ "$(git -C "$CIWT" rev-parse HEAD)" = "$HEAD" ] && [ -z "$(git -C "$CIWT" status --porcelain --untracked-files=no)" ]; }; }
+ci_wt_ok || { echo "review-round: CI changed its worktree; its result is not evidence for $HEAD" >&2; RC=11; }
 exact_head_wt || { echo "review-round: worktree changed during the round; evidence is not at $HEAD" >&2; RC=11; }
 
 # Merge: one receipt; findings de-duplicated by normalised text; overall verdict
