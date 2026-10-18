@@ -38,7 +38,7 @@
 # clean; otherwise FAIL, NONE or PROVISIONAL, and the exit code is non-zero
 # unless the verdict is a genuine FAIL from a reviewer (exit 0, receipt FAIL).
 set -euo pipefail
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"   # keep the caller's PATH: dispatch needs ic
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DISPATCH="${REVIEW_ROUND_DISPATCH:-$HERE/dispatch.sh}"
 
