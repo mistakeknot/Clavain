@@ -52,3 +52,30 @@ def test_quoted_formula_cells_and_concurrent_writers(project_root, tmp_path):
     assert len(lines) == 61
     assert lines.count("ts\tphase\tdecision\twhy\tevidence\tresult") == 1
     assert all(len(line.split("\t")) == 6 for line in lines)
+
+
+def test_mkdir_lock_fallback_without_flock(project_root, tmp_path):
+    import os
+    import shutil
+    from concurrent.futures import ThreadPoolExecutor
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for tool in ("bash", "date", "sleep", "mkdir", "rmdir"):
+        os.symlink(shutil.which(tool), bin_dir / tool)
+    log = tmp_path / "f.tsv"
+
+    def call(i):
+        return subprocess.run(
+            [str(bin_dir / "bash"), str(project_root / "scripts" / "decision-log.sh"),
+             str(log), "p", f"d{i}", "w", "e", "r"],
+            capture_output=True, text=True, timeout=60, env={"PATH": str(bin_dir)},
+        ).returncode
+
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        codes = list(pool.map(call, range(30)))
+    assert set(codes) == {0}
+    lines = log.read_text().splitlines()
+    assert len(lines) == 31
+    assert all(len(line.split("\t")) == 6 for line in lines)
+    assert not (tmp_path / "f.tsv.lock.d").exists()
