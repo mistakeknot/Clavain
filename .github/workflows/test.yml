@@ -41,7 +41,7 @@ jobs:
           ref: ede848c682f0e7e8a3787169b944d8f73229e6dc
           path: interverse/interstat
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
