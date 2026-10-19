@@ -30,12 +30,12 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: os/Clavain
 
       - name: Check out the verified task profiler dependency
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: mistakeknot/interstat
           ref: ede848c682f0e7e8a3787169b944d8f73229e6dc
@@ -104,7 +104,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Smoke tests via Claude Code
         if: env.HAS_KEY == 'true'
