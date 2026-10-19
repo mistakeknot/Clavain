@@ -196,6 +196,19 @@ with the balanced three-round profile; use to-dry only when the user asks.
 Fold findings back into Key Decisions / Open Questions before handoff and cite
 the review artifact in the doc.
 
+**Breadth before convergence (mk-eef5l).** A design decision that will go
+through repeated cross-lab review rounds before sign-off (a decision record,
+a foundational design or data-model commitment, anything hard to reverse)
+gets one breadth review when its first complete draft exists, before the
+first cross-lab round: `/interflux:flux-review <doc>`, or
+`/interflux:flux-melange` instead when the decision is foundational or hard to
+reverse. Fold its findings and cite its synthesis in the doc, then run
+cross-lab rounds to convergence. Do not repeat the breadth review per
+revision; rerun it only when a cross-lab round overturns the decision's
+premise. Cross-lab rounds converge inside the draft's own framing; the breadth
+pass is what tests that framing. Routine design edits keep the flux-drive
+default or no review.
+
 ### Phase 3b: Record Phase (Reflect + Compound)
 
 Record the brainstorm artifact and advance the phase state machine. This is the OODARC Reflect+Compound step — it writes the outcome back into the system so the sprint orchestrator can route correctly.

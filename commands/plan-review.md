@@ -12,7 +12,7 @@ This command is the **Validate** leg of the OODARC loop — a decision gate that
 ```
 plan-review (OODARC: Validate — decision gate):
 - [ ] Gauge lint (BLOCKING): plan-gauge-lint.py <plan> --repo-root <repo>
-- [ ] Route: /flux-drive (DEFAULT) vs /flux-melange (high-stakes only)
+- [ ] Route: /flux-drive (DEFAULT) vs /flux-melange (high-stakes only); first draft of a multi-round decision: one /flux-review before cross-lab rounds (mk-eef5l)
 - [ ] Dispatch the selected review pool (or the fallback trio when interflux is unavailable)
 - [ ] Collect every selected verdict
 - [ ] Synthesize into a unified, prioritized review

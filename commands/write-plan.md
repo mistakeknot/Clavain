@@ -66,3 +66,10 @@ asks. Bounded research gets one careful pass or `/interflux:flux-review`. Fold
 findings into the plan before dispatching executors; if the Acceptance Criteria
 change, re-seal explicitly with `CLAVAIN_RESEAL=1`. When interflux is unavailable,
 use the `/clavain:plan-review` fixed trio.
+
+**Breadth before convergence (mk-eef5l):** a plan or decision record that
+will go through repeated cross-lab review rounds gets one breadth review
+(`/interflux:flux-review`, or flux-melange when foundational) at its first
+complete draft, before the first cross-lab round; not per revision. Rerun it
+only when a cross-lab round overturns the premise. See the same rule in
+`/clavain:brainstorm`.
