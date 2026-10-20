@@ -15,7 +15,7 @@ fail() {
   exit 1
 }
 
-# mk ruled 2026-09-27: every coordinator seat resolves the fleet
+# the owner ruled 2026-09-27: every coordinator seat resolves the fleet
 # default, coordinator-seat-sonnet. The former nine-Opus/six-Sonnet split is
 # gone; all fifteen table slugs are equivalent for coordinator-seat purposes.
 ALL_SLUGS=(aleph clavain autarch after-them bbops shadow-work quilan sylvesteops nartopo autosigil rakes uncrancher cujgel agmodb linsenkasten)

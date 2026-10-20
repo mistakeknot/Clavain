@@ -282,7 +282,7 @@ jq -e '.profile_ref == "main-astra"
   "$work/floor-real-policy.json" >/dev/null \
   || { echo 'FAIL: real-policy main-integrator chain did not exclude pilot-opus via unsupported_adapter'; exit 1; }
 
-# mk ruling 2026-09-27 (effort-floor conflict, option 3): pilot-opus
+# owner ruling 2026-09-27 (effort-floor conflict, option 3): pilot-opus
 # (backend: main) is correctly excluded via unsupported_adapter under a
 # floored reason, but that must not leave main-integrator with zero eligible
 # seats when Codex is ALSO exhausted -- main-opus (backend: claude,

@@ -59,7 +59,7 @@ _source_sprint_lib() {
 }
 
 # Assert the production lock contract every sprint_claim path must honour
-#. The mocks log rather than silently returning 0, so these
+# The mocks log rather than silently returning 0, so these
 # tests now prove the lock is taken with the right name/scope/timeout and
 # released exactly once -- which is what makes deleting the old global
 # /tmp cleanup safe rather than merely convenient.

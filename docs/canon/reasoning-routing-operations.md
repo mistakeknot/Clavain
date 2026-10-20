@@ -65,8 +65,7 @@ chain are unaffected: Intercore dedupes an already-visited profile_ref, so the
 new edge cannot reintroduce a seat the walk already excluded or already used.
 Distinct profile_refs can still name one seat (`crosslab-opus` and
 `validation-opus` are both Opus 5.5), so the dispatch walk also skips a
-candidate whose backend and model already failed on capacity in the same walk
-.
+candidate whose backend and model already failed on capacity in the same walk.
 
 Frontier authoring — `planning`, `frontier-planning`, `escalation` — runs
 `planning-astra`, then `planning-opus` (mk ruling 2026-09-18; the Fable seat
@@ -108,7 +107,7 @@ error event as `quota_exhausted`; a `rate_limit` without it stays terminal.
 `tests/routing/plan-review-capacity-test.sh` drives the real dispatch walk in both
 directions, and the case where every non-producer seat is out still blocks.
 
-**Opus 5.5 replaces Fable 5.1.** mk ruled on 2026-09-25 that Opus 5.5
+**Opus 5.5 replaces Fable 5.1.** the owner ruled on 2026-09-25 that Opus 5.5
 outperforms Fable 5.1 and takes every Fable and Opus 5 seat. Fable is removed from
 routing entirely. `plan-review` now has two frontier seats, Opus 5.5 then Astra,
 so each reviews the other's plans. An Opus-authored plan with Astra out therefore
@@ -126,7 +125,7 @@ A pooled Codex lane whose own retries ran out (`exceeded retry limit, last
 status: 429`) now classifies as `rate_limited` rather than `terminal_error`. An
 exhausted-retries 429 is capacity, not a reason to keep hammering the same
 model: it gets the identical single account-pool retry `quota_exhausted` gets,
-then walks to the profile's declared fallback (mk ruling 2026-09-25;
+then walks to the profile's declared fallback (owner ruling 2026-09-25;
 `tests/routing/role-dispatch-test.sh`).
 
 Reviewer separation is not part of that degradation. It is enforced structurally,

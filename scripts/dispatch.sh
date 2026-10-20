@@ -3373,7 +3373,7 @@ _detect_codex_error() {
     # is direct evidence. When the counters say "nothing happened" but real
     # output exists, the parser is what's broken, not the run — firing warn
     # here overwrote a genuine STATUS: pass and struck out a clean task
-    # (uncrancher run 61c1faeb, 2026-08-17). Direct evidence wins;
+    # (run 61c1faeb, 2026-08-17). Direct evidence wins;
     # the disagreement is logged, not enthroned as a verdict.
     if [[ -z "$kind" && -f "$state_file" ]] && command -v jq >/dev/null 2>&1; then
         local turns msgs cmds
