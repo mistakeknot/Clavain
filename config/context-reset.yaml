@@ -1,4 +1,4 @@
-# context-reset.yaml — observe-mode context-reset hygiene telemetry (mk-42j9.40).
+# context-reset.yaml — observe-mode context-reset hygiene telemetry.
 #
 # THIS IS NOT A SECURITY BOUNDARY. The hooks that read this file only record
 # what a context-reset rule *would* have done. Every verdict is "allow":

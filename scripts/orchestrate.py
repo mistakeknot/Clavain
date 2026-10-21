@@ -1085,7 +1085,7 @@ def dispatch_task(
             )
         else:
             # Own process group: a timeout kills the group, not just
-            # dispatch.sh, so its codex/claude grandchild dies too (mk-kj2m).
+            # dispatch.sh, so its codex/claude grandchild dies too.
             returncode, timed_out, out, err = run_in_group(
                 cmd, env=env, timeout=manifest.timeout_per_task,
             )
@@ -1113,7 +1113,7 @@ def dispatch_task(
     note: str | None = None
     # A file that exists but is empty is not output: dispatch.sh pre-creates
     # output.md through tee on the claude and kimi engines, so an existence
-    # check reads a silent timeout as output movement (mk-9hqr).
+    # check reads a silent timeout as output movement.
     fresh_output = os.path.exists(output_path) and os.path.getsize(output_path) > 0
     fresh_verdict = (
         os.path.exists(verdict_path)
@@ -1387,7 +1387,7 @@ def _install_push_guards(
         hook.write_text(
             "#!/bin/sh\n"
             f"# {GUARD_MARKER} run={run_id}\n"
-            "# Executor agents must not push; the orchestrator owns pushes (Sylveste-e9y).\n"
+            "# Executor agents must not push; the orchestrator owns pushes.\n"
             'if [ -n "$ORC_PUSH_GUARD_BYPASS" ]; then exit 0; fi\n'
             f'echo "push-attempt $(date -u +%Y-%m-%dT%H:%M:%SZ) repo=$(pwd)" >> {shlex.quote(os.path.join(run_dir, "push-attempts.log"))}\n'
             f'echo "ERROR: git push blocked by clavain orchestrate run {run_id}'
@@ -1476,7 +1476,7 @@ def orchestrate(
     prior run's journal.jsonl identifies terminal-complete tasks, which are
     skipped with their dependency edges treated as satisfied; everything
     else re-dispatches into the SAME run dir (goal e453fc6a)."""
-    # Live progress even when stdout is a redirected file (Sylveste-e9y).
+    # Live progress even when stdout is a redirected file.
     try:
         sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
     except (AttributeError, OSError):
@@ -1703,7 +1703,7 @@ def orchestrate(
                         # Propagate failure for static modes too
                         _propagate_failure(tid, graph, completed)
     finally:
-        # Artifacts in run_dir persist deliberately (Sylveste-e9y) — only the
+        # Artifacts in run_dir persist deliberately — only the
         # push guards and (on clean runs) the tmux session are torn down.
         _remove_push_guards(guards)
         if journal_path:
@@ -1911,7 +1911,7 @@ def _print_summary(
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# Process-group dispatch (mk-kj2m)
+# Process-group dispatch
 #
 # subprocess.run(timeout=...) kills only the direct child. dispatch.sh is a
 # wrapper, and on uncrancher run 57651f7d its codex grandchild survived the

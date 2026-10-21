@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# route-spawn.sh acceptance suite (mk-42j9.25 Phase 2a Task 2; project-profile
+# route-spawn.sh acceptance suite (Phase 2a Task 2; project-profile
 # resolution updated for mk-h73i, which emptied reasoning.project_profiles).
 # Real Intercore resolver against the packaged policy, fake `bb` for the pool
 # probe. No model calls and no thread spawns.
@@ -184,7 +184,7 @@ jq -e '.arm == null and .route.requested_role == "validation" and .producer_iden
 # A synthetic fixture re-adding a coordinator-seat override for "clavain"
 # only, so the campaign/context-scope-conflict paths that depend on a live
 # project profile stay covered even though the packaged policy's
-# project_profiles is now empty (mk-h73i).
+# project_profiles is now empty.
 python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT/clavainprofile.yaml" <<'CLAVAINPROFILE'
 import sys, yaml
 cfg = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
@@ -230,7 +230,7 @@ expect 3 "" "unparseable policy"
 # unreachable pool leaves fallbacks unevaluated but still resolves. Uses lane
 # (Opus 5.5 via lane-status-quo, same fallback shape as the retired
 # coordinator-seat-opus) since coordinator-seat now defaults to Sonnet for
-# every project (mk-h73i) and this section exercises Opus-headed fallback.
+# every project and this section exercises Opus-headed fallback.
 RC=0; OUT="$(FAKE_POOL=claude-down bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$ASTRA" "lane with the Claude pool exhausted"
 jq -e '.fallbacks_evaluated == true and (.available_models | index("claude-opus-5-5") | not) and (.available_models | index("gpt-6-astra"))' <<< "$(latest_receipt)" >/dev/null \
@@ -244,7 +244,7 @@ jq -e '.policy_hash == .route.policy_hash and (.policy_hash | length == 64) and 
   || fail "receipt must carry policy hash, spawn tuple, role and profile source"
 
 
-# --- Review round 1 (mk-42j9.25 Phase 2a) regressions.
+# --- Review round 1 (Phase 2a) regressions.
 # Option values that look like flags, and unreadable contexts, are usage errors.
 run --role lane --lineage -x
 expect 2 "" "option value starting with a dash"

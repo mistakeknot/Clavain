@@ -44,7 +44,7 @@ ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation 
   --producer-identity=gpt-6-astra --context-file="$work/routine.json" > "$work/codex-review.json"
 jq -e '.profile.model == "claude-opus-5-5" and .cross_lab_reorder == null' "$work/codex-review.json" >/dev/null ||
   { echo 'FAIL: Codex-produced code review order changed'; exit 1; }
-# Opus 5.5 is the packaged plan reviewer (mk-3b8z): a distinct frontier model
+# Opus 5.5 is the packaged plan reviewer: a distinct frontier model
 # for Astra-authored plans, never a downgrade.
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=plan-review \
   --producer-identity=gpt-6-astra --context-file="$work/context.json" > "$work/astra-plan-route.json"
@@ -146,7 +146,7 @@ grep -q 'policy changed after resolution' "$work/drift.log"
 # mk-42j9.28: a minimum reasoning effort applies after fallback expansion to
 # EVERY candidate a role resolves to, not just the primary, and never
 # invents an effort level a backend can't run. See config/routing.yaml
-# dispatch.effort_floors and docs/research/2026-09-27-effort-per-role-validation.md.
+# dispatch.effort_floors.
 
 # A medium-configured fallback candidate under a floored reason is raised,
 # and the raise is receipted with its from/to and the reason that fired.
@@ -231,7 +231,7 @@ jq -e '(.excluded[]? | select(.profile_ref == "pilot-opus") | .reason) == "unsup
 # targets only the resolved primary. It can genuinely lower that candidate's
 # effort, but the floor is applied AFTER the override, so a floored reason
 # still wins: final_effort reflects the floor, never the requested value
-# (mk-42j9.30 -- experiment-only, can never go below effort_floors).
+# (-- experiment-only, can never go below effort_floors).
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=cross-lab-review \
   --producer-identity=claude-opus-5-5 --context-file="$work/context.json" --effort-override=low \
   > "$work/override-below-floor.json"
@@ -282,7 +282,7 @@ jq -e '.profile_ref == "main-astra"
   "$work/floor-real-policy.json" >/dev/null \
   || { echo 'FAIL: real-policy main-integrator chain did not exclude pilot-opus via unsupported_adapter'; exit 1; }
 
-# mk ruling 2026-09-27 (mk-42j9.28 effort-floor conflict, option 3): pilot-opus
+# owner ruling 2026-09-27 (effort-floor conflict, option 3): pilot-opus
 # (backend: main) is correctly excluded via unsupported_adapter under a
 # floored reason, but that must not leave main-integrator with zero eligible
 # seats when Codex is ALSO exhausted -- main-opus (backend: claude,

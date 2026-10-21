@@ -134,6 +134,6 @@ App. Only the former generator/parity and routing-audit workflows are disabled;
 all other protection fields and workflow states are preserved. See the
 [authenticated publication and cutover evidence](https://github.com/mistakeknot/ops/blob/main/ci/fleet/evidence/2026-09-09-app-publication-canary.json).
 
-Full CI migration remains outstanding under `mk-ag2s.209` and `mk-ag2s.78` for
+Full CI migration remains outstanding for
 other workflow classes. Remaining host model verification and remote
 installation are not implied by these execution receipts.

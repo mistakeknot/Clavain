@@ -7,7 +7,7 @@
 #   - bead-closed + CLAVAIN_SELF_DISPATCH=true → self-dispatch (autonomous bead pickup)
 #   - weight >= 3 → trigger /interwatch:watch (doc drift check)
 #
-# Merged from auto-compound.sh + auto-drift-check.sh (iv-rn81).
+# Merged from auto-compound.sh + auto-drift-check.sh.
 # Self-dispatch tier added in ysxe.3 (2026-03-20): merged here per flux-drive
 # review to avoid sentinel conflict with separate hook file.
 # Goal-cadence tier (structural "MUST end with a Next goal block" demand,
@@ -35,7 +35,7 @@ if ! command -v jq &>/dev/null; then
     exit 0
 fi
 
-# Headless guard (Sylveste-364): a decision:"block" in a `claude -p` run is
+# Headless guard: a decision:"block" in a `claude -p` run is
 # fed back as a prompt turn and REPLACES the caller's reply — never inject
 # into non-interactive sessions.
 source "${BASH_SOURCE[0]%/*}/lib-headless.sh" 2>/dev/null || true
@@ -251,7 +251,7 @@ if [[ -z "$REASON" ]]; then
     exit 0
 fi
 
-# Loop breaker (mk-ax8): if this exact demand already fired and no commits
+# Loop breaker: if this exact demand already fired and no commits
 # or file changes happened since, the session is blocked on a human gate —
 # emit one BLOCKED message, then go silent for the session instead of
 # re-demanding forever. Progress (new commit / changed worktree) resets it.

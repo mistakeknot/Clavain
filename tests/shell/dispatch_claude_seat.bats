@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # The validation seat (dispatch.sh --to claude, what --role validation resolves
 # to) must be able to execute the plan's Verification, read the plan wherever
-# it lives, and never mutate the checkout (Sylveste-soj7). Dry-run tests assert
+# it lives, and never mutate the checkout. Dry-run tests assert
 # on the assembled command; the run tests put a fake `claude` on PATH.
 
 setup() {

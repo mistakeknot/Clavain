@@ -192,7 +192,7 @@ Lightweight review from `git diff` — faster than flux-drive, suitable for incr
 
 ## 8. Roadmap
 
-> Full detail in [`docs/roadmap.md`](roadmap.md) and [`docs/vision.md`](vision.md).
+> Full detail in [`docs/vision.md`](vision.md).
 
 Three parallel tracks converge toward autonomous self-building sprints:
 

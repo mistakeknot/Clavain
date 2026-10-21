@@ -14,7 +14,7 @@ MANIFEST="$REPO_ROOT/bin/release-manifest.json"
 #                        the artifacts.
 #
 # Collapsing these told operators "release artifacts are stale" on machines that
-# had simply never been able to check (mk-cg3z). Exit 3 is the reserved code
+# had simply never been able to check. Exit 3 is the reserved code
 # intercore's internal/publish/release.go maps to ErrReleaseVerifierUnavailable;
 # keep the two in step if either moves.
 die() {
@@ -101,7 +101,7 @@ git -C "$intercore_root" cat-file -e "${intercore_revision}^{commit}" 2>/dev/nul
 
 # zklw autosync auto-commits into the linked Intercore checkout on its own
 # schedule, including docs-only and internal/-only commits that no Clavain
-# binary imports. Requiring HEAD == intercore_revision (mk-y5de, 2026-09-25)
+# binary imports. Requiring HEAD == intercore_revision (2026-09-25)
 # meant every such commit re-broke Clavain publication even though the
 # binaries embed a build tag pinning the exact revision (checked below) and
 # nothing they actually import had changed. Fall through to a content check

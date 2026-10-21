@@ -82,7 +82,7 @@ if command -v sqlite3 &>/dev/null && [ -f "$_db" ]; then
   sqlite3 "$_db" "INSERT INTO evidence (ts,session_id,seq,source,event,override_reason,context,project) VALUES ('$_ts','$_session',$_seq,'codex-delegate','delegation_outcome','','$_ctx','$_project');" 2>/dev/null || true
 fi
 ```
-Skip silently if DB missing. This writes to the **existing** interspect `evidence` table (no new store — sylveste-104h); `oodarc_phase` is just an added field in the context JSON.
+Skip silently if DB missing. This writes to the **existing** interspect `evidence` table (no new store); `oodarc_phase` is just an added field in the context JSON.
 
 **6. Return** tier used, verdict, key output, whether retry was needed.
 

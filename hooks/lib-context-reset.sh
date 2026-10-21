@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# lib-context-reset.sh — observe-mode context-reset hygiene telemetry (mk-42j9.40).
+# lib-context-reset.sh — observe-mode context-reset hygiene telemetry.
 #
 # NOT A SECURITY BOUNDARY. This library detects when a context epoch has read
 # untrusted content (web, remote commands, MCP, browser) and when an
@@ -892,7 +892,7 @@ cr_classify() {
         mcp__*) _cr_classify_mcp ;;
         Skill) _cr_classify_skill ;;
         # A child agent's result may carry content it read; which content is not
-        # known without origin tagging (mk-42j9.42), so it counts as unknown.
+        # known without origin tagging, so it counts as unknown.
         Task|Agent) CR_EXPOSURE_CLASS=subagent-result ;;
     esac
     return 0

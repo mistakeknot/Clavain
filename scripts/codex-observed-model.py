@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Observed model/effort for a finished `codex exec --json` run (mk-28gt).
+"""Observed model/effort for a finished `codex exec --json` run.
 
 Codex's --json stream has no model field, so a receipt built from dispatch's own
 arguments holds only the *requested* model. Codex does write the model it ran to

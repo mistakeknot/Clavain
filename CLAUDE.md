@@ -10,7 +10,7 @@ Autonomous software agency — orchestrates the full development lifecycle from 
 
 ```bash
 # Test locally
-claude --plugin-dir /home/mk/projects/Sylveste/os/Clavain
+claude --plugin-dir /path/to/Clavain
 
 # Validate structure
 ls skills/*/SKILL.md | wc -l          # Should be 20
@@ -27,7 +27,7 @@ All work tracking goes through the project's single tracker: beads (`bd create`)
 
 ## Telemetry
 
-- `~/.clavain/peer-telemetry.jsonl` — one record per session with detected peer rigs (superpowers, GSD, compound-engineering). Opt out via `CLAVAIN_PEER_TELEMETRY=0` env or `telemetry.peers: false` in `~/.clavain/config.json`. Used to gate B′/C′ scope expansion (sylveste-fj1w / sylveste-yofd).
+- `~/.clavain/peer-telemetry.jsonl` — one record per session with detected peer rigs (superpowers, GSD, compound-engineering). Opt out via `CLAVAIN_PEER_TELEMETRY=0` env or `telemetry.peers: false` in `~/.clavain/config.json`. Used to gate B′/C′ scope expansion (sylveste-yofd).
 
 ## Design Decisions (Do Not Re-Ask)
 

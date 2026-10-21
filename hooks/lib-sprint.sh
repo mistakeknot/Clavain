@@ -1095,7 +1095,7 @@ enforce_gate() {
     [[ "$gate_mode" == "off" ]] && return 0
 
     # Map the target phase to a stage up front so the no-run-id path below can
-    # decide its fail DIRECTION by safety class (sylveste-scx1).
+    # decide its fail DIRECTION by safety class.
     local stage
     stage=$(_sprint_phase_to_stage "$target_phase")
 
@@ -1111,7 +1111,7 @@ enforce_gate() {
     local run_id
     run_id=$(_sprint_resolve_run_id "$bead_id") || {
         # No ic run for this bead. Fail DIRECTION depends on stage safety class
-        # (sylveste-scx1: degraded-modes as an active breaker). Safety stages
+        # (degraded-modes as an active breaker). Safety stages
         # fail CLOSED — a missing kernel run means we cannot prove review/tests
         # ran, so block rather than wave code through. The escape hatch is an
         # explicit, logged CLAVAIN_SKIP_GATE=<reason>. Non-safety stages stay

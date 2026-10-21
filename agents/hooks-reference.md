@@ -47,7 +47,7 @@ Sourced by hook scripts, not registered as hooks themselves:
 | `lib-discovery.sh` | Plugin discovery shim — delegates to interphase when installed, no-op stub otherwise |
 | `lib-context-reset.sh` | Observe-mode context-reset telemetry: exposure/approval classification, epoch state, row emission (NOT a security boundary) |
 
-### Observe-mode context-reset telemetry (mk-42j9.40) — NOT a security boundary
+### Observe-mode context-reset telemetry — NOT a security boundary
 
 The context-reset hooks measure how often a "reset context before an
 approval-gated action once the session has read untrusted content" rule would
@@ -73,7 +73,7 @@ fire, and what it would cost. They are hygiene telemetry only:
   `CLAVAIN_CONTEXT_RESET_CONFIG`). Only `mode: observe` and `mode: off` exist.
   If `approval` or `full` is configured, the hooks log an error at SessionStart,
   record nothing and never block. Enforcement needs origin tagging and
-  attestation, which are deferred to mk-42j9.42.
+  attestation, which are deferred to a later change.
 - **Rollback:** set `mode: off` in the config, or export
   `CLAVAIN_CONTEXT_RESET_MODE=off`.
 - `CLAVAIN_DISPATCH_ROLE` labels rows by role (default `interactive`).
@@ -85,7 +85,7 @@ fire, and what it would cost. They are hygiene telemetry only:
   counted as clean.
 - A `Task`/`Agent` result in the parent is recorded as `unknown` exposure
   (`source_class: subagent-result`), because which content the child read is
-  not known without origin tagging (mk-42j9.42).
+  not known without origin tagging.
 - `scripts/context-reset-report.sh [--json]` summarises the store:
   - exposure epochs and research batches;
   - would-be resets, exposed/unknown vs clean;

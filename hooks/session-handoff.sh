@@ -53,7 +53,7 @@ intercore_check_or_die "handoff" "$SESSION_ID" 0
 source "${BASH_SOURCE[0]%/*}/lib.sh" 2>/dev/null || true
 _write_inflight_manifest "$SESSION_ID" 2>/dev/null || true
 
-# Auto-close shipped-but-unclosed beads claimed by this session (sylveste-060).
+# Auto-close shipped-but-unclosed beads claimed by this session.
 # Runs BEFORE signal check so closed beads don't trigger false "in-progress" signals.
 _close_script="${BASH_SOURCE[0]%/*}/../scripts/bead-close-shipped.sh"
 if [[ -x "$_close_script" ]]; then

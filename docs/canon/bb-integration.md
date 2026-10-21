@@ -110,8 +110,7 @@ Direct pooling uses the installed BB provider's corrected mechanism: Codex
 responses endpoint `/api/v1/plugins/account-pool/http/v1`, an explicit
 `bb-account-pool` provider configuration, and an environment-sourced
 `x-bb-account-pool-token` header from `CODEX_POOL_AUTH_TOKEN`. No nested-server
-parent token (`BB_ACCOUNT_POOL_PARENT_TOKEN`) is reused. See [the spike
-evidence](../research/bb-direct-pool-spike.md).
+parent token (`BB_ACCOUNT_POOL_PARENT_TOKEN`) is reused.
 Codex pooling is enabled by default after the successful hub-correlated spike.
 Before a cross-provider attempt, dispatch asks BB's authenticated thread-scoped
 availability endpoint for the target provider. BB uses the same routing, parent
@@ -144,7 +143,7 @@ the child drops that stale route and uses its own provider login.
   boundary, because the borrowed bearer is one the process already holds. When
   pool-shaped variables are present but enrollment cannot be verified, dispatch
   stops with `terminal_configuration` instead of trying an unrelated login.
-- Raw provider captures are tracked separately (sylveste-2tpo).
+- Raw provider captures are tracked separately.
 
 Quota classification consumes structured provider errors, never quoted task
 text. Permission, configuration, policy or unclear acceptance is terminal and
@@ -242,7 +241,7 @@ The adapter must report missing model/effort/permission evidence rather than
 copying requested settings into observed fields. The scratch seat completed,
 exported and archived, but the installed BB schema supplies no model/effort/
 permission attestation, so acceptance remains blocked. BB provider retries also
-lack a supported per-seat disable control. See [the canary](../research/bb-seat-canary.md).
+lack a supported per-seat disable control.
 Independent review and unresolved parity cells remain acceptance gates. The
 coordinator corrected the reviewer to governed Fable because Astra produced this
 implementation; an additional Astra review cannot establish independence.

@@ -538,8 +538,8 @@ for serving_root in "${SERVING_SCAN[@]+"${SERVING_SCAN[@]}"}"; do
 done
 
 # Deduplicate by the database bd actually resolves to, not by the directory we
-# found a .beads/ in. /Users/sma/projects has a .beads/ directory but bd
-# resolves past it to /Users/sma/.beads (prefix mk), so walking up from a
+# found a .beads/ in. ~/projects has a .beads/ directory but bd
+# resolves past it to ~/.beads, so walking up from a
 # Sylveste subproject yields three directories over two real trackers. Keying
 # on the path would report a breadth of coverage that does not exist.
 resolve_tracker() {

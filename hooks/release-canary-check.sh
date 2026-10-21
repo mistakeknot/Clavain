@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# SessionStart hook: release canary check (sylveste-ao0q)
+# SessionStart hook: release canary check
 #
 # `ic publish` registers a pending release canary per publish
 # (~/.clavain/release-canaries.json). This hook verifies each pending canary
 # against THIS session's actual plugin resolution surface: the
 # installed_plugins.json installPath must exist and its plugin.json must
 # parse — exactly the surface that fails silently when a publish breaks the
-# install (Sylveste-0lt: cache dir deleted, every command gone, no signal).
+# install (cache dir deleted, every command gone, no signal).
 #
 # Passed  → canary marked passed, no output.
 # Failed  → canary marked failed + loud systemMessage carrying the

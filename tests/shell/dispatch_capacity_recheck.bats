@@ -129,7 +129,7 @@ _answer_with_section() {
 
 # --- mk-c66x: '*' and numbered list items are recognized, not dropped -----
 
-@test "recheck: '*' bullet items are recognized, not fabricated (mk-c66x)" {
+@test "recheck: '*' bullet items are recognized, not fabricated" {
     _load
     _fake_bd
     _answer_with_section $'* confirmed the migration script runs without executing it\n* unsure whether the fallback order still matches routing.yaml'
@@ -140,7 +140,7 @@ _answer_with_section() {
     grep -q "unsure whether the fallback order" "${OUTPUT}.recheck.md"
 }
 
-@test "recheck: numbered '1.'/'2)' items are recognized, not fabricated (mk-c66x)" {
+@test "recheck: numbered '1.'/'2)' items are recognized, not fabricated" {
     _load
     _fake_bd
     _answer_with_section $'1. confirmed the migration script runs without executing it\n2) unsure whether the fallback order still matches routing.yaml'
@@ -163,7 +163,7 @@ _answer_with_section() {
 
 # --- mk-c66x: 'None.' followed by a trailing VERDICT block is still 'none' -
 
-@test "recheck: 'None.' followed by a trailing VERDICT block is still recognized as none, not missing (mk-c66x)" {
+@test "recheck: 'None.' followed by a trailing VERDICT block is still recognized as none, not missing" {
     _load
     _fake_bd
     printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\nNone.\n\n--- VERDICT ---\nSTATUS: pass\nSUMMARY: ok\n---\n' > "$OUTPUT"
@@ -176,7 +176,7 @@ _answer_with_section() {
 
 # --- mk-c66x: the receipt names WHY recheck_bead is null, not just that it is
 
-@test "recheck: a filed bead reports status 'filed' with tracker dir and sidecar path (mk-c66x)" {
+@test "recheck: a filed bead reports status 'filed' with tracker dir and sidecar path" {
     _load
     _fake_bd
     _answer_with_section '- confirmed nothing was executed'
@@ -187,7 +187,7 @@ _answer_with_section() {
     [[ "$RECHECK_SIDECAR_PATH_JSON" == "$(printf '%s' "${OUTPUT}.recheck.md" | jq -Rs 'rtrimstr("\n")')" ]]
 }
 
-@test "recheck: CLAVAIN_RECHECK_BEADS=0 reports status 'disabled', not just recheck_bead:null (mk-c66x)" {
+@test "recheck: CLAVAIN_RECHECK_BEADS=0 reports status 'disabled', not just recheck_bead:null" {
     _load
     CLAVAIN_RECHECK_BEADS=0
     _fake_bd
@@ -198,7 +198,7 @@ _answer_with_section() {
     [[ ! -s "$BD_LOG" ]]
 }
 
-@test "recheck: no tracker resolved reports status 'no_tracker' (mk-c66x)" {
+@test "recheck: no tracker resolved reports status 'no_tracker'" {
     _load
     CLAVAIN_RECHECK_BEADS_DIR="$TMPDIR_T/not-a-tracker"
     mkdir -p "$CLAVAIN_RECHECK_BEADS_DIR"
@@ -210,7 +210,7 @@ _answer_with_section() {
     [[ ! -s "$BD_LOG" ]]
 }
 
-@test "recheck: bd failing outright (no id at all) reports status 'bd_failed' (mk-c66x)" {
+@test "recheck: bd failing outright (no id at all) reports status 'bd_failed'" {
     _load
     FAKE_BD_MODE=fail _fake_bd
     _answer_with_section '- confirmed nothing was executed'
@@ -253,7 +253,7 @@ FAKE_BD
 
 # --- mk-c66x: defensive idempotency — one process files at most once -------
 
-@test "recheck: calling the filing pass twice for one OUTPUT files at most once (mk-c66x)" {
+@test "recheck: calling the filing pass twice for one OUTPUT files at most once" {
     _load
     _fake_bd
     _answer_with_section '- confirmed nothing was executed'
@@ -267,7 +267,7 @@ FAKE_BD
 
 # --- mk-c66x: bd create is bounded by a timeout ----------------------------
 
-@test "recheck: a hung bd create is bounded by a timeout, not left to hang (mk-c66x)" {
+@test "recheck: a hung bd create is bounded by a timeout, not left to hang" {
     _load
     _fake_bd
     _answer_with_section '- confirmed nothing was executed'
@@ -282,7 +282,7 @@ FAKE_BD
 
 # --- mk-c66x: a sidecar write failure never still files a bead -------------
 
-@test "recheck: a sidecar write failure reports status 'sidecar_write_failed' and files no bead (mk-c66x)" {
+@test "recheck: a sidecar write failure reports status 'sidecar_write_failed' and files no bead" {
     _load
     _fake_bd
     OUTPUT="$TMPDIR_T/readonly/out.md"

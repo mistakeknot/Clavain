@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# context-reset-pre.sh — PreToolUse, observe-mode context-reset telemetry (mk-42j9.40).
+# context-reset-pre.sh — PreToolUse, observe-mode context-reset telemetry.
 #
 # NOT A SECURITY BOUNDARY. Records whether an approval-gated action (push, PR,
 # release, publication, destructive override) runs while the context epoch is

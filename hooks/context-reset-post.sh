@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # context-reset-post.sh — SessionStart + PostToolUse, observe-mode context-reset
-# telemetry (mk-42j9.40).
+# telemetry.
 #
 # NOT A SECURITY BOUNDARY. On SessionStart it opens or carries a context epoch.
 # After a tool call it records exposure to untrusted content (web, remote

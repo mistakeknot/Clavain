@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# Tripwire for the verdict-grounding invariant (Sylveste-4b5.5, verdict-
+# Tripwire for the verdict-grounding invariant (verdict-
 # integrity goal 2026-08-24): a "clean" that nothing concrete corroborates
 # must surface as NEEDS_VERIFICATION, never advance a phase, and the check
 # itself must live where edits to the command doc cannot silently drop it.

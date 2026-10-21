@@ -11,7 +11,7 @@ import (
 // writeBeadSideband writes the kernel-authored interband envelope
 // (interband protocol 1.0.0) so the statusline keeps working as interphase
 // retires (brainstorm KD 11). Atomic tmp+rename, best-effort at call sites.
-// Session keying (Sylveste-23k): an empty sessionID falls back to
+// Session keying: an empty sessionID falls back to
 // CLAUDE_SESSION_ID then CLAUDE_CODE_SESSION_ID (exported to every Bash
 // subprocess since CC 2.1.132), so callers need not thread session ids.
 func writeBeadSideband(sessionID, beadID, phase, reason string) error {

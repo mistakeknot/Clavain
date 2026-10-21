@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Step 4 (mk-42j9.34): opt-in review-packet boundary in dispatch.sh.
+# Step 4: opt-in review-packet boundary in dispatch.sh.
 # --review-input/--review-packet are inert unless a caller explicitly passes
 # one; every other role/plan path must be byte-for-byte unchanged.
 

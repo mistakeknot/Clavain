@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Loop breaker for Stop-hook block reasons (mk-ax8).
+# Loop breaker for Stop-hook block reasons.
 #
 # A Stop hook that re-demands the SAME reason forever while no work happens
 # is blocked on something outside the model's control (usually a human

@@ -644,7 +644,7 @@ _codex_version_at_least() {
 }
 
 # Bash port of intercore's modelLab (internal/routing/identity.go:138-148),
-# used to detect a capacity-substitute review (mk-gp32): a model identity
+# used to detect a capacity-substitute review: a model identity
 # without a recognized prefix is "unknown" and never counts as a lab match.
 _dispatch_model_lab() {
   case "$1" in
@@ -863,7 +863,7 @@ _dispatch_role_profile() {
       echo "dispatch: profile '$profile_ref' requires Codex >= $minimum; trying its declared fallback" >&2
       continue
     fi
-    # Distinct profile_refs can name the same seat (mk-3b8z: crosslab-opus and
+    # Distinct profile_refs can name the same seat (crosslab-opus and
     # validation-opus are both Opus 5.5). Once a seat failed on capacity in this
     # walk, a second profile for it would only fail again.
     if [[ "$capacity_failed_seats" == *$'\n'"$backend/$model"$'\n'* ]]; then
@@ -871,7 +871,7 @@ _dispatch_role_profile() {
       continue
     fi
 
-    # A capacity substitute (mk-gp32, tightened by mk-dabt): this review role
+    # A capacity substitute: this review role
     # already had an earlier candidate skipped or failed for an OPERATIONAL
     # reason — actually run and failed with a capacity class (quota_exhausted,
     # rate_limited, model_unavailable, account_access_absent), or skipped
@@ -1679,7 +1679,7 @@ fi
 # Resolve prompt: positional arg, --prompt-file, or error
 PROMPT="${1:-}"
 # A seat that cannot read its plan has nothing to replay: fail before any
-# backend runs (Sylveste-soj7).
+# backend runs.
 if [[ -n "$PLAN_FILE" && ! -r "$PLAN_FILE" ]]; then
   _dispatch_write_failure_class terminal_configuration
   echo "Error: --plan not found or unreadable: $PLAN_FILE" >&2
@@ -2008,7 +2008,7 @@ $RESOLVED_ROUTE_JSON
 
 Task:
 $PROMPT"
-      # A capacity substitute (mk-gp32): the walk that reached this candidate
+      # A capacity substitute: the walk that reached this candidate
       # landed on a model from the producer's own lab, so the review needs
       # its own provisional framing and a re-check hook for the other lab.
       if [[ -n "$CAPACITY_SUBSTITUTE_JSON" && "$CAPACITY_SUBSTITUTE_JSON" != null ]]; then
@@ -2440,7 +2440,7 @@ elif [[ "$ENGINE" == "claude" ]]; then
   else
   # dontAsk denies every tool that is not allowed up front, so without an
   # explicit allowance the seat cannot run one command and its "replay" is a
-  # hand trace (Sylveste-soj7). Bash is allowed; the file-mutating tools stay
+  # hand trace. Bash is allowed; the file-mutating tools stay
   # disallowed and the checkout is snapshotted around the run (see
   # _seat_snapshot): a run that changes it is an error verdict, not a ruling.
   if [[ "$CLAUDE_UNSAFE" != true ]]; then
@@ -2854,8 +2854,8 @@ _extract_verdict() {
 
     local verdict_file="${output_file}.verdict"
 
-    # mk-rzi5: a same-lab capacity-substitute review (mk-gp32, tightened by
-    # mk-dabt) still gates normally — provisional, never blocking, see
+    # A same-lab capacity-substitute review
+    # still gates normally — provisional, never blocking, see
     # reasoning-routing-operations.md "Capacity-substitute reviews are
     # provisional, never blocking" — but nothing reading this sidecar in
     # isolation from the routing receipt could otherwise tell a substitute
@@ -3236,7 +3236,7 @@ _extract_verdict() {
     } > "$verdict_file"
 }
 
-# ─── Codex error surfacing (sylveste-mb3i) ──────────────────────────────────
+# ─── Codex error surfacing ──────────────────────────────────
 # Inspect codex stderr, exit code, and state counters after codex exits.
 # Returns (stdout) a TAB-delimited "<kind>\t<detail>" when an error/retry/warn
 # signal is present, or non-zero exit when all clear.
@@ -3373,7 +3373,7 @@ _detect_codex_error() {
     # is direct evidence. When the counters say "nothing happened" but real
     # output exists, the parser is what's broken, not the run — firing warn
     # here overwrote a genuine STATUS: pass and struck out a clean task
-    # (mk-1hrx, uncrancher run 61c1faeb, 2026-08-17). Direct evidence wins;
+    # (run 61c1faeb, 2026-08-17). Direct evidence wins;
     # the disagreement is logged, not enthroned as a verdict.
     if [[ -z "$kind" && -f "$state_file" ]] && command -v jq >/dev/null 2>&1; then
         local turns msgs cmds
@@ -3498,10 +3498,10 @@ _dispatch_capacity_recheck_section() {
 # directory, exactly like git looks for `.git` — a worktree with no `.beads`
 # of its own walks past its own repo root into whatever unrelated tracker
 # happens to sit above it. Observed in production: WORKDIR
-# /home/mk/projects/.clavain-capreview has no .beads, so `bd -C` there
-# filed capacity-recheck beads into /home/mk/projects/.beads, an unrelated
-# tracker (mk-hadt fix). CLAVAIN_RECHECK_BEADS_DIR overrides outright (e.g.
-# zklw points it at /home/mk/hub) but only when it names a directory that
+# $HOME/projects/.clavain-capreview has no .beads, so `bd -C` there
+# filed capacity-recheck beads into $HOME/projects/.beads, an unrelated
+# tracker. CLAVAIN_RECHECK_BEADS_DIR overrides outright (e.g.
+# the canonical host points it at its hub checkout) but only when it names a directory that
 # itself has `.beads` — an override pointed at a bare directory would just
 # let bd walk up from there and reopen the same hazard. Otherwise mirror
 # next-goal-candidates.sh's tracker_home() (scripts/next-goal-candidates.sh:
@@ -3541,7 +3541,7 @@ _dispatch_recheck_tracker_dir() {
   printf '%s\n' "$main"
 }
 
-# After a successful capacity-substitute review (mk-gp32), parse its
+# After a successful capacity-substitute review, parse its
 # "## Re-check by the other lab" section and turn any listed items into a
 # filed bead for the lab that never actually reviewed. Never fails the
 # dispatch: a bd problem is a loud stderr warning, not a withheld verdict.
@@ -3551,7 +3551,7 @@ _dispatch_recheck_tracker_dir() {
 # whole review still needs a re-check. Only an explicit "None." body means
 # the reviewer actually confirmed there is nothing to flag. Items are
 # accepted as "- item", "* item" or a numbered "1. item"/"1) item" line
-# (mk-c66x: a reviewer's own Markdown convention varies; only the leading
+# (a reviewer's own Markdown convention varies; only the leading
 # marker style differs, not the semantics — dropping "*"/numbered items back
 # to the fabricated "whole review" item lost real reviewer content and gave a
 # false "missing" receipt). RECHECK_SOURCE_JSON records which of the three
@@ -4078,7 +4078,7 @@ elif [[ "$HAS_GAWK" == true ]]; then
   CMD+=(--json)
 
   # Capture stderr while still mirroring to the terminal so the user sees errors live
-  # AND dispatch can inspect them for verdict synthesis (sylveste-mb3i).
+  # AND dispatch can inspect them for verdict synthesis.
   # set -e is disabled around the pipeline so a non-zero codex exit still lets
   # us run verdict override + cleanup before exiting with the captured code.
   set +e

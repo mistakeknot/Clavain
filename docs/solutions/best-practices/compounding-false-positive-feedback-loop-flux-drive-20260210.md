@@ -109,5 +109,3 @@ No related issues documented yet.
 This pattern was discovered when flux-drive reviewed its own v2 architecture redesign:
 - 7 Claude agents independently analyzed the design (6/7 converged on this finding)
 - Oracle (GPT-5.2 Pro) confirmed and extended with evidence anchor requirements
-- Full review: `docs/research/flux-drive/flux-drive-v2-architecture/summary.md`
-- Architecture doc: `docs/research/flux-drive-v2-architecture.md`

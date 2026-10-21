@@ -13,7 +13,7 @@ packet bytes, missing required evidence always fails assembly instead of
 silently omitting a section, and `UNRUN` is rendered as visible evidence of
 missing verification rather than mapped to a passing test.
 
-This script is Step 1 of the plan (docs/plans/plan-clavain-42j9-34.md):
+This script is Step 1 of the review-packet plan:
 the deterministic interface and the fixed section contract. Step 2 adds
 transcript-input rejection and a stricter, allowlisted producer-receipt
 projection sourced from `ic route`. Step 3 adds bounded excerpt context and

@@ -2,7 +2,7 @@
 # SessionEnd hook: auto-push unpushed commits
 #
 # Pushes commits the session left unpushed. Handles three branch shapes
-# (mk-667 — the old version exited silently when @{upstream} was missing,
+# (the old version exited silently when @{upstream} was missing,
 # stranding every worktree branch's commits):
 #   1. Branch with a same-name upstream: plain `git push`.
 #   2. Branch tracking a DIFFERENT ref (e.g. a worktree branch tracking

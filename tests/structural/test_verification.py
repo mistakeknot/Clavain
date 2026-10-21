@@ -199,7 +199,7 @@ def test_append_to_log_appends_existing(tmp_path: Path) -> None:
     assert json.loads(lines[1])["name"] == "new"
 
 
-# --- canonical use case: microrouter no-op short-circuit (Sylveste-a5u) ---
+# --- canonical use case: microrouter no-op short-circuit ---
 
 
 def test_microrouter_passthrough_audit() -> None:

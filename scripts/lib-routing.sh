@@ -84,14 +84,14 @@ _routing_model_tier() {
     local:qwen3.5-122b-a10b-4bit)       echo 3 ;;  # Track B5: MoE opus-equivalent
     local:gpt-oss-120b-mxfp4)           echo 3 ;;  # Track B5: opus-equivalent
     flash-moe:qwen3.5-397b)             echo 3 ;;  # Track B5: SSD-streamed opus-equivalent
-    fable)                              echo 3 ;;  # retired (mk-3b8z): ranks as opus, never above it
+    fable)                              echo 3 ;;  # retired: ranks as opus, never above it
     *)                                  echo 0 ;;
   esac
 }
 
 # --- Retire the fable tier ---
 # Usage: _routing_retire_fable <model> <context>
-# Fable is retired (mk-3b8z, 2026-09-25): Opus 5.5 took every Fable seat. A
+# Fable is retired (2026-09-25): Opus 5.5 took every Fable seat. A
 # legacy `fable` from an older routing.yaml, agency spec, complexity override or
 # safety floor always leaves the resolver as opus.
 _routing_retire_fable() {
@@ -243,7 +243,7 @@ PY
 
 # Ordered backend list honoring the mode:
 #   off     -> prints nothing (dispatch falls back to its default backend)
-#   shadow  -> prints nothing, logs the would-route decision (Sylveste-d3m phase 1)
+#   shadow  -> prints nothing, logs the would-route decision (phase 1)
 #   enforce -> prints the order
 routing_resolve_executor_order() {
   local class="$1"
@@ -1224,7 +1224,7 @@ routing_resolve_model() {
             "B3 calibration would override base=$base_for_shadow with calibrated=$cal_model for $agent_short" \
             "override"
         else
-          # No-op short-circuit (Sylveste-a5u): cal_model matched base. The
+          # No-op short-circuit: cal_model matched base. The
           # legacy code emitted nothing, leaving operators unable to tell
           # "calibration agreed with base" from "calibration was never read".
           # VerificationStep with decision_type=passthrough closes the gap.

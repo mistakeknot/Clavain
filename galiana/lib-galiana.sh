@@ -50,7 +50,7 @@ galiana_log_defect() {
         --arg bead "$1" --arg defect_type "$2" --arg severity "$3" --arg escaped_gate "$4" --arg agents_reviewed "$5" --arg agents_missed "$6"
 }
 
-# stop_loop_suppression: loop-breaker (mk-ax8) parked or silenced a
+# stop_loop_suppression: loop-breaker parked or silenced a
 # repeating Stop-hook demand. action: blocked_message | silent.
 # Frequency of these events is the loop-burn KPI.
 galiana_log_stop_suppression() {

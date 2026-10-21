@@ -83,5 +83,3 @@ Before building a variant of an existing system for a new input type:
 - `skills/flux-drive/phases/launch.md` — agent dispatch (would need 3 content modes without unification)
 - `skills/flux-drive/phases/shared-contracts.md` — Diff Slicing Contract (lines 57-88) is the template
 - `config/flux-drive/diff-routing.md` — domain keywords that both systems should share
-- `docs/research/pyramid-mode-flux-drive.md` — pyramid mode design doc
-- `docs/research/flux-drive/strongdm-techniques/summary.md` — full review findings

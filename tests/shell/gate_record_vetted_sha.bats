@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# Regression for the audit recording gap (Sylveste-ymp2 stage B, goal 14539da7).
+# Regression for the audit recording gap (stage B, goal 14539da7).
 #
 # bead-close.sh passes --vetted-sha to `policy check`, and `policy record-signed`
 # has always accepted --vetted-sha, but gate_record_signed never forwarded it.

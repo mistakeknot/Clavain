@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Tests for the observe-mode context-reset telemetry (mk-42j9.40):
+# Tests for the observe-mode context-reset telemetry:
 # hooks/context-reset-pre.sh, hooks/context-reset-post.sh,
 # hooks/lib-context-reset.sh and the scripts/context-reset-*.sh tools.
 # This is observe-mode hygiene telemetry, NOT a security boundary. These tests

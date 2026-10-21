@@ -15,9 +15,9 @@ and it must neither silently downgrade the work nor silently stall it. The remed
 is a declared, ordered fallback that is visible in the receipt.
 
 The user's 2026-09-10 ruling makes Opus the capacity substitute for a frontier
-seat, including independent plan review. As of mk-9yyt that substitution lives in
-the packaged default policy rather than in a per-caller snapshot. Since mk-3b8z
-(2026-09-25) Opus 5.5 (`claude-opus-5-5`) has replaced both Fable 5.1 and Opus 5
+seat, including independent plan review. That substitution lives in
+the packaged default policy rather than in a per-caller snapshot. Since
+2026-09-25 Opus 5.5 (`claude-opus-5-5`) has replaced both Fable 5.1 and Opus 5
 in every seat: it is the only Claude entry in `reasoning.frontier_models`, the
 `plan-review` primary, and `planning-opus`, `deep-opus`,
 `routine-sonnet`, `scout-sonnet` and `release-sonnet` are the last entries of the
@@ -65,12 +65,11 @@ chain are unaffected: Intercore dedupes an already-visited profile_ref, so the
 new edge cannot reintroduce a seat the walk already excluded or already used.
 Distinct profile_refs can still name one seat (`crosslab-opus` and
 `validation-opus` are both Opus 5.5), so the dispatch walk also skips a
-candidate whose backend and model already failed on capacity in the same walk
-(mk-3b8z).
+candidate whose backend and model already failed on capacity in the same walk.
 
 Frontier authoring — `planning`, `frontier-planning`, `escalation` — runs
 `planning-astra`, then `planning-opus` (mk ruling 2026-09-18; the Fable seat
-between them was removed by mk-3b8z on 2026-09-25). It previously failed closed
+between them was removed on 2026-09-25). It previously failed closed
 when both frontier labs were out. mk ruled that asymmetric: Opus is in
 `reasoning.frontier_models` and is authorised to independently review a
 frontier-authored plan, which is the harder job, so refusing to let it author in
@@ -85,7 +84,7 @@ review-side substitute from silently changing who authors a plan;
 unchanged by edits to the review lane, and that Astra is still preferred while
 reachable.
 
-**Scope correction (mk-9yyt).** The earlier wording — *scope a capacity snapshot
+**Scope correction.** The earlier wording — *scope a capacity snapshot
 to reviews of the bound producer from another lab; reviews of Claude-authored work
 keep the default independent route* — excluded the exact failure it existed to
 remedy. Routing-table v2 put the `strategized` and `planned` phases on Fable, so
@@ -98,8 +97,7 @@ frontier model is the declared degradation when no cross-lab seat is reachable.
 The preference is a preference, not a gate — a stalled review gate is the worse
 outcome, and the receipt records which seats were excluded and why.
 
-**Both directions walk at runtime (mk-esex).** The chains were symmetric after
-mk-9yyt, but only a Codex limit classified as `quota_exhausted`. The Claude CLI
+**Both directions walk at runtime.** The chains were symmetric, but only a Codex limit classified as `quota_exhausted`. The Claude CLI
 reports a subscription limit as `error: "rate_limit"` — the same code as a
 transient 429 — with the limit named in the text ("You've hit your weekly
 limit · resets …"), so a Fable seat out of quota landed as `terminal_error` and
@@ -109,14 +107,14 @@ error event as `quota_exhausted`; a `rate_limit` without it stays terminal.
 `tests/routing/plan-review-capacity-test.sh` drives the real dispatch walk in both
 directions, and the case where every non-producer seat is out still blocks.
 
-**Opus 5.5 replaces Fable 5.1 (mk-3b8z).** mk ruled on 2026-09-25 that Opus 5.5
+**Opus 5.5 replaces Fable 5.1.** the owner ruled on 2026-09-25 that Opus 5.5
 outperforms Fable 5.1 and takes every Fable and Opus 5 seat. Fable is removed from
 routing entirely. `plan-review` now has two frontier seats, Opus 5.5 then Astra,
 so each reviews the other's plans. An Opus-authored plan with Astra out therefore
 has no distinct routed reviewer, and routing fails closed rather than admitting a
 same-model review. The agent then applies mk's adversarial orthogonal same-model
-Opus review by hand and declares it as such in the receipt and evidence; mk-2e1e
-tracks a routable seat for that review. The mk-9yyt same-lab degradation still
+Opus review by hand and declares it as such in the receipt and evidence; a routable
+seat for that review is still to be added. The same-lab degradation still
 applies where a distinct same-lab seat exists. Two plan-review paths qualify: a
 Sol-authored plan whose Opus reviewer fails on capacity (the walk reaches Astra,
 another OpenAI model), and, since plan-review was put in
@@ -127,7 +125,7 @@ A pooled Codex lane whose own retries ran out (`exceeded retry limit, last
 status: 429`) now classifies as `rate_limited` rather than `terminal_error`. An
 exhausted-retries 429 is capacity, not a reason to keep hammering the same
 model: it gets the identical single account-pool retry `quota_exhausted` gets,
-then walks to the profile's declared fallback (mk ruling 2026-09-25, mk-nh6v;
+then walks to the profile's declared fallback (owner ruling 2026-09-25;
 `tests/routing/role-dispatch-test.sh`).
 
 Reviewer separation is not part of that degradation. It is enforced structurally,
@@ -155,7 +153,7 @@ any change as `cross_lab_reorder: {from, to}` over the seats that survive the
 reasoning contract. For `validation`, Claude-produced code therefore reaches Sol
 first. When the Codex lane is out, observed as a capacity failure, the same-lab
 substitute is Opus 5.5, or Sonnet 5.5 when Opus produced the work. Do not wait for
-the Codex reset; Fable is retired (mk-3b8z). Codex-produced work keeps the policy
+the Codex reset; Fable is retired. Codex-produced work keeps the policy
 order, with Opus first. `cross-lab-review` keeps its Claude first-pass seat, now
 `crosslab-opus` (it was `crosslab-fable`); for a Claude producer it resolves Sol
 first, then the Astra seat `crosslab-astra` (GPT-6 Astra at xhigh, Codex >= 0.153.1)
@@ -167,7 +165,7 @@ policy order.
 
 ### Capacity-substitute reviews are provisional, never blocking
 
-mk-gp32, tightened by mk-dabt. A `plan-review`, `validation` or
+A `plan-review`, `validation` or
 `cross-lab-review` candidate counts as a capacity substitute when an *earlier*
 candidate in the same walk was skipped or failed for an OPERATIONAL reason —
 either actually attempted and failed with a real capacity class
@@ -176,7 +174,7 @@ either actually attempted and failed with a real capacity class
 `insufficient_codex_version`, `unsupported_adapter` or
 `usage_reporting_unavailable` — and this candidate's lab matches the
 producer's; all of these set `capacity_failure_class` in
-`_dispatch_role_profile`. mk-dabt: an operational skip is not a policy
+`_dispatch_role_profile`. An operational skip is not a policy
 decision that the other lab shouldn't review, so per canon it must still mark
 the substitute the same as an actually-attempted capacity failure does — an
 earlier version of this walk let `insufficient_codex_version` and
@@ -218,11 +216,11 @@ outcomes plus the different-lab case where no paragraph or bead is expected,
 the producer-conflict-only case where no capacity failure occurred, and the
 tracker-resolution cases below.
 
-Bead filing never lets `bd` resolve its own tracker (mk-hadt: `bd -C
+Bead filing never lets `bd` resolve its own tracker (`bd -C
 $WORKDIR` from a worktree with no local `.beads` walked up past the repo root
 into an unrelated ancestor tracker and filed real beads there). If
 `CLAVAIN_RECHECK_BEADS_DIR` is set, dispatch runs `bd -C` there — but only
-when that directory itself contains `.beads` (zklw sets it to `/home/mk/hub`);
+when that directory itself contains `.beads` (the canonical host points it at its hub checkout);
 an override pointed anywhere else is refused with the same warning as no
 tracker resolving at all, rather than trusted to let `bd` walk up from there.
 Otherwise dispatch resolves `WORKDIR` to its repo's own top level (mirroring
@@ -240,7 +238,7 @@ directory with its own `.beads` no longer files there (it did before this
 fix, since the old code ran `bd -C $WORKDIR` directly with no git dependence
 at all) — real dispatch `WORKDIR`s are always git checkouts, so this is not
 expected to matter in practice, but it is a real behavior change from before
-mk-hadt. When no tracker resolves, dispatch files nothing, still writes the sidecar, and
+When no tracker resolves, dispatch files nothing, still writes the sidecar, and
 prints a loud stderr warning naming the sidecar and
 `CLAVAIN_RECHECK_BEADS_DIR`. The receipt carries
 `recheck_bead` (the filed bead's id, or `null` when nothing was filed).
@@ -423,7 +421,7 @@ atomically before the tuple is printed, a JSON seat: `provider`, `model`,
 `policy_hash` and the absolute `receipt` path. A failed print exits 3 with the
 seat already written.
 
-Only role `lane` consults the rollout arm. Until mk-42j9.25 Phase 2b, the lookup
+Only role `lane` consults the rollout arm. Until Phase 2b of the rollout, the lookup
 is a stub returning `control`, so landing this guidance keeps every lineage on
 the status quo. Coordinator-seat and governed roles ignore `--lineage` for routing
 and record a null arm.
@@ -435,9 +433,9 @@ profile applies only to roles in its `roles` map. `--project` is mandatory for
 coordinator-seat and must resolve to a known slug. Shared projects `proj_personal`
 and `proj_bnq4zi2wiv` ("projects/Sylveste") deliberately have no alias: pass the
 logical slug. `project_profiles` is currently empty: mk ruled 2026-09-27
-(mk-h73i) that every coordinator seat resolves the fleet default,
+ that every coordinator seat resolves the fleet default,
 coordinator-seat-sonnet, reversing the nine-project Opus coordinator-seat
-table that mk-42j9.25/mk-42j9.5 had established. All fifteen known slugs
+table that an earlier ruling had established. All fifteen known slugs
 keep fleet routing unless a future project profile overrides a role again.
 Unknown projects on other roles warn and resolve with `project: null`.
 
@@ -458,7 +456,7 @@ A family counts as exhausted by bb's own rule (the pool `switchThreshold`,
 default 0.98) only when every up Claude account has an active family window.
 With Claude exhausted, spawn roles fall back to gpt-6-astra medium. route-spawn
 refuses gpt-5.6-sol for every role, by any alias or case (mk 2026-09-27);
-GPT-6.1 Sol is allowed (mk-v4ao; legacy GPT-6 Sol still is). With no eligible seat, exit 3: do not spawn.
+GPT-6.1 Sol is allowed (legacy GPT-6 Sol still is). With no eligible seat, exit 3: do not spawn.
 The probe timeout is `ROUTE_SPAWN_POOL_TIMEOUT` seconds (default 20); the resolver
 timeout is `ROUTE_SPAWN_IC_TIMEOUT` seconds (default 30, exit 3 on timeout).
 Both must be finite and positive (otherwise exit 2); timeouts kill the whole

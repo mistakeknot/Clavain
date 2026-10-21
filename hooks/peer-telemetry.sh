@@ -9,7 +9,7 @@
 # which using-* skill ultimately won the routing decision (that requires a
 # session-end hook which is fragile under crash and `/clear` paths).
 #
-# Used to gate B'/C' scope expansion (sylveste-fj1w / sylveste-yofd).
+# Used to gate B'/C' scope expansion.
 set -euo pipefail
 
 [[ "${CLAVAIN_PEER_TELEMETRY:-1}" == "0" ]] && exit 0

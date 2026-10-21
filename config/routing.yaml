@@ -22,8 +22,7 @@
 # Executor routing (CLI-backend dimension) — ported from FLUXrig doctrine.
 # Per task CLASS, an ordered backend list; first that succeeds wins (free-first).
 # A class is added ONLY after its parity eval passes (executor-parity-eval).
-# Unmapped class -> `default` (safe: paid/stronger). See
-# docs/brainstorms/2026-07-23-executor-routing-doctrine-port.md.
+# Unmapped class -> `default` (safe: paid/stronger).
 executor_routing:
   mode: enforce            # off | shadow | enforce
   classes:

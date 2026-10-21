@@ -50,3 +50,9 @@ bin/clavain-cli-go
 # Local git worktrees (upstream-sync etc.) — never tracked
 .worktrees/
 .publish-approved
+
+# agent working state
+.clavain/gate-tier-calibration.json
+.clavain/gate.db
+.clavain/setup-verified
+.remote-source
