@@ -78,7 +78,6 @@ Fallback list if script unavailable:
 - `interject@interagency-marketplace` — Ambient discovery and research engine (MCP)
 - `interstat@interagency-marketplace` — Token efficiency benchmarking
 - `interkasten@interagency-marketplace` — Notion sync and documentation
-- `interlens@interagency-marketplace` — Cognitive augmentation lenses (MCP)
 - `intersearch@interagency-marketplace` — Shared embedding and Exa search library
 - `interpub@interagency-marketplace` — Plugin publishing automation
 - `tuivision@interagency-marketplace` — TUI automation and visual testing (MCP)

@@ -137,10 +137,6 @@
         "description": "Notion sync and documentation"
       },
       {
-        "source": "interlens@interagency-marketplace",
-        "description": "Cognitive augmentation lenses (MCP)"
-      },
-      {
         "source": "intersearch@interagency-marketplace",
         "description": "Shared embedding and Exa search library"
       },
@@ -256,7 +252,6 @@
       "mcp": [
         "intercache@interagency-marketplace",
         "interject@interagency-marketplace",
-        "interlens@interagency-marketplace",
         "intermux@interagency-marketplace",
         "intersearch@interagency-marketplace",
         "interrank@interagency-marketplace",
