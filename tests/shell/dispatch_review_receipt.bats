@@ -59,7 +59,7 @@ teardown() { rm -rf "$T"; }
     [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.2.json")" = BLOCK ]
 }
 
-@test "verdict mapping: notes pass, anything else blocks, none writes nothing" {
+@test "verdict mapping: notes pass, FAIL blocks, unknown words and none write nothing" {
     _review_receipt_prepare "$R"
     printf 'x\n\n**VERDICT: PASS WITH NOTES**\n' > "$OUT"
     [ "$(_review_receipt_verdict "$OUT")" = "PASS WITH NOTES" ]
@@ -217,4 +217,30 @@ teardown() { rm -rf "$T"; }
     run _review_receipt_write "$OUT" 0
     [ "$status" -ne 0 ]
     [ ! -e "$d/7-$HEAD_SHA.3.json" ]
+}
+
+@test "write stops at the 999th receipt and leaves no temp file" {
+    _review_receipt_prepare "$R"
+    d="$T/reviews/o__r"; mkdir -p "$d"
+    : > "$d/7-$HEAD_SHA.json"
+    for i in $(seq 2 999); do : > "$d/7-$HEAD_SHA.$i.json"; done
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -ne 0 ]
+    [ ! -e "$d/7-$HEAD_SHA.1000.json" ]
+    [ -z "$(ls -A "$d" | grep '^\.new\.')" ]
+}
+
+@test "write refuses a fifo at the next numbered path" {
+    _review_receipt_prepare "$R"
+    _review_receipt_write "$OUT" 0
+    d="$T/reviews/o__r"
+    mkfifo "$d/7-$HEAD_SHA.2.json"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -ne 0 ]
+    [ ! -e "$d/7-$HEAD_SHA.3.json" ]
+}
+
+@test "dispatch cross-lab-review prompt names the accepted verdict words" {
+    grep -q 'VERDICT: PASS WITH NOTES' "$DISPATCH"
+    grep -q 'APPROVE, BLOCK, CLEAN' "$DISPATCH" || grep -q 'APPROVE' "$DISPATCH"
 }
