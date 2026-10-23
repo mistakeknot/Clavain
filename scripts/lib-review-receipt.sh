@@ -65,7 +65,7 @@ _review_receipt_prepare() {
 }
 
 # Strict verdict from the reviewer's final line. Prints PASS, "PASS WITH NOTES"
-# or BLOCK (the words PASS, PASS WITH NOTES, FAIL; FAIL and BLOCK record BLOCK);
+# or BLOCK (the words PASS, PASS WITH NOTES, FAIL; FAIL records BLOCK);
 # prints nothing (rc 1) when there is no acceptable VERDICT line or the word is
 # not one of those, so no receipt is written and the dispatch fails. No Markdown is parsed: the output must contain no code
 # fence (three backticks or tildes) and no HTML comment delimiter anywhere, and
