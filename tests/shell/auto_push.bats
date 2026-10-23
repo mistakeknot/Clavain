@@ -414,7 +414,7 @@ not_remote_has() { ! remote_has "$@"; }
     run run_hook
     [ "$status" -eq 0 ]
     [ "$(git --git-dir="$BATS_TEST_TMPDIR/write.git" rev-parse refs/heads/trunk)" = "$before" ]
-    grep -q 'event=skipped .*reason=destination-unverifiable:remote.origin.receivepack' "$CLAVAIN_AUTO_PUSH_LOG"
+    grep -q 'event=skipped .*reason=destination-unverifiable:remote-command-override' "$CLAVAIN_AUTO_PUSH_LOG"
 }
 
 @test "auto-push: a control byte before a newline in a push URL cannot hide the real destination" {
@@ -446,6 +446,41 @@ not_remote_has() { ! remote_has "$@"; }
     [ "$status" -eq 0 ]
     not_remote_has feature
     grep -q 'event=skipped .*reason=destination-unverifiable:env:GIT_SSH_COMMAND' "$CLAVAIN_AUTO_PUSH_LOG"
+}
+
+@test "auto-push: a push URL that is also a remote's name cannot redirect the default-branch query" {
+    git checkout -qb trunk
+    seeded_bare read.git main
+    seeded_bare write.git trunk
+    # relative names, resolved from the work tree root, as in a hostile-but-plausible config
+    ln -s "$BATS_TEST_TMPDIR/write.git" write.git
+    ln -s "$BATS_TEST_TMPDIR/read.git" read.git
+    git config remote.origin.pushurl write.git
+    git remote add write.git write.git
+    git config remote.write.git.uploadpack "sh -c 'exec git-upload-pack $BATS_TEST_TMPDIR/read.git'"
+    echo t > t.txt
+    git add t.txt
+    git commit -qm "trunk work"
+    before=$(git --git-dir="$BATS_TEST_TMPDIR/write.git" rev-parse refs/heads/trunk)
+    run run_hook
+    [ "$status" -eq 0 ]
+    [ "$(git --git-dir="$BATS_TEST_TMPDIR/write.git" rev-parse refs/heads/trunk)" = "$before" ]
+    grep -q 'event=skipped .*reason=destination-unverifiable:remote-command-override' "$CLAVAIN_AUTO_PUSH_LOG"
+}
+
+@test "auto-push: a push URL equal to another remote's name is treated as an unknown default" {
+    git checkout -qb feature
+    seeded_bare a.git main
+    seeded_bare b.git main
+    git remote add alias "$BATS_TEST_TMPDIR/b.git"
+    git config remote.origin.pushurl alias
+    echo t > t.txt
+    git add t.txt
+    git commit -qm "feature work"
+    run run_hook
+    [ "$status" -eq 0 ]
+    not_remote_has feature
+    grep -q 'event=skipped .*reason=default-branch-of-origin-unknown' "$CLAVAIN_AUTO_PUSH_LOG"
 }
 
 @test "auto-push: an ext:: URL is never pushed to" {

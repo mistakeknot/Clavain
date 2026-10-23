@@ -143,7 +143,7 @@ remote_default_branch() {
 # Prints why the guard cannot prove that the repository it queries is the one the push reaches, or
 # nothing when it can. The query is ls-remote against each push URL; the push goes through git's own
 # transport, so anything that can make the two differ fails closed:
-#   - a custom receive-pack/upload-pack/helper for the remote, or a custom ssh/proxy command (the push
+#   - a custom receive-pack/upload-pack/helper on any remote, or a custom ssh/proxy command (the push
 #     may run another command than the query does);
 #   - an ext:: URL (it runs a command);
 #   - a control character (newline, SOH, ...) anywhere in a remote URL or URL rewrite rule: the URL
@@ -151,8 +151,12 @@ remote_default_branch() {
 #   - config that cannot be read.
 destination_unverifiable() {
     local LC_ALL=C remote="$1" key rc rec value
-    for key in "remote.$remote.receivepack" "remote.$remote.uploadpack" "remote.$remote.vcs" \
-        core.sshCommand core.gitProxy; do
+    # Overrides on ANY remote count: ls-remote treats a URL that equals a remote's name as that remote.
+    if git config --get-regexp '^remote\..*\.(receivepack|uploadpack|vcs)$' >/dev/null 2>&1; then
+        echo "remote-command-override"
+        return
+    fi
+    for key in core.sshCommand core.gitProxy; do
         git config --get "$key" >/dev/null 2>&1
         rc=$?
         if [[ $rc -ne 1 ]]; then
@@ -215,6 +219,12 @@ branch_block_reason() {
     while IFS= read -r url; do
         [[ -n "$url" ]] || continue
         found=1
+        # ls-remote reads an argument that names a configured remote as that remote (and uses its url,
+        # not this pushurl), so such a URL would query a different repository than the push reaches.
+        if git remote | grep -Fxq -- "$url"; then
+            echo "default-branch-of-$remote-unknown"
+            return
+        fi
         # ls-remote rewrites its URL argument (insteadOf) once more. If that changes it, the query
         # would reach a different repository than the push does, so treat the default as unknown.
         if [[ "$(git ls-remote --get-url "$url" 2>/dev/null)" != "$url" ]]; then
