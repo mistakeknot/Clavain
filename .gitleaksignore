@@ -5,3 +5,7 @@ fd17873757983ec3f333fa40db426626dae17609:tests/structural/test_provider_errors.p
 fd17873757983ec3f333fa40db426626dae17609:tests/structural/test_provider_errors.py:jwt:80
 # Synthetic borrowed-token fixture ('borrowed-secret-fixture-7f3a') used to assert dispatch does not persist it — not a real key
 c76adb668fe7da961c53d82893c651753fed03e7:tests/structural/test_dispatch_bb.py:generic-api-key:287
+# Dummy key in cmd/clavain-cli/quarantine/quarantine_test.go (secret-shaped identifier rejection test): the AWS-key-shaped value is a dummy placeholder, not a real key
+60c0152fb499d65b406222e39559b4141a8299e9:cmd/clavain-cli/quarantine/quarantine_test.go:aws-access-token:175
+# Dummy key in cmd/clavain-cli/records/records_test.go (secret-shaped identifier rejection test): the AWS-key-shaped value is a dummy placeholder, not a real key
+60c0152fb499d65b406222e39559b4141a8299e9:cmd/clavain-cli/records/records_test.go:aws-access-token:234
