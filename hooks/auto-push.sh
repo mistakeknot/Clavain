@@ -28,7 +28,8 @@
 # Dolt database, not a git branch); the explicit opt-outs above skip that too.
 #
 # Log: every push (and every failed push, and every skip of work that would
-# have been pushed) appends one key=value line to
+# have been pushed) appends one key=value line (values percent-encoded, so one
+# event is one line) to
 #   $CLAVAIN_AUTO_PUSH_LOG, else ${XDG_STATE_HOME:-$HOME/.local/state}/clavain/auto-push.log
 # so "who pushed this branch?" is `grep branch=NAME` on that file.
 #
@@ -56,15 +57,31 @@ json_field() {
     printf '%s' "$INPUT" | sed -n 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1
 }
 
-# One log line: the caller's key=value words. Never fails the hook.
+# Percent-encode a log value so one event is one line and one field is one word.
+enc() {
+    local LC_ALL=C s="${1:0:600}" out="" c i
+    for ((i = 0; i < ${#s}; i++)); do
+        c="${s:i:1}"
+        case "$c" in
+            [A-Za-z0-9._/:@+,=~*-]) out+="$c" ;;
+            *) out+=$(printf '%%%02X' "'$c") ;;
+        esac
+    done
+    printf '%s' "$out"
+}
+
+# One log line: EVENT, then key=value words (values are encoded here). Never fails the hook.
 log_event() {
-    local parent
+    local event="$1" extra="" kv parent
+    shift
+    for kv in "$@"; do extra+=" ${kv%%=*}=$(enc "${kv#*=}")"; done
     parent=$(ps -o comm= -p "$PPID" 2>/dev/null | tr -d ' ') || parent=""
     {
         mkdir -p "$(dirname "$LOG_FILE")" &&
-            printf '%s event=%s repo=%s branch=%s %s pid=%s ppid=%s parent=%s session=%s hook_event=%s\n' \
-                "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$GIT_ROOT" "$BRANCH" "$2" \
-                "$$" "$PPID" "${parent:-unknown}" "$(json_field session_id)" "$(json_field hook_event_name)" \
+            printf '%s event=%s repo=%s branch=%s%s pid=%s ppid=%s parent=%s session=%s hook_event=%s\n' \
+                "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$event" "$(enc "$GIT_ROOT")" "$(enc "$BRANCH")" "$extra" \
+                "$$" "$PPID" "$(enc "${parent:-unknown}")" "$(enc "$(json_field session_id)")" \
+                "$(enc "$(json_field hook_event_name)")" \
                 >>"$LOG_FILE"
     } 2>/dev/null || true
 }
@@ -72,23 +89,25 @@ log_event() {
 # --- opt-outs (the whole hook) ------------------------------------------------
 global_off_reason() {
     case "${CLAVAIN_AUTO_PUSH:-}" in
-        0 | false | no | off) echo "env CLAVAIN_AUTO_PUSH=${CLAVAIN_AUTO_PUSH}"; return ;;
+        0 | false | no | off) echo "env:CLAVAIN_AUTO_PUSH=${CLAVAIN_AUTO_PUSH}"; return ;;
     esac
-    local marker
+    local marker cfg rc
     marker=$(git rev-parse --git-path info/no-auto-push 2>/dev/null) || marker=""
     if [[ -n "$marker" && -e "$marker" ]]; then
-        echo "marker $marker"
+        echo "marker:$marker"
         return
     fi
     if [[ -e ".no-auto-push" ]]; then
-        echo "marker $GIT_ROOT/.no-auto-push"
+        echo "marker:$GIT_ROOT/.no-auto-push"
         return
     fi
-    local cfg
-    cfg=$(git config --type=bool --get clavain.autoPush 2>/dev/null) || cfg=""
-    if [[ "$cfg" == "false" ]]; then
-        echo "git-config clavain.autoPush=false"
-        return
+    cfg=$(git config --type=bool --get clavain.autoPush 2>/dev/null)
+    rc=$?
+    if [[ $rc -eq 0 && "$cfg" == "false" ]]; then
+        echo "git-config:clavain.autoPush=false"
+    elif [[ $rc -ne 0 && $rc -ne 1 ]]; then
+        # 1 means the key is unset; anything else is a bad value or an unreadable file: fail closed.
+        echo "git-config:clavain.autoPush-unreadable(rc=$rc)"
     fi
 }
 
@@ -100,60 +119,86 @@ skip_patterns() {
         printf '%s\n' "${CLAVAIN_AUTO_PUSH_SKIP//,/ }" | tr -s ' ' '\n'
         return
     fi
-    local configured
-    configured=$(git config --get-all clavain.autoPushSkip 2>/dev/null) || configured=""
-    if [[ -n "$configured" ]]; then
+    local configured rc
+    configured=$(git config --get-all clavain.autoPushSkip 2>/dev/null)
+    rc=$?
+    if [[ $rc -gt 1 ]]; then
+        echo '*' # an unreadable list blocks every branch: fail closed
+    elif [[ -n "$configured" ]]; then
         printf '%s\n' "$configured"
     else
         echo 'wk/*'
     fi
 }
 
+# The remote's default branch: the local refs/remotes/<remote>/HEAD when set, else ask the remote
+# (ls-remote --symref, no prompts, bounded). Prints nothing when it cannot be told.
+remote_default_branch() {
+    local remote="$1" ref
+    ref=$(git symbolic-ref -q --short "refs/remotes/$remote/HEAD" 2>/dev/null) || ref=""
+    if [[ -n "$ref" ]]; then
+        echo "${ref#"$remote"/}"
+        return
+    fi
+    GIT_TERMINAL_PROMPT=0 timeout 20 git ls-remote --symref "$remote" HEAD 2>/dev/null </dev/null |
+        sed -n 's|^ref: refs/heads/\(.*\)[[:space:]]HEAD$|\1|p' | head -n1
+}
+
 # Prints why BRANCH must not be pushed to REMOTE, or nothing when it may be.
 branch_block_reason() {
     local remote="$1" default pat
     case "$BRANCH" in
-        main | master) echo "protected branch $BRANCH"; return ;;
+        main | master) echo "protected-branch:$BRANCH"; return ;;
     esac
-    default=$(git symbolic-ref -q --short "refs/remotes/$remote/HEAD" 2>/dev/null) || default=""
-    default="${default#"$remote"/}"
-    if [[ -n "$default" && "$BRANCH" == "$default" ]]; then
-        echo "default branch of $remote ($default)"
-        return
-    fi
     while IFS= read -r pat; do
         [[ -n "$pat" ]] || continue
         # shellcheck disable=SC2053 # the pattern is meant to glob
         if [[ "$BRANCH" == $pat ]]; then
-            echo "skip pattern $pat"
+            echo "skip-pattern:$pat"
             return
         fi
     done < <(skip_patterns)
+    default=$(remote_default_branch "$remote")
+    if [[ -z "$default" ]]; then
+        echo "default-branch-of-$remote-unknown" # fail closed: cannot show this is not the default
+        return
+    fi
+    if [[ "$BRANCH" == "$default" ]]; then
+        echo "default-branch:$remote/$default"
+        return
+    fi
 }
 
 # push_to REMOTE KIND [-u]: the one place a push happens. Logs the outcome.
 push_to() {
-    local remote="$1" kind="$2" setup="${3:-}" reason before after rc url
+    local remote="$1" kind="$2" setup="${3:-}" reason before after rc urls
     if [[ -n "$GLOBAL_OFF" ]]; then
-        log_event skipped "remote=$remote kind=$kind reason=\"$GLOBAL_OFF\""
+        log_event skipped "remote=$remote" "kind=$kind" "reason=$GLOBAL_OFF"
         return 0
     fi
     reason=$(branch_block_reason "$remote")
     if [[ -n "$reason" ]]; then
-        log_event skipped "remote=$remote kind=$kind reason=\"$reason\""
+        log_event skipped "remote=$remote" "kind=$kind" "reason=$reason"
         return 0
     fi
     before=$(git rev-parse --verify -q "refs/remotes/$remote/$BRANCH" 2>/dev/null) || before="none"
-    url=$(git remote get-url --push "$remote" 2>/dev/null) || url="unknown"
+    # git push goes to EVERY push URL of the remote, so log them all.
+    urls=$(git remote get-url --push --all "$remote" 2>/dev/null | paste -sd, -) || urls=""
+    [[ -n "$urls" ]] || urls="unknown"
     # An explicit refspec: never rely on push.default (matching would push other branches).
     # shellcheck disable=SC2086 # $setup is empty or a single -u
     git push $setup "$remote" "refs/heads/$BRANCH:refs/heads/$BRANCH" >/dev/null 2>&1
     rc=$?
     after=$(git rev-parse HEAD 2>/dev/null) || after="unknown"
     if [[ $rc -eq 0 ]]; then
-        log_event pushed "remote=$remote url=$url kind=$kind from=${before:0:12} sha=${after:0:12}"
+        log_event pushed "remote=$remote" "urls=$urls" "kind=$kind" "from=${before:0:12}" "sha=${after:0:12}"
     else
-        log_event push-failed "remote=$remote url=$url kind=$kind rc=$rc sha=${after:0:12}"
+        # With several push URLs a failure may still have updated some of them.
+        if [[ "$urls" == *,* ]]; then
+            log_event push-failed "remote=$remote" "urls=$urls" "kind=$kind" "rc=$rc" "sha=${after:0:12}" "note=may-be-partial"
+        else
+            log_event push-failed "remote=$remote" "urls=$urls" "kind=$kind" "rc=$rc" "sha=${after:0:12}"
+        fi
     fi
     return 0
 }

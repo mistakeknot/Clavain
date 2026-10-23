@@ -9,7 +9,7 @@ setup() {
     export WORK="$BATS_TEST_TMPDIR/work"
     export REMOTE="$BATS_TEST_TMPDIR/remote.git"
     mkdir -p "$WORK"
-    git init --bare -q "$REMOTE"
+    git init --bare -q -b main "$REMOTE"
     git init -q -b main "$WORK/repo"
     cd "$WORK/repo"
     git config user.email test@example.com
@@ -100,13 +100,15 @@ commit_on() { # commit_on BRANCH: create BRANCH from main with one commit
 }
 
 remote_has() { git --git-dir="$REMOTE" rev-parse -q --verify "refs/heads/$1" >/dev/null; }
+# A bare `! cmd` never trips bats errexit; a function returning 1 does.
+not_remote_has() { ! remote_has "$@"; }
 
 @test "auto-push: CLAVAIN_AUTO_PUSH=0 pushes nothing" {
     commit_on feature
     CLAVAIN_AUTO_PUSH=0 run run_hook
     [ "$status" -eq 0 ]
-    ! remote_has feature
-    grep -q 'event=skipped .*branch=feature .*reason="env CLAVAIN_AUTO_PUSH=0"' "$CLAVAIN_AUTO_PUSH_LOG"
+    not_remote_has feature
+    grep -q 'event=skipped .*branch=feature .*reason=env:CLAVAIN_AUTO_PUSH=0' "$CLAVAIN_AUTO_PUSH_LOG"
 }
 
 @test "auto-push: CLAVAIN_AUTO_PUSH=1 still pushes" {
@@ -121,21 +123,21 @@ remote_has() { git --git-dir="$REMOTE" rev-parse -q --verify "refs/heads/$1" >/d
     : > .git/info/no-auto-push
     run run_hook
     [ "$status" -eq 0 ]
-    ! remote_has feature
+    not_remote_has feature
 }
 
 @test "auto-push: work tree .no-auto-push opts the repo out" {
     : > .no-auto-push
     commit_on feature
     run run_hook
-    ! remote_has feature
+    not_remote_has feature
 }
 
 @test "auto-push: git config clavain.autoPush=false opts out; true does not" {
     commit_on feature
     git config clavain.autoPush false
     run run_hook
-    ! remote_has feature
+    not_remote_has feature
     git config clavain.autoPush true
     run run_hook
     remote_has feature
@@ -145,8 +147,8 @@ remote_has() { git --git-dir="$REMOTE" rev-parse -q --verify "refs/heads/$1" >/d
     commit_on wk/some-work
     run run_hook
     [ "$status" -eq 0 ]
-    ! remote_has wk/some-work
-    grep -q 'event=skipped .*branch=wk/some-work .*reason="skip pattern wk/\*"' "$CLAVAIN_AUTO_PUSH_LOG"
+    not_remote_has wk/some-work
+    grep -q 'event=skipped .*branch=wk/some-work .*reason=skip-pattern:wk/\*' "$CLAVAIN_AUTO_PUSH_LOG"
 }
 
 @test "auto-push: CLAVAIN_AUTO_PUSH_SKIP replaces the default pattern list" {
@@ -155,7 +157,7 @@ remote_has() { git --git-dir="$REMOTE" rev-parse -q --verify "refs/heads/$1" >/d
     remote_has wk/some-work
     commit_on scratch-one
     CLAVAIN_AUTO_PUSH_SKIP="tmp/*,scratch-*" run run_hook
-    ! remote_has scratch-one
+    not_remote_has scratch-one
 }
 
 @test "auto-push: git config clavain.autoPushSkip patterns are honoured" {
@@ -163,7 +165,7 @@ remote_has() { git --git-dir="$REMOTE" rev-parse -q --verify "refs/heads/$1" >/d
     git config --add clavain.autoPushSkip 'draft-*'
     commit_on draft-x
     run run_hook
-    ! remote_has draft-x
+    not_remote_has draft-x
     commit_on feature
     run run_hook
     remote_has feature
@@ -177,7 +179,7 @@ remote_has() { git --git-dir="$REMOTE" rev-parse -q --verify "refs/heads/$1" >/d
     run run_hook
     [ "$status" -eq 0 ]
     [ "$(git --git-dir="$REMOTE" rev-parse refs/heads/main)" = "$before" ]
-    grep -q 'event=skipped .*branch=main .*reason="protected branch main"' "$CLAVAIN_AUTO_PUSH_LOG"
+    grep -q 'event=skipped .*branch=main .*reason=protected-branch:main' "$CLAVAIN_AUTO_PUSH_LOG"
 }
 
 @test "auto-push: master is never pushed" {
@@ -186,7 +188,7 @@ remote_has() { git --git-dir="$REMOTE" rev-parse -q --verify "refs/heads/$1" >/d
     git add m.txt
     git commit -qm "master work"
     run run_hook
-    ! remote_has master
+    not_remote_has master
 }
 
 @test "auto-push: the remote's default branch is never pushed, whatever its name" {
@@ -200,7 +202,7 @@ remote_has() { git --git-dir="$REMOTE" rev-parse -q --verify "refs/heads/$1" >/d
     before=$(git --git-dir="$REMOTE" rev-parse refs/heads/trunk)
     run run_hook
     [ "$(git --git-dir="$REMOTE" rev-parse refs/heads/trunk)" = "$before" ]
-    grep -q 'reason="default branch of origin (trunk)"' "$CLAVAIN_AUTO_PUSH_LOG"
+    grep -q 'reason=default-branch:origin/trunk' "$CLAVAIN_AUTO_PUSH_LOG"
 }
 
 @test "auto-push: a branch tracking origin/main publishes under its own name, not main" {
@@ -240,7 +242,7 @@ remote_has() { git --git-dir="$REMOTE" rev-parse -q --verify "refs/heads/$1" >/d
     [ "$status" -eq 0 ]
     [[ "$output" == *"branch=feature"* ]]
     [[ "$output" == *"remote=origin"* ]]
-    [[ "$output" == *"url=$REMOTE"* ]]
+    [[ "$output" == *"urls=$REMOTE "* ]]
     [[ "$output" == *"sha=$sha"* ]]
     [[ "$output" == *"from=none"* ]]
     [[ "$output" == *"session=sess-123"* ]]
@@ -250,7 +252,7 @@ remote_has() { git --git-dir="$REMOTE" rev-parse -q --verify "refs/heads/$1" >/d
 
 @test "auto-push: a failed push is logged as push-failed and the hook still exits 0" {
     commit_on feature
-    git remote set-url origin "$BATS_TEST_TMPDIR/does-not-exist.git"
+    git config remote.origin.pushurl "$BATS_TEST_TMPDIR/does-not-exist.git"
     run run_hook
     [ "$status" -eq 0 ]
     grep -q 'event=push-failed .*branch=feature' "$CLAVAIN_AUTO_PUSH_LOG"
@@ -278,4 +280,74 @@ remote_has() { git --git-dir="$REMOTE" rev-parse -q --verify "refs/heads/$1" >/d
     rm "$BATS_TEST_TMPDIR/beads-ran"
     CLAVAIN_AUTO_PUSH=0 run run_hook
     [ ! -e "$BATS_TEST_TMPDIR/beads-ran" ]
+}
+
+@test "auto-push: the default branch is still refused when refs/remotes/origin/HEAD is unset (resolved from the remote)" {
+    git --git-dir="$REMOTE" symbolic-ref HEAD refs/heads/trunk
+    git checkout -qb trunk
+    git push -qu origin trunk
+    git remote set-head origin --delete
+    run git symbolic-ref -q refs/remotes/origin/HEAD
+    [ "$status" -ne 0 ]
+    echo t > t.txt
+    git add t.txt
+    git commit -qm "trunk work"
+    before=$(git --git-dir="$REMOTE" rev-parse refs/heads/trunk)
+    run run_hook
+    [ "$status" -eq 0 ]
+    [ "$(git --git-dir="$REMOTE" rev-parse refs/heads/trunk)" = "$before" ]
+    grep -q 'reason=default-branch:origin/trunk' "$CLAVAIN_AUTO_PUSH_LOG"
+}
+
+@test "auto-push: an unknowable default branch blocks the push (fails closed)" {
+    commit_on feature
+    git remote set-url origin "$BATS_TEST_TMPDIR/does-not-exist.git"
+    git config remote.origin.pushurl "$REMOTE"
+    run run_hook
+    [ "$status" -eq 0 ]
+    not_remote_has feature
+    grep -q 'event=skipped .*reason=default-branch-of-origin-unknown' "$CLAVAIN_AUTO_PUSH_LOG"
+}
+
+@test "auto-push: an invalid clavain.autoPush value blocks the push (fails closed)" {
+    commit_on feature
+    git config clavain.autoPush disabled
+    run run_hook
+    [ "$status" -eq 0 ]
+    not_remote_has feature
+    grep -q 'event=skipped .*reason=git-config:clavain.autoPush-unreadable' "$CLAVAIN_AUTO_PUSH_LOG"
+}
+
+@test "auto-push: a newline or space in the repo path still yields one log line per event" {
+    odd="$WORK/$(printf 'odd\nevent=pushed forged=1')"
+    mv "$WORK/repo" "$odd"
+    cd "$odd"
+    commit_on feature
+    run run_hook
+    [ "$status" -eq 0 ]
+    remote_has feature
+    [ "$(wc -l < "$CLAVAIN_AUTO_PUSH_LOG")" -eq 1 ]
+    run grep -q ' forged=1' "$CLAVAIN_AUTO_PUSH_LOG"
+    [ "$status" -eq 1 ]
+    grep -q 'repo=.*odd%0Aevent=pushed%20forged=1 ' "$CLAVAIN_AUTO_PUSH_LOG"
+}
+
+@test "auto-push: every push URL of the remote is logged" {
+    git init --bare -q -b main "$BATS_TEST_TMPDIR/mirror.git"
+    git remote set-url --add --push origin "$REMOTE"
+    git remote set-url --add --push origin "$BATS_TEST_TMPDIR/mirror.git"
+    commit_on feature
+    run run_hook
+    [ "$status" -eq 0 ]
+    remote_has feature
+    grep 'event=pushed' "$CLAVAIN_AUTO_PUSH_LOG" | grep -q "urls=$REMOTE,$BATS_TEST_TMPDIR/mirror.git "
+}
+
+@test "auto-push: a failed multi-URL push is flagged as possibly partial" {
+    git remote set-url --add --push origin "$REMOTE"
+    git remote set-url --add --push origin "$BATS_TEST_TMPDIR/does-not-exist.git"
+    commit_on feature
+    run run_hook
+    [ "$status" -eq 0 ]
+    grep 'event=push-failed' "$CLAVAIN_AUTO_PUSH_LOG" | grep -q 'note=may-be-partial'
 }
