@@ -492,7 +492,7 @@ not_remote_has() { ! remote_has "$@"; }
     git commit -qm "add submodule"
     git push -q origin main
     git checkout -qb feature
-    git -C sub commit -q --allow-empty -m "sub work"
+    git -C sub -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m "sub work"
     git add sub
     git commit -qm "bump submodule"
     git config push.recurseSubmodules on-demand
