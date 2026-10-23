@@ -145,7 +145,7 @@ remote_default_branch() {
 # transport, so anything that can make the two differ fails closed:
 #   - a custom receive-pack/upload-pack/helper on any remote, or a custom ssh/proxy command (the push
 #     may run another command than the query does);
-#   - an ext:: URL (it runs a command);
+#   - a helper-transport URL (ext::, fd::, ...), as configured or after URL rewriting (it runs a command);
 #   - a control character (newline, SOH, ...) anywhere in a remote URL or URL rewrite rule: the URL
 #     list is read line by line, so such a URL would be truncated;
 #   - config that cannot be read.
@@ -184,9 +184,13 @@ destination_unverifiable() {
             echo "control-character-in-url-config"
             return
         fi
-        case "$value" in
-            ext::*) echo "ext-transport"; return ;;
-        esac
+        # Helper transports (ext::, fd::, ...) run a command. An insteadOf rule's replacement URL is
+        # part of its KEY (url.<replacement>.insteadOf), so check the key as well as the value.
+        key="${rec%%$'\n'*}"
+        if [[ "$value" =~ ^[[:alnum:]+.-]+:: || "${key#url.}" =~ ^[[:alnum:]+.-]+:: ]]; then
+            echo "helper-transport"
+            return
+        fi
     done < <(LC_ALL=C git config -z --get-regexp '^(remote\..*\.(url|pushurl)|url\..*\.(insteadof|pushinsteadof))$' 2>/dev/null)
 }
 
@@ -219,6 +223,12 @@ branch_block_reason() {
     while IFS= read -r url; do
         [[ -n "$url" ]] || continue
         found=1
+        # The EXPANDED url is what gets queried and pushed: it may carry a helper transport or a
+        # control character that no single config value shows.
+        if [[ "$url" == *[[:cntrl:]]* || "$url" =~ ^[[:alnum:]+.-]+:: ]]; then
+            echo "destination-unverifiable:expanded-url"
+            return
+        fi
         # ls-remote reads an argument that names a configured remote as that remote (and uses its url,
         # not this pushurl), so such a URL would query a different repository than the push reaches.
         if git remote | grep -Fxq -- "$url"; then

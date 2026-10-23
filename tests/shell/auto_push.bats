@@ -483,13 +483,30 @@ not_remote_has() { ! remote_has "$@"; }
     grep -q 'event=skipped .*reason=default-branch-of-origin-unknown' "$CLAVAIN_AUTO_PUSH_LOG"
 }
 
+@test "auto-push: an ext:: URL produced by a URL rewrite is never queried or pushed to" {
+    git checkout -qb trunk
+    seeded_bare safe.git main
+    seeded_bare write.git trunk
+    git config protocol.ext.allow always
+    git config remote.origin.pushurl review-alias:
+    git config "url.ext::sh -c if% test% %s% =% upload-pack;% then% exec% git-upload-pack% $BATS_TEST_TMPDIR/safe.git;% else% exec% git-receive-pack% $BATS_TEST_TMPDIR/write.git;% fi.insteadOf" review-alias:
+    echo t > t.txt
+    git add t.txt
+    git commit -qm "trunk work"
+    before=$(git --git-dir="$BATS_TEST_TMPDIR/write.git" rev-parse refs/heads/trunk)
+    run run_hook
+    [ "$status" -eq 0 ]
+    [ "$(git --git-dir="$BATS_TEST_TMPDIR/write.git" rev-parse refs/heads/trunk)" = "$before" ]
+    grep -q 'event=skipped .*reason=destination-unverifiable:helper-transport' "$CLAVAIN_AUTO_PUSH_LOG"
+}
+
 @test "auto-push: an ext:: URL is never pushed to" {
     commit_on feature
     git config remote.origin.pushurl "ext::sh -c 'touch $BATS_TEST_TMPDIR/ext-ran'"
     run run_hook
     [ "$status" -eq 0 ]
     [ ! -e "$BATS_TEST_TMPDIR/ext-ran" ]
-    grep -q 'event=skipped .*reason=destination-unverifiable:ext-transport' "$CLAVAIN_AUTO_PUSH_LOG"
+    grep -q 'event=skipped .*reason=destination-unverifiable:helper-transport' "$CLAVAIN_AUTO_PUSH_LOG"
 }
 
 @test "auto-push: an invalid clavain.autoPush value blocks the push (fails closed)" {
