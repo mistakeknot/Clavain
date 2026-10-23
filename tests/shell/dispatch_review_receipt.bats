@@ -241,6 +241,9 @@ teardown() { rm -rf "$T"; }
 }
 
 @test "dispatch cross-lab-review prompt names the accepted verdict words" {
-    grep -q 'VERDICT: PASS WITH NOTES' "$DISPATCH"
-    grep -q 'APPROVE, BLOCK, CLEAN' "$DISPATCH" || grep -q 'APPROVE' "$DISPATCH"
+    line="$(grep -n 'of: .*VERDICT: PASS.*VERDICT: FAIL' "$DISPATCH" | head -1)"
+    [ -n "$line" ]
+    [[ "$line" == *'\"VERDICT: PASS\"'* ]]
+    [[ "$line" == *'\"VERDICT: PASS WITH NOTES\"'* ]]
+    [[ "$line" == *'\"VERDICT: FAIL\"'* ]]
 }
