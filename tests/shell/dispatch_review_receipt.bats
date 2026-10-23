@@ -197,3 +197,24 @@ teardown() { rm -rf "$T"; }
     [ "$(jq -r .sequence "$d/7-$HEAD_SHA.json")" = 1 ]
     [ "$(jq -r .sequence "$d/7-$HEAD_SHA.3.json")" = 3 ]
 }
+
+@test "concurrent writers for one head each get a distinct receipt and sequence" {
+    _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"
+    for i in 1 2 3 4 5 6 7 8; do ( _review_receipt_write "$OUT" 0 ) 2>/dev/null & done
+    wait
+    d="$T/reviews/o__r"
+    [ "$(ls "$d"/7-"$HEAD_SHA"*.json | wc -l)" -eq 8 ]
+    [ "$(jq -r .sequence "$d"/7-"$HEAD_SHA"*.json | sort -n | uniq | wc -l)" -eq 8 ]
+}
+
+@test "a dangling symlink at the next numbered path is refused" {
+    _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    d="$T/reviews/o__r"
+    ln -s /nonexistent "$d/7-$HEAD_SHA.2.json"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -ne 0 ]
+    [ ! -e "$d/7-$HEAD_SHA.3.json" ]
+}
