@@ -88,7 +88,8 @@ fi
 # Create-only: a repo may commit its own .gitignore here (e.g. to version
 # progress.md ledgers); overwriting it would revert that on every run.
 if [ -e "$base/.gitignore" ] || [ -L "$base/.gitignore" ]; then
-  [ -f "$base/.gitignore" ] \
+  # Git ignores a symlinked .gitignore, so a symlink cannot hide the workspace.
+  { [ -f "$base/.gitignore" ] && [ ! -L "$base/.gitignore" ]; } \
     || { echo "$base/.gitignore exists but is not a regular file" >&2; exit 2; }
 else
   printf '*\n' > "$base/.gitignore"

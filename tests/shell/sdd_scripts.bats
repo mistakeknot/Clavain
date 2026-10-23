@@ -83,6 +83,15 @@ commit_file() {
     [[ "$output" == *"not a regular file"* ]]
 }
 
+@test "sdd-workspace refuses a symlinked .clavain/sdd/.gitignore even to a regular file" {
+    mkdir -p .clavain/sdd
+    printf '*\n' > "$BATS_TEST_TMPDIR/real-ignore"
+    ln -s "$BATS_TEST_TMPDIR/real-ignore" .clavain/sdd/.gitignore
+    run bash "$SDD/sdd-workspace" plan-a.md
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"not a regular file"* ]]
+}
+
 @test "same-basename plans get distinct workspaces and keep both briefs" {
     mkdir -p docs/alpha docs/beta
     printf '# A\n\n## Task 1: Alpha\n\nAlpha-only requirement text.\n' > docs/alpha/plan.md
