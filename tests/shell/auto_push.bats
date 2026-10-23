@@ -100,6 +100,16 @@ commit_on() { # commit_on BRANCH: create BRANCH from main with one commit
 }
 
 remote_has() { git --git-dir="$REMOTE" rev-parse -q --verify "refs/heads/$1" >/dev/null; }
+# seeded_bare NAME DEFAULT: a bare repo whose default branch DEFAULT exists (an empty remote reports no default).
+seeded_bare() {
+    git init --bare -q -b "$2" "$BATS_TEST_TMPDIR/$1"
+    git push -q "$BATS_TEST_TMPDIR/$1" "HEAD:refs/heads/$2"
+}
+# reject_pushes PATH: make a bare repo refuse every push.
+reject_pushes() {
+    printf '#!/bin/sh\nexit 1\n' > "$1/hooks/pre-receive"
+    chmod +x "$1/hooks/pre-receive"
+}
 # A bare `! cmd` never trips bats errexit; a function returning 1 does.
 not_remote_has() { ! remote_has "$@"; }
 
@@ -252,7 +262,7 @@ not_remote_has() { ! remote_has "$@"; }
 
 @test "auto-push: a failed push is logged as push-failed and the hook still exits 0" {
     commit_on feature
-    git config remote.origin.pushurl "$BATS_TEST_TMPDIR/does-not-exist.git"
+    reject_pushes "$REMOTE"
     run run_hook
     [ "$status" -eq 0 ]
     grep -q 'event=push-failed .*branch=feature' "$CLAVAIN_AUTO_PUSH_LOG"
@@ -301,12 +311,60 @@ not_remote_has() { ! remote_has "$@"; }
 
 @test "auto-push: an unknowable default branch blocks the push (fails closed)" {
     commit_on feature
-    git remote set-url origin "$BATS_TEST_TMPDIR/does-not-exist.git"
-    git config remote.origin.pushurl "$REMOTE"
+    git config remote.origin.pushurl "$BATS_TEST_TMPDIR/does-not-exist.git"
     run run_hook
     [ "$status" -eq 0 ]
     not_remote_has feature
     grep -q 'event=skipped .*reason=default-branch-of-origin-unknown' "$CLAVAIN_AUTO_PUSH_LOG"
+    run grep -q 'event=push-failed' "$CLAVAIN_AUTO_PUSH_LOG"
+    [ "$status" -eq 1 ]
+}
+
+@test "auto-push: a stale origin/HEAD does not permit pushing the remote's new default branch" {
+    git checkout -qb trunk
+    echo t > t.txt
+    git add t.txt
+    git commit -qm "trunk work"
+    git push -qu origin trunk
+    git remote set-head origin main
+    git --git-dir="$REMOTE" symbolic-ref HEAD refs/heads/trunk
+    echo t2 > t2.txt
+    git add t2.txt
+    git commit -qm "more trunk"
+    before=$(git --git-dir="$REMOTE" rev-parse refs/heads/trunk)
+    run run_hook
+    [ "$status" -eq 0 ]
+    [ "$(git --git-dir="$REMOTE" rev-parse refs/heads/trunk)" = "$before" ]
+    grep -q 'reason=default-branch:origin/trunk' "$CLAVAIN_AUTO_PUSH_LOG"
+}
+
+@test "auto-push: the default branch of the push URL is checked, not just the fetch URL" {
+    git checkout -qb trunk
+    seeded_bare pushdest.git trunk
+    git config remote.origin.pushurl "$BATS_TEST_TMPDIR/pushdest.git"
+    echo t > t.txt
+    git add t.txt
+    git commit -qm "trunk work"
+    before=$(git --git-dir="$BATS_TEST_TMPDIR/pushdest.git" rev-parse refs/heads/trunk)
+    run run_hook
+    [ "$status" -eq 0 ]
+    [ "$(git --git-dir="$BATS_TEST_TMPDIR/pushdest.git" rev-parse refs/heads/trunk)" = "$before" ]
+    grep -q 'reason=default-branch:origin/trunk' "$CLAVAIN_AUTO_PUSH_LOG"
+}
+
+@test "auto-push: with several push URLs, one default-branch match blocks the whole push" {
+    git checkout -qb trunk
+    seeded_bare mirror.git trunk
+    git remote set-url --add --push origin "$REMOTE"
+    git remote set-url --add --push origin "$BATS_TEST_TMPDIR/mirror.git"
+    echo t > t.txt
+    git add t.txt
+    git commit -qm "trunk work"
+    before=$(git --git-dir="$BATS_TEST_TMPDIR/mirror.git" rev-parse refs/heads/trunk)
+    run run_hook
+    [ "$status" -eq 0 ]
+    not_remote_has trunk
+    [ "$(git --git-dir="$BATS_TEST_TMPDIR/mirror.git" rev-parse refs/heads/trunk)" = "$before" ]
 }
 
 @test "auto-push: an invalid clavain.autoPush value blocks the push (fails closed)" {
@@ -333,19 +391,23 @@ not_remote_has() { ! remote_has "$@"; }
 }
 
 @test "auto-push: every push URL of the remote is logged" {
-    git init --bare -q -b main "$BATS_TEST_TMPDIR/mirror.git"
+    seeded_bare mirror.git main
     git remote set-url --add --push origin "$REMOTE"
     git remote set-url --add --push origin "$BATS_TEST_TMPDIR/mirror.git"
     commit_on feature
     run run_hook
     [ "$status" -eq 0 ]
     remote_has feature
+    run git --git-dir="$BATS_TEST_TMPDIR/mirror.git" rev-parse -q --verify refs/heads/feature
+    [ "$status" -eq 0 ]
     grep 'event=pushed' "$CLAVAIN_AUTO_PUSH_LOG" | grep -q "urls=$REMOTE,$BATS_TEST_TMPDIR/mirror.git "
 }
 
 @test "auto-push: a failed multi-URL push is flagged as possibly partial" {
+    seeded_bare mirror.git main
+    reject_pushes "$BATS_TEST_TMPDIR/mirror.git"
     git remote set-url --add --push origin "$REMOTE"
-    git remote set-url --add --push origin "$BATS_TEST_TMPDIR/does-not-exist.git"
+    git remote set-url --add --push origin "$BATS_TEST_TMPDIR/mirror.git"
     commit_on feature
     run run_hook
     [ "$status" -eq 0 ]

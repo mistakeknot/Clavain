@@ -19,8 +19,9 @@
 #     its worktrees), or a tracked/untracked .no-auto-push at the work tree root
 #   - git config clavain.autoPush=false (local, global or system)
 # Branch rules:
-#   - never pushes main, master or the remote's default branch
-#     (refs/remotes/<remote>/HEAD)
+#   - never pushes main, master or the default branch of the remote, asked of
+#     the remote itself for every push URL (ls-remote --symref); if that cannot
+#     be told, nothing is pushed
 #   - skips branches matching a skip pattern: CLAVAIN_AUTO_PUSH_SKIP (space or
 #     comma separated globs), else git config clavain.autoPushSkip (repeatable),
 #     else the default "wk/*". A configured list replaces the default.
@@ -131,22 +132,18 @@ skip_patterns() {
     fi
 }
 
-# The remote's default branch: the local refs/remotes/<remote>/HEAD when set, else ask the remote
-# (ls-remote --symref, no prompts, bounded). Prints nothing when it cannot be told.
+# The default branch of the repository at URL, asked of that repository itself (ls-remote --symref,
+# no prompts, bounded). Prints nothing when it cannot be told. Local remote-tracking metadata is never
+# trusted for this: it goes stale when the remote's default changes.
 remote_default_branch() {
-    local remote="$1" ref
-    ref=$(git symbolic-ref -q --short "refs/remotes/$remote/HEAD" 2>/dev/null) || ref=""
-    if [[ -n "$ref" ]]; then
-        echo "${ref#"$remote"/}"
-        return
-    fi
-    GIT_TERMINAL_PROMPT=0 timeout 20 git ls-remote --symref "$remote" HEAD 2>/dev/null </dev/null |
+    GIT_TERMINAL_PROMPT=0 timeout 20 git ls-remote --symref "$1" HEAD 2>/dev/null </dev/null |
         sed -n 's|^ref: refs/heads/\(.*\)[[:space:]]HEAD$|\1|p' | head -n1
 }
 
-# Prints why BRANCH must not be pushed to REMOTE, or nothing when it may be.
+# Prints why BRANCH must not be pushed to REMOTE, or nothing when it may be. A push goes to every
+# push URL of the remote, so each one's default branch is checked; one unknown or matching blocks all.
 branch_block_reason() {
-    local remote="$1" default pat
+    local remote="$1" cached default pat url found=0
     case "$BRANCH" in
         main | master) echo "protected-branch:$BRANCH"; return ;;
     esac
@@ -158,14 +155,27 @@ branch_block_reason() {
             return
         fi
     done < <(skip_patterns)
-    default=$(remote_default_branch "$remote")
-    if [[ -z "$default" ]]; then
-        echo "default-branch-of-$remote-unknown" # fail closed: cannot show this is not the default
+    # The cached default can only add a refusal, never remove one.
+    cached=$(git symbolic-ref -q --short "refs/remotes/$remote/HEAD" 2>/dev/null) || cached=""
+    if [[ -n "$cached" && "$BRANCH" == "${cached#"$remote"/}" ]]; then
+        echo "default-branch:$remote/$BRANCH"
         return
     fi
-    if [[ "$BRANCH" == "$default" ]]; then
-        echo "default-branch:$remote/$default"
-        return
+    while IFS= read -r url; do
+        [[ -n "$url" ]] || continue
+        found=1
+        default=$(remote_default_branch "$url")
+        if [[ -z "$default" ]]; then
+            echo "default-branch-of-$remote-unknown" # fail closed: cannot show this is not the default
+            return
+        fi
+        if [[ "$BRANCH" == "$default" ]]; then
+            echo "default-branch:$remote/$default"
+            return
+        fi
+    done < <(git remote get-url --push --all "$remote" 2>/dev/null)
+    if [[ $found -eq 0 ]]; then
+        echo "default-branch-of-$remote-unknown"
     fi
 }
 
