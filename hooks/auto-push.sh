@@ -164,6 +164,12 @@ branch_block_reason() {
     while IFS= read -r url; do
         [[ -n "$url" ]] || continue
         found=1
+        # ls-remote rewrites its URL argument (insteadOf) once more. If that changes it, the query
+        # would reach a different repository than the push does, so treat the default as unknown.
+        if [[ "$(git ls-remote --get-url "$url" 2>/dev/null)" != "$url" ]]; then
+            echo "default-branch-of-$remote-unknown"
+            return
+        fi
         default=$(remote_default_branch "$url")
         if [[ -z "$default" ]]; then
             echo "default-branch-of-$remote-unknown" # fail closed: cannot show this is not the default

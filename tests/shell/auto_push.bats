@@ -367,6 +367,23 @@ not_remote_has() { ! remote_has "$@"; }
     [ "$(git --git-dir="$BATS_TEST_TMPDIR/mirror.git" rev-parse refs/heads/trunk)" = "$before" ]
 }
 
+@test "auto-push: a chained URL rewrite cannot make the guard inspect a different repository than the push" {
+    git checkout -qb trunk
+    seeded_bare push.git trunk
+    seeded_bare safe.git main
+    git config remote.origin.pushurl "review-alias:"
+    git config "url.$BATS_TEST_TMPDIR/push.git.insteadOf" "review-alias:"
+    git config "url.$BATS_TEST_TMPDIR/safe.git.insteadOf" "$BATS_TEST_TMPDIR/push.git"
+    echo t > t.txt
+    git add t.txt
+    git commit -qm "trunk work"
+    before=$(git --git-dir="$BATS_TEST_TMPDIR/push.git" rev-parse refs/heads/trunk)
+    run run_hook
+    [ "$status" -eq 0 ]
+    [ "$(git --git-dir="$BATS_TEST_TMPDIR/push.git" rev-parse refs/heads/trunk)" = "$before" ]
+    grep -q 'event=skipped .*reason=default-branch-of-origin-unknown' "$CLAVAIN_AUTO_PUSH_LOG"
+}
+
 @test "auto-push: an invalid clavain.autoPush value blocks the push (fails closed)" {
     commit_on feature
     git config clavain.autoPush disabled
