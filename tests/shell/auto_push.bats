@@ -398,7 +398,7 @@ not_remote_has() { ! remote_has "$@"; }
     [ "$status" -eq 0 ]
     run git --git-dir="$nl_url" rev-parse --verify -q refs/heads/trunk
     [ "$status" -ne 0 ]
-    grep -q 'event=skipped .*reason=destination-unverifiable:newline-in-url-config' "$CLAVAIN_AUTO_PUSH_LOG"
+    grep -q 'event=skipped .*reason=destination-unverifiable:control-character-in-url-config' "$CLAVAIN_AUTO_PUSH_LOG"
 }
 
 @test "auto-push: a custom receive-pack command cannot redirect the push away from the queried repository" {
@@ -414,7 +414,38 @@ not_remote_has() { ! remote_has "$@"; }
     run run_hook
     [ "$status" -eq 0 ]
     [ "$(git --git-dir="$BATS_TEST_TMPDIR/write.git" rev-parse refs/heads/trunk)" = "$before" ]
-    grep -q 'event=skipped .*reason=destination-unverifiable:remote.receivepack' "$CLAVAIN_AUTO_PUSH_LOG"
+    grep -q 'event=skipped .*reason=destination-unverifiable:remote.origin.receivepack' "$CLAVAIN_AUTO_PUSH_LOG"
+}
+
+@test "auto-push: a control byte before a newline in a push URL cannot hide the real destination" {
+    git checkout -qb trunk
+    seeded_bare soh_read main
+    soh_url="$BATS_TEST_TMPDIR/soh_read"$'\001\n'
+    git init --bare -q -b trunk "$soh_url"
+    git -C "$soh_url" symbolic-ref HEAD refs/heads/trunk
+    git config remote.origin.pushurl "$soh_url"
+    echo t > t.txt
+    git add t.txt
+    git commit -qm "trunk work"
+    run run_hook
+    [ "$status" -eq 0 ]
+    run git --git-dir="$soh_url" rev-parse --verify -q refs/heads/trunk
+    [ "$status" -ne 0 ]
+    grep -q 'event=skipped .*reason=destination-unverifiable:control-character-in-url-config' "$CLAVAIN_AUTO_PUSH_LOG"
+}
+
+@test "auto-push: a custom ssh command (config or environment) is never trusted to reach the queried repository" {
+    commit_on feature
+    git config core.sshCommand "sh -c 'exit 1' --"
+    run run_hook
+    [ "$status" -eq 0 ]
+    not_remote_has feature
+    grep -q 'event=skipped .*reason=destination-unverifiable:core.sshCommand' "$CLAVAIN_AUTO_PUSH_LOG"
+    git config --unset core.sshCommand
+    GIT_SSH_COMMAND="sh -c 'exit 1' --" run run_hook
+    [ "$status" -eq 0 ]
+    not_remote_has feature
+    grep -q 'event=skipped .*reason=destination-unverifiable:env:GIT_SSH_COMMAND' "$CLAVAIN_AUTO_PUSH_LOG"
 }
 
 @test "auto-push: an ext:: URL is never pushed to" {

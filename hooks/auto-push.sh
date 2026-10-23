@@ -143,39 +143,47 @@ remote_default_branch() {
 # Prints why the guard cannot prove that the repository it queries is the one the push reaches, or
 # nothing when it can. The query is ls-remote against each push URL; the push goes through git's own
 # transport, so anything that can make the two differ fails closed:
-#   - a custom receive-pack/upload-pack/helper for the remote (the push may run another command);
+#   - a custom receive-pack/upload-pack/helper for the remote, or a custom ssh/proxy command (the push
+#     may run another command than the query does);
 #   - an ext:: URL (it runs a command);
-#   - a newline inside a remote URL or a URL rewrite rule (the URL list is read line by line);
+#   - a control character (newline, SOH, ...) anywhere in a remote URL or URL rewrite rule: the URL
+#     list is read line by line, so such a URL would be truncated;
 #   - config that cannot be read.
 destination_unverifiable() {
-    local remote="$1" key rc rec nl=$'\n'
-    for key in receivepack uploadpack vcs; do
-        git config --get "remote.$remote.$key" >/dev/null 2>&1
+    local LC_ALL=C remote="$1" key rc rec value
+    for key in "remote.$remote.receivepack" "remote.$remote.uploadpack" "remote.$remote.vcs" \
+        core.sshCommand core.gitProxy; do
+        git config --get "$key" >/dev/null 2>&1
         rc=$?
         if [[ $rc -ne 1 ]]; then
-            echo "remote.$key"
+            echo "$key"
             return
         fi
     done
-    # -z: "key\nvalue\0" records, so a newline inside a value is visible as a second newline.
-    # An unreadable config blocks, too.
-    local out
-    out=$(git config -z --get-regexp '^(remote\..*\.(url|pushurl)|url\..*\.(insteadof|pushinsteadof))$' 2>/dev/null | tr '\0' '\001')
-    rc=${PIPESTATUS[0]}
+    for key in GIT_SSH GIT_SSH_COMMAND GIT_PROXY_COMMAND; do
+        if [[ -n "${!key:-}" ]]; then
+            echo "env:$key"
+            return
+        fi
+    done
+    git config --get-regexp '^(remote\..*\.(url|pushurl)|url\..*\.(insteadof|pushinsteadof))$' >/dev/null 2>&1
+    rc=$?
     if [[ $rc -ne 0 && $rc -ne 1 ]]; then
         echo "config-unreadable"
         return
     fi
-    while IFS= read -r -d $'\001' rec; do
-        rec="${rec#"$nl"}" # a record may start after the previous record's separator
-        if [[ "${rec#*"$nl"}" == *"$nl"* ]]; then
-            echo "newline-in-url-config"
+    # -z gives "key\nvalue\0" records, read here with NUL as the delimiter (no byte is substituted,
+    # so no legal URL byte can collide with the separator). The key never holds a newline.
+    while IFS= read -r -d '' rec; do
+        value="${rec#*$'\n'}"
+        if [[ "$value" == *[[:cntrl:]]* ]]; then
+            echo "control-character-in-url-config"
             return
         fi
-        case "${rec#*"$nl"}" in
+        case "$value" in
             ext::*) echo "ext-transport"; return ;;
         esac
-    done < <(printf '%s' "$out")
+    done < <(LC_ALL=C git config -z --get-regexp '^(remote\..*\.(url|pushurl)|url\..*\.(insteadof|pushinsteadof))$' 2>/dev/null)
 }
 
 # Prints why BRANCH must not be pushed to REMOTE, or nothing when it may be. A push goes to every
