@@ -483,6 +483,26 @@ not_remote_has() { ! remote_has "$@"; }
     grep -q 'event=skipped .*reason=default-branch-of-origin-unknown' "$CLAVAIN_AUTO_PUSH_LOG"
 }
 
+@test "auto-push: a submodule branch is never pushed by push.recurseSubmodules" {
+    git init --bare -q -b feature "$BATS_TEST_TMPDIR/sub.git"
+    git init -q -b feature "$BATS_TEST_TMPDIR/subsrc"
+    git -C "$BATS_TEST_TMPDIR/subsrc" -c user.email=t@example.com -c user.name=t commit -q --allow-empty -m sub-base
+    git -C "$BATS_TEST_TMPDIR/subsrc" push -q "$BATS_TEST_TMPDIR/sub.git" feature
+    git -c protocol.file.allow=always submodule add -q -b feature "$BATS_TEST_TMPDIR/sub.git" sub
+    git commit -qm "add submodule"
+    git push -q origin main
+    git checkout -qb feature
+    git -C sub commit -q --allow-empty -m "sub work"
+    git add sub
+    git commit -qm "bump submodule"
+    git config push.recurseSubmodules on-demand
+    sub_before=$(git --git-dir="$BATS_TEST_TMPDIR/sub.git" rev-parse refs/heads/feature)
+    run run_hook
+    [ "$status" -eq 0 ]
+    remote_has feature
+    [ "$(git --git-dir="$BATS_TEST_TMPDIR/sub.git" rev-parse refs/heads/feature)" = "$sub_before" ]
+}
+
 @test "auto-push: an ext:: URL produced by a URL rewrite is never queried or pushed to" {
     git checkout -qb trunk
     seeded_bare safe.git main

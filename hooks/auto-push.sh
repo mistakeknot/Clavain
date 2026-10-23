@@ -273,8 +273,10 @@ push_to() {
     urls=$(git remote get-url --push --all "$remote" 2>/dev/null | paste -sd, -) || urls=""
     [[ -n "$urls" ]] || urls="unknown"
     # An explicit refspec: never rely on push.default (matching would push other branches).
+    # --no-recurse-submodules: push.recurseSubmodules would otherwise push submodule branches to
+    # destinations this guard never checked (or logged).
     # shellcheck disable=SC2086 # $setup is empty or a single -u
-    git push $setup "$remote" "refs/heads/$BRANCH:refs/heads/$BRANCH" >/dev/null 2>&1
+    git push --no-recurse-submodules $setup "$remote" "refs/heads/$BRANCH:refs/heads/$BRANCH" >/dev/null 2>&1
     rc=$?
     after=$(git rev-parse HEAD 2>/dev/null) || after="unknown"
     if [[ $rc -eq 0 ]]; then
