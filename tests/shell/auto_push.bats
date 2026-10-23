@@ -384,6 +384,48 @@ not_remote_has() { ! remote_has "$@"; }
     grep -q 'event=skipped .*reason=default-branch-of-origin-unknown' "$CLAVAIN_AUTO_PUSH_LOG"
 }
 
+@test "auto-push: a push URL containing a newline cannot hide behind its truncated path" {
+    git checkout -qb trunk
+    seeded_bare read.git main
+    nl_url="$BATS_TEST_TMPDIR/read.git"$'\n'
+    git init --bare -q -b trunk "$nl_url"
+    git -C "$nl_url" symbolic-ref HEAD refs/heads/trunk
+    git config remote.origin.pushurl "$nl_url"
+    echo t > t.txt
+    git add t.txt
+    git commit -qm "trunk work"
+    run run_hook
+    [ "$status" -eq 0 ]
+    run git --git-dir="$nl_url" rev-parse --verify -q refs/heads/trunk
+    [ "$status" -ne 0 ]
+    grep -q 'event=skipped .*reason=destination-unverifiable:newline-in-url-config' "$CLAVAIN_AUTO_PUSH_LOG"
+}
+
+@test "auto-push: a custom receive-pack command cannot redirect the push away from the queried repository" {
+    git checkout -qb trunk
+    seeded_bare read.git main
+    seeded_bare write.git trunk
+    git config remote.origin.pushurl "$BATS_TEST_TMPDIR/read.git"
+    git config remote.origin.receivepack "sh -c 'exec git-receive-pack $BATS_TEST_TMPDIR/write.git'"
+    echo t > t.txt
+    git add t.txt
+    git commit -qm "trunk work"
+    before=$(git --git-dir="$BATS_TEST_TMPDIR/write.git" rev-parse refs/heads/trunk)
+    run run_hook
+    [ "$status" -eq 0 ]
+    [ "$(git --git-dir="$BATS_TEST_TMPDIR/write.git" rev-parse refs/heads/trunk)" = "$before" ]
+    grep -q 'event=skipped .*reason=destination-unverifiable:remote.receivepack' "$CLAVAIN_AUTO_PUSH_LOG"
+}
+
+@test "auto-push: an ext:: URL is never pushed to" {
+    commit_on feature
+    git config remote.origin.pushurl "ext::sh -c 'touch $BATS_TEST_TMPDIR/ext-ran'"
+    run run_hook
+    [ "$status" -eq 0 ]
+    [ ! -e "$BATS_TEST_TMPDIR/ext-ran" ]
+    grep -q 'event=skipped .*reason=destination-unverifiable:ext-transport' "$CLAVAIN_AUTO_PUSH_LOG"
+}
+
 @test "auto-push: an invalid clavain.autoPush value blocks the push (fails closed)" {
     commit_on feature
     git config clavain.autoPush disabled
