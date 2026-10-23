@@ -62,10 +62,12 @@ teardown() { rm -rf "$T"; }
     _review_receipt_prepare "$R"
     printf 'x\n\n**VERDICT: PASS WITH NOTES**\n' > "$OUT"
     [ "$(_review_receipt_verdict "$OUT")" = "PASS WITH NOTES" ]
-    printf 'VERDICT: changes requested\n' > "$OUT"
+    printf 'VERDICT: FAIL\n' > "$OUT"
     [ "$(_review_receipt_verdict "$OUT")" = BLOCK ]
-    printf 'VERDICT: question\n' > "$OUT"
-    [ "$(_review_receipt_verdict "$OUT")" = BLOCK ]
+    for w in APPROVE "changes requested" question CLEAN; do
+        printf 'VERDICT: %s\n' "$w" > "$OUT"
+        run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    done
     printf 'no verdict here\n' > "$OUT"
     run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
     printf 'VERDICT: PASS\n\nmore prose after\n' > "$OUT"
@@ -170,4 +172,25 @@ teardown() { rm -rf "$T"; }
     run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
     unset -f tr
     run _review_receipt_verdict "$OUT"; [ "$status" -eq 0 ]
+}
+
+@test "unrecognised verdict word writes no receipt" {
+    _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: APPROVE\n' > "$OUT"
+    run _review_receipt_write "$OUT" 0; [ "$status" -ne 0 ]
+    [[ "$output" == *"VERDICT"* ]]
+    [ -z "$(ls -A "$T/reviews/o__r" 2>/dev/null)" ]
+}
+
+@test "a second receipt for the same head is appended, never overwritten" {
+    _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: FAIL\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    _review_receipt_write "$OUT" 0
+    d="$T/reviews/o__r"
+    [ "$(jq -r .verdict "$d/7-$HEAD_SHA.json")" = BLOCK ]
+    [ "$(jq -r .verdict "$d/7-$HEAD_SHA.2.json")" = PASS ]
+    [ -f "$d/7-$HEAD_SHA.3.json" ]
 }
