@@ -42,7 +42,8 @@ slug=$(basename -- "$plan" .md)
 # Physical path, spelled the way pwd -P spells the plan path below: on Git
 # Bash, rev-parse prints C:/Users/... while pwd prints /c/Users/..., and the
 # repo-relative marker check needs both in the same form.
-root=$(CDPATH='' cd -- "$(git rev-parse --show-toplevel)" && pwd -P)
+toplevel=$(git rev-parse --show-toplevel) || exit
+root=$(CDPATH='' cd -- "$toplevel" && pwd -P) || exit
 base="$root/.clavain/sdd"
 
 # Normalize the plan path (physical directory, so relative/absolute/../
@@ -86,5 +87,10 @@ fi
 
 # Create-only: a repo may commit its own .gitignore here (e.g. to version
 # progress.md ledgers); overwriting it would revert that on every run.
-[ -e "$base/.gitignore" ] || printf '*\n' > "$base/.gitignore"
+if [ -e "$base/.gitignore" ] || [ -L "$base/.gitignore" ]; then
+  [ -f "$base/.gitignore" ] \
+    || { echo "$base/.gitignore exists but is not a regular file" >&2; exit 2; }
+else
+  printf '*\n' > "$base/.gitignore"
+fi
 CDPATH='' cd -- "$dir" && pwd

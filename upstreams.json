@@ -69,7 +69,7 @@
       },
       "declinedAtSync": {
         "skills/using-superpowers/SKILL.md": "8ca22db (mk-km4a.11): SUBAGENT-STOP, user-instruction precedence and platform adaptation declined; using-clavain is a managed router rewrite that already states user precedence, and platform tool maps are harness-specific",
-        "skills/subagent-driven-development/SKILL.md": "2ce8aa1 (mk-tgvcr): upstream 7.0.0 split the skill into references/*.md (preflight, batching, fix-loop, final-review, handling-reports, cannot-verify, resuming); Clavain keeps its 153-line single file and SKILL-compact.md. Layout change only; revisit if the references are wanted here.",
+        "skills/subagent-driven-development/SKILL.md": "2ce8aa1 (mk-tgvcr): upstream 7.0.1 split the skill into references/*.md (preflight, batching, fix-loop, final-review, handling-reports, cannot-verify, resuming); Clavain keeps its 153-line single file and SKILL-compact.md. Layout change only; revisit if the references are wanted here.",
         "skills/executing-plans/SKILL.md": "2ce8aa1 (mk-tgvcr): upstream only deleted the Example Workflow section; the local file has no such section.",
         "skills/executing-plans/scripts/task-done": "2ce8aa1 (mk-tgvcr): upstream's no-output fallback is already covered locally by `|| true` on the same line.",
         "skills/requesting-code-review/SKILL.md": "2ce8aa1 (mk-tgvcr): upstream changed one awk to cut in an example; the example is not in code-review-discipline."
