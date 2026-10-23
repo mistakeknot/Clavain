@@ -52,20 +52,23 @@ teardown() { rm -rf "$T"; }
 @test "a second write for the same head never overwrites" {
     _review_receipt_prepare "$R"
     _review_receipt_write "$OUT" 0
-    printf 'VERDICT: changes requested\n' > "$OUT"
+    printf 'VERDICT: FAIL\n' > "$OUT"
     run _review_receipt_write "$OUT" 0
-    [ "$status" -ne 0 ]
+    [ "$status" -eq 0 ]
     [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.json")" = PASS ]
+    [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.2.json")" = BLOCK ]
 }
 
 @test "verdict mapping: notes pass, anything else blocks, none writes nothing" {
     _review_receipt_prepare "$R"
     printf 'x\n\n**VERDICT: PASS WITH NOTES**\n' > "$OUT"
     [ "$(_review_receipt_verdict "$OUT")" = "PASS WITH NOTES" ]
-    printf 'VERDICT: changes requested\n' > "$OUT"
+    printf 'VERDICT: FAIL\n' > "$OUT"
     [ "$(_review_receipt_verdict "$OUT")" = BLOCK ]
-    printf 'VERDICT: question\n' > "$OUT"
-    [ "$(_review_receipt_verdict "$OUT")" = BLOCK ]
+    for w in APPROVE BLOCK "changes requested" question CLEAN; do
+        printf 'VERDICT: %s\n' "$w" > "$OUT"
+        run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    done
     printf 'no verdict here\n' > "$OUT"
     run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
     printf 'VERDICT: PASS\n\nmore prose after\n' > "$OUT"
@@ -170,4 +173,48 @@ teardown() { rm -rf "$T"; }
     run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
     unset -f tr
     run _review_receipt_verdict "$OUT"; [ "$status" -eq 0 ]
+}
+
+@test "unrecognised verdict word writes no receipt" {
+    _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: APPROVE\n' > "$OUT"
+    run _review_receipt_write "$OUT" 0; [ "$status" -ne 0 ]
+    [[ "$output" == *"VERDICT"* ]]
+    [ -z "$(ls -A "$T/reviews/o__r" 2>/dev/null)" ]
+}
+
+@test "a second receipt for the same head is appended, never overwritten" {
+    _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: FAIL\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    _review_receipt_write "$OUT" 0
+    d="$T/reviews/o__r"
+    [ "$(jq -r .verdict "$d/7-$HEAD_SHA.json")" = BLOCK ]
+    [ "$(jq -r .verdict "$d/7-$HEAD_SHA.2.json")" = PASS ]
+    [ -f "$d/7-$HEAD_SHA.3.json" ]
+    [ "$(jq -r .sequence "$d/7-$HEAD_SHA.json")" = 1 ]
+    [ "$(jq -r .sequence "$d/7-$HEAD_SHA.3.json")" = 3 ]
+}
+
+@test "concurrent writers for one head each get a distinct receipt and sequence" {
+    _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"
+    for i in 1 2 3 4 5 6 7 8; do ( _review_receipt_write "$OUT" 0 ) 2>/dev/null & done
+    wait
+    d="$T/reviews/o__r"
+    [ "$(ls "$d"/7-"$HEAD_SHA"*.json | wc -l)" -eq 8 ]
+    [ "$(jq -r .sequence "$d"/7-"$HEAD_SHA"*.json | sort -n | uniq | wc -l)" -eq 8 ]
+}
+
+@test "a dangling symlink at the next numbered path is refused" {
+    _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    d="$T/reviews/o__r"
+    ln -s /nonexistent "$d/7-$HEAD_SHA.2.json"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -ne 0 ]
+    [ ! -e "$d/7-$HEAD_SHA.3.json" ]
 }

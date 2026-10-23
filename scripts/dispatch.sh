@@ -2008,6 +2008,14 @@ $RESOLVED_ROUTE_JSON
 
 Task:
 $PROMPT"
+      if [[ "$ROLE" == cross-lab-review ]]; then
+        PROMPT="$PROMPT
+
+End your output with a blank line and then, as the very last line, exactly one
+of: \"VERDICT: PASS\", \"VERDICT: PASS WITH NOTES\" or \"VERDICT: FAIL\". No other
+verdict word (not APPROVE, BLOCK or CLEAN) is accepted, and any other word
+fails the dispatch without a receipt."
+      fi
       # A capacity substitute: the walk that reached this candidate
       # landed on a model from the producer's own lab, so the review needs
       # its own provisional framing and a re-check hook for the other lab.
