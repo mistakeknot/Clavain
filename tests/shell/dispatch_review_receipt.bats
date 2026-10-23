@@ -52,10 +52,11 @@ teardown() { rm -rf "$T"; }
 @test "a second write for the same head never overwrites" {
     _review_receipt_prepare "$R"
     _review_receipt_write "$OUT" 0
-    printf 'VERDICT: changes requested\n' > "$OUT"
+    printf 'VERDICT: FAIL\n' > "$OUT"
     run _review_receipt_write "$OUT" 0
-    [ "$status" -ne 0 ]
+    [ "$status" -eq 0 ]
     [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.json")" = PASS ]
+    [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.2.json")" = BLOCK ]
 }
 
 @test "verdict mapping: notes pass, anything else blocks, none writes nothing" {
