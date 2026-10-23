@@ -5,7 +5,7 @@
       "url": "https://github.com/steveyegge/beads.git",
       "branch": "main",
       "floating": true,
-      "lastSyncedCommit": "4a904961367d2ee66b70bee3a4e2095645203d74",
+      "lastSyncedCommit": "ce8554ffb1bb7e70e2c04c739b11e72780cb9901",
       "basePath": "",
       "fileMap": {}
     },
@@ -13,7 +13,7 @@
       "name": "oracle",
       "url": "https://github.com/steipete/oracle.git",
       "branch": "main",
-      "lastSyncedCommit": "5f3aef5ae7a0195d5103fdd340a16cc11e0475ae",
+      "lastSyncedCommit": "fde96271db1611c0287fcfde3053c19325280d10",
       "basePath": "",
       "fileMap": {},
       "relocatedTo": {
@@ -35,7 +35,7 @@
       "name": "superpowers",
       "url": "https://github.com/obra/superpowers.git",
       "branch": "main",
-      "lastSyncedCommit": "8ca22dba9a94f28898bbce59f2537ff4d87c747d",
+      "lastSyncedCommit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
       "basePath": "",
       "fileMap": {
         "skills/dispatching-parallel-agents/SKILL.md": "skills/dispatching-parallel-agents/SKILL.md",
@@ -68,14 +68,18 @@
         "skills/finishing-a-development-branch/SKILL.md": "folded into skills/landing-a-change/SKILL.md (branch and worktree options, Step 5.7) — 8ca22db ported (mk-km4a.5)"
       },
       "declinedAtSync": {
-        "skills/using-superpowers/SKILL.md": "8ca22db (mk-km4a.11): SUBAGENT-STOP, user-instruction precedence and platform adaptation declined; using-clavain is a managed router rewrite that already states user precedence, and platform tool maps are harness-specific"
+        "skills/using-superpowers/SKILL.md": "8ca22db (mk-km4a.11): SUBAGENT-STOP, user-instruction precedence and platform adaptation declined; using-clavain is a managed router rewrite that already states user precedence, and platform tool maps are harness-specific",
+        "skills/subagent-driven-development/SKILL.md": "2ce8aa1 (mk-n2x24): upstream 7.0.0 split the skill into references/*.md (preflight, batching, fix-loop, final-review, handling-reports, cannot-verify, resuming); Clavain keeps its 153-line single file and SKILL-compact.md. Layout change only; revisit if the references are wanted here.",
+        "skills/executing-plans/SKILL.md": "2ce8aa1 (mk-n2x24): upstream only deleted the Example Workflow section; the local file has no such section.",
+        "skills/executing-plans/scripts/task-done": "2ce8aa1 (mk-n2x24): upstream's no-output fallback is already covered locally by `|| true` on the same line.",
+        "skills/requesting-code-review/SKILL.md": "2ce8aa1 (mk-n2x24): upstream changed one awk to cut in an example; the example is not in code-review-discipline."
       }
     },
     {
       "name": "superpowers-lab",
       "url": "https://github.com/obra/superpowers-lab.git",
       "branch": "main",
-      "lastSyncedCommit": "897eebf86cf131ef82fe42a6b2991f8ac463f978",
+      "lastSyncedCommit": "51111f74f24058117752d9aa917cb19859f8ec86",
       "basePath": "",
       "fileMap": {
         "skills/using-tmux-for-interactive-commands/SKILL.md": "skills/using-tmux-for-interactive-commands/SKILL.md"
@@ -102,7 +106,7 @@
       "name": "compound-engineering",
       "url": "https://github.com/EveryInc/compound-engineering-plugin.git",
       "branch": "main",
-      "lastSyncedCommit": "e8f3bbcb3580862a2715575d609333306ed02ee3",
+      "lastSyncedCommit": "786ac0194183fadc3d0e2525b2ba6d40353926d3",
       "basePath": "",
       "fileMap": {},
       "relocatedTo": {

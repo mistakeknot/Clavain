@@ -55,6 +55,17 @@ commit_file() {
     [ -z "$(git diff --cached --name-only)" ]
 }
 
+@test "an existing .clavain/sdd/.gitignore is not overwritten" {
+    own=$'*\n!.gitignore\n!*/\n!*/progress.md'
+    mkdir -p .clavain/sdd
+    printf '%s\n' "$own" > .clavain/sdd/.gitignore
+    git add -f .clavain/sdd/.gitignore
+    git commit -qm own-ignore
+    bash "$SDD/sdd-workspace" plan-a.md >/dev/null
+    [ "$(cat .clavain/sdd/.gitignore)" = "$own" ]
+    [ -z "$(git status --porcelain -- .clavain/sdd/.gitignore)" ]
+}
+
 @test "same-basename plans get distinct workspaces and keep both briefs" {
     mkdir -p docs/alpha docs/beta
     printf '# A\n\n## Task 1: Alpha\n\nAlpha-only requirement text.\n' > docs/alpha/plan.md
