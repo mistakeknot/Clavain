@@ -93,7 +93,7 @@ _review_receipt_verdict() {
   case "${v^^}" in
     PASS) echo PASS ;;
     "PASS WITH NOTES") echo "PASS WITH NOTES" ;;
-    FAIL|BLOCK) echo BLOCK ;;
+    FAIL) echo BLOCK ;;
     *) echo "review receipt: unrecognised verdict word '$v'; accepted: PASS, PASS WITH NOTES, FAIL" >&2; return 1 ;;
   esac
 }
@@ -140,7 +140,7 @@ _review_receipt_write() {
     --arg merge_tree "$RR_MERGE_TREE" --arg stat "$RR_DIFF_STAT" --arg dsha "$RR_DIFF_SHA256" \
     --arg producer "$PRODUCER_IDENTITY" --arg reviewer "$reviewer" --arg verdict "$verdict" \
     --arg policy "$policy_hash" --arg did "${DISPATCH_ID:-}" --arg aid "${ATTEMPT_ID:-}" \
-    --arg rel "${VALIDATOR_RELATIONSHIP:-}" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+    --arg rel "${VALIDATOR_RELATIONSHIP:-}" --arg now "$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)" '
     def nn: if . == "" then null else . end;
     {schema_version: 1, kind: "cross-lab-review-receipt", role: "cross-lab-review",
      repo: $repo, repo_id: $repo_id, pr: $pr, head_sha: $head, head_tree: $head_tree,
@@ -150,16 +150,17 @@ _review_receipt_write() {
      dispatch_id: ($did|nn), attempt_id: ($aid|nn), created_at: $now}')" || return 1
   # Append-only: the first receipt for a head is <pr>-<head>.json; a later run
   # on the same head is recorded as <pr>-<head>.2.json, .3.json, ... and nothing
-  # is overwritten or deleted. Readers order receipts by created_at. A path that
+  # is overwritten or deleted. Each receipt carries its sequence number; readers order by created_at, then sequence. A path that
   # is not a regular file (directory, symlink) is refused, never skipped.
   # Exclusive create: write a private temp file, then hard-link it into place.
   # link(2) fails on any existing entry, symlinks included, and the receipt
   # appears complete or not at all.
   local tmpf n=1 cand="$file"
   tmpf="$(umask 077; mktemp "$dir/.new.XXXXXX")" || { echo "review receipt: cannot create temp file in $dir" >&2; return 1; }
-  printf '%s\n' "$tmp" > "$tmpf" || { rm -f "$tmpf"; echo "review receipt: not written ($file is unwritable)" >&2; return 1; }
-  while ! ln -T "$tmpf" "$cand" 2>/dev/null; do
-    if [[ -L "$cand" || ( -e "$cand" && ! -f "$cand" ) || $n -ge 99 ]]; then
+  while :; do
+    jq --argjson seq "$n" '.sequence = $seq' <<<"$tmp" > "$tmpf" || { rm -f "$tmpf"; echo "review receipt: not written ($file is unwritable)" >&2; return 1; }
+    ln -T "$tmpf" "$cand" 2>/dev/null && break
+    if [[ -L "$cand" || ( -e "$cand" && ! -f "$cand" ) || $n -ge 999 ]]; then
       rm -f "$tmpf"
       echo "review receipt: not written ($cand is not a regular file or unwritable)" >&2
       return 1

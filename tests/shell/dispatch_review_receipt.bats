@@ -65,7 +65,7 @@ teardown() { rm -rf "$T"; }
     [ "$(_review_receipt_verdict "$OUT")" = "PASS WITH NOTES" ]
     printf 'VERDICT: FAIL\n' > "$OUT"
     [ "$(_review_receipt_verdict "$OUT")" = BLOCK ]
-    for w in APPROVE "changes requested" question CLEAN; do
+    for w in APPROVE BLOCK "changes requested" question CLEAN; do
         printf 'VERDICT: %s\n' "$w" > "$OUT"
         run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
     done
@@ -194,4 +194,6 @@ teardown() { rm -rf "$T"; }
     [ "$(jq -r .verdict "$d/7-$HEAD_SHA.json")" = BLOCK ]
     [ "$(jq -r .verdict "$d/7-$HEAD_SHA.2.json")" = PASS ]
     [ -f "$d/7-$HEAD_SHA.3.json" ]
+    [ "$(jq -r .sequence "$d/7-$HEAD_SHA.json")" = 1 ]
+    [ "$(jq -r .sequence "$d/7-$HEAD_SHA.3.json")" = 3 ]
 }
