@@ -38,9 +38,15 @@ the owner are on you.
 Decisions live on the tickets, not in the map body: `resolve` posts a
 resolution record as a comment on the ticket it closes, and
 `wayfind lint <map> --json` lists them under `decisions`. Only `chart` writes
-the map body. It rereads the body before writing and checks the write
-afterwards, so two charts on one map at once are detected, not prevented:
-rerun the one that reports it. The `--source` checks detect an edit made
+the map body. `chart` and `resolve` hold an exclusive lock on the map (a
+file in a private 0700 directory under your runtime or state directory,
+never in the repository), so wayfind
+writes to one map take turns and a rule such as the bet cap holds under
+concurrency; a write that waits over five minutes, or finds the lock directory or file
+owned by someone else or open to writes, fails with exit 2. A bd
+write made outside wayfind is not locked: `chart` rereads the body before
+writing and checks the write afterwards, so that is detected, not prevented:
+rerun the chart that reports it. The `--source` checks detect an edit made
 without a cited source; they do not authenticate the source.
 
 <BEHAVIORAL-RULES>

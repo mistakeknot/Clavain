@@ -568,9 +568,12 @@ def test_chart_detects_a_concurrent_body_change(beads, tmp_path, monkeypatch, ca
     real_create = wayfind.Bd.create
 
     def racing(self, *args, **kwargs):
-        # Another session writes the body while this chart is creating tickets.
+        # A writer outside wayfind's lock (wayfind charts now wait for each other) writes the body
+        # while this chart is creating tickets; the read-back still detects it.
         if change == "retarget":
-            assert run(beads, "chart", "--map", map_id, "--destination", "A spec for Y.", "--source", "ruling 2") == 0
+            sections = wayfind.parse_body(bd.show(map_id)["description"])
+            sections["Destination"] = "A spec for Y."
+            bd.set_description(map_id, wayfind.render_body(sections, "ruling 2"))
         else:
             body = bd.show(map_id)["description"]
             bd.set_description(map_id, body.replace("- storage\n", ""))
