@@ -34,6 +34,7 @@ EPIC_ID="$ARGUMENTS"
 - If empty: AskUserQuestion — "Which epic bead ID should I orchestrate?"
 - Validate: `bd show "$EPIC_ID"` — must succeed and be type `epic` or have children.
 - If not epic/no children: "This bead has no children. Use `/route $EPIC_ID` for single-bead dispatch."
+- If its labels include `wayfinder:roadmap`: halt — "This is a roadmap, not build work. Work it with `/clavain:waymap $EPIC_ID`; run campaign on a committed bet's child epic instead."
 - If its labels include `wayfinder:map`: halt — "This is a decision map, not build work. Work it with `/clavain:wayfind $EPIC_ID`; once `wayfind lint` reports it cleared, run `/clavain:strategy $EPIC_ID` to produce build beads."
 
 ## Step 2: Gather Children and Dependencies
