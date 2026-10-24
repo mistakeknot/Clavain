@@ -751,6 +751,21 @@ def active_commitments(bd: Bd, map_id: str) -> list[dict]:
             and SUPERSEDED_LABEL not in (t.get("labels") or []) and not bet_work(bd, t)["delivered"]]
 
 
+def pending_commitments(bd: Bd, map_id: str) -> list[dict]:
+    """Bets whose commit record is written but whose horizon label is not yet: a resolve that stopped part way.
+
+    They count against the cap, because the retry that finishes them will make them active.
+    """
+    out = []
+    for t in map_tickets(bd, map_id):
+        if ticket_type(t) != "bet" or horizon_of(t) or SUPERSEDED_LABEL in (t.get("labels") or []):
+            continue
+        records, _ = parse_records(bd.comments(t["id"]))
+        if any(r.get("kind") == "resolved" and r.get("decision") == "commit" for r in records):
+            out.append(t)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # resolve
 # ---------------------------------------------------------------------------
@@ -862,8 +877,11 @@ def cmd_resolve(bd: Bd, args) -> int:
         if blockers:
             raise RuleError(f"{args.ticket} is still blocked by {', '.join(blockers)}")
     old = check_supersedes(bd, args.supersedes, args.ticket, map_id) if args.supersedes else None
-    if args.decision == "commit" and not records:
-        held = len(active_commitments(bd, map_id))
+    counted = closed and f"waymap:{args.horizon}" in (ticket.get("labels") or [])
+    if args.decision == "commit" and not counted:
+        # A retry of a half-resolved bet is checked too: its slot may have been taken since.
+        others = {t["id"] for t in active_commitments(bd, map_id) + pending_commitments(bd, map_id)}
+        held = len(others - {args.ticket})
         if held + 1 > args.bet_cap:
             raise RuleError(f"{held} bets are already committed to Now and Next, and the cap is {args.bet_cap}; "
                             "defer or drop one with a revisit ticket first")
@@ -1145,7 +1163,7 @@ def _progress(bet: dict) -> str:
     return f"{bet['closed']}/{bet['total']} done"
 
 
-def render_roadmap(bd: Bd, map_id: str) -> str:
+def render_roadmap(bd: Bd, map_id: str, bet_cap: int = DEFAULT_BET_CAP) -> str:
     """Markdown for a roadmap map: committed bets by horizon, with bead progress. Deterministic.
 
     No dates and no source text, so the file only changes when the roadmap does and `render --check`
@@ -1154,7 +1172,10 @@ def render_roadmap(bd: Bd, map_id: str) -> str:
     issue = load_map(bd, map_id)
     if map_kind(issue) != "roadmap":
         raise RuleError(f"{map_id} is a {map_kind(issue)} map; only a roadmap renders")
-    report = evaluate(bd, map_id, DEFAULT_CAP, DEFAULT_MAX_AGE_DAYS)
+    report = evaluate(bd, map_id, DEFAULT_CAP, DEFAULT_MAX_AGE_DAYS, bet_cap=bet_cap)
+    if report["errors"]:
+        # The file is the published roadmap; never publish a state that lint rejects.
+        raise RuleError(f"{map_id} fails wayfind lint, so it is not rendered: " + "; ".join(report["errors"]))
     sections = parse_body(issue.get("description") or "")
     roadmap = report["roadmap"]
 
@@ -1182,15 +1203,47 @@ def render_roadmap(bd: Bd, map_id: str) -> str:
     return "\n".join(out).rstrip("\n") + "\n"
 
 
+def _safe_target(base: Path, target: Path) -> None:
+    """Refuse an output path that a symlink could redirect.
+
+    The file itself may not be a symlink (a dangling one passes `exists()` and `write_text` would follow
+    it). Under the project directory, no directory on the way may resolve outside it.
+    """
+    if target.is_symlink():
+        raise RuleError(f"{target} is a symlink; render will not write through it")
+    root = base.resolve()
+    ancestor = target.parent
+    while not ancestor.exists() and not ancestor.is_symlink():
+        ancestor = ancestor.parent
+    if ancestor.is_symlink() and not ancestor.exists():
+        raise RuleError(f"{ancestor} is a dangling symlink; render will not write through it")
+    inside = target.parent.absolute().is_relative_to(base.absolute())
+    if inside and not ancestor.resolve().is_relative_to(root):
+        raise RuleError(f"{ancestor} resolves outside the project directory; render will not write there")
+
+
+def _write_atomic(target: Path, text: str) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=target.parent, prefix=".roadmap-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, target)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
 def cmd_render(bd: Bd, args) -> int:
-    text = render_roadmap(bd, args.map)
+    text = render_roadmap(bd, args.map, args.bet_cap)
     if args.stdout:
         sys.stdout.write(text)
         return EXIT_OK
-    base = Path(args.directory) if args.directory else Path.cwd()
-    target = Path(args.out) if args.out else base / ROADMAP_FILE
-    if not target.is_absolute():
-        target = base / target
+    # The project directory is -C or the current directory. The default file lives under it; an explicit
+    # --out is an ordinary path, so a relative one is relative to the current directory, like -C itself.
+    base = Path(args.directory).absolute() if args.directory else Path.cwd()
+    target = Path(args.out).absolute() if args.out else base / ROADMAP_FILE
+    _safe_target(base, target)
     current = target.read_text(encoding="utf-8") if target.exists() else None
     if args.check:
         if current != text:
@@ -1202,8 +1255,7 @@ def cmd_render(bd: Bd, args) -> int:
     if current is not None and not current.startswith(RENDER_MARKER):
         raise RuleError(f"{target} was not generated by wayfind render; move it or pass --out")
     if current != text:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(text, encoding="utf-8")
+        _write_atomic(target, text)
     print(f"wayfind: wrote {target}" if current != text else f"wayfind: {target} unchanged")
     return EXIT_OK
 
@@ -1264,7 +1316,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     render = sub.add_parser("render", help="write a roadmap's committed bets to a generated markdown file")
     render.add_argument("map")
-    render.add_argument("--out", help=f"file to write (default {ROADMAP_FILE} under -C or the current directory)")
+    render.add_argument("--out", help=f"file to write (default {ROADMAP_FILE} under -C or the current directory; "
+                                      "a relative path is relative to the current directory)")
+    render.add_argument("--bet-cap", type=int, default=DEFAULT_BET_CAP,
+                        help="most committed Now + Next bets a roadmap holds; more is refused")
     render.add_argument("--stdout", action="store_true", help="print the markdown instead of writing it")
     render.add_argument("--check", action="store_true", help="exit 1 if the file is missing or out of date")
     return parser

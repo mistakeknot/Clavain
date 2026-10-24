@@ -223,6 +223,45 @@ def test_superseded_bet_frees_a_slot_and_a_rerun_is_idempotent(beads, tmp_path):
     assert report["errors"] == [] and report["roadmap"]["active"] == 0
 
 
+@needs_bd
+def test_the_cap_covers_a_half_resolved_bet_and_its_retry(beads, tmp_path, monkeypatch):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": f"B{i}"} for i in range(3)])
+    cap = ["--bet-cap", "2"]
+    assert commit(beads, bd, map_id, "B0", "now", *cap) == 0
+    # B1's record is written, then closing fails: the bet is half resolved.
+    real_close = wayfind.Bd.close
+
+    def failing_close(self, ticket, reason):
+        raise wayfind.WayfindError("bd close failed: simulated")
+
+    monkeypatch.setattr(wayfind.Bd, "close", failing_close)
+    assert commit(beads, bd, map_id, "B1", "next", *cap) == wayfind.EXIT_USAGE
+    monkeypatch.setattr(wayfind.Bd, "close", real_close)
+    assert bd.show(bet_id(bd, map_id, "B1"))["status"] != "closed"
+    # B1 still holds its slot, so B2 cannot take the last one ...
+    assert commit(beads, bd, map_id, "B2", "next", *cap) == wayfind.EXIT_RULE
+    assert "waymap:next" not in bd.show(bet_id(bd, map_id, "B2"))["labels"]
+    # ... and the retry of B1 finishes it, leaving exactly two active bets.
+    assert commit(beads, bd, map_id, "B1", "next", *cap) == 0
+    assert wayfind.evaluate(bd, map_id, 7, 14, bet_cap=2)["roadmap"]["active"] == 2
+
+
+@needs_bd
+def test_a_retry_is_refused_when_its_slot_was_taken_meanwhile(beads, tmp_path, monkeypatch):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": f"B{i}"} for i in range(2)])
+    assert commit(beads, bd, map_id, "B0", "now", "--bet-cap", "2") == 0
+
+    def failing_close(self, ticket, reason):
+        raise wayfind.WayfindError("bd close failed: simulated")
+
+    with monkeypatch.context() as mp:
+        mp.setattr(wayfind.Bd, "close", failing_close)
+        assert commit(beads, bd, map_id, "B1", "next", "--bet-cap", "2") == wayfind.EXIT_USAGE
+    # The cap is lowered before the retry: the retry is checked, not waved through.
+    assert commit(beads, bd, map_id, "B1", "next", "--bet-cap", "1") == wayfind.EXIT_RULE
+    assert "waymap:next" not in bd.show(bet_id(bd, map_id, "B1"))["labels"]
+
+
 # ---------------------------------------------------------------------------
 # Lint
 # ---------------------------------------------------------------------------
@@ -326,6 +365,88 @@ def test_render_refuses_a_plain_map(beads, tmp_path):
     map_id = next(i["id"] for i in bd.json("list", "--all", "--limit", "0")
                   if i["id"] not in before and wayfind.MAP_LABEL in (i.get("labels") or []))
     assert run(beads, "render", map_id, "--stdout") == wayfind.EXIT_RULE
+
+
+@needs_bd
+def test_render_refuses_a_roadmap_that_lint_rejects(beads, tmp_path, capsys):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}, {"type": "bet", "title": "B1"}])
+    assert commit(beads, bd, map_id, "B0", "now") == 0
+    assert commit(beads, bd, map_id, "B1", "next") == 0
+    out = tmp_path / "roadmap.md"
+    assert run(beads, "render", map_id, "--out", str(out)) == 0
+    published = out.read_text()
+    # Forced over the cap: lint rejects it, so render must not publish it (file, check or stdout).
+    assert run(beads, "render", map_id, "--out", str(out), "--bet-cap", "1") == wayfind.EXIT_RULE
+    assert run(beads, "render", map_id, "--stdout", "--bet-cap", "1") == wayfind.EXIT_RULE
+    # An unsourced Destination change is rejected the same way.
+    bd.set_description(map_id, bd.show(map_id)["description"].replace("A product people can adopt by Q-end.",
+                                                                       "Everything, now."))
+    capsys.readouterr()
+    assert run(beads, "render", map_id, "--out", str(out)) == wayfind.EXIT_RULE
+    assert run(beads, "render", map_id, "--stdout") == wayfind.EXIT_RULE
+    assert "Everything, now." not in capsys.readouterr().out
+    assert out.read_text() == published
+
+
+@needs_bd
+def test_render_will_not_write_through_a_dangling_symlink(beads, tmp_path):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    assert commit(beads, bd, map_id, "B0", "now") == 0
+    outside = tmp_path / "outside" / "escaped.md"
+    outside.parent.mkdir()
+    docs = beads / "docs"
+    docs.mkdir(exist_ok=True)
+    link = docs / "roadmap.md"
+    link.unlink(missing_ok=True)
+    link.symlink_to(outside)
+    try:
+        assert run(beads, "render", map_id) == wayfind.EXIT_RULE
+        assert not outside.exists() and link.is_symlink()
+    finally:
+        link.unlink(missing_ok=True)
+        shutil.rmtree(docs, ignore_errors=True)
+
+
+@needs_bd
+def test_render_will_not_write_through_a_symlinked_directory_out_of_the_project(beads, tmp_path):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    assert commit(beads, bd, map_id, "B0", "now") == 0
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    docs = beads / "docs"
+    shutil.rmtree(docs, ignore_errors=True)
+    docs.symlink_to(outside, target_is_directory=True)
+    try:
+        assert run(beads, "render", map_id) == wayfind.EXIT_RULE
+        assert list(outside.iterdir()) == []
+    finally:
+        docs.unlink(missing_ok=True)
+
+
+@needs_bd
+def test_render_writes_atomically_and_leaves_no_temp_file(beads, tmp_path):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    assert commit(beads, bd, map_id, "B0", "now") == 0
+    out = tmp_path / "docs" / "roadmap.md"
+    assert run(beads, "render", map_id, "--out", str(out)) == 0
+    assert [p.name for p in out.parent.iterdir()] == ["roadmap.md"]
+
+
+@needs_bd
+def test_render_with_a_relative_project_directory_writes_under_it_once(beads, tmp_path, monkeypatch):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    assert commit(beads, bd, map_id, "B0", "now") == 0
+    monkeypatch.chdir(beads.parent)
+    docs = beads / "docs"
+    shutil.rmtree(docs, ignore_errors=True)
+    try:
+        assert wayfind.main(["-C", beads.name, "render", map_id]) == 0
+        assert (docs / "roadmap.md").is_file() and not (beads / beads.name).exists()
+        # An explicit relative --out is relative to the current directory, so the shell's own path works.
+        assert wayfind.main(["-C", beads.name, "render", map_id, "--out", f"{beads.name}/docs/other.md"]) == 0
+        assert (docs / "other.md").is_file() and not (beads / beads.name).exists()
+    finally:
+        shutil.rmtree(docs, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
