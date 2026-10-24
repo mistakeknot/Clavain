@@ -2,10 +2,12 @@
 
 The plain wayfinder:map behaviour is covered by test_wayfind.py; the last tests here pin that it did not move.
 """
+import contextlib
 import json
 import os
 import shutil
 import subprocess
+import time
 
 import pytest
 
@@ -28,8 +30,8 @@ def beads(tmp_path_factory):
 
 @pytest.fixture(autouse=True)
 def private_runtime_dir(tmp_path_factory, monkeypatch):
-    """Keep each test's lock files out of the real runtime directory."""
-    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path_factory.mktemp("run")))
+    """Keep each test's lock files out of the real home directory."""
+    monkeypatch.setenv("WAYFIND_LOCK_DIR", str(tmp_path_factory.mktemp("run") / "locks"))
 
 
 @pytest.fixture(autouse=True)
@@ -502,13 +504,23 @@ sys.exit(wayfind.main(sys.argv[3:]))
 """
 
 
-def race(beads, tmp_path, *commands):
-    """Start every wayfind command at once, behind a barrier file, and return their exit codes."""
+def race(beads, tmp_path, *commands, envs=None):
+    """Start every wayfind command at once, behind a barrier file, and return their exit codes.
+
+    envs, if given, is one dict of environment changes per command (a value of None unsets it)."""
     script = tmp_path / "racer.py"
     script.write_text(_RACER)
     barrier = tmp_path / "go"
+    def environment(changes):
+        env = dict(os.environ)
+        for name, value in (changes or {}).items():
+            env.pop(name, None) if value is None else env.__setitem__(name, value)
+        return env
+
     procs = [subprocess.Popen(["python3", str(script), wayfind.__file__, str(barrier), "-C", str(beads), *argv],
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for argv in commands]
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                              env=environment((envs or [None] * len(commands))[n]))
+             for n, argv in enumerate(commands)]
     barrier.write_text("go")
     results = [(p.wait(timeout=300), p.stderr.read()) for p in procs]
     for p in procs:
@@ -583,17 +595,17 @@ def refused_without_committing(beads, bd, map_id, capsys, fragment):
     assert "waymap:now" not in bd.show(bet_id(bd, map_id, "B0"))["labels"]
 
 
-def test_the_lock_directory_prefers_the_runtime_dir_and_falls_back_to_the_state_dir(tmp_path, monkeypatch):
-    run_dir, state = tmp_path / "run", tmp_path / "state"
-    run_dir.mkdir()
-    monkeypatch.setenv("XDG_RUNTIME_DIR", str(run_dir))
-    assert wayfind.lock_dir().parent == run_dir
-    monkeypatch.delenv("XDG_RUNTIME_DIR")
-    monkeypatch.setenv("XDG_STATE_HOME", str(state))
-    assert wayfind.lock_dir().parent == state
-    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "missing"))
-    assert wayfind.lock_dir().parent == state
-    assert not str(wayfind.lock_dir()).startswith(("/tmp/wayfind", os.path.join(os.sep, "var", "tmp")))
+def test_the_lock_directory_does_not_depend_on_the_xdg_variables(tmp_path, monkeypatch):
+    import pwd
+    monkeypatch.delenv("WAYFIND_LOCK_DIR")
+    expected = os.path.join(pwd.getpwuid(os.getuid()).pw_dir, ".local", "state", "clavain-wayfind")
+    for env in ({}, {"XDG_RUNTIME_DIR": str(tmp_path)}, {"XDG_STATE_HOME": str(tmp_path)},
+                {"XDG_RUNTIME_DIR": str(tmp_path), "XDG_STATE_HOME": str(tmp_path / "s"), "HOME": str(tmp_path)}):
+        for name in ("XDG_RUNTIME_DIR", "XDG_STATE_HOME"):
+            monkeypatch.delenv(name, raising=False)
+        for name, value in env.items():
+            monkeypatch.setenv(name, value)
+        assert str(wayfind.lock_dir()) == expected
 
 
 @needs_bd
@@ -649,9 +661,9 @@ def test_a_lock_directory_or_file_owned_by_another_user_is_refused(beads, tmp_pa
     no_lock_directory().mkdir(mode=0o700)
     path.touch(mode=0o600)
     real = os.getuid()
-    # chown needs root, so claim to be someone else instead. Calls, in order: the runtime dir check,
-    # the lock directory, then the lock file; the listed ones see the real owner.
-    for trusted, fragment in ((1, "owned by you with mode 0700"), (2, "regular file owned by you")):
+    # chown needs root, so claim to be someone else instead. Calls, in order: the lock directory, then
+    # the lock file; the first `trusted` of them see the real owner.
+    for trusted, fragment in ((0, "owned by you with mode 0700"), (1, "regular file owned by you")):
         calls = iter([real] * trusted)
         monkeypatch.setattr(wayfind, "current_uid", lambda: next(calls, real + 1))
         refused_without_committing(beads, bd, map_id, capsys, fragment)
@@ -673,3 +685,100 @@ def test_a_lock_file_left_by_a_crashed_run_does_not_block_the_next_one(beads, tm
         holder.stdout.close()
     assert wayfind.lock_path(bd, map_id).exists()
     assert commit(beads, bd, map_id, "B0", "now") == 0
+
+
+# ---------------------------------------------------------------------------
+# One lock namespace, and creation shares it
+# ---------------------------------------------------------------------------
+
+
+@needs_bd
+def test_writers_with_and_without_xdg_runtime_dir_still_exclude_each_other(beads, tmp_path):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": f"B{i}"} for i in range(7)])
+    for i in range(6):
+        assert commit(beads, bd, map_id, f"B{i}", "now" if i == 0 else "next") == 0
+    more = tmp_path / "more.json"
+    more.write_text(json.dumps({"tickets": [{"type": "bet", "title": "B7"}]}))
+    assert run(beads, "chart", "--map", map_id, "--tickets", str(more)) == 0
+    argv = [["resolve", bet_id(bd, map_id, title), "--answer", f"Build {title}.", "--source", "card pick",
+             "--decision", "commit", "--horizon", "next"] for title in ("B6", "B7")]
+    elsewhere = tmp_path / "xdg"
+    elsewhere.mkdir()
+    # The same lock directory (as every writer of one workspace shares it), but one process sees an
+    # XDG_RUNTIME_DIR and XDG_STATE_HOME and the other sees neither.
+    codes = sorted(code for code, _ in race(
+        beads, tmp_path, *argv,
+        envs=[{"XDG_RUNTIME_DIR": str(elsewhere), "XDG_STATE_HOME": str(elsewhere)},
+              {"XDG_RUNTIME_DIR": None, "XDG_STATE_HOME": None}]))
+    assert codes == [wayfind.EXIT_OK, wayfind.EXIT_RULE]
+    assert len(wayfind.active_commitments(bd, map_id)) == 7
+
+
+_CREATOR = """
+import os, sys, time
+sys.path.insert(0, os.path.dirname(sys.argv[1]))
+import wayfind
+# Pause right after the new epic exists, before creation looks at it again.
+real = wayfind.Bd.create
+def create(self, *a, **k):
+    out = real(self, *a, **k)
+    if k.get("issue_type") == "epic":
+        open(sys.argv[2], "w").write(out)
+        while not os.path.exists(sys.argv[3]):
+            time.sleep(0.05)
+    return out
+wayfind.Bd.create = create
+sys.exit(wayfind.main(sys.argv[4:]))
+"""
+
+
+@needs_bd
+def test_creating_a_map_and_adding_to_it_meanwhile_cannot_pass_the_cap(beads, tmp_path):
+    bd = wayfind.Bd(directory=str(beads))
+    before = {i["id"] for i in bd.json("list", "--all", "--limit", "0")}
+    script, made, resume = tmp_path / "creator.py", tmp_path / "made", tmp_path / "resume"
+    script.write_text(_CREATOR)
+    five = tmp_path / "five.json"
+    five.write_text(json.dumps({"tickets": [{"type": "task", "title": f"C{i}"} for i in range(5)]}))
+    three = tmp_path / "three.json"
+    three.write_text(json.dumps({"tickets": [{"type": "task", "title": f"A{i}"} for i in range(3)]}))
+    creator = subprocess.Popen(
+        ["python3", str(script), wayfind.__file__, str(made), str(resume), "-C", str(beads), "chart",
+         "--title", "Race", "--destination", "Ship it.", "--source", "card pick", "--tickets", str(five)],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        deadline = time.monotonic() + 120
+        while not made.exists():
+            assert time.monotonic() < deadline and creator.poll() is None, "creation never reached the pause"
+            time.sleep(0.05)
+        map_id = made.read_text().strip()
+        assert map_id not in before
+        assert run(beads, "chart", "--map", map_id, "--tickets", str(three)) == 0  # adds 3 while creation is paused
+        resume.write_text("go")
+        code, err = creator.wait(timeout=300), creator.stderr.read()
+    finally:
+        creator.kill()
+        creator.stdout.close()
+        creator.stderr.close()
+    assert code == wayfind.EXIT_RULE and "exceeds the cap of 7" in err
+    assert len([t for t in wayfind.map_tickets(bd, map_id) if t.get("status") != "closed"]) == 3
+
+
+@needs_bd
+def test_creating_a_map_holds_the_new_maps_lock_while_it_adds_tickets(beads, tmp_path, monkeypatch):
+    # The ordinary path: creation takes both locks, in order, and releases them for the next writer.
+    seen = []
+    real = wayfind.map_lock
+
+    @contextlib.contextmanager
+    def spy(bd, scope):
+        seen.append(scope)
+        with real(bd, scope):
+            yield
+
+    monkeypatch.setattr(wayfind, "map_lock", spy)
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    assert seen == ["new-map", map_id]
+    more = tmp_path / "more.json"
+    more.write_text(json.dumps({"tickets": [{"type": "task", "title": "T"}]}))
+    assert run(beads, "chart", "--map", map_id, "--tickets", str(more)) == 0

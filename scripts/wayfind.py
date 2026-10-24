@@ -51,8 +51,10 @@ from pathlib import Path
 
 try:
     import fcntl
+    import pwd
 except ImportError:  # no POSIX file locks: the writes below refuse rather than run unserialized
     fcntl = None
+    pwd = None
 
 MAP_LABEL = "wayfinder:map"
 ROADMAP_LABEL = "wayfinder:roadmap"
@@ -217,17 +219,22 @@ def current_uid() -> int:
 
 
 def lock_dir() -> Path:
-    """The private directory for lock files: under the user's runtime dir, else the user's state dir."""
-    runtime = os.environ.get("XDG_RUNTIME_DIR")
-    if runtime:
-        try:
-            info = os.stat(runtime)
-        except OSError:
-            info = None
-        if info is not None and stat.S_ISDIR(info.st_mode) and info.st_uid == current_uid():
-            return Path(runtime) / "clavain-wayfind"
-    state = os.environ.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state")
-    return Path(state) / "clavain-wayfind"
+    """The one private directory for lock files, the same for every process of this user.
+
+    It is fixed by the account's home directory, not by XDG_RUNTIME_DIR, XDG_STATE_HOME or HOME:
+    a process that sees different variables must still take the same lock for the same map, or
+    two writers would each hold a lock and still race. WAYFIND_LOCK_DIR overrides it for tests
+    and sandboxes; every writer of one workspace has to share that value.
+    """
+    override = os.environ.get("WAYFIND_LOCK_DIR")
+    if override:
+        return Path(override)
+    try:
+        home = pwd.getpwuid(current_uid()).pw_dir
+    except (KeyError, AttributeError):
+        raise WayfindError("cannot find your home directory for the wayfind lock files; "
+                           "set WAYFIND_LOCK_DIR to a private directory you own") from None
+    return Path(home) / ".local" / "state" / "clavain-wayfind"
 
 
 def lock_path(bd: Bd, scope: str) -> Path:
@@ -635,6 +642,24 @@ def cmd_chart(bd: Bd, args) -> int:
         return _chart(bd, args)
 
 
+def create_tickets(bd: Bd, map_id: str, tickets: list[dict]) -> dict[str, str]:
+    # Tickets first, each created whole (labels and blockers in one bd call), the map body last.
+    # A failure part way leaves the body as it was, so graduated fog is never lost and the map
+    # cannot read as cleared while tickets are missing.
+    created: dict[str, str] = {}
+    try:
+        for ticket in tickets:
+            blockers = [created[b] if b in created else b for b in ticket["blocked_by"]]
+            created[ticket["key"]] = bd.create(ticket["title"], ticket_body(ticket, map_id),
+                                               [f"wayfinder:{ticket['type']}"], parent=map_id,
+                                               blocked_by=blockers)
+    except WayfindError as exc:
+        done = ", ".join(f"{k}={v}" for k, v in created.items()) or "none"
+        raise WayfindError(f"{exc}. Map {map_id}: created {done}; the map body is unchanged. Rerun with "
+                           "only the tickets not yet created, keeping fog and graduate as they were") from exc
+    return created
+
+
 def _chart(bd: Bd, args) -> int:
     # Every check runs before the first write, so a refused or malformed request changes nothing.
     spec = load_spec(args.tickets)
@@ -696,21 +721,18 @@ def _chart(bd: Bd, args) -> int:
     if map_id is None:
         map_id = bd.create(f"[{kind}] {args.title}", render_body(sections, source), [MAP_LABELS[kind]],
                            issue_type="epic")
-
-    # Tickets first, each created whole (labels and blockers in one bd call), the map body last.
-    # A failure part way leaves the body as it was, so graduated fog is never lost and the map
-    # cannot read as cleared while tickets are missing.
-    created: dict[str, str] = {}
-    try:
-        for ticket in tickets:
-            blockers = [created[b] if b in created else b for b in ticket["blocked_by"]]
-            created[ticket["key"]] = bd.create(ticket["title"], ticket_body(ticket, map_id),
-                                               [f"wayfinder:{ticket['type']}"], parent=map_id,
-                                               blocked_by=blockers)
-    except WayfindError as exc:
-        done = ", ".join(f"{k}={v}" for k, v in created.items()) or "none"
-        raise WayfindError(f"{exc}. Map {map_id}: created {done}; the map body is unchanged. Rerun with "
-                           "only the tickets not yet created, keeping fog and graduate as they were") from exc
+        # The new map is visible to /chart --map from here on, and those writers hold the lock on its
+        # ID, not on "new-map". Take that lock too and recount under it before adding tickets.
+        with map_lock(bd, map_id):
+            open_now = [t for t in map_tickets(bd, map_id) if t.get("status") != "closed"]
+            if len(open_now) + len(tickets) > args.cap and not args.allow_over_cap:
+                raise RuleError(
+                    f"map {map_id} was created, but another chart added tickets to it first: {len(open_now)} open + "
+                    f"{len(tickets)} new exceeds the cap of {args.cap}. Chart the rest with --map {map_id}, "
+                    "or keep it as fog")
+            created = create_tickets(bd, map_id, tickets)
+    else:
+        created = create_tickets(bd, map_id, tickets)
 
     if args.map:
         fog = write_map_body(bd, map_id, base, marker, spec, destination, out_of_scope, source, created)

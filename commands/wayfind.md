@@ -39,11 +39,13 @@ Decisions live on the tickets, not in the map body: `resolve` posts a
 resolution record as a comment on the ticket it closes, and
 `wayfind lint <map> --json` lists them under `decisions`. Only `chart` writes
 the map body. `chart` and `resolve` hold an exclusive lock on the map (a
-file in a private 0700 directory under your runtime or state directory,
-never in the repository), so wayfind
+file in the private 0700 directory `~/.local/state/clavain-wayfind`, the same
+whatever XDG variables a process sees, never in the repository), so wayfind
 writes to one map take turns and a rule such as the bet cap holds under
 concurrency; a write that waits over five minutes, or finds the lock directory or file
-owned by someone else or open to writes, fails with exit 2. A bd
+owned by someone else or open to writes, fails with exit 2. Creating a map
+also takes the new map's lock before it adds tickets and rechecks the cap
+under it. A bd
 write made outside wayfind is not locked: `chart` rereads the body before
 writing and checks the write afterwards, so that is detected, not prevented:
 rerun the chart that reports it. The `--source` checks detect an edit made
