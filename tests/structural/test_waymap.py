@@ -27,6 +27,12 @@ def beads(tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def private_runtime_dir(tmp_path_factory, monkeypatch):
+    """Keep each test's lock files out of the real runtime directory."""
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path_factory.mktemp("run")))
+
+
+@pytest.fixture(autouse=True)
 def one_roadmap_at_a_time(beads):
     """A project holds one open roadmap, so close the previous test's before the next charts its own."""
     if BD is None:
@@ -551,6 +557,119 @@ def test_a_write_waits_for_the_lock_then_fails_clearly_and_leaves_nothing_tracke
     assert "waymap:now" not in bd.show(bet_id(bd, map_id, "B0"))["labels"]
     assert commit(beads, bd, map_id, "B0", "now") == 0  # the lock was released
     assert not str(wayfind.lock_path(bd, map_id)).startswith(str(beads))
+    assert oct(os.stat(wayfind.lock_path(bd, map_id).parent).st_mode & 0o777) == "0o700"
     status = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=beads,
                             capture_output=True, text=True, check=True).stdout
     assert "lock" not in status
+
+
+# ---------------------------------------------------------------------------
+# The lock trusts nothing on disk
+# ---------------------------------------------------------------------------
+
+
+def no_lock_directory():
+    """Charting already made the lock directory; start from none so a test can plant its own."""
+    directory = wayfind.lock_dir()
+    if directory.exists():
+        shutil.rmtree(directory)
+    return directory
+
+
+def refused_without_committing(beads, bd, map_id, capsys, fragment):
+    capsys.readouterr()
+    assert commit(beads, bd, map_id, "B0", "now") == wayfind.EXIT_USAGE
+    assert fragment in capsys.readouterr().err
+    assert "waymap:now" not in bd.show(bet_id(bd, map_id, "B0"))["labels"]
+
+
+def test_the_lock_directory_prefers_the_runtime_dir_and_falls_back_to_the_state_dir(tmp_path, monkeypatch):
+    run_dir, state = tmp_path / "run", tmp_path / "state"
+    run_dir.mkdir()
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(run_dir))
+    assert wayfind.lock_dir().parent == run_dir
+    monkeypatch.delenv("XDG_RUNTIME_DIR")
+    monkeypatch.setenv("XDG_STATE_HOME", str(state))
+    assert wayfind.lock_dir().parent == state
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "missing"))
+    assert wayfind.lock_dir().parent == state
+    assert not str(wayfind.lock_dir()).startswith(("/tmp/wayfind", os.path.join(os.sep, "var", "tmp")))
+
+
+@needs_bd
+def test_a_planted_symlink_at_the_lock_path_is_refused(beads, tmp_path, capsys):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    path = wayfind.lock_path(bd, map_id)
+    no_lock_directory().mkdir(mode=0o700)
+    target = tmp_path / "elsewhere"
+    target.write_text("keep")
+    path.symlink_to(target)
+    refused_without_committing(beads, bd, map_id, capsys, "cannot be opened")
+    assert target.read_text() == "keep"
+
+
+@needs_bd
+def test_a_symlinked_lock_directory_is_refused(beads, tmp_path, capsys):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    real = tmp_path / "planted"
+    real.mkdir(mode=0o700)
+    no_lock_directory().symlink_to(real)
+    refused_without_committing(beads, bd, map_id, capsys, "is not usable")
+    assert list(real.iterdir()) == []
+
+
+@needs_bd
+@pytest.mark.parametrize("mode", [0o755, 0o770, 0o777, 0o500])
+def test_a_lock_directory_with_the_wrong_mode_is_refused(beads, tmp_path, capsys, mode):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    directory = no_lock_directory()
+    directory.mkdir(mode=0o700)
+    directory.chmod(mode)
+    try:
+        refused_without_committing(beads, bd, map_id, capsys, "mode 0700")
+    finally:
+        directory.chmod(0o700)
+
+
+@needs_bd
+@pytest.mark.parametrize("mode", [0o664, 0o666, 0o622])
+def test_a_lock_file_others_can_write_is_refused(beads, tmp_path, capsys, mode):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    path = wayfind.lock_path(bd, map_id)
+    no_lock_directory().mkdir(mode=0o700)
+    path.touch()
+    path.chmod(mode)
+    refused_without_committing(beads, bd, map_id, capsys, "no one else can write")
+
+
+@needs_bd
+def test_a_lock_directory_or_file_owned_by_another_user_is_refused(beads, tmp_path, monkeypatch, capsys):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    path = wayfind.lock_path(bd, map_id)
+    no_lock_directory().mkdir(mode=0o700)
+    path.touch(mode=0o600)
+    real = os.getuid()
+    # chown needs root, so claim to be someone else instead. Calls, in order: the runtime dir check,
+    # the lock directory, then the lock file; the listed ones see the real owner.
+    for trusted, fragment in ((1, "owned by you with mode 0700"), (2, "regular file owned by you")):
+        calls = iter([real] * trusted)
+        monkeypatch.setattr(wayfind, "current_uid", lambda: next(calls, real + 1))
+        refused_without_committing(beads, bd, map_id, capsys, fragment)
+
+
+@needs_bd
+def test_a_lock_file_left_by_a_crashed_run_does_not_block_the_next_one(beads, tmp_path):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    script = ("import sys, time; sys.path.insert(0, sys.argv[1]); import wayfind\n"
+              "bd = wayfind.Bd(directory=sys.argv[2])\n"
+              "with wayfind.map_lock(bd, sys.argv[3]):\n    print('held', flush=True); time.sleep(600)\n")
+    holder = subprocess.Popen(["python3", "-c", script, os.path.dirname(wayfind.__file__), str(beads), map_id],
+                              stdout=subprocess.PIPE, text=True)
+    try:
+        assert holder.stdout.readline().strip() == "held"
+        holder.kill()  # no cleanup runs: the lock file stays behind
+        holder.wait(timeout=30)
+    finally:
+        holder.stdout.close()
+    assert wayfind.lock_path(bd, map_id).exists()
+    assert commit(beads, bd, map_id, "B0", "now") == 0

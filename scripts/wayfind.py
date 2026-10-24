@@ -42,6 +42,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -211,15 +212,73 @@ class Bd:
         return name or os.environ.get("USER", "")
 
 
+def current_uid() -> int:
+    return os.getuid()
+
+
+def lock_dir() -> Path:
+    """The private directory for lock files: under the user's runtime dir, else the user's state dir."""
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime:
+        try:
+            info = os.stat(runtime)
+        except OSError:
+            info = None
+        if info is not None and stat.S_ISDIR(info.st_mode) and info.st_uid == current_uid():
+            return Path(runtime) / "clavain-wayfind"
+    state = os.environ.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state")
+    return Path(state) / "clavain-wayfind"
+
+
 def lock_path(bd: Bd, scope: str) -> Path:
-    """A lock file outside every repository, named for the beads workspace and the map."""
+    """A lock file name for the beads workspace and the map, inside the private lock directory."""
     try:
         where = json.loads(bd.run("where", "--json")).get("path") or ""
     except (WayfindError, json.JSONDecodeError):
         where = ""
     root = os.path.realpath(where or bd.directory or os.getcwd())
     digest = hashlib.sha256(f"{root}\0{scope}".encode("utf-8")).hexdigest()[:24]
-    return Path(tempfile.gettempdir()) / f"wayfind-{digest}.lock"
+    return lock_dir() / f"{digest}.lock"
+
+
+def open_lock(path: Path) -> int:
+    """Open the lock file, trusting nothing about what is already on disk.
+
+    The directory must be a real directory (never a symlink) owned by this user with mode 0700, and
+    the file a regular file owned by this user that no one else can write. Otherwise another user
+    could plant or swap the entry and defeat the lock, so the command fails instead of running
+    without it.
+    """
+    directory = path.parent
+    try:
+        directory.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.mkdir(directory, 0o700)
+            os.chmod(directory, 0o700)  # a umask can only have removed bits; we made this one
+        except FileExistsError:
+            pass
+        dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except OSError as exc:
+        raise WayfindError(f"lock directory {directory} is not usable ({exc.strerror or exc}); "
+                           "remove it or fix it, then rerun") from None
+    try:
+        info = os.fstat(dir_fd)
+        if info.st_uid != current_uid() or stat.S_IMODE(info.st_mode) != 0o700:
+            raise WayfindError(f"lock directory {directory} must be owned by you with mode 0700; "
+                               "fix or remove it, then rerun")
+        try:
+            fd = os.open(path.name, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600, dir_fd=dir_fd)
+        except OSError as exc:
+            raise WayfindError(f"lock file {path} cannot be opened ({exc.strerror or exc}); "
+                               "remove it, then rerun") from None
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != current_uid() or info.st_mode & 0o022:
+            os.close(fd)
+            raise WayfindError(f"lock file {path} must be a regular file owned by you that no one else can "
+                               "write; remove it, then rerun")
+        return fd
+    finally:
+        os.close(dir_fd)
 
 
 @contextlib.contextmanager
@@ -228,13 +287,13 @@ def map_lock(bd: Bd, scope: str):
 
     bd has no transactions, so a rule such as the bet cap holds only if the count and the write
     happen under one lock. The lock covers wayfind writers of one beads workspace on one host;
-    a bd write made outside wayfind is not serialized.
+    a bd write made outside wayfind is not serialized. A lock file left by a crashed run is
+    harmless: the lock is the flock, which the system drops with the process, not the file.
     """
     if fcntl is None:
         raise WayfindError("this platform has no file locks, so wayfind cannot serialize writes to a map")
     timeout = float(os.environ.get("WAYFIND_LOCK_TIMEOUT") or LOCK_TIMEOUT)
-    path = lock_path(bd, scope)
-    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    fd = open_lock(lock_path(bd, scope))
     try:
         deadline = time.monotonic() + timeout
         while True:
@@ -248,7 +307,7 @@ def map_lock(bd: Bd, scope: str):
                 time.sleep(0.1)
         yield
     finally:
-        os.close(fd)  # closing drops the flock; the empty file stays in the temp directory, untracked
+        os.close(fd)  # closing drops the flock; the empty file stays in the private directory
 
 
 # ---------------------------------------------------------------------------
