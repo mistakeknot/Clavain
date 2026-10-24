@@ -471,3 +471,86 @@ def test_plain_map_keeps_its_label_types_and_bet_flags_are_refused(beads, tmp_pa
     assert run(beads, "resolve", r, "--answer", "found it") == 0
     assert bd.show(map_id)["labels"] == [wayfind.MAP_LABEL]
     assert not [l for l in bd.show(r)["labels"] if l.startswith("waymap:")]
+
+
+# ---------------------------------------------------------------------------
+# Concurrent writers
+# ---------------------------------------------------------------------------
+
+_RACER = """
+import os, sys, time
+sys.path.insert(0, os.path.dirname(sys.argv[1]))
+import wayfind
+# A slow bd, simulated: each rule check returns its answer, then the process stalls before it writes.
+# Without serialization both racers read the same state; with it the second reads after the first wrote.
+for name in ("active_commitments", "pending_commitments", "map_tickets"):
+    real = getattr(wayfind, name)
+    def slow(*a, _real=real, **k):
+        out = _real(*a, **k)
+        time.sleep(2)
+        return out
+    setattr(wayfind, name, slow)
+while not os.path.exists(sys.argv[2]):
+    time.sleep(0.001)
+sys.exit(wayfind.main(sys.argv[3:]))
+"""
+
+
+def race(beads, tmp_path, *commands):
+    """Start every wayfind command at once, behind a barrier file, and return their exit codes."""
+    script = tmp_path / "racer.py"
+    script.write_text(_RACER)
+    barrier = tmp_path / "go"
+    procs = [subprocess.Popen(["python3", str(script), wayfind.__file__, str(barrier), "-C", str(beads), *argv],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for argv in commands]
+    barrier.write_text("go")
+    results = [(p.wait(timeout=300), p.stderr.read()) for p in procs]
+    for p in procs:
+        p.stdout.close()
+        p.stderr.close()
+    return results
+
+
+@needs_bd
+def test_two_concurrent_resolves_cannot_commit_an_eighth_bet(beads, tmp_path):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": f"B{i}"} for i in range(7)])
+    for i in range(6):
+        assert commit(beads, bd, map_id, f"B{i}", "now" if i == 0 else "next") == 0
+    assert len(wayfind.active_commitments(bd, map_id)) == 6
+    more = tmp_path / "more.json"
+    more.write_text(json.dumps({"tickets": [{"type": "bet", "title": "B7"}]}))
+    assert run(beads, "chart", "--map", map_id, "--tickets", str(more)) == 0
+    argv = [["resolve", bet_id(bd, map_id, title), "--answer", f"Build {title}.", "--source", "card pick",
+             "--decision", "commit", "--horizon", "next"] for title in ("B6", "B7")]
+    codes = sorted(code for code, _ in race(beads, tmp_path, *argv))
+    assert codes == [wayfind.EXIT_OK, wayfind.EXIT_RULE]
+    assert len(wayfind.active_commitments(bd, map_id)) == 7
+    assert wayfind.evaluate(bd, map_id, 7, 14)["errors"] == []
+
+
+@needs_bd
+def test_two_concurrent_charts_cannot_pass_the_open_ticket_cap(beads, tmp_path):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": f"B{i}"} for i in range(5)])
+    argv = []
+    for n in range(2):
+        spec = tmp_path / f"more{n}.json"
+        spec.write_text(json.dumps({"tickets": [{"type": "task", "title": f"T{n}a"}, {"type": "task", "title": f"T{n}b"}]}))
+        argv.append(["chart", "--map", map_id, "--tickets", str(spec)])
+    codes = sorted(code for code, _ in race(beads, tmp_path, *argv))
+    assert codes == [wayfind.EXIT_OK, wayfind.EXIT_RULE]
+    assert len([t for t in wayfind.map_tickets(bd, map_id) if t.get("status") != "closed"]) == 7
+
+
+@needs_bd
+def test_a_write_waits_for_the_lock_then_fails_clearly_and_leaves_nothing_tracked(beads, tmp_path, monkeypatch, capsys):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    monkeypatch.setenv("WAYFIND_LOCK_TIMEOUT", "0.3")
+    with wayfind.map_lock(bd, map_id):
+        assert commit(beads, bd, map_id, "B0", "now") == wayfind.EXIT_USAGE
+    assert "another wayfind command has held the lock" in capsys.readouterr().err
+    assert "waymap:now" not in bd.show(bet_id(bd, map_id, "B0"))["labels"]
+    assert commit(beads, bd, map_id, "B0", "now") == 0  # the lock was released
+    assert not str(wayfind.lock_path(bd, map_id)).startswith(str(beads))
+    status = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=beads,
+                            capture_output=True, text=True, check=True).stdout
+    assert "lock" not in status

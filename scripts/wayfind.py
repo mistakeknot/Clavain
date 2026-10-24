@@ -36,6 +36,7 @@ refuses it, or lint found a broken rule), 2 usage, malformed spec or bd failure,
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
 import hashlib
 import json
@@ -44,7 +45,13 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
+
+try:
+    import fcntl
+except ImportError:  # no POSIX file locks: the writes below refuse rather than run unserialized
+    fcntl = None
 
 MAP_LABEL = "wayfinder:map"
 ROADMAP_LABEL = "wayfinder:roadmap"
@@ -77,6 +84,7 @@ DEFAULT_MAX_AGE_DAYS = 14  # design choice: no resolution for this long is stale
 SUMMARY_WIDTH = 120
 
 EXIT_OK, EXIT_RULE, EXIT_USAGE, EXIT_ALARM = 0, 1, 2, 3
+LOCK_TIMEOUT = 300.0  # seconds a write waits for another wayfind write on the same map
 
 
 class WayfindError(Exception):
@@ -201,6 +209,46 @@ class Bd:
         except (OSError, subprocess.TimeoutExpired):
             name = ""
         return name or os.environ.get("USER", "")
+
+
+def lock_path(bd: Bd, scope: str) -> Path:
+    """A lock file outside every repository, named for the beads workspace and the map."""
+    try:
+        where = json.loads(bd.run("where", "--json")).get("path") or ""
+    except (WayfindError, json.JSONDecodeError):
+        where = ""
+    root = os.path.realpath(where or bd.directory or os.getcwd())
+    digest = hashlib.sha256(f"{root}\0{scope}".encode("utf-8")).hexdigest()[:24]
+    return Path(tempfile.gettempdir()) / f"wayfind-{digest}.lock"
+
+
+@contextlib.contextmanager
+def map_lock(bd: Bd, scope: str):
+    """Hold an exclusive lock on one map while a command checks a rule and writes under it.
+
+    bd has no transactions, so a rule such as the bet cap holds only if the count and the write
+    happen under one lock. The lock covers wayfind writers of one beads workspace on one host;
+    a bd write made outside wayfind is not serialized.
+    """
+    if fcntl is None:
+        raise WayfindError("this platform has no file locks, so wayfind cannot serialize writes to a map")
+    timeout = float(os.environ.get("WAYFIND_LOCK_TIMEOUT") or LOCK_TIMEOUT)
+    path = lock_path(bd, scope)
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise WayfindError(f"another wayfind command has held the lock on {scope} for {timeout:g}s; "
+                                       "wait for it and rerun") from None
+                time.sleep(0.1)
+        yield
+    finally:
+        os.close(fd)  # closing drops the flock; the empty file stays in the temp directory, untracked
 
 
 # ---------------------------------------------------------------------------
@@ -521,6 +569,14 @@ def write_map_body(bd: Bd, map_id: str, base: dict[str, str], marker: tuple[str,
 
 
 def cmd_chart(bd: Bd, args) -> int:
+    if args.dry_run:
+        return _chart(bd, args)
+    # The open-ticket cap, the one-roadmap rule and the body rebase all read before they write.
+    with map_lock(bd, args.map or "new-map"):
+        return _chart(bd, args)
+
+
+def _chart(bd: Bd, args) -> int:
     # Every check runs before the first write, so a refused or malformed request changes nothing.
     spec = load_spec(args.tickets)
     destination = read_text(args.destination, args.destination_file)
@@ -814,6 +870,16 @@ def release_lease(bd: Bd, map_id: str, ticket_id: str, me: str | None) -> bool:
 
 
 def cmd_resolve(bd: Bd, args) -> int:
+    parent = bd.show(args.ticket).get("parent")
+    if not parent:
+        return _resolve(bd, args)  # refused as a rule error before it writes anything
+    # The bet cap counts committed bets, then the commit is written: both under one lock, or two
+    # resolves at the cap's edge would each count seven and commit an eighth.
+    with map_lock(bd, parent):
+        return _resolve(bd, args)
+
+
+def _resolve(bd: Bd, args) -> int:
     # All checks first; then each write is skipped when already done, so a retry with the
     # same arguments after a failure part way finishes the job instead of being refused.
     ticket = bd.show(args.ticket)
