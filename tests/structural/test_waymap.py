@@ -595,6 +595,48 @@ def test_chart_locks_the_canonical_map_id_whatever_the_spelling(beads, tmp_path,
 
 
 @needs_bd
+@pytest.mark.parametrize("bad", [None, "", 7, ["wm-x"]], ids=["null", "empty", "number", "list"])
+def test_chart_of_an_existing_map_refuses_an_unusable_id_from_bd(beads, tmp_path, monkeypatch, capsys, bad):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    spec = tmp_path / "more.json"
+    spec.write_text(json.dumps({"tickets": [{"type": "task", "title": "T"}]}))
+    before = sorted(t["id"] for t in wayfind.map_tickets(bd, map_id))
+    epics = len(bd.json("list", "--label", wayfind.ROADMAP_LABEL, "--limit", "0"))
+    real = wayfind.Bd.show
+    monkeypatch.setattr(wayfind.Bd, "show", lambda self, issue_id: dict(real(self, issue_id), id=bad))
+    capsys.readouterr()
+    assert run(beads, "chart", "--map", map_id, "--kind", "roadmap", "--title", "Fallthrough",
+               "--destination", "A destination that must not be created.", "--out-of-scope", "- x",
+               "--source", "card pick", "--tickets", str(spec)) == wayfind.EXIT_USAGE
+    assert "did not report an ID" in capsys.readouterr().err
+    monkeypatch.undo()
+    assert sorted(t["id"] for t in wayfind.map_tickets(bd, map_id)) == before
+    assert len(bd.json("list", "--label", wayfind.ROADMAP_LABEL, "--limit", "0")) == epics  # no new map
+
+
+@needs_bd
+def test_a_bare_suffix_retry_after_a_close_failure_is_not_counted_against_the_cap(beads, tmp_path, monkeypatch, capsys):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": f"B{i}"} for i in range(7)])
+    for i in range(6):
+        assert commit(beads, bd, map_id, f"B{i}", "now" if i == 0 else "next") == 0
+    last = bet_id(bd, map_id, "B6")
+    real = wayfind.Bd.close
+
+    def failing_close(self, issue_id, reason):
+        raise wayfind.WayfindError("bd close failed: temporary")
+
+    monkeypatch.setattr(wayfind.Bd, "close", failing_close)
+    assert commit(beads, bd, map_id, "B6") == wayfind.EXIT_USAGE  # the record is written, the ticket stays open
+    monkeypatch.setattr(wayfind.Bd, "close", real)
+    assert [t["id"] for t in wayfind.pending_commitments(bd, map_id)] == [last]
+    suffix = last.split("-", 1)[1]
+    capsys.readouterr()
+    assert run(beads, "resolve", suffix, "--answer", "Build B6.", "--source", "card pick",
+               "--decision", "commit", "--horizon", "next") == 0
+    assert len(wayfind.active_commitments(bd, map_id)) == 7
+
+
+@needs_bd
 def test_a_write_waits_for_the_lock_then_fails_clearly_and_leaves_nothing_tracked(beads, tmp_path, monkeypatch, capsys):
     bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
     monkeypatch.setenv("WAYFIND_LOCK_TIMEOUT", "0.3")

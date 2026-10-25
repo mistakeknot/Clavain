@@ -660,7 +660,12 @@ def cmd_chart(bd: Bd, args) -> int:
     # bd accepts a map under several spellings (wm-abc, abc); the lock is keyed on the ID bd
     # resolves them to, the same one resolve and map creation lock, so every spelling shares it.
     if args.map:
-        args.map = bd.show(args.map)["id"]
+        shown = bd.show(args.map)
+        canonical = shown.get("id") if isinstance(shown, dict) else None
+        if not isinstance(canonical, str) or not canonical:
+            raise WayfindError(f"bd did not report an ID for {args.map}; refusing to chart without it "
+                               "(an existing-map request never becomes a new map)")
+        args.map = canonical
     with map_lock(bd, args.map or "new-map"):
         return _chart(bd, args)
 
@@ -1051,7 +1056,7 @@ def _resolve(bd: Bd, args) -> int:
     if args.decision == "commit" and not counted:
         # A retry of a half-resolved bet is checked too: its slot may have been taken since.
         others = {t["id"] for t in active_commitments(bd, map_id) + pending_commitments(bd, map_id)}
-        held = len(others - {args.ticket})
+        held = len(others - {args.ticket, ticket.get("id")})  # a bare-suffix retry is the same ticket
         if held + 1 > args.bet_cap:
             raise RuleError(f"{held} bets are already committed to Now and Next, and the cap is {args.bet_cap}; "
                             "defer or drop one with a revisit ticket first")
