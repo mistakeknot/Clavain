@@ -560,6 +560,41 @@ def test_two_concurrent_charts_cannot_pass_the_open_ticket_cap(beads, tmp_path):
 
 
 @needs_bd
+def test_two_spellings_of_one_map_serialize_on_one_lock(beads, tmp_path):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": f"B{i}"} for i in range(5)])
+    short = map_id.split("-", 1)[1]  # bd resolves "abc" to "wm-abc"
+    assert bd.show(short)["id"] == map_id
+    argv = []
+    for n, spelling in enumerate((map_id, short)):
+        spec = tmp_path / f"spelled{n}.json"
+        spec.write_text(json.dumps({"tickets": [{"type": "task", "title": f"S{n}a"}, {"type": "task", "title": f"S{n}b"}]}))
+        argv.append(["chart", "--map", spelling, "--tickets", str(spec)])
+    codes = sorted(code for code, _ in race(beads, tmp_path, *argv))
+    assert codes == [wayfind.EXIT_OK, wayfind.EXIT_RULE]
+    assert len([t for t in wayfind.map_tickets(bd, map_id) if t.get("status") != "closed"]) == 7
+
+
+@needs_bd
+def test_chart_locks_the_canonical_map_id_whatever_the_spelling(beads, tmp_path, monkeypatch):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    seen = []
+    real = wayfind.map_lock
+
+    @contextlib.contextmanager
+    def spy(bd, scope):
+        seen.append(scope)
+        with real(bd, scope):
+            yield
+
+    monkeypatch.setattr(wayfind, "map_lock", spy)
+    for n, spelling in enumerate((map_id, map_id.split("-", 1)[1])):
+        spec = tmp_path / f"t{n}.json"
+        spec.write_text(json.dumps({"tickets": [{"type": "task", "title": f"T{n}"}]}))
+        assert run(beads, "chart", "--map", spelling, "--tickets", str(spec)) == 0
+    assert seen == [map_id, map_id]
+
+
+@needs_bd
 def test_a_write_waits_for_the_lock_then_fails_clearly_and_leaves_nothing_tracked(beads, tmp_path, monkeypatch, capsys):
     bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
     monkeypatch.setenv("WAYFIND_LOCK_TIMEOUT", "0.3")

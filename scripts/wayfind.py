@@ -657,6 +657,10 @@ def cmd_chart(bd: Bd, args) -> int:
     if args.dry_run:
         return _chart(bd, args)
     # The open-ticket cap, the one-roadmap rule and the body rebase all read before they write.
+    # bd accepts a map under several spellings (wm-abc, abc); the lock is keyed on the ID bd
+    # resolves them to, the same one resolve and map creation lock, so every spelling shares it.
+    if args.map:
+        args.map = bd.show(args.map)["id"]
     with map_lock(bd, args.map or "new-map"):
         return _chart(bd, args)
 
