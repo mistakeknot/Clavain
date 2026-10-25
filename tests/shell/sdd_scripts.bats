@@ -55,6 +55,43 @@ commit_file() {
     [ -z "$(git diff --cached --name-only)" ]
 }
 
+@test "an existing .clavain/sdd/.gitignore is not overwritten" {
+    own=$'*\n!.gitignore\n!*/\n!*/progress.md'
+    mkdir -p .clavain/sdd
+    printf '%s\n' "$own" > .clavain/sdd/.gitignore
+    git add -f .clavain/sdd/.gitignore
+    git commit -qm own-ignore
+    bash "$SDD/sdd-workspace" plan-a.md >/dev/null
+    [ "$(cat .clavain/sdd/.gitignore)" = "$own" ]
+    [ -z "$(git status --porcelain -- .clavain/sdd/.gitignore)" ]
+}
+
+@test "sdd-workspace fails and creates nothing when run outside a git repository" {
+    mkdir -p "$BATS_TEST_TMPDIR/nogit"
+    printf '# P\n' > "$BATS_TEST_TMPDIR/nogit/plan.md"
+    cd "$BATS_TEST_TMPDIR/nogit"
+    run env GIT_CEILING_DIRECTORIES="$BATS_TEST_TMPDIR" bash "$SDD/sdd-workspace" plan.md
+    [ "$status" -ne 0 ]
+    [ ! -e "$BATS_TEST_TMPDIR/nogit/.clavain" ]
+    [ ! -e "$BATS_TEST_TMPDIR/.clavain" ]
+}
+
+@test "sdd-workspace refuses a .clavain/sdd/.gitignore that is not a regular file" {
+    mkdir -p .clavain/sdd/.gitignore
+    run bash "$SDD/sdd-workspace" plan-a.md
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"not a regular file"* ]]
+}
+
+@test "sdd-workspace refuses a symlinked .clavain/sdd/.gitignore even to a regular file" {
+    mkdir -p .clavain/sdd
+    printf '*\n' > "$BATS_TEST_TMPDIR/real-ignore"
+    ln -s "$BATS_TEST_TMPDIR/real-ignore" .clavain/sdd/.gitignore
+    run bash "$SDD/sdd-workspace" plan-a.md
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"not a regular file"* ]]
+}
+
 @test "same-basename plans get distinct workspaces and keep both briefs" {
     mkdir -p docs/alpha docs/beta
     printf '# A\n\n## Task 1: Alpha\n\nAlpha-only requirement text.\n' > docs/alpha/plan.md

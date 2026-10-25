@@ -1,9 +1,9 @@
 {
-  "generated": "2026-10-23T23:42:21Z",
+  "generated": "2026-10-25T23:01:44Z",
   "counts": {
     "skills": 27,
     "agents": 6,
-    "commands": 64,
+    "commands": 65,
     "hooks": 22,
     "mcp_servers": 0,
     "review": 2,
@@ -323,6 +323,10 @@
     {
       "name": "resolve",
       "description": "Resolve findings from any source \u2014 auto-detects TODOs, PR comments, or todo files, then resolves in parallel"
+    },
+    {
+      "name": "retro",
+      "description": "Read a session, a PR with its session, or a week of merged PRs and propose ranked changes to the environment that would have stopped repeated mistakes"
     },
     {
       "name": "review-discipline",
