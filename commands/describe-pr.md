@@ -53,10 +53,12 @@ From commits and diff identify: what changed, why (infer from messages), type (f
   migration, an external message (email, post, webhook, notification), a
   signing or production path, or a repo with an automatic deploy timer. Name the one
   matching reason (`data-migration`, `external-message`, `signing-or-production`
-  or `deploy-timer`) and say why in a few words. Anything else is
-  **two-way**.
-- Blast Radius is one line. For a change that is not obviously local, run
-  `/clavain:blast-radius` first and summarise its result.
+  or `deploy-timer`) and say why in a few words. If an irreversible effect
+  fits none of the four, it is still one-way: give the nearest code and name
+  the mismatch in the why. Everything reversible is **two-way**.
+- Blast Radius is one line. If a blast-radius report for this change already
+  exists, summarise it; do not start one just for this line, since it can
+  dispatch a paid model review.
 - Evidence is one before/after line you actually observed. If you did not
   observe it, write `none observed` rather than inventing one.
 - The block only orders reviewer attention. A two-way door never waives a
