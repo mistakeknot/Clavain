@@ -782,3 +782,134 @@ def test_creating_a_map_holds_the_new_maps_lock_while_it_adds_tickets(beads, tmp
     more = tmp_path / "more.json"
     more.write_text(json.dumps({"tickets": [{"type": "task", "title": "T"}]}))
     assert run(beads, "chart", "--map", map_id, "--tickets", str(more)) == 0
+
+
+# ---------------------------------------------------------------------------
+# The lock namespace is one stable absolute path, or the write is refused
+# ---------------------------------------------------------------------------
+
+
+def test_a_relative_lock_directory_is_refused(tmp_path, monkeypatch):
+    monkeypatch.setenv("WAYFIND_LOCK_DIR", "locks")
+    with pytest.raises(wayfind.WayfindError, match="absolute path"):
+        wayfind.lock_dir()
+
+
+@pytest.mark.parametrize("home", ["", "relative/home"])
+def test_an_empty_or_relative_home_directory_is_refused(monkeypatch, home):
+    import pwd
+    monkeypatch.delenv("WAYFIND_LOCK_DIR")
+    record = pwd.getpwuid(os.getuid())
+    fake = pwd.struct_passwd((record.pw_name, record.pw_passwd, record.pw_uid, record.pw_gid,
+                              record.pw_gecos, home, record.pw_shell))
+    monkeypatch.setattr(wayfind.pwd, "getpwuid", lambda uid: fake)
+    with pytest.raises(wayfind.WayfindError, match="absolute home directory"):
+        wayfind.lock_dir()
+
+
+@needs_bd
+def test_two_writers_with_one_relative_lock_directory_are_both_refused(beads, tmp_path, monkeypatch):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}, {"type": "bet", "title": "B1"}])
+    for name in ("one", "two"):
+        (tmp_path / name).mkdir()
+    argv = [["resolve", bet_id(bd, map_id, title), "--answer", f"Build {title}.", "--source", "card pick",
+             "--decision", "commit", "--horizon", "next"] for title in ("B0", "B1")]
+    script = tmp_path / "racer.py"
+    script.write_text(_RACER)
+    barrier = tmp_path / "go"
+    env = dict(os.environ, WAYFIND_LOCK_DIR="locks")  # the same relative value, a different cwd each
+    procs = [subprocess.Popen(["python3", str(script), wayfind.__file__, str(barrier), "-C", str(beads), *a],
+                              cwd=tmp_path / name, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+             for name, a in zip(("one", "two"), argv)]
+    barrier.write_text("go")
+    results = [(p.wait(timeout=300), p.stderr.read()) for p in procs]
+    for p in procs:
+        p.stdout.close()
+        p.stderr.close()
+    assert [code for code, _ in results] == [wayfind.EXIT_USAGE, wayfind.EXIT_USAGE]
+    assert all("must be an absolute path" in err for _, err in results)
+    assert not (tmp_path / "one" / "locks").exists() and not (tmp_path / "two" / "locks").exists()
+    assert wayfind.active_commitments(bd, map_id) == []
+
+
+def refuse_the_workspace_identity(monkeypatch, answer):
+    """Make bd where --json fail (an exception) or answer something unusable; every other bd call is real."""
+    real = wayfind.Bd.run
+
+    def run_bd(self, *args, **kwargs):
+        if args[:1] == ("where",):
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(wayfind.Bd, "run", run_bd)
+
+
+UNREADABLE_IDENTITY = [
+    wayfind.WayfindError("bd where failed: no beads directory"),
+    "not json",
+    "[]",
+    "{}",
+    '{"error": "no_beads_directory"}',
+    '{"path": ""}',
+    '{"path": "relative/.beads"}',
+    '{"path": 7}',
+]
+
+
+@needs_bd
+@pytest.mark.parametrize("answer", UNREADABLE_IDENTITY, ids=range(len(UNREADABLE_IDENTITY)))
+def test_writes_are_refused_when_the_workspace_identity_is_unreadable(beads, tmp_path, monkeypatch, capsys, answer):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    before = sorted(t["id"] for t in wayfind.map_tickets(bd, map_id))
+    more = tmp_path / "more.json"
+    more.write_text(json.dumps({"tickets": [{"type": "task", "title": "T"}]}))
+    new = tmp_path / "new.json"
+    new.write_text(json.dumps({"tickets": [{"type": "bet", "title": "N0"}]}))
+    refuse_the_workspace_identity(monkeypatch, answer)
+    epics = lambda: len(bd.json("list", "--label", wayfind.ROADMAP_LABEL, "--limit", "0"))
+    epics_before = epics()
+    locks_before = sorted(os.listdir(wayfind.lock_dir()))
+    capsys.readouterr()
+    for argv in (
+        ["resolve", bet_id(bd, map_id, "B0"), "--answer", "Build B0.", "--source", "card pick",
+         "--decision", "commit", "--horizon", "now"],
+        ["chart", "--map", map_id, "--tickets", str(more)],
+        ["chart", "--kind", "roadmap", "--title", "Second", "--destination", "A second destination here.",
+         "--out-of-scope", "- x", "--source", "card pick", "--tickets", str(new)],
+    ):
+        assert run(beads, *argv) == wayfind.EXIT_USAGE
+        assert "cannot tell which beads workspace this is" in capsys.readouterr().err
+    assert sorted(os.listdir(wayfind.lock_dir())) == locks_before  # no lock under a guessed name
+    monkeypatch.undo()
+    assert sorted(t["id"] for t in wayfind.map_tickets(bd, map_id)) == before
+    assert epics() == epics_before
+    assert "waymap:now" not in bd.show(bet_id(bd, map_id, "B0"))["labels"]
+
+
+@needs_bd
+def test_reads_still_work_when_the_workspace_identity_is_unreadable(beads, tmp_path, monkeypatch):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    spec = tmp_path / "dry.json"
+    spec.write_text(json.dumps({"tickets": [{"type": "task", "title": "T"}]}))
+    refuse_the_workspace_identity(monkeypatch, wayfind.WayfindError("bd where failed"))
+    assert run(beads, "lint", map_id) == 0
+    assert run(beads, "ready", map_id) == 0
+    assert run(beads, "chart", "--map", map_id, "--tickets", str(spec), "--dry-run") == 0
+    assert run(beads, "render", map_id, "--out", str(tmp_path / "ROADMAP.md")) == 0
+
+
+@needs_bd
+def test_creation_reads_the_workspace_identity_once(beads, tmp_path, monkeypatch):
+    # It must not become unreadable between the first lock and the new map's lock, after the epic exists.
+    calls = []
+    real = wayfind.Bd.run
+
+    def counting(self, *args, **kwargs):
+        calls.append(args[:1])
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(wayfind.Bd, "run", counting)
+    chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    assert calls.count(("where",)) == 1

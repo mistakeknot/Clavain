@@ -112,6 +112,7 @@ class Bd:
         self.binary = binary or os.environ.get("WAYFIND_BD", "bd")
         self.directory = directory
         self.actor = actor
+        self.workspace: str | None = None  # the beads workspace identity, read once (see workspace_root)
 
     def run(self, *args: str, stdin: str | None = None) -> str:
         cmd = [self.binary]
@@ -228,23 +229,41 @@ def lock_dir() -> Path:
     """
     override = os.environ.get("WAYFIND_LOCK_DIR")
     if override:
+        if not os.path.isabs(override):
+            raise WayfindError(f"WAYFIND_LOCK_DIR must be an absolute path, not {override!r}: a relative "
+                               "one names a different directory from each working directory, so writers "
+                               "would stop excluding each other")
         return Path(override)
     try:
         home = pwd.getpwuid(current_uid()).pw_dir
     except (KeyError, AttributeError):
-        raise WayfindError("cannot find your home directory for the wayfind lock files; "
-                           "set WAYFIND_LOCK_DIR to a private directory you own") from None
+        home = ""
+    if not home or not os.path.isabs(home):
+        raise WayfindError("cannot find an absolute home directory for the wayfind lock files "
+                           f"(the account database says {home!r}); set WAYFIND_LOCK_DIR to an absolute "
+                           "private directory you own")
     return Path(home) / ".local" / "state" / "clavain-wayfind"
+
+
+def workspace_root(bd: Bd) -> str:
+    """The beads workspace's own identity, the same from every working directory and -C spelling."""
+    if bd.workspace:  # read once, so a map creation cannot find it unreadable after its epic exists
+        return bd.workspace
+    try:
+        where = json.loads(bd.run("where", "--json")).get("path")
+    except (WayfindError, json.JSONDecodeError, AttributeError) as exc:
+        raise WayfindError("cannot tell which beads workspace this is (bd where --json failed: "
+                           f"{exc}); refusing to write to a map without its lock, so fix bd and rerun") from None
+    if not isinstance(where, str) or not os.path.isabs(where):
+        raise WayfindError("cannot tell which beads workspace this is (bd where --json gave no absolute "
+                           "path); refusing to write to a map without its lock, so fix bd and rerun")
+    bd.workspace = os.path.realpath(where)
+    return bd.workspace
 
 
 def lock_path(bd: Bd, scope: str) -> Path:
     """A lock file name for the beads workspace and the map, inside the private lock directory."""
-    try:
-        where = json.loads(bd.run("where", "--json")).get("path") or ""
-    except (WayfindError, json.JSONDecodeError):
-        where = ""
-    root = os.path.realpath(where or bd.directory or os.getcwd())
-    digest = hashlib.sha256(f"{root}\0{scope}".encode("utf-8")).hexdigest()[:24]
+    digest = hashlib.sha256(f"{workspace_root(bd)}\0{scope}".encode("utf-8")).hexdigest()[:24]
     return lock_dir() / f"{digest}.lock"
 
 

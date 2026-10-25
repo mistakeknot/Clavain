@@ -45,7 +45,11 @@ writes to one map take turns and a rule such as the bet cap holds under
 concurrency; a write that waits over five minutes, or finds the lock directory or file
 owned by someone else or open to writes, fails with exit 2. Creating a map
 also takes the new map's lock before it adds tickets and rechecks the cap
-under it. A bd
+under it. The lock is named from the beads workspace that `bd where --json`
+reports, so a write whose workspace cannot be read, a relative
+`WAYFIND_LOCK_DIR` or an empty or relative home directory is refused with
+exit 2 before anything is written (`lint`, `ready`, `render` and
+`chart --dry-run` still run). A bd
 write made outside wayfind is not locked: `chart` rereads the body before
 writing and checks the write afterwards, so that is detected, not prevented:
 rerun the chart that reports it. The `--source` checks detect an edit made
