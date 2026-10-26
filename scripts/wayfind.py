@@ -1325,10 +1325,12 @@ def evaluate(bd: Bd, map_id: str, cap: int, max_age_days: int, now: dt.datetime 
             errors.append(f"{map_id}: carries {len(owners)} project labels ({', '.join(owners)}); a roadmap "
                           "belongs to one project")
         else:
-            twins = [r["id"] for r in open_roadmaps(bd) if r["id"] != map_id and owners[0] in project_names(r)]
+            # map_id may be an abbreviation (axz for wm-axz); bd lists canonical IDs, so compare with bd's.
+            own = issue.get("id") or map_id
+            twins = [r["id"] for r in open_roadmaps(bd) if r["id"] != own and owners[0] in project_names(r)]
             if twins and issue.get("status") != "closed":
                 errors.append(f"{map_id}: project {owners[0]} has more than one open roadmap "
-                              f"({map_id}, {', '.join(twins)}); close the extra one")
+                              f"({own}, {', '.join(twins)}); close the extra one")
         bets = []
         for t in resolved:
             if t["id"] in committed_horizon and not superseders.get(t["id"]):

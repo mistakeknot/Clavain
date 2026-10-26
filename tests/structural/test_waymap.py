@@ -298,6 +298,26 @@ def test_lint_errors_when_a_project_has_two_open_roadmaps_or_a_roadmap_two_proje
 
 
 @needs_bd
+def test_an_abbreviated_roadmap_id_is_not_its_own_twin(beads, tmp_path, capsys):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "A1"}], project="probe")
+    short = map_id.split("-", 1)[1]
+    assert bd.show(short)["id"] == map_id
+    for spelling in (map_id, short):
+        assert wayfind.evaluate(bd, spelling, 7, 14)["errors"] == []
+        assert run(beads, "lint", spelling) == 0
+    capsys.readouterr()
+    assert run(beads, "adopt-roadmap", short, "--project", "probe") == 0  # not refused as a rival of itself
+    assert f"roadmap {map_id}:" in capsys.readouterr().out  # reported under its canonical id
+    assert wayfind.project_names(bd.show(map_id)) == ["probe"]
+    assert run(beads, "chart", "--kind", "roadmap", "--project", "probe", "--title", "x", "--destination", "D",
+               "--source", "s") == wayfind.EXIT_RULE  # chart finds the project by label, not by ID
+    _, twin = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "U1"}], project="other")
+    bd.add_label(twin, "waymap:project:probe")  # a hand edit: a real twin is still reported under either spelling
+    for spelling in (map_id, short):
+        assert any("more than one open roadmap" in e for e in wayfind.evaluate(bd, spelling, 7, 14)["errors"])
+
+
+@needs_bd
 def test_roadmap_destination_is_one_line(beads):
     assert run(beads, "chart", "--kind", "roadmap", "--project", "wm", "--title", "t",
                "--destination", "line one\nline two",
