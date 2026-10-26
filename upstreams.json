@@ -5,7 +5,7 @@
       "url": "https://github.com/steveyegge/beads.git",
       "branch": "main",
       "floating": true,
-      "lastSyncedCommit": "ce8554ffb1bb7e70e2c04c739b11e72780cb9901",
+      "lastSyncedCommit": "1dfdc96de785f43223e3748027ec3b13181f0ad6",
       "basePath": "",
       "fileMap": {}
     },
@@ -17,10 +17,10 @@
       "basePath": "",
       "fileMap": {},
       "relocatedTo": {
-        "skills/oracle/SKILL.md": "interpeer:skills/interpeer/references/oracle-reference.md — last ported from oracle 5f3aef5",
-        "README.md": "interpeer:skills/interpeer/references/oracle-docs/upstream-readme.md — last ported from oracle 5f3aef5",
-        "docs/browser-mode.md": "interpeer:skills/interpeer/references/oracle-docs/browser-mode.md — last ported from oracle 5f3aef5",
-        "docs/configuration.md": "interpeer:skills/interpeer/references/oracle-docs/configuration.md — last ported from oracle 5f3aef5",
+        "skills/oracle/SKILL.md": "interpeer:skills/interpeer/references/oracle-reference.md \u2014 last ported from oracle 5f3aef5",
+        "README.md": "interpeer:skills/interpeer/references/oracle-docs/upstream-readme.md \u2014 last ported from oracle 5f3aef5",
+        "docs/browser-mode.md": "interpeer:skills/interpeer/references/oracle-docs/browser-mode.md \u2014 last ported from oracle 5f3aef5",
+        "docs/configuration.md": "interpeer:skills/interpeer/references/oracle-docs/configuration.md \u2014 last ported from oracle 5f3aef5",
         "docs/debug/remote-chrome.md": "never carried (was in the fileMap before interpeer extraction but never synced into Clavain)",
         "docs/gemini.md": "never carried (was in the fileMap before interpeer extraction but never synced into Clavain)",
         "docs/linux.md": "never carried (was in the fileMap before interpeer extraction but never synced into Clavain)",
@@ -55,17 +55,17 @@
         "skills/writing-plans/SKILL.md": "skills/writing-plans/SKILL.md"
       },
       "relocatedTo": {
-        "skills/systematic-debugging/SKILL.md": "intertest:skills/systematic-debugging/SKILL.md — 8ca22db ported (mk-km4a.12)",
-        "skills/systematic-debugging/condition-based-waiting.md": "intertest:skills/systematic-debugging/condition-based-waiting.md — 8ca22db ported (mk-km4a.12)",
-        "skills/systematic-debugging/defense-in-depth.md": "intertest:skills/systematic-debugging/defense-in-depth.md — 8ca22db ported (mk-km4a.12)",
-        "skills/systematic-debugging/find-polluter.sh": "intertest:skills/systematic-debugging/find-polluter.sh — 8ca22db ported (mk-km4a.12)",
-        "skills/systematic-debugging/root-cause-tracing.md": "intertest:skills/systematic-debugging/root-cause-tracing.md — 8ca22db ported (mk-km4a.12)",
+        "skills/systematic-debugging/SKILL.md": "intertest:skills/systematic-debugging/SKILL.md \u2014 8ca22db ported (mk-km4a.12)",
+        "skills/systematic-debugging/condition-based-waiting.md": "intertest:skills/systematic-debugging/condition-based-waiting.md \u2014 8ca22db ported (mk-km4a.12)",
+        "skills/systematic-debugging/defense-in-depth.md": "intertest:skills/systematic-debugging/defense-in-depth.md \u2014 8ca22db ported (mk-km4a.12)",
+        "skills/systematic-debugging/find-polluter.sh": "intertest:skills/systematic-debugging/find-polluter.sh \u2014 8ca22db ported (mk-km4a.12)",
+        "skills/systematic-debugging/root-cause-tracing.md": "intertest:skills/systematic-debugging/root-cause-tracing.md \u2014 8ca22db ported (mk-km4a.12)",
         "skills/test-driven-development/SKILL.md": "intertest:skills/test-driven-development/SKILL.md",
         "skills/test-driven-development/writing-good-tests.md": "intertest:skills/test-driven-development/writing-good-tests.md",
-        "skills/verification-before-completion/SKILL.md": "intertest:skills/verification-before-completion/SKILL.md — 8ca22db ported (mk-km4a.12)",
+        "skills/verification-before-completion/SKILL.md": "intertest:skills/verification-before-completion/SKILL.md \u2014 8ca22db ported (mk-km4a.12)",
         "skills/writing-skills/*": "retired (extracted to interdev in Clavain 91ea85a; no longer carried there)",
-        "skills/receiving-code-review/SKILL.md": "folded into skills/code-review-discipline/SKILL.md (Receiving Feedback, Common Rationalizations) — 8ca22db ported (mk-km4a.6); not in fileMap because requesting-code-review already maps to that file",
-        "skills/finishing-a-development-branch/SKILL.md": "folded into skills/landing-a-change/SKILL.md (branch and worktree options, Step 5.7) — 8ca22db ported (mk-km4a.5)"
+        "skills/receiving-code-review/SKILL.md": "folded into skills/code-review-discipline/SKILL.md (Receiving Feedback, Common Rationalizations) \u2014 8ca22db ported (mk-km4a.6); not in fileMap because requesting-code-review already maps to that file",
+        "skills/finishing-a-development-branch/SKILL.md": "folded into skills/landing-a-change/SKILL.md (branch and worktree options, Step 5.7) \u2014 8ca22db ported (mk-km4a.5)"
       },
       "declinedAtSync": {
         "skills/using-superpowers/SKILL.md": "8ca22db (mk-km4a.11): SUBAGENT-STOP, user-instruction precedence and platform adaptation declined; using-clavain is a managed router rewrite that already states user precedence, and platform tool maps are harness-specific",
@@ -106,7 +106,7 @@
       "name": "compound-engineering",
       "url": "https://github.com/EveryInc/compound-engineering-plugin.git",
       "branch": "main",
-      "lastSyncedCommit": "786ac0194183fadc3d0e2525b2ba6d40353926d3",
+      "lastSyncedCommit": "9f5b16fc617fb5bf4817c8f42537b626c17abd05",
       "basePath": "",
       "fileMap": {},
       "relocatedTo": {
