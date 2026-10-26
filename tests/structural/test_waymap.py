@@ -52,12 +52,13 @@ def run(beads, *argv):
     return wayfind.main(["-C", str(beads), *argv])
 
 
-def chart_roadmap(beads, tmp_path, tickets, fog=("a later bet",), project="wm"):
+def chart_roadmap(beads, tmp_path, tickets, fog=("a later bet",), project="wm",
+                  destination="A product people can adopt by Q-end.", out_of_scope="- billing"):
     spec = tmp_path / "spec.json"
     spec.write_text(json.dumps({"tickets": tickets, "fog": list(fog)}))
     bd = wayfind.Bd(directory=str(beads))
     assert run(beads, "chart", "--kind", "roadmap", "--project", project, "--title", f"{project} roadmap",
-               "--destination", "A product people can adopt by Q-end.", "--out-of-scope", "- billing",
+               "--destination", destination, "--out-of-scope", out_of_scope,
                "--source", "card pick", "--tickets", str(spec)) == 0
     map_id = next(i["id"] for i in bd.json("list", "--label", wayfind.ROADMAP_LABEL, "--limit", "0")
                   if wayfind.PROJECT_LABEL_PREFIX + project in i["labels"])
@@ -525,6 +526,41 @@ def test_render_lists_committed_bets_with_progress_and_keeps_later_as_fog(beads,
     assert "B1" in text.split("## Next")[1] and "no work started" in text
     assert "Skipped" not in text
     assert "## Not yet specified\n\n- a later bet" in text
+
+
+@needs_bd
+def test_render_keeps_a_prose_out_of_scope_and_the_whole_destination(beads, tmp_path, capsys):
+    destination = ("A product people can adopt by the end of the quarter, with onboarding, billing and support "
+                   "all working together, end to end, for every team that asks.")
+    assert len(destination) > wayfind.SUMMARY_WIDTH
+    prose = "Nothing about pricing is decided here. Hosting stays as ruled."
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}], destination=destination,
+                               out_of_scope=prose)
+    capsys.readouterr()
+    assert run(beads, "render", map_id, "--stdout") == 0
+    text = capsys.readouterr().out
+    assert f"Destination: {destination}\n" in text
+    assert text.rstrip("\n").endswith(f"## Out of scope\n\n{prose}")
+
+
+@needs_bd
+def test_render_progress_count_matches_the_work_it_lists(beads, tmp_path, capsys):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    assert commit(beads, bd, map_id, "B0", "now") == 0
+    bet = bet_id(bd, map_id, "B0")
+    parent = make_child(beads, bet, "Parent")
+    done = make_child(beads, parent, "Leaf done")
+    make_child(beads, parent, "Leaf open")
+    make_child(beads, bet, "Plain leaf")
+    close_issue(beads, done)
+    capsys.readouterr()
+    assert run(beads, "render", map_id, "--stdout") == 0
+    text = capsys.readouterr().out
+    now = text.split("## Now")[1].split("## Next")[0]
+    assert "[1/3 done]" in now.splitlines()[2]                      # the bet: three leaves, one closed
+    assert f"  - `{parent}` Parent [1/2 done]" in now               # a parent with children shows its sub-count
+    assert f"    - [x] `{done}` Leaf done" in now and "    - [ ] " in now and "  - [ ] " in now
+    assert now.count("[x]") == 1 and now.count("[ ]") == 2          # one box per leaf, as many as the count
 
 
 @needs_bd

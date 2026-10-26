@@ -143,9 +143,12 @@ projects then chart their own with `chart --project`.
    ```bash
    python3 "$WAYFIND" render <roadmap>
    ```
-   This writes `docs/roadmap.md`. Commit it with the change that moved the
-   roadmap. `render --check` exits 1 when the file is stale, and `--stdout`
-   prints it instead.
+   This writes `docs/roadmap.md` under the current directory. To run against
+   another project directory, put `-C` before the subcommand
+   (`python3 "$WAYFIND" -C <dir> render <roadmap>`); after the subcommand it is
+   refused. Commit the file with the change that moved the roadmap.
+   `render --check` exits 1 when the file is stale, and `--stdout` prints it
+   instead.
 7. **Stop.** One ticket per session, except research.
 
 ## Exit

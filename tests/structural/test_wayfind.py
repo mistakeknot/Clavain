@@ -15,6 +15,30 @@ import wayfind
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("text, expected", [
+    ("Nothing about pricing.", ["Nothing about pricing."]),                          # prose, verbatim
+    ("- billing\n* hosting", ["- billing", "- hosting"]),                            # bullets, normalised
+    ("Not covered:\n- billing\nAnd hosting.", ["Not covered:", "- billing", "And hosting."]),   # mixed, in order
+    ("", []), ("  \n ", []),                                                        # empty
+])
+def test_scope_lines_renders_prose_bullets_and_mixed_text(text, expected):
+    assert wayfind.scope_lines(text) == expected
+
+
+def test_tree_progress_counts_the_leaves_the_tree_lists():
+    leaf = lambda s: {"id": "x", "title": "t", "status": s, "children": []}   # noqa: E731
+    tree = [leaf("closed"), {"id": "p", "title": "t", "status": "in_progress",
+                             "children": [leaf("closed"), leaf("open")]}]
+    assert wayfind.tree_progress(tree) == (2, 3)
+    assert wayfind.tree_progress([]) == (0, 0)
+
+
+def test_a_dash_c_after_the_subcommand_is_refused_with_a_hint(capsys):
+    assert wayfind.main(["render", "wm-1", "-C", "/tmp/x"]) == wayfind.EXIT_USAGE
+    err = capsys.readouterr().err
+    assert "-C must come before the subcommand" in err and "wayfind -C /tmp/x render" in err
+
+
 def test_render_parse_round_trip_keeps_sections_and_source():
     sections = {"Destination": "A spec for X.", "Out of scope": "- billing", "Notes": "",
                 "Not yet specified": "- storage\n- auth"}
