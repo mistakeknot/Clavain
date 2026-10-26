@@ -1,9 +1,9 @@
 {
-  "generated": "2026-10-25T05:50:10Z",
+  "generated": "2026-10-25T23:01:44Z",
   "counts": {
     "skills": 27,
     "agents": 6,
-    "commands": 64,
+    "commands": 65,
     "hooks": 22,
     "mcp_servers": 0,
     "review": 2,
@@ -399,6 +399,10 @@
     {
       "name": "wayfind",
       "description": "Chart or work a decision map in beads for an effort whose destination is known but whose route spans many sessions"
+    },
+    {
+      "name": "waymap",
+      "description": "Chart or work a project's Now / Next / Later roadmap in beads, as bets the coordinator commits, defers or drops"
     },
     {
       "name": "work",

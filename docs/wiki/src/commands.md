@@ -1,6 +1,6 @@
 # Commands
 
-Clavain ships **65** files under `commands/`: slash commands (`.md`) plus the
+Clavain ships **66** files under `commands/`: slash commands (`.md`) plus the
 `degraded-modes.yaml` table.
 
 The main sequence is `/route` (smart dispatch), `/sprint` (phase sequencer),
