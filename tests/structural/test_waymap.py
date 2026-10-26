@@ -35,10 +35,14 @@ def private_runtime_dir(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def one_roadmap_at_a_time(beads):
-    """A project holds one open roadmap, so close the previous test's before the next charts its own."""
+def one_roadmap_at_a_time(request):
+    """A project holds one open roadmap, so close the previous test's before the next charts its own.
+
+    The tests that need no bd (the label and lock-directory checks) must not build the bd workspace, so
+    it is requested only when bd is installed."""
     if BD is None:
         return
+    beads = request.getfixturevalue("beads")
     bd = wayfind.Bd(directory=str(beads))
     for issue in bd.json("list", "--label", wayfind.ROADMAP_LABEL, "--limit", "0"):
         bd.run("close", issue["id"], "-r", "test teardown", "--force")
