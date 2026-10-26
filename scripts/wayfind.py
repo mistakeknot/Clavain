@@ -22,12 +22,15 @@ as a claim (the lease), so at most one HITL ticket per map is handed out.
     wayfind resolve record a ticket's answer and close it
     wayfind lint    check the map's rules and report whether it converges
     wayfind render  write a roadmap map's committed bets to a generated markdown file
+    wayfind adopt-roadmap  give a roadmap charted before project scoping its project label
 
 A second map kind, a roadmap (label wayfinder:roadmap, one per project), reuses the
 same tickets, lease, lint and --source rules for /clavain:waymap. Its tickets are
 `bet`, research, task and revisit. A bet resolves to commit, defer or drop; a
 committed bet carries a horizon label (waymap:now or waymap:next). The Later
-horizon is the map's fog and is never charted. A roadmap never clears.
+horizon is the map's fog and is never charted. A roadmap never clears. Projects can
+share one beads database, so a roadmap carries a project label (waymap:project:<name>,
+set by `chart --project`) and the one-open-roadmap rule counts roadmaps per project.
 
 Exit codes: 0 ok, 1 rule violation (the request is well formed but a map rule
 refuses it, or lint found a broken rule), 2 usage, malformed spec or bd failure,
@@ -59,6 +62,8 @@ except ImportError:  # no POSIX file locks: the writes below refuse rather than 
 MAP_LABEL = "wayfinder:map"
 ROADMAP_LABEL = "wayfinder:roadmap"
 MAP_LABELS = {"map": MAP_LABEL, "roadmap": ROADMAP_LABEL}
+PROJECT_LABEL_PREFIX = "waymap:project:"
+PROJECT_NAME = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
 TYPES = ("grilling", "prototype", "research", "task", "revisit", "bet")
 # Ticket types each map kind accepts. A bet exists only on a roadmap.
 KIND_TYPES = {"map": ("grilling", "prototype", "research", "task", "revisit"),
@@ -461,6 +466,24 @@ def map_kind(issue: dict) -> str | None:
     return found[0] if len(found) == 1 else None
 
 
+def normalize_project(name: str | None) -> str:
+    """The project name a roadmap is scoped to: lower case, label-safe."""
+    project = (name or "").strip().lower()
+    if not PROJECT_NAME.fullmatch(project):
+        raise WayfindError(f"invalid --project {name!r}: use 1-64 characters of a-z, 0-9, '.', '_' or '-', "
+                           "starting with a letter or digit")
+    return project
+
+
+def project_names(issue: dict) -> list[str]:
+    return [label[len(PROJECT_LABEL_PREFIX):] for label in issue.get("labels") or []
+            if label.startswith(PROJECT_LABEL_PREFIX)]
+
+
+def open_roadmaps(bd: Bd) -> list[dict]:
+    return bd.json("list", "--label", ROADMAP_LABEL, "--limit", "0")
+
+
 def horizon_of(issue: dict) -> str | None:
     found = [HORIZON_LABELS[label] for label in issue.get("labels") or [] if label in HORIZON_LABELS]
     return found[0] if len(found) == 1 else None
@@ -670,6 +693,26 @@ def cmd_chart(bd: Bd, args) -> int:
         return _chart(bd, args)
 
 
+def check_project_free(bd: Bd, project: str | None) -> None:
+    """Refuse a second open roadmap for one project; warn about roadmaps that have no project yet.
+
+    The rule is per project because projects can share one beads database. A roadmap charted
+    before project scoping has no project label, so it cannot say whose it is: it blocks no one,
+    and the warning points at `adopt-roadmap`."""
+    if project is None:
+        raise WayfindError("a new roadmap needs --project NAME: projects can share one beads database, so the "
+                           "one-open-roadmap rule is counted per project (for example --project aleph)")
+    roadmaps = open_roadmaps(bd)
+    same = [r["id"] for r in roadmaps if project in project_names(r)]
+    if same:
+        raise RuleError(f"project {project} already has an open roadmap ({', '.join(same)}); work it with "
+                        "/clavain:waymap, or close it before charting another")
+    legacy = [r["id"] for r in roadmaps if not project_names(r)]
+    if legacy:
+        print(f"wayfind: warning: open roadmap(s) without a project label: {', '.join(legacy)}. If one is "
+              f"{project}'s, adopt it instead (wayfind adopt-roadmap MAP_ID --project {project})", file=sys.stderr)
+
+
 def create_tickets(bd: Bd, map_id: str, tickets: list[dict]) -> dict[str, str]:
     # Tickets first, each created whole (labels and blockers in one bd call), the map body last.
     # A failure part way leaves the body as it was, so graduated fog is never lost and the map
@@ -694,6 +737,10 @@ def _chart(bd: Bd, args) -> int:
     destination = read_text(args.destination, args.destination_file)
     out_of_scope = read_text(args.out_of_scope, args.out_of_scope_file)
     retarget = destination is not None or out_of_scope is not None
+    project = normalize_project(args.project) if args.project is not None else None
+    if project is not None and (args.map or (args.kind or "map") != "roadmap"):
+        raise WayfindError("--project scopes a new roadmap; it is not accepted with --map or for a plain map "
+                           "(adopt an existing roadmap with `wayfind adopt-roadmap`)")
 
     if args.map:
         issue = load_map(bd, args.map)
@@ -718,9 +765,8 @@ def _chart(bd: Bd, args) -> int:
         if not args.source:
             raise RuleError("a new map needs --source: where the owner set the Destination")
         kind = args.kind or "map"
-        if kind == "roadmap" and bd.json("list", "--label", ROADMAP_LABEL, "--limit", "0"):
-            raise RuleError("this project already has an open roadmap; work it with /clavain:waymap, "
-                            "or close it before charting another")
+        if kind == "roadmap":
+            check_project_free(bd, project)
         base = {"Destination": "", "Out of scope": "", "Notes": "", "Not yet specified": ""}
         marker = None
         source = args.source
@@ -740,15 +786,15 @@ def _chart(bd: Bd, args) -> int:
             "keep the rest as fog, or pass --allow-over-cap")
 
     if args.dry_run:
-        print(json.dumps({"map": map_id, "kind": kind, "create_map": map_id is None, "retarget": retarget and bool(map_id),
+        print(json.dumps({"map": map_id, "kind": kind, "project": project, "create_map": map_id is None, "retarget": retarget and bool(map_id),
                           "tickets": [{"key": t["key"], "type": t["type"], "title": t["title"],
                                        "blocked_by": t["blocked_by"]} for t in tickets],
                           "fog": fog}, indent=2))
         return EXIT_OK
 
     if map_id is None:
-        map_id = bd.create(f"[{kind}] {args.title}", render_body(sections, source), [MAP_LABELS[kind]],
-                           issue_type="epic")
+        labels = [MAP_LABELS[kind]] + ([PROJECT_LABEL_PREFIX + project] if kind == "roadmap" else [])
+        map_id = bd.create(f"[{kind}] {args.title}", render_body(sections, source), labels, issue_type="epic")
         # The new map is visible to /chart --map from here on, and those writers hold the lock on its
         # ID, not on "new-map". Take that lock too and recount under it before adding tickets.
         with map_lock(bd, map_id):
@@ -769,6 +815,47 @@ def _chart(bd: Bd, args) -> int:
 
     print(json.dumps({"map": map_id, "tickets": created, "fog": len(fog)}) if args.json
           else f"map {map_id}: {len(created)} ticket(s) created, {len(fog)} fog item(s)")
+    return EXIT_OK
+
+
+# ---------------------------------------------------------------------------
+# adopt-roadmap
+# ---------------------------------------------------------------------------
+
+
+def cmd_adopt(bd: Bd, args) -> int:
+    """Label a roadmap, and the tickets under it, with its project.
+
+    For a roadmap charted before `chart --project` existed. Rerunning it with the same project is
+    a no-op for what is already labelled, so a partial run can simply be run again."""
+    project = normalize_project(args.project)
+    shown = bd.show(args.map)
+    canonical = shown.get("id") if isinstance(shown, dict) else None
+    if not isinstance(canonical, str) or not canonical:
+        raise WayfindError(f"bd did not report an ID for {args.map}")
+    # The same two locks a new roadmap's chart takes, in the same order, so a chart and an adopt
+    # cannot both claim one project.
+    with map_lock(bd, "new-map"), map_lock(bd, canonical):
+        issue = load_map(bd, canonical)
+        if map_kind(issue) != "roadmap":
+            raise RuleError(f"{canonical} is a {map_kind(issue)} map; only a roadmap carries a project")
+        held = project_names(issue)
+        if held and held != [project]:
+            raise RuleError(f"{canonical} already belongs to project {', '.join(held)}; "
+                            "wayfind does not move a roadmap between projects")
+        rivals = [r["id"] for r in open_roadmaps(bd) if r["id"] != canonical and project in project_names(r)]
+        if rivals:
+            raise RuleError(f"project {project} already has an open roadmap ({', '.join(rivals)}); "
+                            "close it before adopting another")
+        label = PROJECT_LABEL_PREFIX + project
+        targets = [issue] + map_tickets(bd, canonical)
+        todo = [t["id"] for t in targets if label not in (t.get("labels") or [])]
+        if not args.dry_run:
+            for issue_id in todo:
+                bd.add_label(issue_id, label)
+    verb = "would label" if args.dry_run else "labelled"
+    print(json.dumps({"map": canonical, "project": project, "labelled": todo, "dry_run": args.dry_run})
+          if args.json else f"roadmap {canonical}: {verb} {len(todo)} of {len(targets)} issue(s) {label}")
     return EXIT_OK
 
 
@@ -1230,6 +1317,20 @@ def evaluate(bd: Bd, map_id: str, cap: int, max_age_days: int, now: dt.datetime 
 
     roadmap = None
     if kind == "roadmap":
+        owners = project_names(issue)
+        if not owners:
+            warnings.append(f"{map_id}: roadmap has no project label, so it counts against no project; "
+                            f"adopt it with wayfind adopt-roadmap {map_id} --project NAME")
+        elif len(owners) > 1:
+            errors.append(f"{map_id}: carries {len(owners)} project labels ({', '.join(owners)}); a roadmap "
+                          "belongs to one project")
+        else:
+            # map_id may be an abbreviation (axz for wm-axz); bd lists canonical IDs, so compare with bd's.
+            own = issue.get("id") or map_id
+            twins = [r["id"] for r in open_roadmaps(bd) if r["id"] != own and owners[0] in project_names(r)]
+            if twins and issue.get("status") != "closed":
+                errors.append(f"{map_id}: project {owners[0]} has more than one open roadmap "
+                              f"({own}, {', '.join(twins)}); close the extra one")
         bets = []
         for t in resolved:
             if t["id"] in committed_horizon and not superseders.get(t["id"]):
@@ -1449,7 +1550,9 @@ def build_parser() -> argparse.ArgumentParser:
     chart = sub.add_parser("chart", help="create a map, add tickets, or retarget a map")
     chart.add_argument("--map", help="existing map id; omit to create a new map")
     chart.add_argument("--kind", choices=sorted(MAP_LABELS),
-                       help="kind of a new map (default map); roadmap is the /clavain:waymap kind, one per project")
+                       help="kind of a new map (default map); roadmap is the /clavain:waymap kind, one per --project")
+    chart.add_argument("--project", help="project a new roadmap belongs to (required for --kind roadmap; labels "
+                                         f"it {PROJECT_LABEL_PREFIX}NAME so projects sharing one database each get a roadmap)")
     chart.add_argument("--title", help="short destination title for a new map")
     chart.add_argument("--destination")
     chart.add_argument("--destination-file")
@@ -1497,6 +1600,11 @@ def build_parser() -> argparse.ArgumentParser:
                         help="most committed Now + Next bets a roadmap holds; more is refused")
     render.add_argument("--stdout", action="store_true", help="print the markdown instead of writing it")
     render.add_argument("--check", action="store_true", help="exit 1 if the file is missing or out of date")
+    adopt = sub.add_parser("adopt-roadmap", help="give a roadmap charted before project scoping its project label")
+    adopt.add_argument("map")
+    adopt.add_argument("--project", required=True, help="project the roadmap belongs to")
+    adopt.add_argument("--dry-run", action="store_true")
+    adopt.add_argument("--json", action="store_true")
     return parser
 
 
@@ -1504,7 +1612,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     bd = Bd(directory=args.directory, actor=args.actor)
     handlers = {"chart": cmd_chart, "ready": cmd_ready, "resolve": cmd_resolve, "lint": cmd_lint,
-                "render": cmd_render}
+                "render": cmd_render, "adopt-roadmap": cmd_adopt}
     try:
         return handlers[args.command](bd, args)
     except WayfindError as exc:
