@@ -402,6 +402,20 @@ def bullets(text: str) -> list[str]:
     return [m.group(1).strip() for m in re.finditer(r"^\s*[-*] (.+)$", text or "", re.MULTILINE)]
 
 
+def scope_lines(text: str) -> list[str]:
+    """Markdown lines for an Out of scope section body.
+
+    A pure bullet list is normalised to '- item' lines, as before. Anything else (a prose sentence, or
+    prose mixed with bullets) is the owner's own wording, so it renders verbatim and in order; bullets()
+    would drop every non-bullet line and leave an empty heading.
+    """
+    body = (text or "").strip()
+    lines = [ln for ln in body.splitlines() if ln.strip()]
+    if lines and all(re.match(r"^\s*[-*] .+$", ln) for ln in lines):
+        return [f"- {item}" for item in bullets(body)]
+    return body.splitlines()
+
+
 def set_bullets(items: list[str]) -> str:
     return "\n".join(f"- {item}" for item in items)
 
@@ -970,29 +984,49 @@ def cmd_ready(bd: Bd, args) -> int:
 # ---------------------------------------------------------------------------
 
 
-def leaf_progress(bd: Bd, kids: list[dict], depth: int = 3) -> tuple[int, int]:
-    """Return (closed, total) over the leaves under kids; an issue with children counts through them."""
-    closed = total = 0
+def work_tree(bd: Bd, kids: list[dict], depth: int = 3) -> list[dict]:
+    """The work under kids as nested {id, title, status, children} nodes, down to depth levels.
+
+    An issue at the depth limit counts as a leaf even if it has children, so the progress count and the
+    rendered list are built from the same tree and cannot disagree.
+    """
+    nodes = []
     for kid in kids:
         below = [c for c in bd.children(kid["id"]) if c.get("id") != kid["id"]] if depth > 1 else []
-        if below:
-            c, t = leaf_progress(bd, below, depth - 1)
+        nodes.append({"id": kid["id"], "title": kid.get("title", ""), "status": kid.get("status", ""),
+                      "children": work_tree(bd, below, depth - 1)})
+    return nodes
+
+
+def tree_progress(nodes: list[dict]) -> tuple[int, int]:
+    """Return (closed, total) over the leaves of a work tree; an issue with children counts through them."""
+    closed = total = 0
+    for node in nodes:
+        if node["children"]:
+            c, t = tree_progress(node["children"])
         else:
-            c, t = (1 if kid.get("status") == "closed" else 0), 1
+            c, t = (1 if node["status"] == "closed" else 0), 1
         closed, total = closed + c, total + t
     return closed, total
 
 
-def bet_work(bd: Bd, bet: dict) -> dict:
-    """The work hanging under a committed bet: its direct children, and whether the bet is delivered.
+def leaf_progress(bd: Bd, kids: list[dict], depth: int = 3) -> tuple[int, int]:
+    """Return (closed, total) over the leaves under kids; an issue with children counts through them."""
+    return tree_progress(work_tree(bd, kids, depth))
 
-    A bet is live while any direct child is open, and delivered once it has children and all are closed.
+
+def bet_work(bd: Bd, bet: dict) -> dict:
+    """The work hanging under a committed bet, and whether the bet is delivered.
+
+    "children" is the whole tree the progress count walks (leaf_progress's set), not just the direct
+    children. A bet is live while any direct child is open, and delivered once it has children and all
+    are closed.
     """
     kids = [c for c in bd.children(bet["id"]) if c.get("id") != bet["id"]]
-    closed, total = leaf_progress(bd, kids)
+    tree = work_tree(bd, kids)
+    closed, total = tree_progress(tree)
     open_kids = [k for k in kids if k.get("status") != "closed"]
-    return {"children": [{"id": k["id"], "title": k.get("title", ""), "status": k.get("status", "")} for k in kids],
-            "live": bool(open_kids), "delivered": bool(kids) and not open_kids,
+    return {"children": tree, "live": bool(open_kids), "delivered": bool(kids) and not open_kids,
             "closed": closed, "total": total}
 
 
@@ -1439,6 +1473,21 @@ def _progress(bet: dict) -> str:
     return f"{bet['closed']}/{bet['total']} done"
 
 
+def work_lines(nodes: list[dict], level: int) -> list[str]:
+    """The bet's work, nested as the progress count walks it. Only a leaf has a box (the count's unit);
+    an issue with children shows its own sub-count instead of a box of its own."""
+    lines = []
+    for node in nodes:
+        pad = "  " * level + "- "
+        if node["children"]:
+            closed, total = tree_progress(node["children"])
+            lines.append(f"{pad}`{node['id']}` {node['title']} [{closed}/{total} done]")
+            lines += work_lines(node["children"], level + 1)
+        else:
+            lines.append(f"{pad}[{'x' if node['status'] == 'closed' else ' '}] `{node['id']}` {node['title']}")
+    return lines
+
+
 def render_roadmap(bd: Bd, map_id: str, bet_cap: int = DEFAULT_BET_CAP) -> str:
     """Markdown for a roadmap map: committed bets by horizon, with bead progress. Deterministic.
 
@@ -1457,11 +1506,11 @@ def render_roadmap(bd: Bd, map_id: str, bet_cap: int = DEFAULT_BET_CAP) -> str:
 
     def bet_block(bet: dict) -> list[str]:
         lines = [f"- **{bet['title']}** (`{bet['id']}`): {bet['summary'] or 'no summary'} [{_progress(bet)}]"]
-        lines += [f"  - [{'x' if c['status'] == 'closed' else ' '}] `{c['id']}` {c['title']}" for c in bet["children"]]
+        lines += work_lines(bet["children"], 1)
         return lines
 
     out = [RENDER_MARKER, "# Roadmap", "",
-           f"Destination: {one_line(sections.get('Destination', '')) or '_(none)_'}", ""]
+           f"Destination: {' '.join(sections.get('Destination', '').split()) or '_(none)_'}", ""]
     for heading, key in (("Now", "now"), ("Next", "next")):
         out += [f"## {heading}", ""]
         out += [line for bet in roadmap[key] for line in bet_block(bet)] or ["_Nothing committed._"]
@@ -1475,7 +1524,7 @@ def render_roadmap(bd: Bd, map_id: str, bet_cap: int = DEFAULT_BET_CAP) -> str:
     out += [f"- {item}" for item in bullets(fog)] if not is_placeholder(fog) and bullets(fog) else ["_(none)_"]
     scope = sections.get("Out of scope", "")
     if not is_placeholder(scope):
-        out += ["", "## Out of scope", ""] + [f"- {item}" for item in bullets(scope)]
+        out += ["", "## Out of scope", ""] + scope_lines(scope)
     return "\n".join(out).rstrip("\n") + "\n"
 
 
@@ -1605,11 +1654,18 @@ def build_parser() -> argparse.ArgumentParser:
     adopt.add_argument("--project", required=True, help="project the roadmap belongs to")
     adopt.add_argument("--dry-run", action="store_true")
     adopt.add_argument("--json", action="store_true")
+    for subparser in sub.choices.values():
+        # -C is global: it must come before the subcommand. Catch it after, so the error says so.
+        subparser.add_argument("-C", dest="misplaced_directory", help=argparse.SUPPRESS)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.misplaced_directory is not None:
+        print(f"wayfind: -C must come before the subcommand: wayfind -C {args.misplaced_directory} {args.command} ...",
+              file=sys.stderr)
+        return EXIT_USAGE
     bd = Bd(directory=args.directory, actor=args.actor)
     handlers = {"chart": cmd_chart, "ready": cmd_ready, "resolve": cmd_resolve, "lint": cmd_lint,
                 "render": cmd_render, "adopt-roadmap": cmd_adopt}
