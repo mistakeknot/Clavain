@@ -24,8 +24,13 @@ WAYFIND="${CLAUDE_PLUGIN_ROOT}/scripts/wayfind.py"
 
 ## The shape
 
-- **One roadmap per project**, labelled `wayfinder:roadmap`. `chart` refuses a
-  second open one.
+- **One roadmap per project**, labelled `wayfinder:roadmap`. Projects can share
+  one beads database (Aleph, Undersketch and Yaoirioware share the hub), so a
+  roadmap also carries `waymap:project:<name>`, set by `chart --project NAME`,
+  and `chart` refuses a second open roadmap for the same project. Other
+  projects' roadmaps in the same database do not count. A roadmap with no
+  project label (charted before scoping) counts against no project: `lint`
+  warns, and `adopt-roadmap` (below) labels it.
 - **Destination** is one horizon sentence and is the owner's alone. Out of
   scope is the owner's too.
 - **Horizons, no dates.** A committed bet carries `waymap:now` or
@@ -74,8 +79,11 @@ WAYFIND="${CLAUDE_PLUGIN_ROOT}/scripts/wayfind.py"
 
 - An argument that is a bead ID labelled `wayfinder:roadmap`: **work mode**.
 - Anything else: **chart mode**.
-- No argument: run `bd list --label wayfinder:roadmap`. One result is the
-  roadmap to work; none means chart mode.
+- No argument: run
+  `bd list --label wayfinder:roadmap --label waymap:project:<project>` for the
+  project you are working (the name `chart --project` used). One result is the
+  roadmap to work; none means chart mode. Never take a roadmap from the
+  unfiltered label: in a shared database it may be another project's.
 
 ## Chart mode
 
@@ -85,13 +93,27 @@ WAYFIND="${CLAUDE_PLUGIN_ROOT}/scripts/wayfind.py"
    `research` tickets that decide them. Everything else is fog.
 3. **Chart.**
    ```bash
-   python3 "$WAYFIND" chart --kind roadmap --title "<project> roadmap" \
+   python3 "$WAYFIND" chart --kind roadmap --project <project> --title "<project> roadmap" \
      --destination "<one sentence>" --out-of-scope-file oos.md \
      --source "<where the owner set it>" --tickets spec.json --dry-run
    ```
-   Drop `--dry-run` once the plan looks right. Past seven open tickets the
-   command refuses; keep the extras as fog.
+   `--project` is required for a roadmap (a short lower-case name such as
+   `aleph`; there is no default, since the working directory cannot tell
+   which project a shared database is serving). Drop `--dry-run` once the plan
+   looks right. Past seven open tickets the command refuses; keep the extras
+   as fog. A second roadmap for the same project exits 1.
 4. **Stop.** Report the roadmap ID and `wayfind lint` output.
+
+### Adopt a roadmap charted before project scoping
+
+```bash
+python3 "$WAYFIND" adopt-roadmap <roadmap> --project <project> [--dry-run]
+```
+
+This adds `waymap:project:<project>` to the roadmap and to every ticket under
+it, and is safe to rerun. It refuses a roadmap that already belongs to another
+project, a plain map, and a project that already has an open roadmap. Other
+projects then chart their own with `chart --project`.
 
 ## Work mode
 

@@ -52,14 +52,15 @@ def run(beads, *argv):
     return wayfind.main(["-C", str(beads), *argv])
 
 
-def chart_roadmap(beads, tmp_path, tickets, fog=("a later bet",)):
+def chart_roadmap(beads, tmp_path, tickets, fog=("a later bet",), project="wm"):
     spec = tmp_path / "spec.json"
     spec.write_text(json.dumps({"tickets": tickets, "fog": list(fog)}))
     bd = wayfind.Bd(directory=str(beads))
-    assert run(beads, "chart", "--kind", "roadmap", "--title", "Roadmap", "--destination",
-               "A product people can adopt by Q-end.", "--out-of-scope", "- billing", "--source", "card pick",
-               "--tickets", str(spec)) == 0
-    map_id = bd.json("list", "--label", wayfind.ROADMAP_LABEL, "--limit", "0")[0]["id"]
+    assert run(beads, "chart", "--kind", "roadmap", "--project", project, "--title", f"{project} roadmap",
+               "--destination", "A product people can adopt by Q-end.", "--out-of-scope", "- billing",
+               "--source", "card pick", "--tickets", str(spec)) == 0
+    map_id = next(i["id"] for i in bd.json("list", "--label", wayfind.ROADMAP_LABEL, "--limit", "0")
+                  if wayfind.PROJECT_LABEL_PREFIX + project in i["labels"])
     return bd, map_id
 
 
@@ -109,7 +110,7 @@ def test_bet_is_a_roadmap_only_hitl_type():
 def test_chart_roadmap_labels_the_epic_and_types_the_bets(beads, tmp_path):
     bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B1"}, {"type": "research", "title": "R1"}])
     issue = bd.show(map_id)
-    assert issue["labels"] == [wayfind.ROADMAP_LABEL]
+    assert sorted(issue["labels"]) == sorted([wayfind.ROADMAP_LABEL, "waymap:project:wm"])
     assert wayfind.ticket_type(bd.show(bet_id(bd, map_id, "B1"))) == "bet"
     report = wayfind.evaluate(bd, map_id, 7, 14)
     assert report["kind"] == "roadmap" and report["errors"] == [] and report["cleared"] is False
@@ -137,14 +138,169 @@ def test_one_open_roadmap_per_project(beads, tmp_path):
     chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B1"}])
     bd = wayfind.Bd(directory=str(beads))
     before = {i["id"] for i in bd.json("list", "--all", "--limit", "0")}
-    assert run(beads, "chart", "--kind", "roadmap", "--title", "Another", "--destination", "D",
+    assert run(beads, "chart", "--kind", "roadmap", "--project", "wm", "--title", "Another", "--destination", "D",
                "--source", "s") == wayfind.EXIT_RULE
     assert {i["id"] for i in bd.json("list", "--all", "--limit", "0")} == before
 
 
+def all_ids(bd):
+    return {i["id"] for i in bd.json("list", "--all", "--limit", "0")}
+
+
+def chart_unscoped_legacy_roadmap(beads, tmp_path):
+    """A roadmap as charted before project scoping: the roadmap label and no project label."""
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "L1"}, {"type": "bet", "title": "L2"}],
+                               project="legacy")
+    for issue in [map_id] + [t["id"] for t in wayfind.map_tickets(bd, map_id)]:
+        bd.remove_label(issue, "waymap:project:legacy")
+    assert wayfind.project_names(bd.show(map_id)) == []
+    return bd, map_id
+
+
+def test_project_names_are_normalised_and_label_safe():
+    assert wayfind.normalize_project(" Aleph ") == "aleph"
+    assert wayfind.project_names({"labels": ["wayfinder:roadmap", "waymap:project:aleph", "x"]}) == ["aleph"]
+    for bad in (None, "", "a b", "a:b", "-x", "x" * 65):
+        with pytest.raises(wayfind.WayfindError):
+            wayfind.normalize_project(bad)
+
+
+@needs_bd
+def test_two_projects_can_each_chart_a_roadmap_in_one_database(beads, tmp_path):
+    bd_a, aleph = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "A1"}], project="aleph")
+    bd_u, undersketch = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "U1"}], project="undersketch")
+    assert aleph != undersketch
+    assert wayfind.project_names(bd_a.show(aleph)) == ["aleph"]
+    assert wayfind.project_names(bd_u.show(undersketch)) == ["undersketch"]
+    for map_id in (aleph, undersketch):
+        report = wayfind.evaluate(bd_a, map_id, 7, 14)
+        assert report["errors"] == [] and report["warnings"] == [
+            "Now has no live child: no committed Now bet; commit one, or the roadmap is stale"]
+    # Each roadmap's work stays on its own tickets.
+    assert [t["title"] for t in wayfind.map_tickets(bd_a, aleph)] == ["A1"]
+    assert [t["title"] for t in wayfind.map_tickets(bd_a, undersketch)] == ["U1"]
+
+
+@needs_bd
+def test_the_same_project_twice_is_refused_and_changes_nothing(beads, tmp_path, capsys):
+    bd, first = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "A1"}], project="aleph")
+    chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "U1"}], project="undersketch")
+    before = all_ids(bd)
+    capsys.readouterr()
+    assert run(beads, "chart", "--kind", "roadmap", "--project", "ALEPH", "--title", "Again", "--destination", "D",
+               "--source", "s") == wayfind.EXIT_RULE
+    err = capsys.readouterr().err
+    assert "project aleph already has an open roadmap" in err and first in err
+    assert all_ids(bd) == before
+
+
+@needs_bd
+def test_a_closed_roadmap_frees_its_project(beads, tmp_path):
+    bd, first = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "A1"}], project="aleph")
+    bd.run("close", first, "-r", "ended", "--force")
+    _, second = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "A2"}], project="aleph")
+    assert second != first
+
+
+@needs_bd
+def test_a_new_roadmap_needs_a_project_and_a_plain_map_refuses_one(beads, tmp_path, capsys):
+    bd = wayfind.Bd(directory=str(beads))
+    before = all_ids(bd)
+    capsys.readouterr()
+    assert run(beads, "chart", "--kind", "roadmap", "--title", "t", "--destination", "D",
+               "--source", "s") == wayfind.EXIT_USAGE
+    assert "needs --project" in capsys.readouterr().err
+    assert run(beads, "chart", "--title", "t", "--destination", "D", "--source", "s",
+               "--project", "aleph") == wayfind.EXIT_USAGE
+    assert run(beads, "chart", "--kind", "roadmap", "--project", "a b", "--title", "t", "--destination", "D",
+               "--source", "s") == wayfind.EXIT_USAGE
+    assert all_ids(bd) == before
+
+
+@needs_bd
+def test_dry_run_reports_the_project_and_writes_nothing(beads, capsys):
+    bd = wayfind.Bd(directory=str(beads))
+    before = all_ids(bd)
+    capsys.readouterr()
+    assert run(beads, "chart", "--kind", "roadmap", "--project", "Aleph", "--title", "t", "--destination", "D",
+               "--source", "s", "--dry-run") == 0
+    assert json.loads(capsys.readouterr().out)["project"] == "aleph"
+    assert all_ids(bd) == before
+
+
+@needs_bd
+def test_an_unlabeled_legacy_roadmap_blocks_no_project_and_lint_warns(beads, tmp_path, capsys):
+    bd, legacy = chart_unscoped_legacy_roadmap(beads, tmp_path)
+    capsys.readouterr()
+    report = wayfind.evaluate(bd, legacy, 7, 14)
+    assert report["errors"] == [] and any("no project label" in w and "adopt-roadmap" in w for w in report["warnings"])
+    # A project can still chart its own roadmap, with a warning that names the legacy one.
+    _, other = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "U1"}], project="undersketch")
+    assert other != legacy
+    assert legacy in capsys.readouterr().err
+    assert wayfind.project_names(bd.show(legacy)) == []
+    assert wayfind.evaluate(bd, other, 7, 14)["errors"] == []
+
+
+@needs_bd
+def test_adopt_roadmap_labels_the_map_and_its_tickets_and_then_the_project_is_taken(beads, tmp_path, capsys):
+    bd, legacy = chart_unscoped_legacy_roadmap(beads, tmp_path)
+    ticket_ids = [t["id"] for t in wayfind.map_tickets(bd, legacy)]
+    assert len(ticket_ids) == 2
+    capsys.readouterr()
+    assert run(beads, "adopt-roadmap", legacy, "--project", "Aleph", "--dry-run") == 0
+    assert "would label 3 of 3" in capsys.readouterr().out
+    assert wayfind.project_names(bd.show(legacy)) == []
+    assert run(beads, "adopt-roadmap", legacy, "--project", "Aleph") == 0
+    assert "labelled 3 of 3" in capsys.readouterr().out
+    for issue_id in [legacy] + ticket_ids:
+        assert wayfind.project_names(bd.show(issue_id)) == ["aleph"]
+    assert wayfind.ROADMAP_LABEL in bd.show(legacy)["labels"]
+    assert wayfind.evaluate(bd, legacy, 7, 14)["errors"] == []
+    assert not any("no project label" in w for w in wayfind.evaluate(bd, legacy, 7, 14)["warnings"])
+    # Idempotent, and the project is now taken while another project is free.
+    assert run(beads, "adopt-roadmap", legacy, "--project", "aleph") == 0
+    assert "labelled 0 of 3" in capsys.readouterr().out
+    assert run(beads, "chart", "--kind", "roadmap", "--project", "aleph", "--title", "Again", "--destination", "D",
+               "--source", "s") == wayfind.EXIT_RULE
+    _, other = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "U1"}], project="undersketch")
+    assert other != legacy
+
+
+@needs_bd
+def test_adopt_roadmap_refuses_a_second_project_a_plain_map_and_a_taken_project(beads, tmp_path, capsys):
+    bd, legacy = chart_unscoped_legacy_roadmap(beads, tmp_path)
+    _, taken = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "T1"}], project="yaoirioware")
+    capsys.readouterr()
+    assert run(beads, "adopt-roadmap", legacy, "--project", "yaoirioware") == wayfind.EXIT_RULE
+    assert "already has an open roadmap" in capsys.readouterr().err
+    assert wayfind.project_names(bd.show(legacy)) == []
+    assert run(beads, "adopt-roadmap", taken, "--project", "aleph") == wayfind.EXIT_RULE
+    assert "already belongs to project yaoirioware" in capsys.readouterr().err
+    assert wayfind.project_names(bd.show(taken)) == ["yaoirioware"]
+    plain = bd.create("[map] plain", "## Destination\nD\n", [wayfind.MAP_LABEL], issue_type="epic")
+    assert run(beads, "adopt-roadmap", plain, "--project", "aleph") == wayfind.EXIT_RULE
+    assert wayfind.project_names(bd.show(plain)) == []
+    assert run(beads, "adopt-roadmap", legacy, "--project", "bad name") == wayfind.EXIT_USAGE
+    bd.run("close", plain, "-r", "test teardown", "--force")
+
+
+@needs_bd
+def test_lint_errors_when_a_project_has_two_open_roadmaps_or_a_roadmap_two_projects(beads, tmp_path):
+    bd, first = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "A1"}], project="aleph")
+    _, second = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "U1"}], project="undersketch")
+    bd.add_label(second, "waymap:project:aleph")  # a hand edit that bypasses chart
+    report = wayfind.evaluate(bd, second, 7, 14)
+    assert any("carries 2 project labels" in e for e in report["errors"])
+    bd.remove_label(second, "waymap:project:undersketch")
+    report = wayfind.evaluate(bd, first, 7, 14)
+    assert any("more than one open roadmap" in e for e in report["errors"])
+
+
 @needs_bd
 def test_roadmap_destination_is_one_line(beads):
-    assert run(beads, "chart", "--kind", "roadmap", "--title", "t", "--destination", "line one\nline two",
+    assert run(beads, "chart", "--kind", "roadmap", "--project", "wm", "--title", "t",
+               "--destination", "line one\nline two",
                "--source", "s") == wayfind.EXIT_RULE
 
 
@@ -957,7 +1113,7 @@ def test_writes_are_refused_when_the_workspace_identity_is_unreadable(beads, tmp
         ["resolve", bet_id(bd, map_id, "B0"), "--answer", "Build B0.", "--source", "card pick",
          "--decision", "commit", "--horizon", "now"],
         ["chart", "--map", map_id, "--tickets", str(more)],
-        ["chart", "--kind", "roadmap", "--title", "Second", "--destination", "A second destination here.",
+        ["chart", "--kind", "roadmap", "--project", "other", "--title", "Second", "--destination", "A second destination here.",
          "--out-of-scope", "- x", "--source", "card pick", "--tickets", str(new)],
     ):
         assert run(beads, *argv) == wayfind.EXIT_USAGE
