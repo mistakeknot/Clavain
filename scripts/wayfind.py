@@ -984,6 +984,12 @@ def cmd_ready(bd: Bd, args) -> int:
 # ---------------------------------------------------------------------------
 
 
+def work_children(bd: Bd, parent_id: str) -> list[dict]:
+    """The work issues directly under parent_id: events (state-change records, e.g. an advance-phase
+    child) are history, not work, so they are neither listed nor counted."""
+    return [c for c in bd.children(parent_id) if c.get("id") != parent_id and c.get("issue_type") != "event"]
+
+
 def work_tree(bd: Bd, kids: list[dict], depth: int = 3) -> list[dict]:
     """The work under kids as nested {id, title, status, children} nodes, down to depth levels.
 
@@ -992,7 +998,7 @@ def work_tree(bd: Bd, kids: list[dict], depth: int = 3) -> list[dict]:
     """
     nodes = []
     for kid in kids:
-        below = [c for c in bd.children(kid["id"]) if c.get("id") != kid["id"]] if depth > 1 else []
+        below = work_children(bd, kid["id"]) if depth > 1 else []
         nodes.append({"id": kid["id"], "title": kid.get("title", ""), "status": kid.get("status", ""),
                       "children": work_tree(bd, below, depth - 1)})
     return nodes
@@ -1022,7 +1028,7 @@ def bet_work(bd: Bd, bet: dict) -> dict:
     children. A bet is live while any direct child is open, and delivered once it has children and all
     are closed.
     """
-    kids = [c for c in bd.children(bet["id"]) if c.get("id") != bet["id"]]
+    kids = work_children(bd, bet["id"])
     tree = work_tree(bd, kids)
     closed, total = tree_progress(tree)
     open_kids = [k for k in kids if k.get("status") != "closed"]
