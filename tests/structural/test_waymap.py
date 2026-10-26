@@ -543,6 +543,42 @@ def test_render_keeps_a_prose_out_of_scope_and_the_whole_destination(beads, tmp_
     assert text.rstrip("\n").endswith(f"## Out of scope\n\n{prose}")
 
 
+class FakeBd:
+    """children() from a table of fake issue dicts, so the tree functions run without bd."""
+
+    def __init__(self, table):
+        self.table = table
+
+    def children(self, parent_id):
+        return self.table.get(parent_id, [])
+
+
+def _issue(issue_id, status, issue_type="task"):
+    return {"id": issue_id, "title": f"T {issue_id}", "status": status, "issue_type": issue_type}
+
+
+def test_event_children_are_neither_listed_nor_counted():
+    bd = FakeBd({
+        "bet": [_issue("feat", "open", "feature"), _issue("bet.ev", "closed", "event")],
+        "feat": [_issue("feat.task", "closed"), _issue("feat.ev", "closed", "event")],
+    })
+    kids = wayfind.work_children(bd, "bet")
+    assert [k["id"] for k in kids] == ["feat"]
+    tree = wayfind.work_tree(bd, kids)
+    assert [n["id"] for n in tree] == ["feat"] and [c["id"] for c in tree[0]["children"]] == ["feat.task"]
+    assert wayfind.tree_progress(tree) == (1, 1)
+    assert wayfind.leaf_progress(bd, kids) == (1, 1)
+    assert [line for line in wayfind.work_lines(tree, 1) if "feat.ev" in line or "bet.ev" in line] == []
+
+
+def test_a_feature_with_only_event_children_is_a_leaf_and_an_event_does_not_deliver_a_bet():
+    bd = FakeBd({"bet": [_issue("bet.ev", "closed", "event")], "feat": [_issue("feat.ev", "closed", "event")]})
+    assert wayfind.leaf_progress(bd, [_issue("feat", "open", "feature")]) == (0, 1)
+    work = wayfind.bet_work(bd, {"id": "bet"})
+    assert work["children"] == [] and work["total"] == 0
+    assert not work["delivered"] and not work["live"]
+
+
 @needs_bd
 def test_render_progress_count_matches_the_work_it_lists(beads, tmp_path, capsys):
     bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
@@ -1206,3 +1242,22 @@ def test_creation_reads_the_workspace_identity_once(beads, tmp_path, monkeypatch
     monkeypatch.setattr(wayfind.Bd, "run", counting)
     chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
     assert calls.count(("where",)) == 1
+
+
+@needs_bd
+def test_render_skips_event_children_of_a_bet(beads, tmp_path, capsys):
+    bd, map_id = chart_roadmap(beads, tmp_path, [{"type": "bet", "title": "B0"}])
+    assert commit(beads, bd, map_id, "B0", "now") == 0
+    bet = bet_id(bd, map_id, "B0")
+    feature = make_child(beads, bet, "Open feature")
+    event = subprocess.run([BD, "create", "State change: phase -> strategized", "--parent", bet, "-t", "event",
+                            "--event-category", "phase.changed", "--json"], cwd=beads,
+                           capture_output=True, text=True, check=True).stdout
+    event_id = (json.loads(event)[0] if event.lstrip().startswith("[") else json.loads(event))["id"]
+    close_issue(beads, event_id)
+    capsys.readouterr()
+    assert run(beads, "render", map_id, "--stdout") == 0
+    now = capsys.readouterr().out.split("## Now")[1].split("## Next")[0]
+    assert event_id not in now and "State change" not in now
+    assert "[0/1 done]" in now.splitlines()[2] and f"`{feature}`" in now
+    assert not wayfind.bet_work(bd, bd.show(bet))["delivered"]
