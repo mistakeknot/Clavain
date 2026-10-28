@@ -31,7 +31,7 @@ Push the work branch and open the PR **ready for review, not draft** (`gh pr cre
 Run the packaged reviewer against the exact head and base:
 
 ```bash
-dispatch.sh --role cross-lab-review -s read-only --producer-identity <your model> \
+dispatch.sh --role cross-lab-review -s read-only --producer-identity <model that authored the change, from its receipt> \
   --repo OWNER/NAME --repo-id ID --pr N --head <head sha> --base <base sha> \
   --prompt-file review.prompt -o review.out -C <worktree>
 ```
@@ -39,8 +39,8 @@ dispatch.sh --role cross-lab-review -s read-only --producer-identity <your model
 The prompt ends with "Verdict: PASS|PASS WITH NOTES|FAIL". A bare transcript is not a receipt. Receipts normalize FAIL to BLOCK.
 
 - Record every round: round number, head SHA, reviewer model, verdict. A BLOCK is never dropped from the record, even when a later round passes; say how each BLOCK was resolved.
-- Fix findings with new commits, then review again at the new head.
-- Escalation: two demonstrated failures request escalation (canon, `docs/canon/reasoning-routing.md`); the loop cap is three failed rounds, then escalate before a fourth. One confirming review after a pass is allowed. Do not add a commit only to obtain a fresh receipt after a BLOCK; escalate at that head.
+- Fix findings with new commits, then re-review at the new head under `clavain:code-review-discipline`: the brief carries the previous open findings verbatim, the reviewed head and base, and the fix diff, and the reviewer verdicts each finding ADDRESSED or NOT ADDRESSED. A fresh reviewer's PASS does not close an unaddressed earlier finding.
+- Escalation: a disproven premise escalates immediately. Two demonstrated failures request escalation (canon, `docs/canon/reasoning-routing.md`); do not start another autonomous round once a Critical or Important finding has survived a fix. The loop cap is three failed rounds, then escalate before a fourth. If this runs inside the final review of subagent-driven development or executing-plans, their stricter limit governs: one fix round and one scoped re-review, then a human blocker. One confirming review after a pass is allowed. Do not add a commit only to obtain a fresh receipt after a BLOCK; escalate at that head.
 - Operational failures (quota, auth, timeout) are not verdicts; retry or use the packaged fallback, and report an unavailable seat rather than skipping review.
 
 ### 4. CI

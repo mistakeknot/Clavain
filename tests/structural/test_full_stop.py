@@ -27,6 +27,8 @@ def test_full_stop_states_hard_limits_and_loop(project_root):
             "cross-lab-review",
             "block",
             "decision card",
+            "producer-identity",
+            "code-review-discipline",
         ):
             assert needle in text, (relative, needle)
 
