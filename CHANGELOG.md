@@ -1,6 +1,22 @@
 # Changelog
 
-## Unreleased
+## 0.6.332
+
+Release notes for everything merged since the installed 0.6.331. The version
+files are bumped by the release step (`ic publish`), not by this change.
+
+### Since 0.6.331
+
+- **`/clavain:waymap` and `wayfind render`** (#99, #102, #103, #104). A roadmap map kind for wayfind: bets in Now / Next / Not yet specified, a Destination and prose Out of scope, rendered to `docs/roadmap.md`. A roadmap is scoped to one project (`waymap:project:<name>`); progress counts come from one work tree shared by the bet list and the count; event beads no longer count as bet work; a misplaced `-C` errors with exit 2. Not in the installed 0.6.331: `wayfind render` is missing there.
+- **`hooks/auto-push.sh` opt-outs, branch guards and a push log** (#93, mk-ge29k). It no longer pushes to a default branch.
+- **`cross-lab-review` verdict words, failure on unknown verdict, append-only superseding receipts** (#94, mk-0ud4q), plus receipt-cap, fifo and prompt-word test coverage (#96, mk-6bdyb).
+- **`describe-pr` Merge Danger block** (#100) and **`/retro`** to propose environment changes (#101).
+- **`review-round`** one-round review wrapper with strict terminal verdict block and CI-EXIT on failing CI (#81, #82, #83).
+- **New commands**: grill-me, blast-radius, correct, show-me-your-work (#78); blast-radius and show-me-your-work are now model-invocable (#80); breadth review before cross-lab convergence (#77).
+- **Upstream sync** of superpowers sdd-workspace fixes (#98); decision-log lock test (#79).
+- **Housekeeping**: public hygiene scrub (#91), interlens dropped from agent-rig and install fallbacks (#92), gitleaks fingerprints (#97), wiki version figure (#95).
+
+### Earlier unreleased entries
 
 ### Added
 
