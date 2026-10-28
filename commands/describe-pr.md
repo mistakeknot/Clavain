@@ -45,6 +45,12 @@ From commits and diff identify: what changed, why (infer from messages), type (f
 - Door: <one-way: data-migration | external-message | signing-or-production | deploy-timer, plus why / two-way: one clause on how to undo it>
 - Blast Radius: <one line, 1-200 characters: what else a bad merge would touch>
 - Evidence: <one line: before -> after, taken from a command you ran, a test or a screenshot>
+
+## Review
+- Rounds: <number of review rounds, or "none run">
+- Reviewer model: <model(s) that reviewed, or "none">
+- Verdicts by round: <1: BLOCK, 2: PASS ...>
+- Final verdict: <PASS | PASS WITH NOTES | BLOCK | none run> at head <sha>
 ```
 
 ### Merge Danger rules
@@ -63,6 +69,18 @@ From commits and diff identify: what changed, why (infer from messages), type (f
   observe it, write `none observed` rather than inventing one.
 - The block only orders reviewer attention. A two-way door never waives a
   required review, receipt or approval, and a one-way door adds none by itself.
+
+### Review footer rules
+
+- The Review block is mandatory on every PR. Fill it from review receipts or
+  the review record, never from memory.
+- List every round's verdict. A BLOCK stays in the list even when a later
+  round passes, and a FAIL counts as BLOCK. If no review ran, write `none run`.
+- Name the head the final verdict applies to. A commit added after the final
+  verdict makes the footer stale: re-review or say the verdict is for the
+  earlier head.
+- Public repos: the footer carries no ruling IDs, card keys, private paths or
+  hostnames.
 
 Title: under 70 chars, prefixed with type (`feat:`, `fix:`, `refactor:`, etc.).
 
