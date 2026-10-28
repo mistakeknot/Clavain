@@ -27,6 +27,7 @@ def test_full_stop_states_hard_limits_and_loop(project_root):
             "cross-lab-review",
             "block",
             "decision card",
+            "-s read-only",
             "producer-identity",
             "code-review-discipline",
         ):
