@@ -447,7 +447,7 @@ def test_false_positives_admitted(name, payload):
 
 def test_false_positives_skill_descriptions():
     skill_dirs = sorted(p for p in SKILLS_DIR.iterdir() if p.is_dir())
-    assert len(skill_dirs) == 27
+    assert len(skill_dirs) == 28
     descriptions = []
     for skill_dir in skill_dirs:
         skill_md = skill_dir / "SKILL.md"

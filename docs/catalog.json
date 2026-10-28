@@ -1,7 +1,7 @@
 {
-  "generated": "2026-10-25T23:01:44Z",
+  "generated": "2026-10-28T03:33:51Z",
   "counts": {
-    "skills": 27,
+    "skills": 28,
     "agents": 6,
     "commands": 65,
     "hooks": 22,
@@ -41,6 +41,10 @@
     {
       "name": "file-todos",
       "description": "Manage an existing todos/ file tracker with status, dependencies, and review triage."
+    },
+    {
+      "name": "full-stop",
+      "description": "Use when told \"full stop\", or when asked to own a change end to end up to a merge-ready pull request. Verify, cross-lab review, open the PR ready, register the watcher, fix CI, escalate, then stop. Never merges."
     },
     {
       "name": "galiana",
