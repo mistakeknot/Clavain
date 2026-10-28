@@ -12,7 +12,7 @@ files are bumped by the release step (`ic publish`), not by this change.
 - **`cross-lab-review` verdict words, failure on unknown verdict, append-only superseding receipts** (#94, mk-0ud4q), plus receipt-cap, fifo and prompt-word test coverage (#96, mk-6bdyb).
 - **`describe-pr` Merge Danger block** (#100) and **`/retro`** to propose environment changes (#101).
 - **`review-round`** one-round review wrapper with strict terminal verdict block and CI-EXIT on failing CI (#81, #82, #83).
-- **New commands**: grill-me, blast-radius, correct, show-me-your-work (#78), routed to agents (#80); breadth review before cross-lab convergence (#77).
+- **New commands**: grill-me, blast-radius, correct, show-me-your-work (#78); blast-radius and show-me-your-work are now model-invocable (#80); breadth review before cross-lab convergence (#77).
 - **Upstream sync** of superpowers sdd-workspace fixes (#98); decision-log lock test (#79).
 - **Housekeeping**: public hygiene scrub (#91), interlens dropped from agent-rig and install fallbacks (#92), gitleaks fingerprints (#97), wiki version figure (#95).
 
