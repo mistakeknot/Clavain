@@ -86,14 +86,14 @@ def account_headroom(account, threshold, floor, family=None):
 
 def best(accounts, threshold, floor, family=None, now=None):
     now = now_ms() if now is None else now
-    skips = {a.get('id'): skip_reason(a, now) for a in accounts}
+    skips = [skip_reason(a, now) for a in accounts]
     # Exhausted, held or restricted accounts are out; a stale observation says
     # nothing either way, so it is dropped without proving exhaustion.
-    accounts_in = [a for a in accounts if skips[a.get('id')] is None]
+    accounts_in = [a for a, reason in zip(accounts, skips) if reason is None]
     if not accounts_in:
         # Exhausted only when every account is provably unavailable; one stale
         # account leaves the provider unknown.
-        hard = all(r in ('status', 'held', 'restricted') for r in skips.values())
+        hard = all(r in ('status', 'held', 'restricted') for r in skips)
         return {'best_account': None, 'remaining_5h': None, 'remaining_7d': None,
                 'family_remaining_7d': None, 'score': None, 'below_floor': hard,
                 'soonest_reset': None}
@@ -106,7 +106,9 @@ def best(accounts, threshold, floor, family=None, now=None):
     # A partial/unknown account is never proof that every account is exhausted.
     usable = [r for r in rows if not r['below_floor']]
     winner = max(usable or rows, key=lambda r: r['score'] if r['score'] is not None else -1)
-    return dict(winner, below_floor=all(r['below_floor'] for r in rows))
+    # A stale account may still have room: it keeps the provider unknown.
+    stale = any(r == 'stale' for r in skips)
+    return dict(winner, below_floor=all(r['below_floor'] for r in rows) and not stale)
 
 
 def normalize(data):

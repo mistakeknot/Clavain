@@ -278,3 +278,20 @@ def test_cache_does_not_follow_symlinked_directory(tmp_path):
     os.symlink(target, tmp_path / 'c' / 'clavain')
     subprocess.run(['bash', str(SCRIPT)], env=env, capture_output=True, text=True, check=True)
     assert list(target.iterdir()) == []
+
+
+def test_fresh_nearly_full_plus_stale_ready_is_not_exhausted():
+    snap = core({'accounts': [account('claude', .99, .1, id='a', status='ready', observedAt=NOW),
+                              account('claude', .1, .1, id='b', status='ready', observedAt=1),
+                              usable('codex', 0.2)]})
+    assert snap['providers']['claude']['below_floor'] is False
+    assert advise(snap)['exclude'] == []
+
+
+def test_accounts_without_distinct_ids_do_not_collide():
+    snap = core({'accounts': [
+        {k: v for k, v in account('claude', 1.0, 0.0, status='exhausted', observedAt=NOW).items() if k != 'id'},
+        {k: v for k, v in account('claude', .1, .1, status='ready', observedAt=NOW).items() if k != 'id'},
+        usable('codex', 0.2)]})
+    assert snap['providers']['claude']['below_floor'] is False
+    assert snap['providers']['claude']['score'] == pytest.approx(.9)
