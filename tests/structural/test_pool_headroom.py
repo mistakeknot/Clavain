@@ -11,8 +11,8 @@ SCRIPT = ROOT / 'scripts/pool-headroom.sh'
 
 
 def account(provider, weekly, five=0.1, **extra):
-    return dict(id=provider + '-fixture', provider=provider, enabled=True,
-                sevenDayUtilization=weekly, fiveHourUtilization=five, **extra)
+    return {'id': provider + '-fixture', 'provider': provider, 'enabled': True,
+            'sevenDayUtilization': weekly, 'fiveHourUtilization': five, **extra}
 
 
 HEALTHY = {'snapshot_at': '2026-09-22T23:00:00Z', 'accounts': [
@@ -160,3 +160,138 @@ def test_protected_roles_ignore_exhausted_fable(role):
     result = advise(core(fixture), role, resolved)
     assert result['exclude'] == [] and result['headroom_reorder'] is None
     assert result['candidates'][0]['profile'] == resolved['profile']
+
+
+NOW = 1_800_000_000_000
+
+
+def usable(provider, weekly, five=0.1, **extra):
+    return account(provider, weekly, five, observedAt=NOW, status='ready', **extra)
+
+
+def test_exhausted_status_account_is_skipped_not_scored():
+    # Live shape: two exhausted Claude accounts plus one ready account.
+    snap = core({'accounts': [
+        account('claude', 1.0, 0.0, id='a', status='exhausted', observedAt=NOW),
+        account('claude', 0.12, 0.51, id='b', status='ready', observedAt=NOW),
+        usable('codex', 0.2)]})
+    claude = snap['providers']['claude']
+    assert claude['best_account'] == 'b'
+    assert claude['below_floor'] is False
+
+
+def test_all_claude_accounts_exhausted_excludes_claude_up_front():
+    snap = core({'accounts': [
+        account('claude', 1.0, 0.0, id='a', status='exhausted', observedAt=NOW),
+        account('claude', 0.99, 0.02, id='b', status='exhausted', observedAt=NOW),
+        usable('codex', 0.2)]})
+    assert snap['providers']['claude']['below_floor'] is True
+    assert advise(snap)['exclude'] == ['claude-sonnet-5-5']
+
+
+def test_held_and_restricted_accounts_are_skipped():
+    far = 9_999_999_999_999
+    snap = core({'accounts': [
+        account('claude', 0.1, 0.1, id='h', status='ready', heldUntil=far),
+        account('claude', 0.1, 0.1, id='r', status='ready', usageRestriction={'kind': 'x'}),
+        usable('codex', 0.2)]})
+    assert snap['providers']['claude']['below_floor'] is True
+
+
+def test_stale_observation_is_unknown_not_exhausted():
+    snap = core({'accounts': [
+        account('claude', 0.1, 0.1, id='s', status='ready', observedAt=1),
+        usable('codex', 0.2)]})
+    claude = snap['providers']['claude']
+    assert claude['score'] is None and claude['below_floor'] is False
+    assert advise(snap)['exclude'] == []
+
+
+def test_weekly_pace_guard_lowers_score():
+    # 60% used with 40% of the week elapsed => pace 1.5 > 1, minus 15 points.
+    week = 10080 * 60 * 1000
+    import time
+    now = int(time.time() * 1000)
+    paced = core({'accounts': [account('claude', 0.6, 0.1, id='p', status='ready', observedAt=now,
+                                       sevenDayResetAt=now + int(week * 0.6))]})
+    plain = core({'accounts': [account('claude', 0.6, 0.1, id='p', status='ready', observedAt=now)]})
+    assert plain['providers']['claude']['score'] == pytest.approx(.4)
+    assert paced['providers']['claude']['score'] == pytest.approx(.25)
+
+
+def test_live_read_is_cached(tmp_path):
+    import os
+    calls = tmp_path / 'calls'
+    bb = tmp_path / 'bb'
+    bb.write_text('#!/bin/sh\necho x >> ' + str(calls) + '\ncat <<EOF\n' + json.dumps(
+        {'accounts': [dict(usable('codex', 0.2), observedAt=int(__import__('time').time() * 1000))]}) + '\nEOF\n')
+    bb.chmod(0o755)
+    env = dict(os.environ, BB_CLI=str(bb), XDG_CACHE_HOME=str(tmp_path / 'c'))
+    for _ in range(2):
+        out = subprocess.run(['bash', str(SCRIPT)], env=env, capture_output=True, text=True, check=True)
+        assert json.loads(out.stdout)['status'] == 'known'
+    assert len(calls.read_text().split()) == 1
+
+
+def test_stale_exhausted_account_is_unknown_not_exhausted():
+    snap = core({'accounts': [account('claude', 1.0, 0.0, id='s', status='exhausted', observedAt=1),
+                              usable('codex', 0.2)]})
+    assert snap['providers']['claude']['below_floor'] is False
+    assert advise(snap)['exclude'] == []
+
+
+def test_fresh_exhausted_plus_stale_ready_is_unknown():
+    snap = core({'accounts': [account('claude', 1.0, 0.0, id='a', status='exhausted', observedAt=NOW),
+                              account('claude', 0.1, 0.1, id='b', status='ready', observedAt=1),
+                              usable('codex', 0.2)]})
+    assert snap['providers']['claude']['below_floor'] is False
+    assert advise(snap)['exclude'] == []
+
+
+def _cache_env(tmp_path, body):
+    import os, time
+    bb = tmp_path / 'bb'
+    bb.write_text('#!/bin/sh\ncat <<EOF\n' + json.dumps({'accounts': [dict(
+        usable('codex', 0.2), observedAt=int(time.time() * 1000))]}) + '\nEOF\n')
+    bb.chmod(0o755)
+    return dict(os.environ, BB_CLI=str(bb), XDG_CACHE_HOME=str(tmp_path / 'c'))
+
+
+def test_cache_ignores_poisoned_world_writable_file(tmp_path):
+    import os
+    env = _cache_env(tmp_path, None)
+    d = tmp_path / 'c' / 'clavain'
+    d.mkdir(parents=True, mode=0o700)
+    f = d / 'pool-status.json'
+    f.write_text(json.dumps({'accounts': [account('claude', 1.0, 1.0, id='x', status='exhausted')]}))
+    f.chmod(0o666)
+    out = subprocess.run(['bash', str(SCRIPT)], env=env, capture_output=True, text=True, check=True)
+    assert 'claude' not in json.loads(out.stdout)['providers']
+
+
+def test_cache_does_not_follow_symlinked_directory(tmp_path):
+    import os
+    env = _cache_env(tmp_path, None)
+    target = tmp_path / 'elsewhere'
+    target.mkdir()
+    (tmp_path / 'c').mkdir()
+    os.symlink(target, tmp_path / 'c' / 'clavain')
+    subprocess.run(['bash', str(SCRIPT)], env=env, capture_output=True, text=True, check=True)
+    assert list(target.iterdir()) == []
+
+
+def test_fresh_nearly_full_plus_stale_ready_is_not_exhausted():
+    snap = core({'accounts': [account('claude', .99, .1, id='a', status='ready', observedAt=NOW),
+                              account('claude', .1, .1, id='b', status='ready', observedAt=1),
+                              usable('codex', 0.2)]})
+    assert snap['providers']['claude']['below_floor'] is False
+    assert advise(snap)['exclude'] == []
+
+
+def test_accounts_without_distinct_ids_do_not_collide():
+    snap = core({'accounts': [
+        {k: v for k, v in account('claude', 1.0, 0.0, status='exhausted', observedAt=NOW).items() if k != 'id'},
+        {k: v for k, v in account('claude', .1, .1, status='ready', observedAt=NOW).items() if k != 'id'},
+        usable('codex', 0.2)]})
+    assert snap['providers']['claude']['below_floor'] is False
+    assert snap['providers']['claude']['score'] == pytest.approx(.9)
