@@ -231,3 +231,50 @@ def test_live_read_is_cached(tmp_path):
         out = subprocess.run(['bash', str(SCRIPT)], env=env, capture_output=True, text=True, check=True)
         assert json.loads(out.stdout)['status'] == 'known'
     assert len(calls.read_text().split()) == 1
+
+
+def test_stale_exhausted_account_is_unknown_not_exhausted():
+    snap = core({'accounts': [account('claude', 1.0, 0.0, id='s', status='exhausted', observedAt=1),
+                              usable('codex', 0.2)]})
+    assert snap['providers']['claude']['below_floor'] is False
+    assert advise(snap)['exclude'] == []
+
+
+def test_fresh_exhausted_plus_stale_ready_is_unknown():
+    snap = core({'accounts': [account('claude', 1.0, 0.0, id='a', status='exhausted', observedAt=NOW),
+                              account('claude', 0.1, 0.1, id='b', status='ready', observedAt=1),
+                              usable('codex', 0.2)]})
+    assert snap['providers']['claude']['below_floor'] is False
+    assert advise(snap)['exclude'] == []
+
+
+def _cache_env(tmp_path, body):
+    import os, time
+    bb = tmp_path / 'bb'
+    bb.write_text('#!/bin/sh\ncat <<EOF\n' + json.dumps({'accounts': [dict(
+        usable('codex', 0.2), observedAt=int(time.time() * 1000))]}) + '\nEOF\n')
+    bb.chmod(0o755)
+    return dict(os.environ, BB_CLI=str(bb), XDG_CACHE_HOME=str(tmp_path / 'c'))
+
+
+def test_cache_ignores_poisoned_world_writable_file(tmp_path):
+    import os
+    env = _cache_env(tmp_path, None)
+    d = tmp_path / 'c' / 'clavain'
+    d.mkdir(parents=True, mode=0o700)
+    f = d / 'pool-status.json'
+    f.write_text(json.dumps({'accounts': [account('claude', 1.0, 1.0, id='x', status='exhausted')]}))
+    f.chmod(0o666)
+    out = subprocess.run(['bash', str(SCRIPT)], env=env, capture_output=True, text=True, check=True)
+    assert 'claude' not in json.loads(out.stdout)['providers']
+
+
+def test_cache_does_not_follow_symlinked_directory(tmp_path):
+    import os
+    env = _cache_env(tmp_path, None)
+    target = tmp_path / 'elsewhere'
+    target.mkdir()
+    (tmp_path / 'c').mkdir()
+    os.symlink(target, tmp_path / 'c' / 'clavain')
+    subprocess.run(['bash', str(SCRIPT)], env=env, capture_output=True, text=True, check=True)
+    assert list(target.iterdir()) == []

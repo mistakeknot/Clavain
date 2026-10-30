@@ -5,8 +5,10 @@ from datetime import datetime, timezone
 import json
 import math
 import os
+import stat
 import subprocess
 import sys
+import tempfile
 
 EXECUTION = ('routine-execution', 'deep-execution', 'scout', 'coordination')
 FAMILIES = ('fable', 'opus', 'sonnet')
@@ -28,6 +30,10 @@ def now_ms():
 
 def skip_reason(account, now):
     """Why an account cannot take new work, or None. Missing fields never disqualify."""
+    # Freshness first: an old observation proves nothing, even an old "exhausted".
+    seen = account.get('observedAt')
+    if type(seen) in (int, float) and now - seen > STALE_MS:
+        return 'stale'
     status = account.get('status')
     if status is not None and status != 'ready':
         return 'status'
@@ -36,9 +42,6 @@ def skip_reason(account, now):
         return 'held'
     if account.get('usageRestriction'):
         return 'restricted'
-    seen = account.get('observedAt')
-    if type(seen) in (int, float) and now - seen > STALE_MS:
-        return 'stale'
     return None
 
 
@@ -88,7 +91,9 @@ def best(accounts, threshold, floor, family=None, now=None):
     # nothing either way, so it is dropped without proving exhaustion.
     accounts_in = [a for a in accounts if skips[a.get('id')] is None]
     if not accounts_in:
-        hard = any(r in ('status', 'held', 'restricted') for r in skips.values())
+        # Exhausted only when every account is provably unavailable; one stale
+        # account leaves the provider unknown.
+        hard = all(r in ('status', 'held', 'restricted') for r in skips.values())
         return {'best_account': None, 'remaining_5h': None, 'remaining_7d': None,
                 'family_remaining_7d': None, 'score': None, 'below_floor': hard,
                 'soonest_reset': None}
@@ -175,11 +180,19 @@ def cache_path():
     return os.path.join(base, 'clavain', 'pool-status.json')
 
 
+def private(path, want_dir):
+    """True when path is ours, not a symlink, and not writable by group or others."""
+    info = os.lstat(path)
+    kind = stat.S_ISDIR(info.st_mode) if want_dir else stat.S_ISREG(info.st_mode)
+    return kind and info.st_uid == os.getuid() and not info.st_mode & 0o022
+
+
 def read_snapshot():
     """One `bb pool status --json`, reused for CACHE_TTL seconds across dispatches."""
     path = cache_path()
     try:
-        if CACHE_TTL > 0 and datetime.now().timestamp() - os.path.getmtime(path) < CACHE_TTL:
+        if (CACHE_TTL > 0 and private(os.path.dirname(path), True) and private(path, False)
+                and datetime.now().timestamp() - os.path.getmtime(path) < CACHE_TTL):
             with open(path) as handle:
                 return json.load(handle)
     except (OSError, ValueError):
@@ -189,14 +202,24 @@ def read_snapshot():
     data = json.loads(value.stdout)
     data['snapshot_at'] = datetime.now(timezone.utc).isoformat()
     if CACHE_TTL > 0:
+        tmp = None
         try:
-            os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
-            tmp = '%s.%d' % (path, os.getpid())
-            with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), 'w') as handle:
-                json.dump(data, handle)
-            os.replace(tmp, path)
+            directory = os.path.dirname(path)
+            os.makedirs(directory, mode=0o700, exist_ok=True)
+            if private(directory, True):
+                fd, tmp = tempfile.mkstemp(dir=directory, prefix='.pool-status-')  # exclusive, 0600
+                with os.fdopen(fd, 'w') as handle:
+                    json.dump(data, handle)
+                os.replace(tmp, path)
+                tmp = None
         except OSError:
             pass
+        finally:
+            if tmp:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
     return data
 
 
