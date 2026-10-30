@@ -10,6 +10,46 @@ import sys
 
 EXECUTION = ('routine-execution', 'deep-execution', 'scout', 'coordination')
 FAMILIES = ('fable', 'opus', 'sonnet')
+# Same usability rules and weekly pace guard as the coordinator-side
+# executor-headroom helper, so dispatch and spawn gating read one signal.
+STALE_MS = 30 * 60 * 1000
+WEEK_MIN = 10080
+PACE_PENALTY = 0.15
+# `bb pool status --json` takes 7-12 s on a busy host, so a snapshot is cached
+# briefly and the read deadline is generous. A read failure never proves
+# exhaustion: the result is `unknown` and routing is unchanged.
+READ_TIMEOUT = float(os.environ.get('CLAVAIN_POOL_HEADROOM_TIMEOUT') or 60)
+CACHE_TTL = float(os.environ.get('CLAVAIN_POOL_HEADROOM_CACHE_TTL') or 120)
+
+
+def now_ms():
+    return int(datetime.now(timezone.utc).timestamp() * 1000)
+
+
+def skip_reason(account, now):
+    """Why an account cannot take new work, or None. Missing fields never disqualify."""
+    status = account.get('status')
+    if status is not None and status != 'ready':
+        return 'status'
+    held = account.get('heldUntil')
+    if type(held) in (int, float) and held > now:
+        return 'held'
+    if account.get('usageRestriction'):
+        return 'restricted'
+    seen = account.get('observedAt')
+    if type(seen) in (int, float) and now - seen > STALE_MS:
+        return 'stale'
+    return None
+
+
+def pace_penalty(account, now):
+    reset = account.get('sevenDayResetAt')
+    used = utilization(account.get('sevenDayUtilization'))
+    if used is None or type(reset) not in (int, float):
+        return 0
+    span = WEEK_MIN * 60 * 1000
+    elapsed = min(1 - (reset - now) / span, 1)
+    return PACE_PENALTY if (elapsed <= 0 and used > 0) or (elapsed > 0 and used / elapsed > 1) else 0
 
 
 def utilization(value):
@@ -41,8 +81,23 @@ def account_headroom(account, threshold, floor, family=None):
             'soonest_reset': min(resets) if resets else None}
 
 
-def best(accounts, threshold, floor, family=None):
-    rows = [account_headroom(a, threshold, floor, family) for a in accounts]
+def best(accounts, threshold, floor, family=None, now=None):
+    now = now_ms() if now is None else now
+    skips = {a.get('id'): skip_reason(a, now) for a in accounts}
+    # Exhausted, held or restricted accounts are out; a stale observation says
+    # nothing either way, so it is dropped without proving exhaustion.
+    accounts_in = [a for a in accounts if skips[a.get('id')] is None]
+    if not accounts_in:
+        hard = any(r in ('status', 'held', 'restricted') for r in skips.values())
+        return {'best_account': None, 'remaining_5h': None, 'remaining_7d': None,
+                'family_remaining_7d': None, 'score': None, 'below_floor': hard,
+                'soonest_reset': None}
+    rows = []
+    for a in accounts_in:
+        row = account_headroom(a, threshold, floor, family)
+        if row['score'] is not None:
+            row['score'] = max(row['score'] - pace_penalty(a, now), 0)
+        rows.append(row)
     # A partial/unknown account is never proof that every account is exhausted.
     usable = [r for r in rows if not r['below_floor']]
     winner = max(usable or rows, key=lambda r: r['score'] if r['score'] is not None else -1)
@@ -115,6 +170,36 @@ def advice(data, role):
     return result
 
 
+def cache_path():
+    base = os.environ.get('XDG_CACHE_HOME') or os.path.join(os.path.expanduser('~'), '.cache')
+    return os.path.join(base, 'clavain', 'pool-status.json')
+
+
+def read_snapshot():
+    """One `bb pool status --json`, reused for CACHE_TTL seconds across dispatches."""
+    path = cache_path()
+    try:
+        if CACHE_TTL > 0 and datetime.now().timestamp() - os.path.getmtime(path) < CACHE_TTL:
+            with open(path) as handle:
+                return json.load(handle)
+    except (OSError, ValueError):
+        pass
+    value = subprocess.run([os.environ.get('BB_CLI') or 'bb', 'pool', 'status', '--json'],
+                           capture_output=True, text=True, timeout=READ_TIMEOUT, check=True)
+    data = json.loads(value.stdout)
+    data['snapshot_at'] = datetime.now(timezone.utc).isoformat()
+    if CACHE_TTL > 0:
+        try:
+            os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+            tmp = '%s.%d' % (path, os.getpid())
+            with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), 'w') as handle:
+                json.dump(data, handle)
+            os.replace(tmp, path)
+        except OSError:
+            pass
+    return data
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--stdin', action='store_true')
@@ -124,10 +209,7 @@ def main():
         if args.stdin:
             data = json.load(sys.stdin)
         else:
-            value = subprocess.run([os.environ.get('BB_CLI') or 'bb', 'pool', 'status', '--json'],
-                                   capture_output=True, text=True, timeout=3, check=True)
-            data = json.loads(value.stdout)
-            data['snapshot_at'] = datetime.now(timezone.utc).isoformat()
+            data = read_snapshot()
         result = advice(data, args.role) if args.role else normalize(data)
     except (OSError, ValueError, TypeError, KeyError, AttributeError, subprocess.SubprocessError):
         if args.role:

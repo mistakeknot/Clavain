@@ -139,3 +139,9 @@ def hooks_json(project_root: Path) -> dict:
     """Parsed hooks.json."""
     with open(project_root / "hooks" / "hooks.json") as f:
         return json.load(f)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_pool_snapshot_cache(tmp_path, monkeypatch):
+    """pool-headroom caches a live snapshot; keep tests off the real cache."""
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))

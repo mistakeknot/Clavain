@@ -172,8 +172,16 @@ stdout to JSONL; the output file still contains the last agent message.
 
 ## Execution headroom
 
-`scripts/pool-headroom.sh` makes one read-only `bb pool status --json` call with
-a three-second deadline. `--stdin` runs the pure JSON fixture core. The summary
+`scripts/pool-headroom.sh` makes one read-only `bb pool status --json` call
+(60-second deadline, `CLAVAIN_POOL_HEADROOM_TIMEOUT`; the call takes 7-12 s on a
+busy host). The snapshot is cached for 120 seconds in
+`$XDG_CACHE_HOME/clavain/pool-status.json` (`CLAVAIN_POOL_HEADROOM_CACHE_TTL`,
+0 disables). Accounts that are not `ready`, are held, carry a usage restriction
+or were last observed over 30 minutes ago are skipped, and the weekly pace guard
+subtracts 15 points, the same rules as the coordinator-side `executor-headroom`
+helper. A provider whose accounts are all exhausted, held or restricted is below
+the floor, so dispatch picks the other provider's seat up front; stale data is
+unknown, not exhausted. `--stdin` runs the pure JSON fixture core. The summary
 retains account IDs, headroom and reset times; it omits labels, email addresses
 and credentials. It reads Codex `limitWindows` and Claude provider/family windows.
 The best enabled account can differ by family. Unknown telemetry never proves
