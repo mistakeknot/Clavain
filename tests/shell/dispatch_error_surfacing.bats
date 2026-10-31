@@ -558,11 +558,11 @@ TEXT
     grep -q '^STATUS: warn$' "$VERDICT_FILE"
 }
 
-@test "extract: a final 'VERDICT: FAIL' line after narration stays warn" {
+@test "extract: a final 'VERDICT: FAIL' line after narration is a fail ruling" {
     _load
     printf 'Reviewed.\nVERDICT: FAIL\n' > "$OUTPUT"
     _extract_verdict "$OUTPUT"
-    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+    grep -q '^STATUS: fail$' "$VERDICT_FILE"
 }
 
 @test "extract: a final VERDICT: CLEAN inside an unclosed code fence stays warn" {
