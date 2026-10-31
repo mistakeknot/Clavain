@@ -3134,7 +3134,8 @@ _extract_verdict() {
         # structured block) the LAST non-blank line is the one remaining
         # legitimate verdict source: agents that narrate first and close
         # with "VERDICT: PASS" (claude result text) end this way. Only an
-        # exact PASS/CLEAN token on that final line counts, and only when
+        # exact PASS[ WITH NOTES]/CLEAN (pass) or BLOCK/FAIL (fail) token on
+        # that final line counts, and only when
         # no trailing block exists and the line is outside a code fence —
         # mid-body lines, quoted fences and recaps followed by further prose
         # are never consulted (mk P1-2).
@@ -3165,13 +3166,35 @@ _extract_verdict() {
                         else if (ch == open && length(run) >= olen && rest ~ /^[ \t]*$/) { open = "" }
                     }
                 }
-                $0 ~ /[^[:space:]]/ { last = $0 }
-                END { if (open == "") print last }
+                # Track whether the final paragraph (the contiguous non-blank
+                # lines ending at the last line) holds a blockquote line: a
+                # closing line directly after one is a lazy continuation of
+                # the quote, i.e. still example text. List items are not
+                # counted: a findings list followed directly by the ruling is
+                # the common compact review shape, and heading and indented
+                # code lines cannot be continued lazily.
+                $0 !~ /[^[:space:]]/ { wrapped = 0; next }
+                $0 ~ /^ ? ? ?>/ { wrapped = 1 }
+                # a heading, list item, rule or fence line ends the quote
+                $0 ~ /^ ? ? ?(#+[ ]|[-+*][ ]|[0-9]+[.)][ ]|(-[ ]*){3,}$|(\*[ ]*){3,}$|```|~~~)/ { wrapped = 0 }
+                { last = $0; lastwrapped = wrapped }
+                END { if (open == "") { print lastwrapped + 0; print last } }
             ' "$output_file" 2>/dev/null)" || last_line=""
+            local last_line_wrapped=0
+            if [[ -n "$last_line" ]]; then
+                last_line_wrapped="${last_line%%$'\n'*}"
+                last_line="${last_line#*$'\n'}"
+            fi
             # Strip only balanced outer decoration: list/quote/heading markers,
             # then matching ** / __ / ` wrappers (also around just the label,
             # as in **Verdict:** PASS). Unbalanced or interior asterisks stay,
             # so "CLEAN*" and "P*ASS" never become a pass.
+            # A fail ruling is accepted only in the bare shape (optional bold
+            # around the label or the whole line), with no quote, list,
+            # heading or code prefix and not a lazy continuation of a blockquote: anything wrapped is example text, which
+            # may still read as pass (existing behaviour) but never as fail.
+            local last_line_bare=0
+            [[ "$last_line_wrapped" == 0 && "${last_line^^}" =~ ^[[:space:]]*(\*\*|__)?VERDICT[[:space:]]*:(\*\*|__)?[[:space:]]*(BLOCK|FAIL)(\*\*|__)?[[:space:]]*$ ]] && last_line_bare=1
             last_line="$(sed -E 's/\r$//; s/^[[:space:]]*([>#+•-]+[[:space:]]*)+//; s/^[[:space:]]*\*[[:space:]]+//; s/[[:space:]]+$//' <<< "$last_line")"
             local _prev=""
             while [[ "$last_line" != "$_prev" ]]; do
@@ -3185,6 +3208,12 @@ _extract_verdict() {
             elif [[ "${last_line^^}" =~ ^VERDICT[[:space:]]*:[[:space:]]*CLEAN[[:space:]]*$ ]]; then
                 status="pass"
                 summary="Agent reports clean completion."
+            elif [[ "$last_line_bare" == 1 && "${last_line^^}" =~ ^VERDICT[[:space:]]*:[[:space:]]*(BLOCK|FAIL)[[:space:]]*$ ]]; then
+                # A reviewer's closing BLOCK/FAIL is a hard ruling, not an
+                # absent verdict: a gate reading this file must not see the
+                # "No verdict line" warn and take it for no ruling.
+                status="fail"
+                summary="Reviewer ruling ${BASH_REMATCH[1]}."
             fi
         fi
     elif [[ "$verdict_word_upper" =~ ^(NEEDS-FIXES|NOT[[:space:]]+CLEAN) ]]; then
