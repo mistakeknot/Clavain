@@ -24,6 +24,7 @@ text is never printed. Run niced; it is single threaded.
 from __future__ import annotations
 
 import argparse
+from fractions import Fraction
 import glob
 import json
 import os
@@ -52,7 +53,8 @@ def skill_files(skills_dir):
             for f in files:
                 p = os.path.join(root, f)
                 refs[os.path.relpath(p, d)] = os.path.getsize(p)
-        out[name] = {"refs": refs, "compact": os.path.exists(os.path.join(d, "SKILL-compact.md"))}
+        keys = set(refs) | {os.path.basename(m) for m in glob.glob(os.path.join(d, "SKILL*.md"))}
+        out[name] = {"keys": keys, "refs": refs, "compact": os.path.exists(os.path.join(d, "SKILL-compact.md"))}
     return out
 
 
@@ -62,16 +64,29 @@ def split_commands(cmd):
     return [p.strip() for p in parts if p.strip()]
 
 
-def classify_bash(cmd):
-    """Return list of (kind, token) for each skill path a read command touches.
+def resolve_key(skills, skill, rel):
+    """Return the inventory key for rel, or None. Only inventory keys are ever emitted."""
+    if skill not in skills or ".." in rel.split("/"):
+        return None
+    rel = os.path.normpath(rel)
+    return rel if rel in skills[skill]["keys"] else None
 
-    kind: 'path' (concrete file), 'glob' (glob/recursive/dir listing)."""
+
+def classify_bash(cmd):
+    """Return list of (kind, skill, token) for each skill path a read command touches.
+
+    kind: 'path' (one concrete file whose output is separable), 'glob'
+    (glob/recursive/dir listing), 'multi' (output cannot be separated per file:
+    several commands or several file operands)."""
     hits = []
-    for sub in split_commands(cmd):
+    segs = re.split(r"\|\||&&|;|\n", cmd)
+    segs = [x.strip() for x in segs if x.strip()]
+    for sub in segs:
+        stage = sub.split("|")[0]
         try:
-            toks = shlex.split(sub)
+            toks = shlex.split(stage)
         except ValueError:
-            toks = sub.split()
+            toks = stage.split()
         if not toks:
             continue
         i = 0
@@ -79,20 +94,28 @@ def classify_bash(cmd):
             i += 1
         if i >= len(toks) or os.path.basename(toks[i]) not in READ_CMDS:
             continue
-        recursive = any(t in ("-r", "-R", "-rn", "-rl", "-rI", "--recursive") or (t.startswith("-") and not t.startswith("--") and "r" in t[1:] and toks[i] in ("grep", "egrep")) for t in toks[i + 1:])
+        c = os.path.basename(toks[i])
+        recursive = any(t in ("-r", "-R", "-rn", "-rl", "-rI", "--recursive") or (t.startswith("-") and not t.startswith("--") and "r" in t[1:] and c in ("grep", "egrep")) for t in toks[i + 1:])
+        operands = [t for t in toks[i + 1:] if not t.startswith("-")]
+        if c in ("sed", "grep", "egrep", "rg", "awk") and operands:
+            operands = operands[1:]  # script / pattern
         for t in toks[i + 1:]:
-            if t.startswith("-"):
-                continue
-            if "skills/" not in t:
+            if t.startswith("-") or "skills/" not in t:
                 continue
             m = SKILL_PATH_RE.search(t)
             if m and not (GLOB_CHARS & set(t)):
-                hits.append(("path", m.group(1), m.group(2)))
+                hits.append(["path", m.group(1), m.group(2), len(operands)])
                 continue
             m2 = re.search(r"skills/([A-Za-z0-9._-]+)", t)
             if m2:
-                hits.append(("glob" if (GLOB_CHARS & set(t)) or recursive or toks[i] == "ls" else "dir", m2.group(1), t))
-    return hits
+                hits.append(["glob" if (GLOB_CHARS & set(t)) or recursive or c == "ls" else "dir", m2.group(1), t, len(operands)])
+    out = []
+    for h in hits:
+        kind = h[0]
+        if kind == "path" and (len(segs) > 1 or h[3] > 1 or len(hits) > 1):
+            kind = "multi"
+        out.append((kind, h[1], h[2]))
+    return out
 
 
 def iter_events(path):
@@ -172,7 +195,8 @@ def process_session(path, inv, skills):
                 elif name == "Bash":
                     items = classify_bash(str(inp.get("command", "")))
                 if items:
-                    pending[tid] = items
+                    # bind the active invocation now, at call time
+                    pending[tid] = [(k, sk, rel, active.get(sk)) for k, sk, rel in items]
             elif t == "tool_result":
                 tid = b.get("tool_use_id")
                 items = pending.pop(tid, None)
@@ -180,20 +204,22 @@ def process_session(path, inv, skills):
                     continue
                 size = result_size(ev, b)
                 share = size // max(len(items), 1)
-                for kind, sk, rel in items:
+                for kind, sk, rel, rec in items:
                     if sk not in skills:
                         continue  # not a Clavain skill; not counted at all
                     st = inv[sk]
                     st["reads"] += 1
-                    rec = active.get(sk)
-                    if kind != "path" or rec is None or b.get("is_error"):
+                    key = resolve_key(skills, sk, rel) if kind == "path" else None
+                    if kind != "path" or key is None or rec is None or b.get("is_error"):
                         st["unattributed"] += 1
-                        why = ("not_a_concrete_file" if kind != "path"
+                        why = ("combined_output" if kind == "multi"
+                               else "not_a_concrete_file" if kind != "path"
+                               else "not_in_inventory" if key is None
                                else "no_prior_invocation" if rec is None else "tool_error")
                         st["why"][why] += 1
                         continue
+                    rel = key
                     if rel.startswith("references/"):
-                        key = rel
                         rec["refs"].add(key)
                         rec["ref_bytes"] += share
                         st["ref_bytes"] += share
@@ -243,7 +269,7 @@ def main(argv=None):
     total_reads = sum(s["reads"] for s in inv.values())
     total_un = sum(s["unattributed"] for s in inv.values())
     un_share = (total_un / total_reads) if total_reads else 0.0
-    stop = total_reads > 0 and un_share > args.max_unattributed
+    stop = total_reads > 0 and Fraction(total_un, total_reads) > Fraction(str(args.max_unattributed))
     out = {"sessions": sessions, "skill_path_reads": total_reads,
            "unattributed_calls": total_un, "unattributed_share": round(un_share, 4),
            "stop": stop, "skills": {}}

@@ -125,3 +125,75 @@ def test_output_has_no_transcript_text(tmp_path, skills, capsys):
     session(tmp_path, ev)
     sra.main(["--transcripts", str(tmp_path), "--skills-dir", str(skills)])
     assert secret not in capsys.readouterr().out
+
+
+def test_traversal_path_not_emitted_in_json(tmp_path, skills, capsys):
+    evil = "/x/plugin/skills/demo/references/../../../users/alice/private.md"
+    ev = [use("1", "Skill", {"skill": "clavain:demo"}),
+          use("2", "Read", {"file_path": evil}), read_res("2", 10),
+          use("3", "Bash", {"command": f"cat {BASE}/references/nope-secret.md"}), res("3"),
+          use("4", "Read", {"file_path": f"{BASE}/references/a.md"}), read_res("4", 10)]
+    _, out = run(tmp_path, skills, ev, capsys)
+    text = json.dumps(out)
+    assert "alice" not in text and "private" not in text and "nope-secret" not in text
+    s = out["skills"]["demo"]
+    assert set(s["per_reference_bytes"]) <= {"references/a.md", "references/b.md"}
+    assert s["unattributed_reasons"] == {"not_in_inventory": 2}
+    assert s["reference_bytes_total"] == 10
+
+
+@pytest.mark.parametrize("cmd", [
+    "cat {b}/references/a.md; cat /elsewhere/other.txt",
+    "cat {b}/references/a.md /elsewhere/other.txt",
+    "cat {b}/references/a.md {b}/references/b.md",
+    "cat {b}/references/a.md && echo done",
+])
+def test_combined_output_is_unattributed(tmp_path, skills, capsys, cmd):
+    ev = [use("1", "Skill", {"skill": "clavain:demo"}),
+          use("2", "Bash", {"command": cmd.format(b=BASE)}), res("2", "x" * 500)]
+    _, out = run(tmp_path, skills, ev, capsys)
+    s = out["skills"]["demo"]
+    assert s["reference_bytes_total"] == 0
+    assert s["unattributed_calls"] == s["skill_path_reads"] >= 1
+    assert "combined_output" in s["unattributed_reasons"]
+
+
+def test_call_time_binding_when_result_lands_after_skill_call(tmp_path, skills, capsys):
+    ev = [use("1", "Read", {"file_path": f"{BASE}/references/a.md"}),
+          use("2", "Skill", {"skill": "clavain:demo"}),
+          read_res("1", 10)]
+    _, out = run(tmp_path, skills, ev, capsys)
+    s = out["skills"]["demo"]
+    assert s["reference_bytes_total"] == 0
+    assert s["unattributed_reasons"] == {"no_prior_invocation": 1}
+
+
+def test_call_binds_to_invocation_active_at_call(tmp_path, skills, capsys):
+    ev = [use("1", "Skill", {"skill": "clavain:demo"}),
+          use("2", "Read", {"file_path": f"{BASE}/references/a.md"}),
+          use("3", "Skill", {"skill": "clavain:demo"}),
+          read_res("2", 10)]
+    _, out = run(tmp_path, skills, ev, capsys)
+    assert out["skills"]["demo"]["full_open_share"] == 0.0
+    assert out["skills"]["demo"]["reference_bytes_total"] == 10
+
+
+def _threshold_events(total, unattributed):
+    ev = [use("s", "Skill", {"skill": "clavain:demo"})]
+    for n in range(total):
+        i = f"r{n}"
+        if n < unattributed:
+            ev += [use(i, "Bash", {"command": f"ls {BASE}/references"}), res(i)]
+        else:
+            ev += [use(i, "Read", {"file_path": f"{BASE}/references/a.md"}), read_res(i, 1)]
+    return ev
+
+
+def test_threshold_boundary_exactly_30_percent_does_not_stop(tmp_path, skills, capsys):
+    rc, out = run(tmp_path, skills, _threshold_events(100, 30), capsys)
+    assert out["unattributed_share"] == 0.3 and out["stop"] is False and rc == 0
+
+
+def test_threshold_boundary_just_over_stops(tmp_path, skills, capsys):
+    rc, out = run(tmp_path, skills, _threshold_events(100, 31), capsys)
+    assert out["stop"] is True and rc == 3
