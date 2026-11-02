@@ -19,7 +19,8 @@ seat, including independent plan review. That substitution lives in
 the packaged default policy rather than in a per-caller snapshot. Since
 2026-09-25 Opus 5.5 (`claude-opus-5-5`) has replaced both Fable 5.1 and Opus 5
 in every seat: it is the only Claude entry in `reasoning.frontier_models`, the
-`plan-review` primary, and `planning-opus`, `deep-opus`,
+`plan-review` primary and the `planning` primary (`planning-opus`);
+`deep-opus`,
 `routine-sonnet`, `scout-sonnet` and `release-sonnet` are the last entries of the
 chains that reach them. `plan-review`, `deep-execution`, `routine-execution`,
 `scout` and `release-preparation` therefore each have a reachable destination
@@ -68,21 +69,21 @@ Distinct profile_refs can still name one seat (`crosslab-opus` and
 candidate whose backend and model already failed on capacity in the same walk.
 
 Frontier authoring — `planning`, `frontier-planning`, `escalation` — runs
-`planning-astra`, then `planning-opus` (mk ruling 2026-09-18; the Fable seat
-between them was removed on 2026-09-25). It previously failed closed
-when both frontier labs were out. mk ruled that asymmetric: Opus is in
-`reasoning.frontier_models` and is authorised to independently review a
-frontier-authored plan, which is the harder job, so refusing to let it author in
-an emergency was arbitrary. The Opus seat stays last, so a reachable Astra still
-authors every plan.
+`planning-opus` first (Opus 5.5 plans first), then `planning-astra`,
+then `planning-sol` for plain `planning`. Astra is the cross-lab reviewer of
+Opus-authored plans and the fallback author when Opus is unreachable. Frontier-required
+routes exclude Sol and Sonnet, so they end at Astra; plain `planning` can continue
+through Sol to its Sonnet fallback. An Opus-authored plan still gets a different-model
+reviewer: with Astra out, plan review fails closed and the agent runs the declared
+adversarial Opus review by hand.
 
 The review and authoring lanes remain separate profile chains
-(`review-opus`/`review-astra` against `planning-astra`/`planning-opus`) so that
+(`review-opus`/`review-astra` against `planning-opus`/`planning-astra`) so that
 adding a seat to one cannot reach the other. That separation, not a refusal, is what keeps a
 review-side substitute from silently changing who authors a plan;
 `tests/routing/reasoning-contract-test.sh` asserts an authoring receipt is
-unchanged by edits to the review lane, and that Astra is still preferred while
-reachable.
+unchanged by edits to the review lane, and that Opus is still preferred for
+authoring (Astra only when Opus is unreachable).
 
 **Scope correction.** The earlier wording — *scope a capacity snapshot
 to reviews of the bound producer from another lab; reviews of Claude-authored work
