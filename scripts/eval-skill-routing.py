@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+"""Offline scoring for tests/evals/skill-routing.json.
+
+Asks ONE headless `claude -p` session per batch which skill it would load for
+each prompt, given only skill names and descriptions. Runs through the bb
+account pooler (subscription quota, no API key). A prompt with no parseable
+answer is counted "not run", never a pass.
+
+Usage: eval-skill-routing.py [--limit N] [--batch-size N] [--model M] [--dry-run]
+Default --limit is 10 prompts; the cap is deliberate (quota).
+"""
+import argparse, json, os, re, subprocess, sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+EVALS = ROOT / "tests" / "evals" / "skill-routing.json"
+
+# Skills that live outside this repo but are part of the overlap clusters.
+EXTERNAL = {
+    "interflux:flux-drive": "Multi-agent review of documents, code or diffs: triage, dispatch specialist agents, synthesize findings.",
+}
+
+
+def description(path: Path) -> str:
+    m = re.search(r'^description:\s*(.+)$', path.read_text(errors="replace"), re.M)
+    return m.group(1).strip().strip('"') if m else ""
+
+
+def catalog() -> dict:
+    cat = {}
+    for p in sorted((ROOT / "skills").glob("*/SKILL.md")):
+        cat[p.parent.name] = description(p)
+    for p in sorted((ROOT / "commands").glob("*.md")):
+        cat.setdefault(p.stem, description(p))
+    cat.update(EXTERNAL)
+    return cat
+
+
+def build_prompt(cat, items):
+    lines = ["You route user requests to skills. Available skills (name: description):", ""]
+    lines += [f"- {n}: {d[:220]}" for n, d in cat.items()]
+    lines += ["", 'For each numbered request below, name the ONE skill you would load, or "none" if no skill applies.',
+              'Reply with ONLY a JSON object mapping the request number (string) to the skill name. No prose.', ""]
+    lines += [f"{n}. {it['prompt']}" for n, (_, it) in enumerate(items, 1)]
+    return "\n".join(lines)
+
+
+INPUT_DIR = Path.home() / ".local/state/bb-account-pool/exec-input"
+
+
+def ask(prompt, model):
+    # The pool host allows only: --print --output-format text --max-turns 1 --model,
+    # and reads stdin files only from INPUT_DIR (direct children).
+    f = INPUT_DIR / f"skill-routing-{os.getpid()}.txt"
+    f.write_text(prompt)
+    try:
+        cmd = ["bb", "pool", "exec", "--stdin-file", str(f), "--", "claude", "--print",
+               "--output-format", "text", "--max-turns", "1", "--model", model or "sonnet"]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    finally:
+        f.unlink(missing_ok=True)
+    if r.returncode != 0:
+        return None, None, r.stderr[-300:]
+    if os.environ.get("EVAL_RAW_OUT"):
+        Path(os.environ["EVAL_RAW_OUT"]).write_text(r.stdout)
+    m = re.search(r"\{.*\}", r.stdout, re.S)
+    try:
+        return json.loads(m.group(0)), None, ""
+    except (AttributeError, json.JSONDecodeError):
+        return None, None, "unparseable reply"
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--limit", type=int, default=10)
+    ap.add_argument("--batch-size", type=int, default=10)
+    ap.add_argument("--model", default=None)
+    ap.add_argument("--dry-run", action="store_true", help="print the first batch prompt and exit")
+    a = ap.parse_args()
+    allitems = list(enumerate(json.loads(EVALS.read_text())))
+    step = max(1, len(allitems) // a.limit)  # evenly spaced sample across clusters
+    items = allitems[::step][: a.limit]
+    cat = catalog()
+    if a.dry_run:
+        print(build_prompt(cat, items[: a.batch_size])); return 0
+    passed = failed = not_run = 0
+    misses, usages = [], []
+    for s in range(0, len(items), a.batch_size):
+        batch = items[s : s + a.batch_size]
+        ans, usage, err = ask(build_prompt(cat, batch), a.model)
+        usages.append(usage)
+        if err:
+            print(f"batch error: {err}", file=sys.stderr)
+        for bi, (i, it) in enumerate(batch, 1):
+            got = (ans or {}).get(str(bi))
+            if not isinstance(got, str) or not got.strip():
+                not_run += 1; continue
+            got = got.strip().lstrip("/")
+            exp = it["expected"]
+            if got == exp or got.split(":")[-1] == exp.split(":")[-1]:
+                passed += 1
+            else:
+                failed += 1; misses.append((it["prompt"], exp, got))
+    ran = passed + failed
+    print(f"prompts={len(items)} ran={ran} not_run={not_run} pass={passed} fail={failed}")
+    if ran:
+        print(f"accuracy_of_ran={passed/ran:.0%}  accuracy_of_all={passed/len(items):.0%}")
+    for p, e, g in misses:
+        print(f"MISS expected={e} got={g} :: {p}")
+    print("usage:", json.dumps(usages))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
