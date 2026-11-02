@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-28T03:33:51Z",
+  "generated": "2026-11-02T19:19:02Z",
   "counts": {
     "skills": 28,
     "agents": 6,
@@ -24,7 +24,7 @@
     },
     {
       "name": "data-migration-expert",
-      "description": "Validate data migrations, backfills, ID mappings, column renames, enum conversions, and schema changes against production reality."
+      "description": "Validate one migration, backfill, ID mapping, column rename, enum conversion, or schema change against production reality, as a single focused reviewer. For a full multi-agent pre-deploy assessment, use /migration-safety."
     },
     {
       "name": "dispatching-parallel-agents",
@@ -36,7 +36,7 @@
     },
     {
       "name": "executing-plans",
-      "description": "Execute a written implementation plan task by task, continuously, with a final independent review; native mode keeps a progress ledger."
+      "description": "Execute a written implementation plan task by task, continuously, with a final independent review; native mode keeps a progress ledger. This is the execution engine; /execute-plan is the gated entry that wraps it."
     },
     {
       "name": "file-todos",
@@ -234,7 +234,7 @@
     },
     {
       "name": "execute-plan",
-      "description": "Execute a plan continuously, with a ledger and a final independent review"
+      "description": "Slash-command entry that enforces the pre-execution gate, records the phase transition, then runs a written plan via the executing-plans skill. Use the executing-plans skill directly when no gate or phase tracking is wanted."
     },
     {
       "name": "fixbuild",
@@ -278,7 +278,7 @@
     },
     {
       "name": "migration-safety",
-      "description": "Orchestrate database migration and data-risk work with safety checks (integrity, migration, deployment)."
+      "description": "Slash-command entry that fans out three parallel agents for a full pre-deploy safety assessment of a DB migration or data change. For a single-reviewer validation of migration code against production data, use the data-migration-expert skill instead."
     },
     {
       "name": "model-routing",

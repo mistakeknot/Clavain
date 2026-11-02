@@ -1,6 +1,6 @@
 ---
 name: execute-plan
-description: Execute a plan continuously, with a ledger and a final independent review
+description: Slash-command entry that enforces the pre-execution gate, records the phase transition, then runs a written plan via the executing-plans skill. Use the executing-plans skill directly when no gate or phase tracking is wanted.
 ---
 
 > **When to use vs `/work`:** Use `/execute-plan` for multi-step plans executed task by task against a ledger, with one independent review at the end. Use `/work` for autonomous feature execution with quality checks.
