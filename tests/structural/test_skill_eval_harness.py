@@ -8,14 +8,18 @@ spec = importlib.util.spec_from_file_location("skill_eval", ROOT / "scripts" / "
 se = importlib.util.module_from_spec(spec); spec.loader.exec_module(se)
 
 
-def stream(*blocks, final="done"):
+def stream(*blocks, final="done", results=(), subtype="success", is_error=False, result_event=True):
     ev = [{"type": "assistant", "message": {"content": list(blocks)}}]
-    ev.append({"type": "result", "result": final})
+    for tid, err, text in results:
+        ev.append({"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": tid, "is_error": err, "content": text}]}})
+    if result_event:
+        ev.append({"type": "result", "subtype": subtype, "is_error": is_error, "result": final})
     return "\n".join(json.dumps(e) for e in ev)
 
 
-def tool(name, **inp):
-    return {"type": "tool_use", "name": name, "input": inp}
+def tool(name, _id=None, **inp):
+    return {"type": "tool_use", "name": name, "id": _id or name, "input": inp}
 
 
 def replay(tmp_path, case_id, raw, files=None):
@@ -30,9 +34,9 @@ def replay(tmp_path, case_id, raw, files=None):
 def test_shipped_cases_load_and_fixtures_exist():
     cases = se.load_cases(se.EVAL_DIR / "cases.json")
     assert 2 <= len(cases) <= 3
+    seen = set()
     for c in cases:
-        assert (se.EVAL_DIR / "fixtures" / c["fixture"]).is_dir()
-        assert (ROOT / "skills" / c["skill"] / "SKILL.md").is_file()
+        se.validate_case(c, seen)
 
 
 def test_pass_and_fail_by_case(tmp_path):
@@ -56,6 +60,71 @@ def test_files_and_last_message_checks(tmp_path):
     # source edited -> fail
     replay(tmp_path, c["id"], raw, files={"PLAN.md": "verify", "app.py": "def add(a, b):\n    return a + b\n"})
     assert se.run_case(c, replay=tmp_path)["status"] == "fail"
+
+
+ROUTE = "using-clavain-routes-plan-request"
+
+
+def case(cid):
+    return {c["id"]: c for c in se.load_cases(se.EVAL_DIR / "cases.json")}[cid]
+
+
+def test_error_sessions_never_pass_even_with_matching_call(tmp_path):
+    c = case(ROUTE)
+    call = tool("Skill", skill="clavain:writing-plans")
+    # nonzero exit with otherwise matching transcript
+    replay(tmp_path, c["id"], stream(call))
+    (tmp_path / f"{c['id']}.rc").write_text("1")
+    assert se.run_case(c, replay=tmp_path)["status"] == "not-run"
+    (tmp_path / f"{c['id']}.rc").unlink()
+    # error result event, non-success subtype, missing result event
+    for raw in (stream(call, is_error=True), stream(call, subtype="error_max_turns"),
+                stream(call, result_event=False)):
+        replay(tmp_path, c["id"], raw)
+        assert se.run_case(c, replay=tmp_path)["status"] == "not-run"
+
+
+def test_executing_plans_requires_real_passing_verification(tmp_path):
+    c = case("executing-plans-follows-plan-and-verifies")
+    files = {"app.py": "def add(a, b):\n    return a + b\n",
+             "test_app.py": "from app import add\ndef test_add():\n    assert add(2, 3) == 5\n"}
+    run = tool("Bash", "t1", command="pytest -q")
+    good = stream(run, results=[("t1", False, "1 passed in 0.01s")], final="Verified: tests pass")
+    replay(tmp_path, c["id"], good, files=files)
+    assert se.run_case(c, replay=tmp_path)["status"] == "pass"
+    # negative: files fixed and test written but pytest never run
+    denial = stream(final="Did not run pytest; tests should pass")
+    replay(tmp_path, c["id"], denial, files=files)
+    assert se.run_case(c, replay=tmp_path)["status"] == "fail"
+    # pytest ran but failed
+    bad = stream(run, results=[("t1", True, "1 failed")], final="verified")
+    replay(tmp_path, c["id"], bad, files=files)
+    assert se.run_case(c, replay=tmp_path)["status"] == "fail"
+    # test artifact missing
+    import shutil; shutil.rmtree(tmp_path / f"{c['id']}.files")
+    replay(tmp_path, c["id"], good, files={"app.py": files["app.py"]})
+    assert se.run_case(c, replay=tmp_path)["status"] == "fail"
+
+
+def test_malformed_cases_are_not_run_and_others_still_run(tmp_path, monkeypatch):
+    good = case(ROUTE)
+    bad_rx = dict(good, id="bad-rx", checks=[{"type": "trace", "regex": "("}])
+    bad_fx = dict(good, id="bad-fx", fixture="nope")
+    dup = dict(good)
+    replay(tmp_path, good["id"], stream(tool("Skill", skill="clavain:writing-plans")))
+    res = se.run_all([bad_rx, bad_fx, good, dup], replay=tmp_path)
+    st = {r["id"]: r["status"] for r in res[:3]}
+    assert st["bad-rx"] == st["bad-fx"] == "not-run"
+    assert st[ROUTE] == "pass" and [r["status"] for r in res].count("not-run") == 3
+    assert se.exit_code(res) == 2
+
+
+def test_main_writes_summary_with_invalid_case(tmp_path):
+    cf = tmp_path / "c.json"
+    cf.write_text(json.dumps([{"id": "x"}]))
+    out = tmp_path / "o.json"
+    assert se.main(["--cases", str(cf), "--out", str(out)]) == 2
+    assert json.loads(out.read_text())[0]["status"] == "not-run"
 
 
 def test_missing_or_empty_transcript_is_not_run(tmp_path):
