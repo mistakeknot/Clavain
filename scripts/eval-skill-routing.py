@@ -3,7 +3,7 @@
 
 Asks ONE headless `claude -p` session per batch which skill it would load for
 each prompt, given only skill names and descriptions. Runs through the bb
-account pooler (subscription quota, no API key). A prompt with no parseable
+account pooler, which is meant to use subscription quota; this script reads no API key itself, but see the spend boundary below. A prompt with no parseable
 answer is counted "not run", never a pass.
 
 Usage: eval-skill-routing.py [--limit N] [--batch-size N] [--model M] [--dry-run]
@@ -45,11 +45,21 @@ def preflight(text: str = None) -> tuple:
         text = r.stdout
     rows = [l.split("\t") for l in text.splitlines()[1:] if l.strip()]
     for c in rows:
+        if len(c) >= 15 and c[3] == "claude" and c[5] == "true" and c[4] != "oauth":
+            return False, "an enabled non-oauth claude account is in the pool; refusing to run"
+    for c in rows:
         if len(c) >= 15 and c[3] == "claude" and c[4] == "oauth" and c[5] == "true" and c[14].strip() == "ready":
             pct = c[7].strip().rstrip("%")
             if pct.isdigit() and int(pct) < 100:
                 return True, ""
     return False, "no enabled, ready subscription (oauth) claude account with 5h headroom; refusing to run"
+
+
+def positive_int(v):
+    n = int(v)
+    if n <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return n
 
 
 def description(path: Path) -> str:
@@ -103,8 +113,8 @@ def ask(prompt, model):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--limit", type=int, default=10)
-    ap.add_argument("--batch-size", type=int, default=10)
+    ap.add_argument("--limit", type=positive_int, default=10)
+    ap.add_argument("--batch-size", type=positive_int, default=10)
     ap.add_argument("--model", default=None)
     ap.add_argument("--dry-run", action="store_true", help="print the first batch prompt and exit")
     a = ap.parse_args()

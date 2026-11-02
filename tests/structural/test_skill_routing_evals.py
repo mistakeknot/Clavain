@@ -74,3 +74,24 @@ def test_preflight():
     assert not pf(hdr + row("oauth", "true", "ready", "100%"))[0]
     assert not pf(hdr + row("oauth", "false", "ready", "0%"))[0]
     assert not pf(hdr)[0]
+
+
+def test_preflight_rejects_any_enabled_non_oauth():
+    m = _load_script()
+    hdr = "\t".join(["ID"] * 15) + "\n"
+    def row(kind, en, pct="0%"):
+        return "\t".join(["i", "l", "e", "claude", kind, en, "1", pct, "-", "-", "-", "-", "-", "-", "ready"]) + "\n"
+    good = row("oauth", "true")
+    assert m.preflight(hdr + good)[0]
+    assert not m.preflight(hdr + good + row("api_key", "true"))[0]
+    assert m.preflight(hdr + good + row("api_key", "false"))[0]
+
+
+def test_positive_int():
+    import argparse
+    import pytest
+    pi = _load_script().positive_int
+    assert pi("3") == 3
+    for bad in ("0", "-1"):
+        with pytest.raises(argparse.ArgumentTypeError):
+            pi(bad)
