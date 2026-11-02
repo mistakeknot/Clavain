@@ -101,7 +101,7 @@ def test_no_orphan_skill_dirs(skills_dir):
 # --- Description budget, references links and coverage (bead mk-yvmw9.7) ---
 
 DESCRIPTION_CAP = 1024
-_LINK_RE = re.compile(r"\]\(\s*(references/[^)\s#]+)(?:#[^)]*)?\s*\)")
+_LINK_RE = re.compile(r"\]\(\s*(?:\./)?(references/[^)\s#]+)(?:#[^)]*)?\s*\)")
 
 
 def _unfolded_description(skill_md):
@@ -163,9 +163,12 @@ def test_reference_link_check_catches_planted_dead_link(tmp_path):
     (d / "references" / "ok.md").write_text("x")
     (d / "SKILL.md").write_text(
         "---\nname: planted\ndescription: x\n---\n"
-        "[ok](references/ok.md) [bad](references/missing.md#a)\n"
+        "[ok](references/ok.md) [ok2](./references/ok.md) [bad](references/missing.md#a)\n"
+        "[bad2](./references/missing2.md)\n"
     )
-    assert _dead_reference_links(d / "SKILL.md") == ["references/missing.md"]
+    assert _dead_reference_links(d / "SKILL.md") == [
+        "references/missing.md", "references/missing2.md",
+    ]
 
 
 def test_every_skill_dir_is_covered(skills_dir):
