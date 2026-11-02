@@ -19,7 +19,8 @@ seat, including independent plan review. That substitution lives in
 the packaged default policy rather than in a per-caller snapshot. Since
 2026-09-25 Opus 5.5 (`claude-opus-5-5`) has replaced both Fable 5.1 and Opus 5
 in every seat: it is the only Claude entry in `reasoning.frontier_models`, the
-`plan-review` primary, and `planning-opus`, `deep-opus`,
+`plan-review` primary and the `planning` primary (`planning-opus`);
+`deep-opus`,
 `routine-sonnet`, `scout-sonnet` and `release-sonnet` are the last entries of the
 chains that reach them. `plan-review`, `deep-execution`, `routine-execution`,
 `scout` and `release-preparation` therefore each have a reachable destination
@@ -81,8 +82,8 @@ The review and authoring lanes remain separate profile chains
 adding a seat to one cannot reach the other. That separation, not a refusal, is what keeps a
 review-side substitute from silently changing who authors a plan;
 `tests/routing/reasoning-contract-test.sh` asserts an authoring receipt is
-unchanged by edits to the review lane, and that Astra is still preferred while
-reachable.
+unchanged by edits to the review lane, and that Opus is still preferred for
+authoring (Astra only when Opus is unreachable).
 
 **Scope correction.** The earlier wording — *scope a capacity snapshot
 to reviews of the bound producer from another lab; reviews of Claude-authored work
