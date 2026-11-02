@@ -8,6 +8,12 @@ answer is counted "not run", never a pass.
 
 Usage: eval-skill-routing.py [--limit N] [--batch-size N] [--model M] [--dry-run]
 Default --limit is 10 prompts; the cap is deliberate (quota).
+
+Spend boundary: `bb pool exec` has no subscription-only flag, and the pool's own
+fallback policy (extra usage, API-key accounts) cannot be enforced from this
+script. The only guard here is a preflight that refuses to run unless
+`bb pool account list` shows at least one enabled, ready subscription (oauth)
+account with headroom. It does not stop the pool from choosing another account.
 """
 import argparse, json, os, re, subprocess, sys
 from pathlib import Path
@@ -19,6 +25,31 @@ EVALS = ROOT / "tests" / "evals" / "skill-routing.json"
 EXTERNAL = {
     "interflux:flux-drive": "Multi-agent review of documents, code or diffs: triage, dispatch specialist agents, synthesize findings.",
 }
+
+
+# Only these aliases are normalized; everything else must match exactly.
+ALIASES = {"flux-drive": "interflux:flux-drive"}
+
+
+def canon(name: str) -> str:
+    name = name.strip().lstrip("/")
+    return ALIASES.get(name, name)  # "none" is accepted only as the bare token
+
+
+def preflight(text: str = None) -> tuple:
+    """Return (ok, message) from `bb pool account list` output."""
+    if text is None:
+        r = subprocess.run(["bb", "pool", "account", "list"], capture_output=True, text=True, timeout=60)
+        if r.returncode != 0:
+            return False, "bb pool account list failed: " + r.stderr[-200:]
+        text = r.stdout
+    rows = [l.split("\t") for l in text.splitlines()[1:] if l.strip()]
+    for c in rows:
+        if len(c) >= 15 and c[3] == "claude" and c[4] == "oauth" and c[5] == "true" and c[14].strip() == "ready":
+            pct = c[7].strip().rstrip("%")
+            if pct.isdigit() and int(pct) < 100:
+                return True, ""
+    return False, "no enabled, ready subscription (oauth) claude account with 5h headroom; refusing to run"
 
 
 def description(path: Path) -> str:
@@ -77,6 +108,10 @@ def main():
     ap.add_argument("--model", default=None)
     ap.add_argument("--dry-run", action="store_true", help="print the first batch prompt and exit")
     a = ap.parse_args()
+    if not a.dry_run:
+        ok, msg = preflight()
+        if not ok:
+            print(f"preflight: {msg}", file=sys.stderr); return 2
     allitems = list(enumerate(json.loads(EVALS.read_text())))
     step = max(1, len(allitems) // a.limit)  # evenly spaced sample across clusters
     items = allitems[::step][: a.limit]
@@ -97,7 +132,7 @@ def main():
                 not_run += 1; continue
             got = got.strip().lstrip("/")
             exp = it["expected"]
-            if got == exp or got.split(":")[-1] == exp.split(":")[-1]:
+            if canon(got) == canon(exp):
                 passed += 1
             else:
                 failed += 1; misses.append((it["prompt"], exp, got))

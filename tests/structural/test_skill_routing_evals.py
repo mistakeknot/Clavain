@@ -40,7 +40,37 @@ def test_no_duplicate_prompts():
     assert len(prompts) == len(set(prompts))
 
 
+def _load_script():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("evalscript", ROOT / "scripts" / "eval-skill-routing.py")
+    m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+    return m
+
+
 def test_public_hygiene():
-    text = EVALS.read_text()
-    for needle in ("/home/", "thr_", "mk-"):
-        assert needle not in text
+    files = [EVALS, ROOT / "scripts" / "eval-skill-routing.py", Path(__file__)]
+    needles = ("/ho" + "me/", "th" + "r_", "m" + "k-")
+    for f in files:
+        text = f.read_text()
+        for needle in needles:
+            assert needle not in text, f"{needle!r} in {f.name}"
+
+
+def test_canon_namespace():
+    c = _load_script().canon
+    assert c("flux-drive") == c("interflux:flux-drive")
+    assert c("unrelated:flux-drive") != c("interflux:flux-drive")
+    assert c("anything:none") != c("none")
+    assert c("/none") == "none"
+
+
+def test_preflight():
+    pf = _load_script().preflight
+    hdr = "\t".join(["ID", "Label", "Email", "Provider", "Kind", "Enabled", "Priority", "5h"] + ["x"] * 7) + "\n"
+    def row(kind, en, st, pct):
+        return "\t".join(["i", "l", "e", "claude", kind, en, "1", pct, "-", "-", "-", "-", "-", "-", st]) + "\n"
+    assert pf(hdr + row("oauth", "true", "ready", "0%"))[0]
+    assert not pf(hdr + row("api_key", "true", "ready", "0%"))[0]
+    assert not pf(hdr + row("oauth", "true", "ready", "100%"))[0]
+    assert not pf(hdr + row("oauth", "false", "ready", "0%"))[0]
+    assert not pf(hdr)[0]
