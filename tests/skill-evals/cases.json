@@ -1,0 +1,37 @@
+[
+  {
+    "id": "using-clavain-routes-plan-request",
+    "skill": "using-clavain",
+    "fixture": "routing-plan",
+    "prompt": "I have a written spec in SPEC.md. Plan the implementation before any code is edited.",
+    "max_turns": 6,
+    "checks": [
+      {"type": "tool_used", "tool": "Skill", "input": "writing-plans"},
+      {"type": "files", "path": "src/**", "present": false}
+    ]
+  },
+  {
+    "id": "writing-plans-writes-plan-not-code",
+    "skill": "writing-plans",
+    "fixture": "plan-ready",
+    "prompt": "Use the writing-plans skill to plan the change described in SPEC.md. Write the plan to PLAN.md. Do not edit source.",
+    "max_turns": 10,
+    "checks": [
+      {"type": "files", "path": "PLAN.md", "regex": "(?i)verif|test"},
+      {"type": "files", "path": "app.py", "regex": "^def add\\(a, b\\):\\n    return a - b\\n$"},
+      {"type": "last_message", "regex": "(?i)PLAN\\.md"}
+    ]
+  },
+  {
+    "id": "executing-plans-follows-plan-and-verifies",
+    "skill": "executing-plans",
+    "fixture": "plan-exec",
+    "prompt": "Execute PLAN.md using the executing-plans skill.",
+    "max_turns": 12,
+    "checks": [
+      {"type": "files", "path": "app.py", "regex": "return a \\+ b"},
+      {"type": "trace", "regex": "pytest|test_app"},
+      {"type": "last_message", "regex": "(?i)verif|pass"}
+    ]
+  }
+]
