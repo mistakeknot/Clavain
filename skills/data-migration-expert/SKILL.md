@@ -1,6 +1,6 @@
 ---
 name: data-migration-expert
-description: Validate data migrations, backfills, ID mappings, column renames, enum conversions, and schema changes against production reality.
+description: Validate one migration, backfill, ID mapping, column rename, enum conversion, or schema change against production reality, as a single focused reviewer. For a full multi-agent pre-deploy assessment, use /migration-safety.
 ---
 
 # Data Migration Expert
