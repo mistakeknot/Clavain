@@ -31,9 +31,23 @@ EXTERNAL = {
 ALIASES = {"flux-drive": "interflux:flux-drive"}
 
 
-def canon(name: str) -> str:
+def canon(name: str, own=None) -> str:
+    """Canonical identity. `own` (this repo's bare skill/command names) enables the
+    explicit rule that "clavain:<name>" equals bare <name> for names in that set only."""
     name = name.strip().lstrip("/")
+    if own and name.startswith("clavain:") and name[len("clavain:"):] in own:
+        name = name[len("clavain:"):]
     return ALIASES.get(name, name)  # "none" is accepted only as the bare token
+
+
+def own_names() -> set:
+    return {p.parent.name for p in (ROOT / "skills").glob("*/SKILL.md")} | {
+        p.stem for p in (ROOT / "commands").glob("*.md")}
+
+
+def score(got: str, exp: str, own) -> tuple:
+    """Return (strict_match, normalized_match)."""
+    return canon(got) == canon(exp), canon(got, own) == canon(exp, own)
 
 
 def preflight(text: str = None) -> tuple:
@@ -128,7 +142,8 @@ def main():
     cat = catalog()
     if a.dry_run:
         print(build_prompt(cat, items[: a.batch_size])); return 0
-    passed = failed = not_run = 0
+    passed = failed = not_run = strict_passed = 0
+    own = own_names()
     misses, usages = [], []
     for s in range(0, len(items), a.batch_size):
         batch = items[s : s + a.batch_size]
@@ -142,14 +157,18 @@ def main():
                 not_run += 1; continue
             got = got.strip().lstrip("/")
             exp = it["expected"]
-            if canon(got) == canon(exp):
+            strict, norm = score(got, exp, own)
+            strict_passed += strict
+            if norm:
                 passed += 1
             else:
                 failed += 1; misses.append((it["prompt"], exp, got))
     ran = passed + failed
-    print(f"prompts={len(items)} ran={ran} not_run={not_run} pass={passed} fail={failed}")
+    print(f"prompts={len(items)} ran={ran} not_run={not_run} pass={passed} fail={failed} "
+          f"strict_pass={strict_passed} normalized_pass={passed}")
     if ran:
-        print(f"accuracy_of_ran={passed/ran:.0%}  accuracy_of_all={passed/len(items):.0%}")
+        print(f"strict_accuracy_of_all={strict_passed/len(items):.0%}  "
+              f"normalized_accuracy_of_ran={passed/ran:.0%}  normalized_accuracy_of_all={passed/len(items):.0%}")
     for p, e, g in misses:
         print(f"MISS expected={e} got={g} :: {p}")
     print("usage:", json.dumps(usages))

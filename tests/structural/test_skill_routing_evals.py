@@ -95,3 +95,23 @@ def test_positive_int():
     for bad in ("0", "-1"):
         with pytest.raises(argparse.ArgumentTypeError):
             pi(bad)
+
+
+def test_clavain_prefix_alias():
+    m = _load_script()
+    own = m.own_names()
+    assert "route" in own
+    assert m.canon("clavain:route", own) == m.canon("route", own)
+    assert m.canon("clavain:not-a-real-skill", own) != m.canon("not-a-real-skill", own)
+    assert m.canon("unrelated:route", own) != "route"
+    assert m.canon("anything:none", own) != "none"
+    assert m.canon("clavain:none", own) != "none"
+    assert m.canon("flux-drive", own) == "interflux:flux-drive"
+
+
+def test_strict_and_normalized_both_computed():
+    m = _load_script()
+    own = m.own_names()
+    assert m.score("clavain:route", "route", own) == (False, True)
+    assert m.score("route", "route", own) == (True, True)
+    assert m.score("clavain:not-a-real-skill", "not-a-real-skill", own) == (False, False)
