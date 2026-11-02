@@ -186,15 +186,20 @@ def run_check(ch, calls, results, raw, last, workdir):
         hit = bool(rx.search(last))
         return hit == want, f"last message match={hit}"
     # files: glob relative to workdir; present=false means no file may match
-    files = [p for p in workdir.rglob("*") if p.is_file() and not p.is_symlink()
-             and fnmatch.fnmatch(p.relative_to(workdir).as_posix(), ch["path"])]
+    # walk without following links; a symlink (even dangling) counts as present
+    files = []
+    for dp, dns, fns in os.walk(workdir, followlinks=False):
+        for n in dns + fns:
+            q = Path(dp) / n
+            if (q.is_symlink() or q.is_file()) and fnmatch.fnmatch(q.relative_to(workdir).as_posix(), ch["path"]):
+                files.append(q)
     if not want:
         return not files, f"files {ch['path']} found={len(files)}"
     if not files:
         return False, f"no file matches {ch['path']}"
     if rx is None:
         return True, f"file {ch['path']} exists"
-    ok = any(rx.search(p.read_text(errors="replace")) for p in files)
+    ok = any(rx.search(p.read_text(errors="replace")) for p in files if p.is_file() and not p.is_symlink())
     return ok, f"file {ch['path']} regex match={ok}"
 
 

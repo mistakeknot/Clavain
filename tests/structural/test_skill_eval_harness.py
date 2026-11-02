@@ -215,3 +215,13 @@ def test_non_dict_stream_content_does_not_crash():
         json.dumps({"type": "user", "message": "oops"}) + "\n" + \
         json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "ok"})
     se.parse_stream(raw)
+
+
+def test_symlink_counts_as_present_for_forbidden_file(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "x.py").symlink_to("/nonexistent-target")  # dangling link must still count
+    forbidden = {"type": "files", "path": "src/**", "present": False}
+    ok, _ = se.run_check(forbidden, [], {}, "", "", tmp_path)
+    assert not ok
+    ok, _ = se.run_check({"type": "files", "path": "src/*"}, [], {}, "", "", tmp_path)
+    assert ok
