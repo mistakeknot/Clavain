@@ -68,7 +68,7 @@ Distinct profile_refs can still name one seat (`crosslab-opus` and
 candidate whose backend and model already failed on capacity in the same walk.
 
 Frontier authoring — `planning`, `frontier-planning`, `escalation` — runs
-`planning-opus` first (Opus 5.5 plans first, mk-g8wd0), then `planning-astra`,
+`planning-opus` first (Opus 5.5 plans first), then `planning-astra`,
 then `planning-sol` for plain `planning`. Astra is the cross-lab reviewer of
 Opus-authored plans and the fallback author when Opus is unreachable. Frontier-required
 routes exclude Sol and Sonnet, so they end at Astra; plain `planning` can continue
