@@ -93,11 +93,11 @@ if ! cmp -s <(jq -S '.profile' "$work/planning.json") \
                 --context-file="$work/opus-only.json" | jq -S '.profile'); then
   echo 'FAIL: capacity review substitution changed frontier planning'; exit 1
 fi
-# A healthy estate still authors on Astra: the substitute is last, not preferred.
+# A healthy estate authors on Opus 5.5 first; Astra is the cross-lab reviewer and the fallback.
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=planning \
   --context-file="$work/context.json" > "$work/planning-healthy.json"
-jq -e '.profile.model_identity == "gpt-6-astra"' "$work/planning-healthy.json" >/dev/null \
-  || { echo 'FAIL: frontier authoring no longer prefers Astra while it is reachable'; exit 1; }
+jq -e '.profile.model == "claude-opus-5-5" and .profile_ref == "planning-opus"' "$work/planning-healthy.json" >/dev/null \
+  || { echo 'FAIL: frontier authoring no longer prefers Opus while it is reachable'; exit 1; }
 for host in codex claude hermes gemini kimi opencode cursor vscode; do
   python3 "$ROOT/scripts/sync-agent-instructions.py" --source "$ROOT" --host "$host" --file "$work/$host.md" >/dev/null
   (cd "$work" && ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=planning --context-file="$work/context.json") > "$work/$host.json"

@@ -191,10 +191,12 @@ dispatch:
   roles:
     # mk-42j9.27: planning is a judgment role, and roster Rule 6 bars Sol-medium
     # there, so it has its own Sol seat at high instead of borrowing routine-sol.
-    planning: planning-sol
-    frontier-planning: planning-astra
+    # mk-g8wd0: Opus 5.5 plans first. Astra is the cross-lab reviewer and the
+    # fallback, Sol the last fallback.
+    planning: planning-opus
+    frontier-planning: planning-opus
     plan-review: review-opus
-    escalation: planning-astra
+    escalation: planning-opus
     main-integrator: main-astra
     scout: scout-sol
     # mk ruling 2026-09-28 (mk-hpwq): execution roles default to Sonnet 5.5.
@@ -308,7 +310,7 @@ dispatch:
       # foundational-invariants or difficult-verification (security, data loss,
       # core rules); (2) track review/gauge pass rate and defect escapes for 48h
       # after landing and revert this seat to xhigh (its pre-PR value) if either
-      # regresses. `roles.escalation` (line 198) also resolves to this seat, so
+      # regresses. `roles.escalation` resolves to planning-opus, which carries the same terms, so
       # two-strikes capability-failure escalation runs at this same effort.
       # The effort-by-reason rule is enforced by `effort_floors`; the 48h-revert
       # rule is not enforced by the router/dispatch code and is
@@ -320,7 +322,7 @@ dispatch:
       # independent, so a review-side seat cannot silently change who authors a
       # plan. planning-opus runs Opus 5.5, the Anthropic frontier author since
       # mk-3b8z replaced planning-fable.
-      fallbacks: [planning-opus]
+      description: Cross-lab reviewer and fallback frontier author when Opus is unavailable (mk-g8wd0)
     planning-opus:
       role: frontier-planning
       backend: claude
@@ -331,7 +333,8 @@ dispatch:
       # high -> medium (revert ceiling high, its pre-PR value — not xhigh, which
       # this seat never ran at), same mandatory escalation/48h-revert terms as
       # planning-astra above.
-      description: Frontier authoring fallback when Astra is unavailable (Opus 5.5 replaced Fable 5.1, mk-3b8z)
+      fallbacks: [planning-astra, planning-sol]
+      description: Frontier authoring seat, first choice for planning (mk-g8wd0; Opus 5.5 replaced Fable 5.1, mk-3b8z)
     review-astra:
       role: plan-review
       backend: codex

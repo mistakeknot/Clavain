@@ -53,7 +53,9 @@ def test_no_rule6_role_is_headed_by_sol_medium(project_root):
 
 def test_planning_has_its_own_sol_seat(project_root):
     dispatch = _dispatch(project_root)
-    assert dispatch["roles"]["planning"] == "planning-sol"
+    # Opus 5.5 plans first; the Sol seat stays as the last fallback.
+    assert dispatch["roles"]["planning"] == "planning-opus"
+    assert "planning-sol" in dispatch["tiers"]["planning-opus"]["fallbacks"]
     seat = dispatch["tiers"]["planning-sol"]
     assert seat["role"] == "planning"
     assert seat.get("fallbacks") == dispatch["tiers"]["routine-sol"].get("fallbacks")

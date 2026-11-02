@@ -215,34 +215,35 @@ fi
   || fail "unexpected refusal for a selection-only substitute: $out"
 
 # ---------------------------------------------------------------------------
-# 7. FRONTIER AUTHORING falls back from Astra to Opus 5.5 (planning-opus, which
-#    replaced planning-fable in mk-3b8z). A reachable Astra must still author
-#    every plan, so the fallback can never become preferred.
+# 7. FRONTIER AUTHORING is Opus 5.5 first (planning-opus). Astra is the
+#    cross-lab reviewer and the fallback author when Opus is unreachable, so
+#    the fallback can never become preferred.
 # ---------------------------------------------------------------------------
 receipt="$(resolve "$POLICY" planning "$WORK/c-front.json")" \
-  || fail "frontier authoring refused while Astra is reachable: $receipt"
-echo "$receipt" | jq -e '.profile.model_identity == "gpt-6-astra"' >/dev/null \
-  || fail "frontier authoring no longer prefers Astra while it is reachable: $receipt"
+  || fail "frontier authoring refused while Opus is reachable: $receipt"
+echo "$receipt" | jq -e '.profile_ref == "planning-opus" and .profile.model == "claude-opus-5-5"' >/dev/null \
+  || fail "frontier authoring no longer prefers Opus while it is reachable: $receipt"
 
-ctx "$WORK/frontier.json" '["claude-opus-5-5"]' "$WORK/c-opus-only.json"
-receipt="$(resolve "$POLICY" planning "$WORK/c-opus-only.json")" \
-  || fail "frontier authoring has no seat when neither frontier lab is reachable: $receipt"
+ctx "$WORK/frontier.json" '["gpt-6-astra"]' "$WORK/c-astra-only.json"
+receipt="$(resolve "$POLICY" planning "$WORK/c-astra-only.json")" \
+  || fail "frontier authoring has no seat when only Astra is reachable: $receipt"
 echo "$receipt" | jq -e '
-  .profile_ref == "planning-opus"
+  .profile_ref == "planning-astra"
   and .profile.role == "frontier-planning"
   and .frontier_required
 ' >/dev/null || fail "frontier authoring capacity route is wrong: $receipt"
 
-# Mutation check: dropping the seat must restore the old fail-closed behaviour,
-# so a silent revert of the ruling cannot pass this suite.
+# Mutation check: dropping Opus's fallbacks must restore the fail-closed
+# behaviour when Opus is out, so a silent revert cannot pass this suite.
 python3 - "$POLICY" "$WORK/no-authoring-seat.yaml" <<'PYMUT'
 import sys
 t = open(sys.argv[1]).read()
-assert t.count("      fallbacks: [planning-opus]\n") == 1
-t = t.replace("      fallbacks: [planning-opus]\n", "      fallbacks: []\n")
+old = "      fallbacks: [planning-astra, planning-sol]\n"
+assert t.count(old) == 1
+t = t.replace(old, "      fallbacks: []\n")
 open(sys.argv[2], "w").write(t)
 PYMUT
-if out="$(resolve "$WORK/no-authoring-seat.yaml" planning "$WORK/c-opus-only.json")"; then
+if out="$(resolve "$WORK/no-authoring-seat.yaml" planning "$WORK/c-astra-only.json")"; then
   fail "authoring-seat mutation still resolved; the test does not detect a revert: $out"
 fi
 
