@@ -3231,14 +3231,13 @@ _extract_verdict() {
         return 0
     fi
 
-    # This synthesized FINDINGS line is a compatibility placeholder only;
-    # receipt attribution uses result.findings parsed from the output body.
+    # The FINDINGS line is counted from the output body, not a constant.
     {
         echo "--- VERDICT ---"
         [[ -z "$provisional_line" ]] || echo "$provisional_line"
         echo "STATUS: $status"
         echo "FILES: 0 changed"
-        echo "FINDINGS: 0 (P0: 0, P1: 0, P2: 0)"
+        _sidecar_findings_line "$output_file"
         echo "SUMMARY: $summary"
         echo "---"
     } > "$verdict_file"
@@ -3403,6 +3402,22 @@ _detect_codex_error() {
     return 0
 }
 
+# Sidecar FINDINGS line from the observed review body (receipt-findings.py).
+# Prints "FINDINGS: N (P0: a, P1: b, P2: c, P3: d)" when the body yields a
+# count, else "FINDINGS: unknown". Never prints a number it did not observe.
+_sidecar_findings_line() {
+    local output_file="${1:-}" helper_dir="${DISPATCH_SCRIPT_DIR:-}" json=""
+    [[ -n "$helper_dir" ]] || helper_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ -n "$output_file" && -r "$output_file" && -s "$output_file" ]]; then
+        json="$(python3 "$helper_dir/receipt-findings.py" "$output_file" 2>/dev/null)" || json=""
+    fi
+    if [[ -n "$json" ]] && jq -e '(.total|type) == "number"' <<< "$json" >/dev/null 2>&1; then
+        jq -r '"FINDINGS: \(.total) (P0: \(.P0), P1: \(.P1), P2: \(.P2), P3: \(.P3))"' <<< "$json"
+    else
+        echo "FINDINGS: unknown"
+    fi
+}
+
 # Overwrite the verdict sidecar with a STATUS reflecting a codex-level failure.
 # Preserves the original verdict body at "${verdict_file}.pre-error" for debugging.
 _write_error_verdict() {
@@ -3422,11 +3437,12 @@ _write_error_verdict() {
         _redact_provider_text < "$verdict_file" > "${verdict_file}.pre-error" 2>/dev/null || true
     fi
 
+    # An errored run produced no review to count: say unknown, not 0.
     cat > "$verdict_file" <<VERDICT
 --- VERDICT ---
 STATUS: $status
 FILES: 0 changed
-FINDINGS: 0 (P0: 0, P1: 0, P2: 0)
+FINDINGS: unknown
 SUMMARY: $detail
 ---
 VERDICT

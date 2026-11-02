@@ -21,6 +21,7 @@ setup() {
         /^_redact_provider_text\(\)[[:space:]]*\{/ { emit=1 }
         /^_provider_error_text\(\)[[:space:]]*\{/ { emit=1 }
         /^_detect_codex_error\(\)[[:space:]]*\{/ { emit=1 }
+        /^_sidecar_findings_line\(\)[[:space:]]*\{/ { emit=1 }
         /^_write_error_verdict\(\)[[:space:]]*\{/ { emit=1 }
         /^_extract_verdict\(\)[[:space:]]*\{/ { emit=1 }
         emit {
@@ -758,4 +759,34 @@ SUMMARY: fine
 TEXT
     _extract_verdict "$OUTPUT"
     grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+# mk-vfifs.1.3: the sidecar FINDINGS line was a constant "0" placeholder.
+@test "sidecar: FINDINGS counts the review body, not a constant 0" {
+    _load
+    DISPATCH_SCRIPT_DIR="$BATS_TEST_DIRNAME/../../scripts"
+    cat > "$OUTPUT" <<'BODY'
+### [P1] token logged in clear
+### [P2] missing test
+### [P2] stale comment
+Verdict: PASS WITH NOTES
+BODY
+    _extract_verdict "$OUTPUT"
+    grep -q '^FINDINGS: 3 (P0: 0, P1: 1, P2: 2, P3: 0)$' "$VERDICT_FILE"
+    ! grep -q '^FINDINGS: 0 (P0: 0, P1: 0, P2: 0)$' "$VERDICT_FILE"
+}
+
+@test "sidecar: FINDINGS is unknown, not 0, when the body cannot be counted" {
+    _load
+    DISPATCH_SCRIPT_DIR="$BATS_TEST_DIRNAME/../../scripts"
+    printf 'Verdict: PASS WITH NOTES\nlooked fine, some prose only\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^FINDINGS: unknown$' "$VERDICT_FILE"
+}
+
+@test "write: error verdict says FINDINGS: unknown, never 0" {
+    _load
+    _write_error_verdict "$OUTPUT" "error" "boom"
+    grep -q '^FINDINGS: unknown$' "$VERDICT_FILE"
+    ! grep -q '^FINDINGS: 0' "$VERDICT_FILE"
 }
