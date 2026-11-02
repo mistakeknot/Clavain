@@ -1,6 +1,6 @@
 ---
 name: migration-safety
-description: Orchestrate database migration and data-risk work with safety checks (integrity, migration, deployment).
+description: Slash-command entry that fans out three parallel agents for a full pre-deploy safety assessment of a DB migration or data change. For a single-reviewer validation of migration code against production data, use the data-migration-expert skill instead.
 argument-hint: "[migration file, PR number, or description of data change]"
 disable-model-invocation: true
 ---

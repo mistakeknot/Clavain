@@ -1,6 +1,6 @@
 ---
 name: executing-plans
-description: Execute a written implementation plan task by task, continuously, with a final independent review; native mode keeps a progress ledger.
+description: Execute a written implementation plan task by task, continuously, with a final independent review; native mode keeps a progress ledger. This is the execution engine; /execute-plan is the gated entry that wraps it.
 ---
 
 # Executing Plans
