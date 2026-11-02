@@ -33,35 +33,44 @@ import shlex
 import sys
 from collections import defaultdict
 
-# .../skills/<skill>/<rest>
-SKILL_PATH_RE = re.compile(r"skills/([A-Za-z0-9._-]+)/((?:references/[^\s'\"|;&<>)]*)|(?:SKILL[A-Za-z0-9._-]*\.md))")
-# a bare skills/<skill>/references directory or glob target
-SKILL_DIR_RE = re.compile(r"skills/([A-Za-z0-9._-]+)(?:/references)?/?[*\s'\"]|skills/([A-Za-z0-9._-]+)/?$")
+# Complete operand: [<dir>/]skills/<skill>/(references/<rest> | SKILL*.md); nothing may follow.
+SKILL_PATH_RE = re.compile(r"(?:.*/)?skills/([A-Za-z0-9._-]+)/(references/[^\s]+|SKILL[A-Za-z0-9._-]*\.md)")
 READ_CMDS = {"cat", "head", "tail", "sed", "less", "more", "grep", "egrep", "rg", "ls", "wc", "awk", "bat", "nl"}
 GLOB_CHARS = set("*?[")
 
 
 def skill_files(skills_dir):
-    """Map skill -> {'refs': {relpath: size}, 'compact': bool} from a checkout."""
+    """Map skill -> {'keys', 'refs': {relpath: size}, 'compact': bool} from a checkout.
+
+    Symlinks are skipped outright, and every admitted file's realpath must stay
+    inside the skills tree, so nothing outside the checkout is ever inventoried."""
+    root = os.path.realpath(skills_dir)
     out = {}
+
+    def inside(p):
+        rp = os.path.realpath(p)
+        return rp == root or rp.startswith(root + os.sep)
+
     for d in sorted(glob.glob(os.path.join(skills_dir, "*"))):
-        if not os.path.isdir(d):
+        if os.path.islink(d) or not os.path.isdir(d) or not inside(d):
             continue
         name = os.path.basename(d)
         refs = {}
-        for root, _, files in os.walk(os.path.join(d, "references")):
-            for f in files:
-                p = os.path.join(root, f)
-                refs[os.path.relpath(p, d)] = os.path.getsize(p)
-        keys = set(refs) | {os.path.basename(m) for m in glob.glob(os.path.join(d, "SKILL*.md"))}
-        out[name] = {"keys": keys, "refs": refs, "compact": os.path.exists(os.path.join(d, "SKILL-compact.md"))}
+        rdir = os.path.join(d, "references")
+        if not os.path.islink(rdir):
+            for r, dirs, files in os.walk(rdir, followlinks=False):
+                dirs[:] = [x for x in dirs if not os.path.islink(os.path.join(r, x))]
+                for f in files:
+                    fp = os.path.join(r, f)
+                    if os.path.islink(fp) or not inside(fp):
+                        continue
+                    refs[os.path.relpath(fp, d)] = os.path.getsize(fp)
+        keys = set(refs)
+        for m in glob.glob(os.path.join(d, "SKILL*.md")):
+            if not os.path.islink(m) and inside(m):
+                keys.add(os.path.basename(m))
+        out[name] = {"keys": keys, "refs": refs, "compact": "SKILL-compact.md" in keys}
     return out
-
-
-def split_commands(cmd):
-    """Split a shell command into simple commands (best effort)."""
-    parts = re.split(r"\|\||&&|;|\||\n", cmd)
-    return [p.strip() for p in parts if p.strip()]
 
 
 def resolve_key(skills, skill, rel):
@@ -72,50 +81,110 @@ def resolve_key(skills, skill, rel):
     return rel if rel in skills[skill]["keys"] else None
 
 
+# Stages after the first that only filter stdin (they must have no file operand).
+FILTERS = {"head", "tail", "wc", "sort", "uniq", "cut", "tr", "nl", "cat", "grep", "egrep", "rg", "sed", "awk", "tee"}
+VALUE_FLAGS = {
+    "head": {"-n", "-c"}, "tail": {"-n", "-c"}, "sort": {"-k", "-t", "-S", "-T"},
+    "cut": {"-d", "-f", "-c", "-b"}, "uniq": {"-f", "-s", "-w"}, "tr": set(),
+    "grep": {"-m", "-A", "-B", "-C"}, "egrep": {"-m", "-A", "-B", "-C"},
+    "rg": {"-m", "-A", "-B", "-C", "-g"}, "sed": set(), "awk": {"-F", "-v"},
+    "cat": set(), "wc": set(), "nl": set(), "tee": set(), "ls": set(),
+}
+PATTERN_CMDS = {"grep", "egrep", "rg", "sed", "awk"}
+UNSAFE_RAW = ("$(", "`", "<(", ">(", "<<", "${")
+
+
+def _operands(c, toks):
+    """File operands of a read command, or None when the flags make that ambiguous."""
+    flags = [t for t in toks if t.startswith("-") and t != "-"]
+    if c in PATTERN_CMDS and any(f.split("=")[0] in ("-e", "-f", "-i", "--expression", "--file", "--in-place") or f.startswith("-i") for f in flags):
+        return None
+    ops, skip = [], False
+    for t in toks:
+        if skip:
+            skip = False
+            continue
+        if t in VALUE_FLAGS.get(c, ()):
+            skip = True
+            continue
+        if t.startswith("-") and t != "-":
+            continue
+        ops.append(t)
+    if c in PATTERN_CMDS and ops:
+        ops = ops[1:]  # script / pattern
+    return ops
+
+
 def classify_bash(cmd):
     """Return list of (kind, skill, token) for each skill path a read command touches.
 
-    kind: 'path' (one concrete file whose output is separable), 'glob'
-    (glob/recursive/dir listing), 'multi' (output cannot be separated per file:
-    several commands or several file operands)."""
+    kind: 'path' (the whole output is one concrete file), 'glob' (glob,
+    recursive or directory read), 'multi' (output may come from other sources:
+    several commands, file operands, redirections, substitutions, or any
+    later pipeline stage that is not a pure stdin filter)."""
+    cmd = cmd.replace("2>&1", " ")
+    unsafe = any(u in cmd for u in UNSAFE_RAW)
+    try:
+        lex = shlex.shlex(cmd, posix=True, punctuation_chars=True)
+        lex.whitespace_split = True
+        toks_all = list(lex)
+    except ValueError:
+        toks_all = cmd.split()
+        unsafe = True
+    if any(set(t) <= set("<>&|;()") and ("<" in t or ">" in t or "(" in t or ")" in t or "&" == t) for t in toks_all):
+        unsafe = True
+    # split into pipelines and stages
+    pipelines, cur, stage = [], [], []
+    for t in toks_all:
+        if t == "|":
+            cur.append(stage); stage = []
+        elif t in ("&&", "||", ";", "\n"):
+            cur.append(stage); pipelines.append(cur); cur, stage = [], []
+        else:
+            stage.append(t)
+    cur.append(stage); pipelines.append(cur)
+    pipelines = [[st for st in pl if st] for pl in pipelines]
+    pipelines = [pl for pl in pipelines if pl]
+    separable = (not unsafe) and len(pipelines) == 1
     hits = []
-    segs = re.split(r"\|\||&&|;|\n", cmd)
-    segs = [x.strip() for x in segs if x.strip()]
-    for sub in segs:
-        stage = sub.split("|")[0]
-        try:
-            toks = shlex.split(stage)
-        except ValueError:
-            toks = stage.split()
-        if not toks:
-            continue
-        i = 0
-        while i < len(toks) and (re.match(r"^\w+=", toks[i]) or toks[i] in ("sudo", "nice", "time")):
-            i += 1
-        if i >= len(toks) or os.path.basename(toks[i]) not in READ_CMDS:
-            continue
-        c = os.path.basename(toks[i])
-        recursive = any(t in ("-r", "-R", "-rn", "-rl", "-rI", "--recursive") or (t.startswith("-") and not t.startswith("--") and "r" in t[1:] and c in ("grep", "egrep")) for t in toks[i + 1:])
-        operands = [t for t in toks[i + 1:] if not t.startswith("-")]
-        if c in ("sed", "grep", "egrep", "rg", "awk") and operands:
-            operands = operands[1:]  # script / pattern
-        for t in toks[i + 1:]:
-            if t.startswith("-") or "skills/" not in t:
+    for pl in pipelines:
+        for si, toks in enumerate(pl):
+            i = 0
+            while i < len(toks) and (re.match(r"^\w+=", toks[i]) or toks[i] in ("sudo", "nice", "time")):
+                i += 1
+            if i >= len(toks):
                 continue
-            m = SKILL_PATH_RE.search(t)
-            if m and not (GLOB_CHARS & set(t)):
-                hits.append(["path", m.group(1), m.group(2), len(operands)])
+            c = os.path.basename(toks[i])
+            args = toks[i + 1:]
+            if c not in READ_CMDS and not (si > 0 and c in FILTERS):
+                if si > 0:
+                    separable = False
                 continue
-            m2 = re.search(r"skills/([A-Za-z0-9._-]+)", t)
-            if m2:
-                hits.append(["glob" if (GLOB_CHARS & set(t)) or recursive or c == "ls" else "dir", m2.group(1), t, len(operands)])
-    out = []
-    for h in hits:
-        kind = h[0]
-        if kind == "path" and (len(segs) > 1 or h[3] > 1 or len(hits) > 1):
-            kind = "multi"
-        out.append((kind, h[1], h[2]))
-    return out
+            ops = _operands(c, args)
+            if si > 0:
+                if ops is None or ops or c not in FILTERS:
+                    separable = False
+                continue
+            recursive = any(t in ("-r", "-R", "-rn", "-rl", "-rI", "--recursive") or (t.startswith("-") and not t.startswith("--") and "r" in t[1:] and c in ("grep", "egrep")) for t in args)
+            if ops is None or len(ops) != 1:
+                one = False
+            else:
+                one = True
+            for t in args:
+                if t.startswith("-") or "skills/" not in t:
+                    continue
+                m = SKILL_PATH_RE.fullmatch(t)
+                if m and not (GLOB_CHARS & set(t)):
+                    hits.append(["path" if one else "multi", m.group(1), m.group(2)])
+                    continue
+                m2 = re.search(r"skills/([A-Za-z0-9._-]+)", t)
+                if m2:
+                    hits.append(["glob" if (GLOB_CHARS & set(t)) or recursive or c == "ls" else "dir", m2.group(1), t])
+    if not separable or len([h for h in hits if h[0] == "path"]) > 1:
+        for h in hits:
+            if h[0] == "path":
+                h[0] = "multi"
+    return [tuple(h) for h in hits]
 
 
 def iter_events(path):
@@ -152,10 +221,13 @@ def new_stats():
             "reads": 0, "unattributed": 0, "why": defaultdict(int), "ref_reads": 0, "per_ref": defaultdict(int)}
 
 
-def process_session(path, inv, skills):
+def process_session(path, inv, skills, orphans=None):
     """Accumulate into inv (skill -> stats). Returns list of per-invocation dicts."""
     active = {}   # skill -> current invocation dict
-    pending = {}  # tool_use_id -> list of (skill|None, rel|None, kind)
+    pending = {}  # tool_use_id -> list of (kind, skill, rel, invocation)
+    orphans = orphans if orphans is not None else [0]
+    seen_ids = set()
+    dup_ids = set()
     done = []
 
     def start(skill):
@@ -174,6 +246,12 @@ def process_session(path, inv, skills):
             t = b.get("type")
             if t == "tool_use":
                 name, inp, tid = b.get("name"), b.get("input") or {}, b.get("id")
+                if isinstance(tid, str) and tid:
+                    if tid in seen_ids:
+                        dup_ids.add(tid)
+                    seen_ids.add(tid)
+                else:
+                    tid = None
                 if name == "Skill":
                     sk = str(inp.get("skill", ""))
                     if sk.startswith("clavain:"):
@@ -184,7 +262,7 @@ def process_session(path, inv, skills):
                 items = []
                 if name == "Read":
                     fp = str(inp.get("file_path", ""))
-                    m = SKILL_PATH_RE.search(fp)
+                    m = SKILL_PATH_RE.fullmatch(fp)
                     if m:
                         items.append(("path", m.group(1), m.group(2)))
                 elif name in ("Grep", "Glob"):
@@ -194,14 +272,25 @@ def process_session(path, inv, skills):
                         items.append(("glob", m.group(1), s))
                 elif name == "Bash":
                     items = classify_bash(str(inp.get("command", "")))
+                if items and tid is None:
+                    for kind, sk, rel in items:
+                        if sk in skills:
+                            inv[sk]["reads"] += 1
+                            inv[sk]["unattributed"] += 1
+                            inv[sk]["why"]["missing_tool_use_id"] += 1
+                    items = []
                 if items:
                     # bind the active invocation now, at call time
                     pending[tid] = [(k, sk, rel, active.get(sk)) for k, sk, rel in items]
             elif t == "tool_result":
                 tid = b.get("tool_use_id")
-                items = pending.pop(tid, None)
+                items = pending.pop(tid, None) if isinstance(tid, str) else None
                 if not items:
+                    if not isinstance(tid, str) or tid not in seen_ids:
+                        orphans[0] += 1
                     continue
+                if tid in dup_ids:
+                    items = [("dup", sk, rel, rec) for _, sk, rel, rec in items]
                 size = result_size(ev, b)
                 share = size // max(len(items), 1)
                 for kind, sk, rel, rec in items:
@@ -212,7 +301,8 @@ def process_session(path, inv, skills):
                     key = resolve_key(skills, sk, rel) if kind == "path" else None
                     if kind != "path" or key is None or rec is None or b.get("is_error"):
                         st["unattributed"] += 1
-                        why = ("combined_output" if kind == "multi"
+                        why = ("duplicate_tool_use_id" if kind == "dup"
+                               else "combined_output" if kind == "multi"
                                else "not_a_concrete_file" if kind != "path"
                                else "not_in_inventory" if key is None
                                else "no_prior_invocation" if rec is None else "tool_error")
@@ -251,9 +341,10 @@ def main(argv=None):
     if args.limit:
         files = files[:args.limit]
     sessions = 0
+    orphans = [0]
     for f in files:
         try:
-            recs = process_session(f, inv, skills)
+            recs = process_session(f, inv, skills, orphans)
         except OSError:
             continue
         sessions += 1
@@ -272,7 +363,7 @@ def main(argv=None):
     stop = total_reads > 0 and Fraction(total_un, total_reads) > Fraction(str(args.max_unattributed))
     out = {"sessions": sessions, "skill_path_reads": total_reads,
            "unattributed_calls": total_un, "unattributed_share": round(un_share, 4),
-           "stop": stop, "skills": {}}
+           "orphan_results": orphans[0], "stop": stop, "skills": {}}
     for name, st in sorted(inv.items()):
         n = st["invocations"]
         nrefs = len(skills[name]["refs"])

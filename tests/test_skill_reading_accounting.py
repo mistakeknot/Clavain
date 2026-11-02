@@ -197,3 +197,122 @@ def test_threshold_boundary_exactly_30_percent_does_not_stop(tmp_path, skills, c
 def test_threshold_boundary_just_over_stops(tmp_path, skills, capsys):
     rc, out = run(tmp_path, skills, _threshold_events(100, 31), capsys)
     assert out["stop"] is True and rc == 3
+
+
+# ---- round 3: pipelines, symlinks, filename prefixes, tool_use ids ----
+
+@pytest.mark.parametrize("cmd,attributed", [
+    ("cat {b}/references/a.md | head -5", True),
+    ("cat {b}/references/a.md | grep foo | wc -l", True),
+    ("cat {b}/references/a.md | tail -n 3", True),
+    ("cat {b}/references/a.md | cat /elsewhere/o.txt", False),
+    ("cat {b}/references/a.md | grep foo /elsewhere/o.txt", False),
+    ("cat {b}/references/a.md | sed -n 1p /elsewhere/o.txt", False),
+    ("cat {b}/references/a.md | python3 -c pass", False),
+    ("cat {b}/references/a.md > /tmp/o.txt", False),
+    ("cat {b}/references/a.md; cat /elsewhere/o.txt", False),
+    ("cat {b}/references/a.md || cat /elsewhere/o.txt", False),
+    ("cat {b}/references/a.md && cat /elsewhere/o.txt", False),
+    ("cat {b}/references/a.md $(cat /elsewhere/o.txt)", False),
+    ("cat {b}/references/a.md `cat /elsewhere/o.txt`", False),
+    ("cat {b}/references/a.md <(cat /elsewhere/o.txt)", False),
+    ("cat {b}/references/a.md 2>&1 | head", True),
+    ("sed -n 1,5p {b}/references/a.md", True),
+    ("grep foo {b}/references/a.md", True),
+    ("grep -e foo {b}/references/a.md", False),
+])
+def test_pipeline_stage_inspection(tmp_path, skills, capsys, cmd, attributed):
+    ev = [use("1", "Skill", {"skill": "clavain:demo"}),
+          use("2", "Bash", {"command": cmd.format(b=BASE)}), res("2", "x" * 50)]
+    _, out = run(tmp_path, skills, ev, capsys)
+    s = out["skills"]["demo"]
+    assert (s["reference_bytes_total"] == 50) is attributed, cmd
+    assert (s["unattributed_calls"] == 0) is attributed, cmd
+
+
+def test_symlinks_excluded_from_inventory(tmp_path, capsys):
+    skills = tmp_path / "skills"
+    d = skills / "demo"
+    (d / "references").mkdir(parents=True)
+    (d / "references" / "a.md").write_text("A")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "leaky-secret-name.md").write_text("x")
+    (d / "references" / "linkfile.md").symlink_to(outside / "leaky-secret-name.md")
+    (d / "references" / "linkdir").symlink_to(outside, target_is_directory=True)
+    (d / "SKILL.md").write_text("s")
+    (d / "SKILL-linked.md").symlink_to(outside / "leaky-secret-name.md")
+    (skills / "extlink").symlink_to(outside, target_is_directory=True)
+    inv = sra.skill_files(str(skills))
+    assert set(inv) == {"demo"}
+    assert inv["demo"]["keys"] == {"references/a.md", "SKILL.md"}
+    ev = [use("1", "Skill", {"skill": "clavain:demo"}),
+          use("2", "Read", {"file_path": f"{BASE}/references/linkfile.md"}), read_res("2", 3),
+          use("3", "Read", {"file_path": f"{BASE}/references/linkdir/leaky-secret-name.md"}), read_res("3", 3)]
+    session(tmp_path, ev)
+    rc = sra.main(["--transcripts", str(tmp_path), "--skills-dir", str(skills), "--json"])
+    j = capsys.readouterr().out
+    sra.main(["--transcripts", str(tmp_path), "--skills-dir", str(skills)])
+    text = capsys.readouterr().out
+    assert "leaky" not in j and "leaky" not in text and "extlink" not in j + text
+    assert json.loads(j)["skills"]["demo"]["unattributed_calls"] == 2
+
+
+@pytest.mark.parametrize("name", ["SKILL.md.private", "SKILL-compact.md.bak", "references/a.md.secret", "references/a.md.secret/x"])
+def test_filename_suffix_not_matched(tmp_path, skills, capsys, name):
+    ev = [use("1", "Skill", {"skill": "clavain:demo"}),
+          use("2", "Read", {"file_path": f"{BASE}/{name}"}), read_res("2", 3),
+          use("3", "Bash", {"command": f"cat {BASE}/{name}"}), res("3")]
+    _, out = run(tmp_path, skills, ev, capsys)
+    s = out["skills"]["demo"]
+    assert s["reference_bytes_total"] == 0 and s["compact_reads"] == 0 and s["skill_md_reads"] == 0
+    assert "secret" not in json.dumps(out) and "private" not in json.dumps(out) and ".bak" not in json.dumps(out)
+
+
+def test_duplicate_tool_use_id_unattributed(tmp_path, skills, capsys):
+    ev = [use("1", "Skill", {"skill": "clavain:demo"}),
+          use("d", "Read", {"file_path": f"{BASE}/references/a.md"}),
+          use("d", "Bash", {"command": "echo hi"}), read_res("d", 10)]
+    _, out = run(tmp_path, skills, ev, capsys)
+    s = out["skills"]["demo"]
+    assert s["reference_bytes_total"] == 0
+    assert s["unattributed_reasons"] == {"duplicate_tool_use_id": 1}
+
+
+def test_missing_tool_use_id_unattributed(tmp_path, skills, capsys):
+    ev = [use("1", "Skill", {"skill": "clavain:demo"}),
+          use(None, "Read", {"file_path": f"{BASE}/references/a.md"}), read_res("zzz", 10)]
+    ev[1]["message"]["content"][0].pop("id")
+    _, out = run(tmp_path, skills, ev, capsys)
+    s = out["skills"]["demo"]
+    assert s["reference_bytes_total"] == 0
+    assert s["unattributed_reasons"] == {"missing_tool_use_id": 1}
+    assert out["orphan_results"] == 1
+
+
+def test_unknown_result_id_not_charged(tmp_path, skills, capsys):
+    ev = [use("1", "Skill", {"skill": "clavain:demo"}),
+          use("2", "Read", {"file_path": f"{BASE}/references/a.md"}), read_res("other", 10)]
+    _, out = run(tmp_path, skills, ev, capsys)
+    assert out["skills"]["demo"]["reference_bytes_total"] == 0
+    assert out["orphan_results"] == 1
+
+
+def test_symlinked_references_dir_excluded(tmp_path):
+    skills = tmp_path / "skills"
+    d = skills / "demo"
+    d.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "ext.md").write_text("x")
+    (d / "references").symlink_to(outside, target_is_directory=True)
+    (d / "SKILL.md").write_text("s")
+    inv = sra.skill_files(str(skills))
+    assert inv["demo"]["keys"] == {"SKILL.md"}
+
+
+def test_unparseable_command_not_attributed(tmp_path, skills, capsys):
+    ev = [use("1", "Skill", {"skill": "clavain:demo"}),
+          use("2", "Bash", {"command": f"cat {BASE}/references/a.md 'unterminated"}), res("2", "x" * 9)]
+    _, out = run(tmp_path, skills, ev, capsys)
+    assert out["skills"]["demo"]["reference_bytes_total"] == 0
