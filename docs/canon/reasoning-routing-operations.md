@@ -68,16 +68,16 @@ Distinct profile_refs can still name one seat (`crosslab-opus` and
 candidate whose backend and model already failed on capacity in the same walk.
 
 Frontier authoring — `planning`, `frontier-planning`, `escalation` — runs
-`planning-astra`, then `planning-opus` (mk ruling 2026-09-18; the Fable seat
-between them was removed on 2026-09-25). It previously failed closed
-when both frontier labs were out. mk ruled that asymmetric: Opus is in
-`reasoning.frontier_models` and is authorised to independently review a
-frontier-authored plan, which is the harder job, so refusing to let it author in
-an emergency was arbitrary. The Opus seat stays last, so a reachable Astra still
-authors every plan.
+`planning-opus` first (Opus 5.5 plans first, mk-g8wd0), then `planning-astra`,
+then `planning-sol` for plain `planning`. Astra is the cross-lab reviewer of
+Opus-authored plans and the fallback author when Opus is unreachable. Frontier-required
+routes exclude Sol and Sonnet, so they end at Astra; plain `planning` can continue
+through Sol to its Sonnet fallback. An Opus-authored plan still gets a different-model
+reviewer: with Astra out, plan review fails closed and the agent runs the declared
+adversarial Opus review by hand.
 
 The review and authoring lanes remain separate profile chains
-(`review-opus`/`review-astra` against `planning-astra`/`planning-opus`) so that
+(`review-opus`/`review-astra` against `planning-opus`/`planning-astra`) so that
 adding a seat to one cannot reach the other. That separation, not a refusal, is what keeps a
 review-side substitute from silently changing who authors a plan;
 `tests/routing/reasoning-contract-test.sh` asserts an authoring receipt is
