@@ -7,7 +7,7 @@
     "max_turns": 6,
     "checks": [
       {
-        "type": "tool_used",
+        "type": "tool_ok",
         "tool": "Skill",
         "input": "writing-plans"
       },
@@ -16,6 +16,9 @@
         "path": "src/**",
         "present": false
       }
+    ],
+    "mount": [
+      "writing-plans"
     ]
   },
   {

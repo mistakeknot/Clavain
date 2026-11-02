@@ -42,7 +42,7 @@ def test_shipped_cases_load_and_fixtures_exist():
 def test_pass_and_fail_by_case(tmp_path):
     cases = {c["id"]: c for c in se.load_cases(se.EVAL_DIR / "cases.json")}
     c = cases["using-clavain-routes-plan-request"]
-    good = stream(tool("Skill", skill="clavain:writing-plans"))
+    good = stream(tool("Skill", skill="clavain:writing-plans"), results=[("Skill", False, "loaded")])
     replay(tmp_path, c["id"], good)
     assert se.run_case(c, replay=tmp_path)["status"] == "pass"
     replay(tmp_path, c["id"], stream(tool("Skill", skill="clavain:brainstorm")))
@@ -111,7 +111,7 @@ def test_malformed_cases_are_not_run_and_others_still_run(tmp_path, monkeypatch)
     bad_rx = dict(good, id="bad-rx", checks=[{"type": "trace", "regex": "("}])
     bad_fx = dict(good, id="bad-fx", fixture="nope")
     dup = dict(good)
-    replay(tmp_path, good["id"], stream(tool("Skill", skill="clavain:writing-plans")))
+    replay(tmp_path, good["id"], stream(tool("Skill", skill="clavain:writing-plans"), results=[("Skill", False, "ok")]))
     res = se.run_all([bad_rx, bad_fx, good, dup], replay=tmp_path)
     st = {r["id"]: r["status"] for r in res[:3]}
     assert st["bad-rx"] == st["bad-fx"] == "not-run"
@@ -154,3 +154,64 @@ def test_main_live_without_guest_exits_2(monkeypatch, capsys):
     monkeypatch.delenv("CLAVAIN_SKILL_EVAL_GUEST", raising=False)
     assert se.main([]) == 2
     assert "NOT RUN" in capsys.readouterr().out
+
+
+def test_routing_requires_downstream_skill_to_load(tmp_path):
+    c = case(ROUTE)
+    assert c["mount"] == ["writing-plans"]  # the live plugin must contain the skill being routed to
+    call = tool("Skill", skill="clavain:writing-plans")
+    replay(tmp_path, c["id"], stream(call, results=[("Skill", True, "Unknown skill: writing-plans")]))
+    assert se.run_case(c, replay=tmp_path)["status"] == "fail"
+    replay(tmp_path, c["id"], stream(call))  # call with no result at all
+    assert se.run_case(c, replay=tmp_path)["status"] == "fail"
+
+
+def _write(tmp_path, name, body):
+    p = tmp_path / name
+    p.write_text(body)
+    return str(p)
+
+
+@pytest.mark.parametrize("body,sel", [
+    ("{not json", None),
+    ('{"id": "x"}', None),
+    (json.dumps([{"id": ["a"], "skill": "using-clavain", "fixture": "routing-plan", "prompt": "p",
+                  "checks": [{"type": "trace", "regex": "x"}]}]), ["a"]),
+    (json.dumps([]), ["nope"]),
+])
+def test_config_errors_are_not_run_exit_2_with_summary(tmp_path, capsys, body, sel):
+    out = tmp_path / "out.json"
+    argv = ["--cases", _write(tmp_path, "c.json", body), "--replay", str(tmp_path), "--out", str(out)]
+    for s_ in sel or []:
+        argv += ["--case", s_]
+    assert se.main(argv) == 2
+    res = json.loads(out.read_text())
+    assert res and all(r["status"] == "not-run" for r in res)
+
+
+def test_missing_cases_file_and_unwritable_out(tmp_path):
+    assert se.main(["--cases", str(tmp_path / "absent.json"), "--out", str(tmp_path / "o.json")]) == 2
+    assert json.loads((tmp_path / "o.json").read_text())[0]["status"] == "not-run"
+    ok = _write(tmp_path, "c.json", json.dumps([]))
+    assert se.main(["--cases", ok, "--out", str(tmp_path / "no" / "dir" / "o.json")]) == 2
+
+
+@pytest.mark.parametrize("mut", [
+    {"id": 5}, {"id": "../x"}, {"skill": ["a"]}, {"skill": "../../x"}, {"fixture": "../skill-evals"},
+    {"fixture": None}, {"prompt": ""}, {"prompt": 3}, {"checks": "x"}, {"checks": [3]},
+    {"checks": [{"type": "trace", "regex": 5}]}, {"checks": [{"type": "files", "path": "../x"}]},
+    {"checks": [{"type": "files", "path": "/etc/passwd"}]}, {"max_turns": "9"}, {"timeout": -1},
+    {"mount": "writing-plans"}, {"mount": ["nope-skill"]},
+    {"checks": [{"type": "files", "path": "a", "present": "no"}]},
+])
+def test_malformed_fields_are_not_run_not_crash(tmp_path, mut):
+    c = {**case(ROUTE), **mut}
+    res = se.run_all([c], replay=tmp_path)
+    assert [r["status"] for r in res] == ["not-run"]
+
+
+def test_non_dict_stream_content_does_not_crash():
+    raw = json.dumps({"type": "assistant", "message": {"content": ["str", 3, None]}}) + "\n" + \
+        json.dumps({"type": "user", "message": "oops"}) + "\n" + \
+        json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "ok"})
+    se.parse_stream(raw)

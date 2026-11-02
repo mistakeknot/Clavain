@@ -49,31 +49,66 @@ def load_cases(path):
     return cases
 
 
+NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _name(v, what):
+    if not isinstance(v, str) or not NAME_RE.match(v) or ".." in v:
+        raise ValueError(f"{what} must be a plain name, got {v!r}")
+    return v
+
+
+def _opt_str(ch, key, rx=True):
+    v = ch.get(key)
+    if v is not None and (not isinstance(v, str) or v == ""):
+        raise ValueError(f"check field {key} must be a non-empty string")
+    if v and rx:
+        re.compile(v)
+
+
 def validate_case(c, seen):
+    """Raise ValueError (or re.error) for any malformed case; touches nothing outside the repo's eval dirs."""
     if not isinstance(c, dict):
         raise ValueError("case is not an object")
     for k in ("id", "skill", "fixture", "prompt", "checks"):
         if k not in c:
             raise ValueError(f"case missing {k}")
-    if c["id"] in seen:
-        raise ValueError(f"duplicate case id {c['id']}")
-    seen.add(c["id"])
-    if not c["checks"]:
-        raise ValueError("case has no checks")
-    if not (EVAL_DIR / "fixtures" / str(c["fixture"])).is_dir():
+    cid = _name(c["id"], "id")
+    if cid in seen:
+        raise ValueError(f"duplicate case id {cid}")
+    seen.add(cid)
+    if not isinstance(c["prompt"], str) or not c["prompt"].strip():
+        raise ValueError("prompt must be a non-empty string")
+    for k in ("max_turns", "timeout"):
+        if k in c and (isinstance(c[k], bool) or not isinstance(c[k], (int, float)) or c[k] <= 0):
+            raise ValueError(f"{k} must be a positive number")
+    mounts = c.get("mount", [])
+    if not isinstance(mounts, list):
+        raise ValueError("mount must be a list of skill names")
+    for sk in [c["skill"], *mounts]:
+        if not (ROOT / "skills" / _name(sk, "skill") / "SKILL.md").is_file():
+            raise ValueError(f"unknown skill {sk}")
+    if not (EVAL_DIR / "fixtures" / _name(c["fixture"], "fixture")).is_dir():
         raise ValueError(f"missing fixture {c['fixture']}")
-    if not (ROOT / "skills" / str(c["skill"]) / "SKILL.md").is_file():
-        raise ValueError(f"unknown skill {c['skill']}")
+    if not isinstance(c["checks"], list) or not c["checks"]:
+        raise ValueError("checks must be a non-empty list")
     for ch in c["checks"]:
+        if not isinstance(ch, dict):
+            raise ValueError("check is not an object")
         if ch.get("type") not in CHECK_TYPES:
-            raise ValueError(f"bad check type {ch.get('type')}")
+            raise ValueError(f"bad check type {ch.get('type')!r}")
         for key in ("regex", "input", "output"):
-            if ch.get(key):
-                re.compile(ch[key])
+            _opt_str(ch, key)
+        for key in ("tool", "path"):
+            _opt_str(ch, key, rx=False)
+        if "present" in ch and not isinstance(ch["present"], bool):
+            raise ValueError("present must be a boolean")
         need = {"tool_used": "tool", "tool_ok": "tool", "trace": "regex",
                 "last_message": "regex", "files": "path"}[ch["type"]]
         if not ch.get(need):
             raise ValueError(f"{ch['type']} check needs {need}")
+        if ch["type"] == "files" and (ch["path"].startswith("/") or ".." in ch["path"].split("/")):
+            raise ValueError("files path must be relative with no '..'")
 
 
 def parse_stream(text):
@@ -89,8 +124,9 @@ def parse_stream(text):
             continue
         if not isinstance(ev, dict):
             continue
-        content = (ev.get("message") or {}).get("content")
-        content = content if isinstance(content, list) else []
+        msg = ev.get("message")
+        content = msg.get("content") if isinstance(msg, dict) else None
+        content = [b for b in content if isinstance(b, dict)] if isinstance(content, list) else []
         if ev.get("type") == "assistant":
             texts = []
             for blk in content:
@@ -150,7 +186,7 @@ def run_check(ch, calls, results, raw, last, workdir):
         hit = bool(rx.search(last))
         return hit == want, f"last message match={hit}"
     # files: glob relative to workdir; present=false means no file may match
-    files = [p for p in workdir.rglob("*") if p.is_file()
+    files = [p for p in workdir.rglob("*") if p.is_file() and not p.is_symlink()
              and fnmatch.fnmatch(p.relative_to(workdir).as_posix(), ch["path"])]
     if not want:
         return not files, f"files {ch['path']} found={len(files)}"
@@ -181,11 +217,11 @@ def guard_live(env):
 
 def live_session(case, workdir, claude_args=()):
     guard_live(os.environ)
-    skill_src = ROOT / "skills" / case["skill"]
     plugin = Path(tempfile.mkdtemp(prefix="skill-eval-plugin-"))
     (plugin / ".claude-plugin").mkdir()
     (plugin / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name": "clavain", "version": "0.0.0-eval"}))
-    shutil.copytree(skill_src, plugin / "skills" / case["skill"])
+    for sk in [case["skill"], *case.get("mount", [])]:
+        shutil.copytree(ROOT / "skills" / sk, plugin / "skills" / sk)
     cmd = ["claude", "-p", case["prompt"], "--output-format", "stream-json", "--verbose",
            "--setting-sources", "project,local", "--plugin-dir", str(plugin),
            "--permission-mode", "bypassPermissions",
@@ -240,7 +276,7 @@ def run_all(cases, replay=None, only=None):
             cid = c.get("id", "?") if isinstance(c, dict) else "?"
             results.append({"id": str(cid), "status": NOT_RUN, "detail": f"invalid case: {e}", "seconds": 0.0})
             continue
-        if only and c["id"] not in only:
+        if only is not None and c["id"] not in only:
             continue
         results.append(run_case(c, replay))
     return results
@@ -255,6 +291,10 @@ def exit_code(results):
     return 0
 
 
+def config_error(msg):
+    return [{"id": "<config>", "status": NOT_RUN, "detail": msg, "seconds": 0.0}]
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--cases", default=str(EVAL_DIR / "cases.json"))
@@ -262,13 +302,18 @@ def main(argv=None):
     ap.add_argument("--replay", help="grade recorded transcripts from DIR instead of running sessions")
     ap.add_argument("--out", help="write JSON results here")
     a = ap.parse_args(argv)
-    cases = load_cases(a.cases)
-    if a.case:
-        unknown = set(a.case) - {c.get("id") for c in cases if isinstance(c, dict)}
-        if unknown:
-            print(f"unknown case id(s): {sorted(unknown)}", file=sys.stderr)
-            return 2
-    results = run_all(cases, a.replay, set(a.case) if a.case else None)
+    try:
+        cases = load_cases(a.cases)
+        only = None
+        if a.case:
+            only = set(a.case)
+            known = {c["id"] for c in cases if isinstance(c, dict) and isinstance(c.get("id"), str)}
+            unknown = sorted(only - known)
+            if unknown:
+                raise ValueError(f"unknown case id(s) selected: {unknown}")
+        results = run_all(cases, a.replay, only)
+    except Exception as e:  # unreadable/malformed JSON, wrong top level, bad selection
+        results = config_error(f"{type(e).__name__}: {e}")
     for r in results:
         print(f"{r['status'].upper():8} {r['id']} ({r['seconds']}s)")
         if r["status"] != PASS:
@@ -276,7 +321,11 @@ def main(argv=None):
     code = exit_code(results)
     print({0: "ALL PASSED", 1: "FAILED", 2: "NOT RUN (this is not a pass)"}[code])
     if a.out:
-        Path(a.out).write_text(json.dumps(results, indent=2))
+        try:
+            Path(a.out).write_text(json.dumps(results, indent=2))
+        except OSError as e:
+            print(f"cannot write --out: {e}", file=sys.stderr)
+            return 2
     return code
 
 
