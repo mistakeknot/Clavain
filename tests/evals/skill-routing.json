@@ -1,0 +1,272 @@
+[
+  {
+    "prompt": "Review this PR diff for correctness bugs and security issues using multiple specialist reviewers",
+    "expected": "interflux:flux-drive",
+    "why": "multi-agent review of a diff is flux-drive's job"
+  },
+  {
+    "prompt": "Run the quality gates on my staged changes before I merge",
+    "expected": "quality-gates",
+    "why": "explicit gate with pass/fail on a diff"
+  },
+  {
+    "prompt": "Do an exhaustive multi-agent code review of the changes on this branch",
+    "expected": "clavain-review",
+    "why": "exhaustive multi-agent code review"
+  },
+  {
+    "prompt": "Have several specialized agents review this implementation plan in parallel",
+    "expected": "plan-review",
+    "why": "parallel multi-agent review of a plan"
+  },
+  {
+    "prompt": "I finished step 3 of the plan, check it against the plan and our coding standards",
+    "expected": "plan-reviewer",
+    "why": "review a completed step against its plan"
+  },
+  {
+    "prompt": "A reviewer left feedback on my PR; help me decide which of it is actually correct before I change code",
+    "expected": "code-review-discipline",
+    "why": "assess received review feedback"
+  },
+  {
+    "prompt": "Resolve all the inline PR comments on PR 214 with code changes",
+    "expected": "pr-comment-resolver",
+    "why": "resolve PR comments with verified changes"
+  },
+  {
+    "prompt": "Resolve the open TODO findings from the last review in parallel",
+    "expected": "resolve",
+    "why": "resolve findings from any source"
+  },
+  {
+    "prompt": "Quickly tighten up this design doc: score clarity and fix issues",
+    "expected": "review-doc",
+    "why": "single-pass document refinement"
+  },
+  {
+    "prompt": "Triage all open PRs on the repo and give me a report by theme",
+    "expected": "pr-triage",
+    "why": "batch PR triage"
+  },
+  {
+    "prompt": "Categorize and prioritize these review findings into the todo system",
+    "expected": "triage",
+    "why": "triage findings for todos"
+  },
+  {
+    "prompt": "Run the quality gate and enforce pass/fail on this diff",
+    "expected": "quality-gates",
+    "why": "gate orchestrator"
+  },
+  {
+    "prompt": "Is this migration safe? It renames a column and backfills IDs on a production table",
+    "expected": "data-migration-expert",
+    "why": "migration/backfill validation"
+  },
+  {
+    "prompt": "Can you confirm this bug report is real? Reproduce it first",
+    "expected": "bug-reproduction-validator",
+    "why": "reproduce and validate a bug report"
+  },
+  {
+    "prompt": "I have a vague idea for a notifications feature; let's explore approaches before building anything",
+    "expected": "brainstorm",
+    "why": "unclear scope, explore approaches"
+  },
+  {
+    "prompt": "Write a detailed bite-sized implementation plan for the approved design in docs/brainstorms/auth.md",
+    "expected": "write-plan",
+    "why": "plan from an approved design"
+  },
+  {
+    "prompt": "Turn this spec into a multi-step implementation plan before I touch any code",
+    "expected": "writing-plans",
+    "why": "plan from spec before editing"
+  },
+  {
+    "prompt": "Take the approved brainstorm and turn it into a PRD with features and beads",
+    "expected": "strategy",
+    "why": "brainstorm output to PRD plus beads"
+  },
+  {
+    "prompt": "Take this feature from idea all the way through design, plan, build, review and ship",
+    "expected": "sprint",
+    "why": "full phase sequencing"
+  },
+  {
+    "prompt": "What should I work on next? Find the work and dispatch it",
+    "expected": "route",
+    "why": "universal entry that discovers and dispatches work"
+  },
+  {
+    "prompt": "Resume whatever sprint was in flight yesterday",
+    "expected": "route",
+    "why": "route resumes sprints"
+  },
+  {
+    "prompt": "Show me a deep scan of where the current sprint stands, with beads and recommendations",
+    "expected": "sprint-status",
+    "why": "sprint scan"
+  },
+  {
+    "prompt": "Execute this written plan task by task and have it independently reviewed at the end",
+    "expected": "execute-plan",
+    "why": "continuous plan execution with final review"
+  },
+  {
+    "prompt": "Execute the plan using a progress ledger, one task at a time",
+    "expected": "executing-plans",
+    "why": "plan execution skill"
+  },
+  {
+    "prompt": "Interview me relentlessly about this design until every decision is settled",
+    "expected": "grill-me",
+    "why": "grill-me interview"
+  },
+  {
+    "prompt": "Implement the work items in the plan and finish the feature",
+    "expected": "work",
+    "why": "execute work plans"
+  },
+  {
+    "prompt": "Do red-green-refactor TDD for the new parser",
+    "expected": "tdd",
+    "why": "test-driven development"
+  },
+  {
+    "prompt": "Write a session handoff summary so the next agent can pick this up",
+    "expected": "handoff",
+    "why": "session handoff file"
+  },
+  {
+    "prompt": "Wrap up: commit, push, close the beads and sync",
+    "expected": "ship",
+    "why": "session close ceremony"
+  },
+  {
+    "prompt": "Land this verified feature branch onto trunk",
+    "expected": "landing-a-change",
+    "why": "landing a change"
+  },
+  {
+    "prompt": "Run the landing workflow for trunk-based handoff",
+    "expected": "land",
+    "why": "landing workflow command"
+  },
+  {
+    "prompt": "Own this change end to end up to a merge-ready pull request, full stop",
+    "expected": "full-stop",
+    "why": "full-stop trigger"
+  },
+  {
+    "prompt": "Read this session and propose changes that would have prevented the repeated mistakes",
+    "expected": "retro",
+    "why": "retro of repeated mistakes"
+  },
+  {
+    "prompt": "Capture what we learned in this sprint and register the reflection",
+    "expected": "reflect",
+    "why": "sprint reflection"
+  },
+  {
+    "prompt": "Document the problem I just solved as a searchable solution with frontmatter",
+    "expected": "engineering-docs",
+    "why": "solution doc"
+  },
+  {
+    "prompt": "Document the problem we just solved so the team's knowledge compounds",
+    "expected": "compound",
+    "why": "compound command"
+  },
+  {
+    "prompt": "Search all our knowledge systems for notes about the dolt lock issue",
+    "expected": "recall",
+    "why": "knowledge search"
+  },
+  {
+    "prompt": "Synthesize accumulated docs into categorized solutions",
+    "expected": "distill",
+    "why": "distill docs"
+  },
+  {
+    "prompt": "Run the build, fix the type error, and re-run until it passes",
+    "expected": "fixbuild",
+    "why": "build-fix loop"
+  },
+  {
+    "prompt": "Plan and execute a safe refactor of the dispatch module with characterization tests",
+    "expected": "refactor-safely",
+    "why": "significant refactor"
+  },
+  {
+    "prompt": "I have 3 independent test failures in different files, fix them in parallel",
+    "expected": "dispatching-parallel-agents",
+    "why": "independent parallel tasks"
+  },
+  {
+    "prompt": "Verify the work is actually done before I claim it",
+    "expected": "verify",
+    "why": "completion verification"
+  },
+  {
+    "prompt": "Generate a PR title and description from my branch commits",
+    "expected": "describe-pr",
+    "why": "describe PR"
+  },
+  {
+    "prompt": "Keep a decision trail of every choice you make while I'm away",
+    "expected": "show-me-your-work",
+    "why": "unattended decision trail"
+  },
+  {
+    "prompt": "Delegate this well-scoped test generation to Codex",
+    "expected": "codex-delegate",
+    "why": "codex delegation"
+  },
+  {
+    "prompt": "What does the function parse_header in src/http.py return?",
+    "expected": "none",
+    "why": "plain code question"
+  },
+  {
+    "prompt": "Rename the variable tmp to buffer in this file",
+    "expected": "none",
+    "why": "trivial edit"
+  },
+  {
+    "prompt": "Explain how git rebase differs from merge",
+    "expected": "none",
+    "why": "general knowledge question"
+  },
+  {
+    "prompt": "Fix this typo in the README",
+    "expected": "none",
+    "why": "one-line edit"
+  },
+  {
+    "prompt": "What is the capital of Australia?",
+    "expected": "none",
+    "why": "unrelated"
+  },
+  {
+    "prompt": "Run the unit tests for the config package and show me the failures",
+    "expected": "none",
+    "why": "plain test run"
+  },
+  {
+    "prompt": "Why is my docker container exiting with code 137?",
+    "expected": "none",
+    "why": "debugging question, no skill"
+  },
+  {
+    "prompt": "Add a --verbose flag to the CLI",
+    "expected": "none",
+    "why": "small feature edit, no planning ceremony requested"
+  },
+  {
+    "prompt": "Summarize this log file",
+    "expected": "none",
+    "why": "plain summarization"
+  }
+]
