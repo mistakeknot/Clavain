@@ -21,7 +21,6 @@ setup() {
         /^_redact_provider_text\(\)[[:space:]]*\{/ { emit=1 }
         /^_provider_error_text\(\)[[:space:]]*\{/ { emit=1 }
         /^_detect_codex_error\(\)[[:space:]]*\{/ { emit=1 }
-        /^_sidecar_findings_line\(\)[[:space:]]*\{/ { emit=1 }
         /^_write_error_verdict\(\)[[:space:]]*\{/ { emit=1 }
         /^_extract_verdict\(\)[[:space:]]*\{/ { emit=1 }
         emit {

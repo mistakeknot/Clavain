@@ -2946,6 +2946,22 @@ _extract_verdict() {
         done < <(grep -i '^status:[[:space:]]' <<< "$verdict_block")
     fi
 
+    # Sidecar FINDINGS line from the observed review body (receipt-findings.py).
+    # Prints "FINDINGS: N (P0: a, P1: b, P2: c, P3: d)" when the body yields a
+    # count, else "FINDINGS: unknown". Never prints a number it did not observe.
+    _sidecar_findings_line() {
+        local output_file="${1:-}" helper_dir="${DISPATCH_SCRIPT_DIR:-}" json=""
+        [[ -n "$helper_dir" ]] || helper_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        if [[ -n "$output_file" && -r "$output_file" && -s "$output_file" ]]; then
+            json="$(python3 "$helper_dir/receipt-findings.py" "$output_file" 2>/dev/null)" || json=""
+        fi
+        if [[ -n "$json" ]] && jq -e '(.total|type) == "number"' <<< "$json" >/dev/null 2>&1; then
+            jq -r '"FINDINGS: \(.total) (P0: \(.P0), P1: \(.P1), P2: \(.P2), P3: \(.P3))"' <<< "$json"
+        else
+            echo "FINDINGS: unknown"
+        fi
+    }
+
     _write_verdict_block() {
         local block="$1"
         # Collapse the block's STATUS lines to the single resolved value so
@@ -3400,22 +3416,6 @@ _detect_codex_error() {
     [[ -z "$kind" ]] && return 1
     printf '%s\t%s\n' "$kind" "$detail"
     return 0
-}
-
-# Sidecar FINDINGS line from the observed review body (receipt-findings.py).
-# Prints "FINDINGS: N (P0: a, P1: b, P2: c, P3: d)" when the body yields a
-# count, else "FINDINGS: unknown". Never prints a number it did not observe.
-_sidecar_findings_line() {
-    local output_file="${1:-}" helper_dir="${DISPATCH_SCRIPT_DIR:-}" json=""
-    [[ -n "$helper_dir" ]] || helper_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [[ -n "$output_file" && -r "$output_file" && -s "$output_file" ]]; then
-        json="$(python3 "$helper_dir/receipt-findings.py" "$output_file" 2>/dev/null)" || json=""
-    fi
-    if [[ -n "$json" ]] && jq -e '(.total|type) == "number"' <<< "$json" >/dev/null 2>&1; then
-        jq -r '"FINDINGS: \(.total) (P0: \(.P0), P1: \(.P1), P2: \(.P2), P3: \(.P3))"' <<< "$json"
-    else
-        echo "FINDINGS: unknown"
-    fi
 }
 
 # Overwrite the verdict sidecar with a STATUS reflecting a codex-level failure.
