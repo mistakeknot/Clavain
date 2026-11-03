@@ -61,3 +61,37 @@ def test_apply_writes_notes_only_and_is_idempotent(tmp_path):
 def test_refuses_out_dir_inside_reviews_dir(tmp_path):
     src = make(tmp_path)
     assert run(src, src / "notes").returncode == 2
+
+
+def test_refuses_nested_symlink_into_receipts(tmp_path):
+    src = make(tmp_path)
+    out = tmp_path / "notes"
+    out.mkdir()
+    (out / "o__r").symlink_to(src / "o__r")
+    before = {p: p.read_bytes() for p in sorted(src.rglob("*")) if p.is_file()}
+    listing = sorted(str(p) for p in src.rglob("*"))
+    r = run(src, out)
+    assert r.returncode == 2
+    assert "unsafe" in r.stderr
+    assert {p: p.read_bytes() for p in sorted(src.rglob("*")) if p.is_file()} == before
+    assert sorted(str(p) for p in src.rglob("*")) == listing
+
+
+def test_refuses_symlinked_out_dir(tmp_path):
+    src = make(tmp_path)
+    real = tmp_path / "real-notes"
+    real.mkdir()
+    link = tmp_path / "notes"
+    link.symlink_to(real)
+    assert run(src, link).returncode == 2
+    assert not any(real.iterdir())
+
+
+def test_refuses_symlinked_destination_file(tmp_path):
+    src = make(tmp_path)
+    out = tmp_path / "notes"
+    (out / "o__r").mkdir(parents=True)
+    (out / "o__r" / "3-c.note.json").symlink_to(src / "o__r" / "1-a.json")
+    before = (src / "o__r" / "1-a.json").read_bytes()
+    assert run(src, out).returncode == 2
+    assert (src / "o__r" / "1-a.json").read_bytes() == before

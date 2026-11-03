@@ -52,6 +52,53 @@ def classify(doc: object) -> str | None:
     return None
 
 
+class UnsafeDest(Exception):
+    pass
+
+
+def safe_dest_dir(out: Path, src: Path, rel_parent: Path, create: bool) -> Path:
+    """Walk the destination directory component by component under `out`.
+
+    Refuses any symlinked component and any destination whose real path falls
+    inside the receipts tree. Creates missing directories only when asked.
+    """
+    cur = out
+    if create:
+        out.mkdir(parents=True, exist_ok=True)
+    for part in rel_parent.parts:
+        cur = cur / part
+        if cur.is_symlink():
+            raise UnsafeDest(f"symlinked output component: {cur}")
+        if not cur.exists() and create:
+            cur.mkdir()
+    real = Path(os.path.realpath(cur))
+    if real == src or src in real.parents:
+        raise UnsafeDest(f"destination resolves inside the receipts tree: {cur}")
+    return cur
+
+
+def write_note(dest_dir: Path, name: str, text: str, src: Path) -> None:
+    dest = dest_dir / name
+    if dest.is_symlink():
+        raise UnsafeDest(f"symlinked destination: {dest}")
+    real = Path(os.path.realpath(dest))
+    if src in real.parents:
+        raise UnsafeDest(f"destination resolves inside the receipts tree: {dest}")
+    tmp = dest_dir / f".note.{os.getpid()}.{name}"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(tmp, flags, 0o644)
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(text)
+        os.replace(tmp, dest)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--reviews-dir", type=Path, default=STATE / "reviews")
@@ -60,6 +107,9 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     src = args.reviews_dir.resolve()
+    if args.out_dir.is_symlink():
+        print("error: --out-dir must not be a symlink", file=sys.stderr)
+        return 2
     out = args.out_dir.resolve()
     if not src.is_dir():
         print(f"error: {src} is not a directory", file=sys.stderr)
@@ -91,18 +141,22 @@ def main(argv: list[str] | None = None) -> int:
             "reason": REASONS[reclass],
         }
         text = json.dumps(note, indent=2, sort_keys=True) + "\n"
-        dest = out / rel.parent / (rel.name[: -len(".json")] + ".note.json")
-        if dest.exists() and dest.read_text() == text:
-            counts[reclass + ":unchanged"] += 1
-            continue
+        name = rel.name[: -len(".json")] + ".note.json"
+        try:
+            dest_dir = safe_dest_dir(out, src, rel.parent, create=False)
+            dest = dest_dir / name
+            if dest.is_symlink():
+                raise UnsafeDest(f"symlinked destination: {dest}")
+            if dest.exists() and dest.read_text() == text:
+                counts[reclass + ":unchanged"] += 1
+                continue
+            if not args.check:
+                dest_dir = safe_dest_dir(out, src, rel.parent, create=True)
+                write_note(dest_dir, name, text, src)
+        except UnsafeDest as exc:
+            print(f"error: refusing unsafe output path: {exc}", file=sys.stderr)
+            return 2
         counts[reclass] += 1
-        if args.check:
-            continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=dest.parent, prefix=".note.")
-        with os.fdopen(fd, "w") as fh:
-            fh.write(text)
-        os.replace(tmp, dest)
 
     mode = "check (nothing written)" if args.check else "applied"
     print(f"mode: {mode}")
