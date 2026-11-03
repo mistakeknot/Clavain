@@ -247,3 +247,68 @@ teardown() { rm -rf "$T"; }
     [[ "$line" == *'\"VERDICT: PASS WITH NOTES\"'* ]]
     [[ "$line" == *'\"VERDICT: FAIL\"'* ]]
 }
+
+@test "write records parsed findings, classes and sorted changed paths" {
+    printf '### [P1] [test-gap] Missing empty case in `scripts/a.sh:42`\n### P2 [made-up] unlisted class\n\nVERDICT: FAIL\n' > "$OUT"
+    _review_receipt_prepare "$R"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ "$(jq -r .schema_version "$f")" = 1 ]
+    [ "$(jq -r .findings_source "$f")" = body ]
+    [ "$(jq -r .findings_total "$f")" = 2 ]
+    [ "$(jq -r '.findings[0].class' "$f")" = test-gap ]
+    [ "$(jq -r '.findings[0].file' "$f")" = scripts/a.sh ]
+    [ "$(jq -r '.findings[0].line' "$f")" = 42 ]
+    [ "$(jq -r '.findings[1].class' "$f")" = other ]
+    [ "$(jq -c .changed_paths "$f")" = '["b"]' ]
+    [ "$(jq -r 'has("changed_paths_truncated")' "$f")" = false ]
+}
+
+@test "write records unknown, not zero, when no findings parse" {
+    printf 'Looks fine to me, some prose.\n\nVERDICT: PASS WITH NOTES\n' > "$OUT"
+    _review_receipt_prepare "$R"
+    _review_receipt_write "$OUT" 0
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ "$(jq -r .findings_source "$f")" = unknown ]
+    [ "$(jq -r .findings_total "$f")" = null ]
+    [ "$(jq -c .findings "$f")" = '[]' ]
+}
+
+@test "changed_paths is capped at 200 and flagged truncated" {
+    for i in $(seq 1 205); do echo x > "$R/f$i"; done
+    git -C "$R" add -A; git -C "$R" commit -qm many
+    RR_HEAD="$(git -C "$R" rev-parse HEAD)"
+    _review_receipt_prepare "$R"
+    _review_receipt_write "$OUT" 0
+    f="$T/reviews/o__r/7-$RR_HEAD.json"
+    [ "$(jq '.changed_paths|length' "$f")" = 200 ]
+    [ "$(jq -r .changed_paths_truncated "$f")" = true ]
+    [ "$(jq -c '.changed_paths == (.changed_paths|sort)' "$f")" = true ]
+}
+
+@test "old receipts without the new fields and new receipts coexist and read the same" {
+    # No other receipt reader lives in this repo; the verifier is outside it and
+    # reads the unchanged fields by name. Check the old fields are identical in
+    # both shapes, and that the append path accepts an old receipt already there.
+    _review_receipt_prepare "$R"
+    _review_receipt_write "$OUT" 0
+    new="$T/reviews/o__r/7-$HEAD_SHA.json"
+    old="$T/old.json"
+    jq 'del(.findings,.findings_source,.findings_total,.changed_paths,.changed_paths_truncated)' "$new" > "$old"
+    cp "$old" "$new"   # an old-format receipt now holds the first slot
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    n2="$T/reviews/o__r/7-$HEAD_SHA.2.json"
+    [ "$(jq -S 'del(.created_at,.sequence,.findings,.findings_source,.findings_total,.changed_paths,.changed_paths_truncated)' "$n2")" = \
+      "$(jq -S 'del(.created_at,.sequence)' "$old")" ]
+    for f in "$new" "$n2"; do
+        [ "$(jq -r '.schema_version' "$f")" = 1 ]
+        [ "$(jq -r '.verdict' "$f")" = PASS ]
+    done
+}
+
+@test "cross-lab-review prompt documents the class tag" {
+    grep -q '\[P1\] \[test-gap\]' "$DISPATCH"
+    grep -q 'process-gate (CI, hooks, instruction files)' "$DISPATCH"
+}

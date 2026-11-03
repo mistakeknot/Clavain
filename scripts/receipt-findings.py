@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Extract observed review finding counts from a dispatch output body."""
+"""Extract observed review finding counts from a dispatch output body.
+
+With --detail the JSON also carries "findings": one record per parsed finding
+heading (class, severity, summary, file, line). A heading may carry a class tag
+after the severity, e.g. "### [P1] [test-gap] summary text (path/file.py:42)"."""
 
 from __future__ import annotations
 
@@ -87,9 +91,28 @@ def verdict_counts(lines: list[str]) -> dict[str, int | str] | None:
     return counts
 
 
-def heading_counts(lines: list[str]) -> dict[str, int | str] | None:
-    counts = {"P0": 0, "P1": 0, "P2": 0, "P3": 0}
-    total = 0
+CLASSES = (
+    "logic-correctness",
+    "concurrency-ordering",
+    "security-trust-boundary",
+    "data-integrity-migration",
+    "error-handling",
+    "test-gap",
+    "spec-or-doc-mismatch",
+    "performance",
+    "style-naming",
+    "process-gate",
+    "other",
+)
+CLASS_TAG = re.compile(r"^(?:\*\*|__)?\[([A-Za-z][A-Za-z _-]*)\](?:\*\*|__)?\s*")
+FILE_LINE = re.compile(r"`?([A-Za-z0-9_./@+-]+\.[A-Za-z0-9]+|[A-Za-z0-9_./@+-]*/[A-Za-z0-9_.@+-]+)(?::(\d+))?`?(?=[\s,;:)\]]|$)")
+SUMMARY_MAX = 200
+
+
+def heading_findings(lines: list[str]) -> list[dict[str, str]]:
+    """Return one {severity, rest} record per finding heading (same rules as
+    the historical heading counter, which is now derived from this list)."""
+    found: list[dict[str, str]] = []
     nonempty = [line.strip() for line in lines if line.strip()]
     for index, line in enumerate(nonempty):
         match = FINDING_HEADING.match(line)
@@ -115,11 +138,50 @@ def heading_counts(lines: list[str]) -> dict[str, int | str] | None:
         ):
             continue
         severity = next(group for group in match.groups() if group is not None)
-        counts[SEVERITY[severity.lower()]] += 1
-        total += 1
-    if total == 0:
+        found.append({"severity": SEVERITY[severity.lower()], "rest": line[match.end():]})
+    return found
+
+
+def parse_finding(record: dict[str, str]) -> dict[str, str | int | None]:
+    """Class, summary, file and line for one finding heading. A missing or
+    unlisted class is stored as "other"; nothing is guessed."""
+    rest = re.sub(r"^(?:\*\*|__)?[\]:\-–—\s]*", "", record["rest"])
+    cls = "other"
+    tag = CLASS_TAG.match(rest)
+    if tag:
+        name = re.sub(r"[\s_]+", "-", tag.group(1).strip().lower())
+        if name in CLASSES:
+            cls = name
+        rest = rest[tag.end():]
+    rest = re.sub(r"^[\]:\-–—\s]+", "", rest)
+    summary = re.sub(r"\s+", " ", re.sub(r"(?:\*\*|__)", "", rest)).strip()
+    file_name: str | None = None
+    line_no: int | None = None
+    for hit in FILE_LINE.finditer(summary):
+        candidate = hit.group(1)
+        if hit.group(2) or "/" in candidate or re.search(r"\.(?:sh|py|go|rs|md|ya?ml|json|toml|bats|ts|js)$", candidate):
+            file_name = candidate
+            line_no = int(hit.group(2)) if hit.group(2) else None
+            break
+    if len(summary) > SUMMARY_MAX:
+        summary = summary[: SUMMARY_MAX - 1].rstrip() + "…"
+    return {
+        "class": cls,
+        "severity": record["severity"],
+        "summary": summary,
+        "file": file_name,
+        "line": line_no,
+    }
+
+
+def heading_counts(lines: list[str]) -> dict[str, int | str] | None:
+    counts = {"P0": 0, "P1": 0, "P2": 0, "P3": 0}
+    records = heading_findings(lines)
+    if not records:
         return None
-    return {"source": "body", **counts, "total": total}
+    for record in records:
+        counts[record["severity"]] += 1
+    return {"source": "body", **counts, "total": len(records)}
 
 
 def clean_verdict(lines: list[str]) -> bool:
@@ -150,21 +212,37 @@ def clean_verdict(lines: list[str]) -> bool:
 
 
 def extract(path: Path) -> dict[str, int | str | None]:
+    result = extract_detail(path)
+    result.pop("findings", None)
+    return result
+
+
+def extract_detail(path: Path) -> dict:
+    """Counts plus the per-finding list, from one pass over the review body.
+
+    "findings" holds the parsed headings; it is empty when nothing parsed. The
+    count fields are exactly those of extract(). When the counts come from a
+    verdict block or a clean verdict but no headings parsed, "findings" is
+    empty and callers must read "source"/"total" for what was observed."""
     try:
         body = path.read_text()
     except (OSError, UnicodeError):
-        return UNKNOWN.copy()
+        return {**UNKNOWN, "findings": []}
     lines = visible_lines(body)
-    return verdict_counts(lines) or heading_counts(lines) or (ZERO.copy() if clean_verdict(lines) else UNKNOWN.copy())
+    counts = verdict_counts(lines) or heading_counts(lines) or (ZERO.copy() if clean_verdict(lines) else UNKNOWN.copy())
+    findings = [parse_finding(r) for r in heading_findings(lines)]
+    return {**counts, "findings": findings}
 
 
 def main() -> int:
-    result = UNKNOWN.copy()
-    if len(sys.argv) == 2:
+    args = [a for a in sys.argv[1:] if a != "--detail"]
+    detail = len(args) != len(sys.argv) - 1
+    result: dict = {**UNKNOWN, "findings": []} if detail else UNKNOWN.copy()
+    if len(args) == 1:
         try:
-            result = extract(Path(sys.argv[1]))
+            result = extract_detail(Path(args[0])) if detail else extract(Path(args[0]))
         except Exception:
-            result = UNKNOWN.copy()
+            result = {**UNKNOWN, "findings": []} if detail else UNKNOWN.copy()
     print(json.dumps(result, separators=(",", ":")))
     return 0
 

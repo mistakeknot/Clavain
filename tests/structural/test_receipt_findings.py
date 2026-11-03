@@ -224,3 +224,55 @@ def test_verdict_total_uses_severity_sum(tmp_path, p3, total):
     assert result["source"] == "verdict"
     assert result["total"] == total
     assert result["P3"] == (2 if p3 == ", P3: 2" else 0)
+
+
+def detail(tmp_path: Path, body: str) -> dict:
+    output = tmp_path / "output.md"
+    output.write_text(body)
+    result = subprocess.run(
+        ["python3", str(SCRIPT), "--detail", str(output)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
+
+
+def test_detail_yields_class_severity_summary_file_line(tmp_path):
+    body = (
+        "### [P1] [test-gap] Missing empty case in `scripts/a.sh:42`\n"
+        "### P2 [made-up-class] unlisted class falls back\n"
+        "### [P3] no class tag at all\n"
+    )
+    out = detail(tmp_path, body)
+    assert out["total"] == 3 and out["P1"] == 1
+    first, second, third = out["findings"]
+    assert first == {
+        "class": "test-gap",
+        "severity": "P1",
+        "summary": "Missing empty case in `scripts/a.sh:42`",
+        "file": "scripts/a.sh",
+        "line": 42,
+    }
+    assert second["class"] == "other" and third["class"] == "other"
+    assert second["file"] is None and second["line"] is None
+
+
+def test_detail_summary_is_one_line_and_capped(tmp_path):
+    out = detail(tmp_path, "### [P2] [performance] " + "word " * 80 + "\n")
+    summary = out["findings"][0]["summary"]
+    assert len(summary) <= 200 and "\n" not in summary
+
+
+def test_detail_unparsed_body_is_unknown_with_no_findings(tmp_path):
+    out = detail(tmp_path, "Some prose with no findings structure.\n")
+    assert out["source"] == "unknown" and out["total"] is None
+    assert out["findings"] == []
+
+
+def test_plain_output_is_unchanged_by_detail_support(tmp_path):
+    body = "### [P1] [test-gap] x\n"
+    plain = findings(tmp_path, body)
+    assert "findings" not in plain
+    assert {k: v for k, v in detail(tmp_path, body).items() if k != "findings"} == plain

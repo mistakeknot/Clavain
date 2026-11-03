@@ -2011,6 +2011,14 @@ $PROMPT"
       if [[ "$ROLE" == cross-lab-review ]]; then
         PROMPT="$PROMPT
 
+Give each finding its own heading line: a severity (P0, P1, P2 or P3) and then a
+class tag in square brackets, for example \"### [P1] [test-gap] one-line summary
+(path/to/file.py:42)\". The class is exactly one of: logic-correctness,
+concurrency-ordering, security-trust-boundary, data-integrity-migration,
+error-handling, test-gap, spec-or-doc-mismatch, performance, style-naming,
+process-gate (CI, hooks, instruction files), other. Use other when none fits; do
+not guess. Keep the summary to one line and name the file and line when known.
+
 End your output with a blank line and then, as the very last line, exactly one
 of: \"VERDICT: PASS\", \"VERDICT: PASS WITH NOTES\" or \"VERDICT: FAIL\". No other
 verdict word (not APPROVE, BLOCK or CLEAN) is accepted, and any other word
