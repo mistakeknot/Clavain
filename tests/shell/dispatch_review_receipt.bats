@@ -287,6 +287,32 @@ teardown() { rm -rf "$T"; }
     [ "$(jq -c '.changed_paths == (.changed_paths|sort)' "$f")" = true ]
 }
 
+@test "changed_paths keeps a filename with an embedded newline as one path" {
+    printf 'x\n' > "$R/$(printf 'qq\nrr')"
+    echo y > "$R/plain"
+    git -C "$R" add -A; git -C "$R" commit -qm nl
+    RR_HEAD="$(git -C "$R" rev-parse HEAD)"
+    _review_receipt_prepare "$R"
+    _review_receipt_write "$OUT" 0
+    f="$T/reviews/o__r/7-$RR_HEAD.json"
+    [ "$(jq -r '.changed_paths | index("plain") != null' "$f")" = true ]
+    [ "$(jq -r '.changed_paths | index("qq\nrr") != null' "$f")" = true ]
+    [ "$(jq -r '.changed_paths | index("qq") == null and index("rr") == null' "$f")" = true ]
+}
+
+@test "a 140000-byte changed-path list still writes a receipt capped at 200" {
+    pad="$(printf 'p%.0s' $(seq 1 230))"
+    for i in $(seq 1 610); do echo x > "$R/${pad}$(printf '%04d' "$i")"; done
+    git -C "$R" add -A; git -C "$R" commit -qm big
+    RR_HEAD="$(git -C "$R" rev-parse HEAD)"
+    [ "$(git -C "$R" diff --name-only HEAD~1 HEAD | wc -c)" -gt 140000 ]
+    _review_receipt_prepare "$R"
+    _review_receipt_write "$OUT" 0
+    f="$T/reviews/o__r/7-$RR_HEAD.json"
+    [ "$(jq '.changed_paths|length' "$f")" = 200 ]
+    [ "$(jq -r .changed_paths_truncated "$f")" = true ]
+}
+
 @test "old receipts without the new fields and new receipts coexist and read the same" {
     # No other receipt reader lives in this repo; the verifier is outside it and
     # reads the unchanged fields by name. Check the old fields are identical in

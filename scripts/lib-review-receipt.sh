@@ -8,7 +8,7 @@
 #   RR_REPO RR_REPO_ID RR_PR RR_HEAD RR_BASE   (all five or none)
 # Computed by _review_receipt_prepare, which runs before the review starts so a
 # bad flag fails fast:
-#   RR_HEAD_TREE RR_MERGE_TREE RR_DIFF_STAT RR_DIFF_SHA256 RR_CHANGED_PATHS_Z
+#   RR_HEAD_TREE RR_MERGE_TREE RR_DIFF_STAT RR_DIFF_SHA256 RR_CHANGED_PATHS_JSON
 
 _review_receipt_requested() {
   [[ -n "${RR_REPO:-}${RR_REPO_ID:-}${RR_PR:-}${RR_HEAD:-}${RR_BASE:-}" ]]
@@ -62,11 +62,19 @@ _review_receipt_prepare() {
   [[ "${dsum##* }" == 0 ]] || { echo "Error: git diff failed; no diff hash" >&2; return 1; }
   RR_DIFF_SHA256="${dsum%% *}"
   [[ "$RR_DIFF_SHA256" =~ ^[0-9a-f]{64}$ ]] || return 1
-  # Repo-relative changed paths, NUL-separated so odd names survive; consumed by
-  # _review_receipt_write (sorted, capped at 200 there).
-  RR_CHANGED_PATHS_Z="$("${g[@]}" diff --no-ext-diff --no-textconv --no-renames --name-only -z "$RR_BASE" "$RR_HEAD" 2>/dev/null | tr '\0' '\n'; printf ' %s' "${PIPESTATUS[0]}")"
-  [[ "${RR_CHANGED_PATHS_Z##* }" == 0 ]] || { echo "Error: git diff --name-only failed" >&2; return 1; }
-  RR_CHANGED_PATHS_Z="${RR_CHANGED_PATHS_Z% *}"
+  # Repo-relative changed paths. git emits NUL-separated names; NUL boundaries are
+  # kept until JSON encoding (a name may contain a newline). The result is a JSON
+  # object {"total": N, "paths": [first 200, sorted]}, so no later step ever
+  # handles the full list.
+  local pj
+  pj="$("${g[@]}" diff --no-ext-diff --no-textconv --no-renames --name-only -z "$RR_BASE" "$RR_HEAD" 2>/dev/null \
+    | python3 -c '
+import json, sys
+names = sorted(n.decode("utf-8", "replace") for n in sys.stdin.buffer.read().split(b"\0") if n)
+json.dump({"total": len(names), "paths": names[:200]}, sys.stdout)
+'; printf ' %s' "${PIPESTATUS[0]}${PIPESTATUS[1]}")"
+  [[ "${pj##* }" == 00 ]] || { echo "Error: git diff --name-only failed" >&2; return 1; }
+  RR_CHANGED_PATHS_JSON="${pj% *}"
 }
 
 # Strict verdict from the reviewer's final line. Prints PASS, "PASS WITH NOTES"
@@ -153,7 +161,7 @@ _review_receipt_write() {
     --arg merge_tree "$RR_MERGE_TREE" --arg stat "$RR_DIFF_STAT" --arg dsha "$RR_DIFF_SHA256" \
     --arg producer "$PRODUCER_IDENTITY" --arg reviewer "$reviewer" --arg verdict "$verdict" \
     --arg policy "$policy_hash" --arg did "${DISPATCH_ID:-}" --arg aid "${ATTEMPT_ID:-}" \
-    --arg rel "${VALIDATOR_RELATIONSHIP:-}" --argjson fx "$fx_json" --arg paths "${RR_CHANGED_PATHS_Z:-}" --arg now "$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)" '
+    --arg rel "${VALIDATOR_RELATIONSHIP:-}" --argjson fx "$fx_json" --slurpfile cp <(printf '%s' "${RR_CHANGED_PATHS_JSON:-}") --arg now "$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)" '
     def nn: if . == "" then null else . end;
     {schema_version: 1, kind: "cross-lab-review-receipt", role: "cross-lab-review",
      repo: $repo, repo_id: $repo_id, pr: $pr, head_sha: $head, head_tree: $head_tree,
@@ -164,9 +172,8 @@ _review_receipt_write() {
      findings: ($fx.findings // []),
      findings_source: (if $fx.source == "unknown" then "unknown" else "body" end),
      findings_total: (if $fx.source == "unknown" then null else $fx.total end),
-     changed_paths: (($paths | split("\n") | map(select(. != "")) | sort)[:200])}
-    + (if ($paths | split("\n") | map(select(. != "")) | length) > 200
-       then {changed_paths_truncated: true} else {} end)')" || return 1
+     changed_paths: ($cp[0].paths // [])}
+    + (if ($cp[0].total // 0) > 200 then {changed_paths_truncated: true} else {} end)')" || return 1
   # Append-only: the first receipt for a head is <pr>-<head>.json; a later run
   # on the same head is recorded as <pr>-<head>.2.json, .3.json, ... and nothing
   # is overwritten or deleted. Each receipt carries its sequence number; readers order by created_at, then sequence. A path that
