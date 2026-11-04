@@ -151,6 +151,9 @@ _review_receipt_write() {
   fx_json="$(python3 "$_rr_here/receipt-findings.py" --detail "$out" 2>/dev/null)" || fx_json=""
   jq -e 'type == "object"' <<<"$fx_json" >/dev/null 2>&1 || fx_json='{"source":"unknown","total":null,"findings":[]}'
 
+  # No review-derived text goes on the jq command line (OS argument limit):
+  # findings and changed paths are read from process substitutions; the rest
+  # are fixed-size identities, hashes and a one-line shortstat.
   local dir file tmp
   dir="$(_review_receipt_dir)/${RR_REPO//\//__}"
   file="$dir/${RR_PR}-${RR_HEAD}.json"
@@ -161,19 +164,21 @@ _review_receipt_write() {
     --arg merge_tree "$RR_MERGE_TREE" --arg stat "$RR_DIFF_STAT" --arg dsha "$RR_DIFF_SHA256" \
     --arg producer "$PRODUCER_IDENTITY" --arg reviewer "$reviewer" --arg verdict "$verdict" \
     --arg policy "$policy_hash" --arg did "${DISPATCH_ID:-}" --arg aid "${ATTEMPT_ID:-}" \
-    --arg rel "${VALIDATOR_RELATIONSHIP:-}" --argjson fx "$fx_json" --slurpfile cp <(printf '%s' "${RR_CHANGED_PATHS_JSON:-}") --arg now "$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)" '
+    --arg rel "${VALIDATOR_RELATIONSHIP:-}" --slurpfile fxs <(printf '%s' "$fx_json") --slurpfile cp <(printf '%s' "${RR_CHANGED_PATHS_JSON:-}") --arg now "$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)" '
     def nn: if . == "" then null else . end;
+    $fxs[0] as $fx |
     {schema_version: 1, kind: "cross-lab-review-receipt", role: "cross-lab-review",
      repo: $repo, repo_id: $repo_id, pr: $pr, head_sha: $head, head_tree: $head_tree,
      base_sha: $base, expected_merge_tree: $merge_tree, diff_stat: $stat, diff_sha256: $dsha,
      producer_identity: $producer, reviewer_identity: $reviewer, validator_relationship: ($rel|nn),
      verdict: $verdict, policy_hash: $policy,
      dispatch_id: ($did|nn), attempt_id: ($aid|nn), created_at: $now,
-     findings: ($fx.findings // []),
+     findings: (($fx.findings // [])[:200]),
      findings_source: (if $fx.source == "unknown" then "unknown" else "body" end),
      findings_total: (if $fx.source == "unknown" then null else $fx.total end),
      changed_paths: ($cp[0].paths // [])}
-    + (if ($cp[0].total // 0) > 200 then {changed_paths_truncated: true} else {} end)')" || return 1
+    + (if ($cp[0].total // 0) > 200 then {changed_paths_truncated: true} else {} end)
+    + (if (($fx.findings // []) | length) > 200 then {findings_truncated: true} else {} end)')" || return 1
   # Append-only: the first receipt for a head is <pr>-<head>.json; a later run
   # on the same head is recorded as <pr>-<head>.2.json, .3.json, ... and nothing
   # is overwritten or deleted. Each receipt carries its sequence number; readers order by created_at, then sequence. A path that

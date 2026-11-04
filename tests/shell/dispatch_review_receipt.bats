@@ -338,3 +338,19 @@ teardown() { rm -rf "$T"; }
     grep -q '\[P1\] \[test-gap\]' "$DISPATCH"
     grep -q 'process-gate (CI, hooks, instruction files)' "$DISPATCH"
 }
+
+@test "a 900-finding review (over 200000 bytes of findings JSON) still writes a receipt" {
+    pad="$(printf 'w%.0s' $(seq 1 190))"
+    { for i in $(seq 1 900); do printf '### [P2] [other] finding %04d %s in `scripts/a.sh:%d`\n' "$i" "$pad" "$i"; done
+      printf '\nVERDICT: FAIL\n'; } > "$OUT"
+    [ "$(python3 "$BATS_TEST_DIRNAME/../../scripts/receipt-findings.py" --detail "$OUT" | wc -c)" -gt 200000 ]
+    _review_receipt_prepare "$R"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ "$(jq -r .findings_total "$f")" = 900 ]
+    [ "$(jq '.findings|length' "$f")" = 200 ]
+    [ "$(jq -r .findings_truncated "$f")" = true ]
+    [ "$(jq -r .findings_source "$f")" = body ]
+    [ "$(jq -r .verdict "$f")" = BLOCK ]
+}
