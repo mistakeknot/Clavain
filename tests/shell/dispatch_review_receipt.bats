@@ -271,3 +271,134 @@ teardown() { rm -rf "$T"; }
     [[ "$line" == *'\"VERDICT: PASS WITH NOTES\"'* ]]
     [[ "$line" == *'\"VERDICT: FAIL\"'* ]]
 }
+
+@test "write records parsed findings, classes and sorted changed paths" {
+    printf '### [P1] [test-gap] Missing empty case in `scripts/a.sh:42`\n### P2 [made-up] unlisted class\n\nVERDICT: FAIL\n' > "$OUT"
+    _review_receipt_prepare "$R"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ "$(jq -r .schema_version "$f")" = 1 ]
+    [ "$(jq -r .findings_source "$f")" = body ]
+    [ "$(jq -r .findings_total "$f")" = 2 ]
+    [ "$(jq -r '.findings[0].class' "$f")" = test-gap ]
+    [ "$(jq -r '.findings[0].file' "$f")" = scripts/a.sh ]
+    [ "$(jq -r '.findings[0].line' "$f")" = 42 ]
+    [ "$(jq -r '.findings[1].class' "$f")" = other ]
+    [ "$(jq -c .changed_paths "$f")" = '["b"]' ]
+    [ "$(jq -r 'has("changed_paths_truncated")' "$f")" = false ]
+}
+
+@test "write records unknown, not zero, when no findings parse" {
+    printf 'Looks fine to me, some prose.\n\nVERDICT: PASS WITH NOTES\n' > "$OUT"
+    _review_receipt_prepare "$R"
+    _review_receipt_write "$OUT" 0
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ "$(jq -r .findings_source "$f")" = unknown ]
+    [ "$(jq -r .findings_total "$f")" = null ]
+    [ "$(jq -c .findings "$f")" = '[]' ]
+}
+
+@test "changed_paths is capped at 200 and flagged truncated" {
+    for i in $(seq 1 205); do echo x > "$R/f$i"; done
+    git -C "$R" add -A; git -C "$R" commit -qm many
+    RR_HEAD="$(git -C "$R" rev-parse HEAD)"
+    _review_receipt_prepare "$R"
+    _review_receipt_write "$OUT" 0
+    f="$T/reviews/o__r/7-$RR_HEAD.json"
+    [ "$(jq '.changed_paths|length' "$f")" = 200 ]
+    [ "$(jq -r .changed_paths_truncated "$f")" = true ]
+    [ "$(jq -c '.changed_paths == (.changed_paths|sort)' "$f")" = true ]
+}
+
+@test "changed_paths keeps a filename with an embedded newline as one path" {
+    printf 'x\n' > "$R/$(printf 'qq\nrr')"
+    echo y > "$R/plain"
+    git -C "$R" add -A; git -C "$R" commit -qm nl
+    RR_HEAD="$(git -C "$R" rev-parse HEAD)"
+    _review_receipt_prepare "$R"
+    _review_receipt_write "$OUT" 0
+    f="$T/reviews/o__r/7-$RR_HEAD.json"
+    [ "$(jq -r '.changed_paths | index("plain") != null' "$f")" = true ]
+    [ "$(jq -r '.changed_paths | index("qq\nrr") != null' "$f")" = true ]
+    [ "$(jq -r '.changed_paths | index("qq") == null and index("rr") == null' "$f")" = true ]
+}
+
+@test "a 140000-byte changed-path list still writes a receipt capped at 200" {
+    pad="$(printf 'p%.0s' $(seq 1 230))"
+    for i in $(seq 1 610); do echo x > "$R/${pad}$(printf '%04d' "$i")"; done
+    git -C "$R" add -A; git -C "$R" commit -qm big
+    RR_HEAD="$(git -C "$R" rev-parse HEAD)"
+    [ "$(git -C "$R" diff --name-only HEAD~1 HEAD | wc -c)" -gt 140000 ]
+    _review_receipt_prepare "$R"
+    _review_receipt_write "$OUT" 0
+    f="$T/reviews/o__r/7-$RR_HEAD.json"
+    [ "$(jq '.changed_paths|length' "$f")" = 200 ]
+    [ "$(jq -r .changed_paths_truncated "$f")" = true ]
+}
+
+@test "old receipts without the new fields and new receipts coexist and read the same" {
+    # No other receipt reader lives in this repo; the verifier is outside it and
+    # reads the unchanged fields by name. Check the old fields are identical in
+    # both shapes, and that the append path accepts an old receipt already there.
+    _review_receipt_prepare "$R"
+    _review_receipt_write "$OUT" 0
+    new="$T/reviews/o__r/7-$HEAD_SHA.json"
+    old="$T/old.json"
+    jq 'del(.findings,.findings_source,.findings_total,.changed_paths,.changed_paths_truncated)' "$new" > "$old"
+    cp "$old" "$new"   # an old-format receipt now holds the first slot
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    n2="$T/reviews/o__r/7-$HEAD_SHA.2.json"
+    [ "$(jq -S 'del(.created_at,.sequence,.findings,.findings_source,.findings_total,.changed_paths,.changed_paths_truncated)' "$n2")" = \
+      "$(jq -S 'del(.created_at,.sequence)' "$old")" ]
+    for f in "$new" "$n2"; do
+        [ "$(jq -r '.schema_version' "$f")" = 1 ]
+        [ "$(jq -r '.verdict' "$f")" = PASS ]
+    done
+}
+
+@test "cross-lab-review prompt documents the class tag" {
+    grep -q '\[P1\] \[test-gap\]' "$DISPATCH"
+    grep -q 'process-gate (CI, hooks, instruction files)' "$DISPATCH"
+}
+
+@test "a 900-finding review (over 200000 bytes of findings JSON) still writes a receipt" {
+    pad="$(printf 'w%.0s' $(seq 1 190))"
+    { for i in $(seq 1 900); do printf '### [P2] [other] finding %04d %s in `scripts/a.sh:%d`\n' "$i" "$pad" "$i"; done
+      printf '\nVERDICT: FAIL\n'; } > "$OUT"
+    [ "$(python3 "$BATS_TEST_DIRNAME/../../scripts/receipt-findings.py" --detail "$OUT" | wc -c)" -gt 200000 ]
+    _review_receipt_prepare "$R"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ "$(jq -r .findings_total "$f")" = 900 ]
+    [ "$(jq '.findings|length' "$f")" = 200 ]
+    [ "$(jq -r .findings_truncated "$f")" = true ]
+    [ "$(jq -r .findings_source "$f")" = body ]
+    [ "$(jq -r .verdict "$f")" = BLOCK ]
+}
+
+@test "a stale FINDINGS: 0 block with a parsed heading records a conflict, not zero" {
+    printf '### [P1] [test-gap] Missing case in `scripts/a.sh:4`\n\n--- VERDICT ---\nSTATUS: revise\nFINDINGS: 0 (P0: 0, P1: 0, P2: 0)\n---\n\nVERDICT: FAIL\n' > "$OUT"
+    _review_receipt_prepare "$R"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ "$(jq -r .findings_source "$f")" = conflict ]
+    [ "$(jq -r .findings_total "$f")" = 1 ]
+    [ "$(jq -r .findings_block_total "$f")" = 0 ]
+    [ "$(jq '.findings|length' "$f")" = 1 ]
+    [ "$(jq -r .verdict "$f")" = BLOCK ]
+}
+
+@test "a block claiming more findings than parsed headings records a conflict" {
+    printf '### [P1] [test-gap] one heading\n\n--- VERDICT ---\nSTATUS: revise\nFINDINGS: 3 (P0: 0, P1: 2, P2: 1)\n---\n\nVERDICT: FAIL\n' > "$OUT"
+    _review_receipt_prepare "$R"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ "$(jq -r .findings_source "$f")" = conflict ]
+    [ "$(jq -r .findings_total "$f")" = 1 ]
+    [ "$(jq -r .findings_block_total "$f")" = 3 ]
+}

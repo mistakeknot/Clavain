@@ -8,7 +8,7 @@
 #   RR_REPO RR_REPO_ID RR_PR RR_HEAD RR_BASE   (all five or none)
 # Computed by _review_receipt_prepare, which runs before the review starts so a
 # bad flag fails fast:
-#   RR_HEAD_TREE RR_MERGE_TREE RR_DIFF_STAT RR_DIFF_SHA256
+#   RR_HEAD_TREE RR_MERGE_TREE RR_DIFF_STAT RR_DIFF_SHA256 RR_CHANGED_PATHS_JSON
 
 _review_receipt_requested() {
   [[ -n "${RR_REPO:-}${RR_REPO_ID:-}${RR_PR:-}${RR_HEAD:-}${RR_BASE:-}" ]]
@@ -62,6 +62,19 @@ _review_receipt_prepare() {
   [[ "${dsum##* }" == 0 ]] || { echo "Error: git diff failed; no diff hash" >&2; return 1; }
   RR_DIFF_SHA256="${dsum%% *}"
   [[ "$RR_DIFF_SHA256" =~ ^[0-9a-f]{64}$ ]] || return 1
+  # Repo-relative changed paths. git emits NUL-separated names; NUL boundaries are
+  # kept until JSON encoding (a name may contain a newline). The result is a JSON
+  # object {"total": N, "paths": [first 200, sorted]}, so no later step ever
+  # handles the full list.
+  local pj
+  pj="$("${g[@]}" diff --no-ext-diff --no-textconv --no-renames --name-only -z "$RR_BASE" "$RR_HEAD" 2>/dev/null \
+    | python3 -c '
+import json, sys
+names = sorted(n.decode("utf-8", "replace") for n in sys.stdin.buffer.read().split(b"\0") if n)
+json.dump({"total": len(names), "paths": names[:200]}, sys.stdout)
+'; printf ' %s' "${PIPESTATUS[0]}${PIPESTATUS[1]}")"
+  [[ "${pj##* }" == 00 ]] || { echo "Error: git diff --name-only failed" >&2; return 1; }
+  RR_CHANGED_PATHS_JSON="${pj% *}"
 }
 
 # Strict verdict from the reviewer's final line. Prints PASS, "PASS WITH NOTES"
@@ -131,6 +144,17 @@ _review_receipt_write() {
   local verdict
   verdict="$(_review_receipt_verdict "$out")" || { echo "review receipt: not written (no usable VERDICT line in review output; the last line must be 'VERDICT: PASS', 'VERDICT: PASS WITH NOTES' or 'VERDICT: FAIL')" >&2; return 1; }
 
+  # Additive fields (schema_version stays 1; verdict logic is untouched). One
+  # extractor, scripts/receipt-findings.py: unparsed bodies record
+  # findings_source "unknown" and findings_total null, never a fake zero.
+  local fx_json _rr_here
+  _rr_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  fx_json="$(python3 "$_rr_here/receipt-findings.py" --detail "$out" 2>/dev/null)" || fx_json=""
+  jq -e 'type == "object"' <<<"$fx_json" >/dev/null 2>&1 || fx_json='{"source":"unknown","total":null,"findings":[]}'
+
+  # No review-derived text goes on the jq command line (OS argument limit):
+  # findings and changed paths are read from process substitutions; the rest
+  # are fixed-size identities, hashes and a one-line shortstat.
   local dir file tmp
   dir="$(_review_receipt_dir)/${RR_REPO//\//__}"
   file="$dir/${RR_PR}-${RR_HEAD}.json"
@@ -141,14 +165,22 @@ _review_receipt_write() {
     --arg merge_tree "$RR_MERGE_TREE" --arg stat "$RR_DIFF_STAT" --arg dsha "$RR_DIFF_SHA256" \
     --arg producer "$PRODUCER_IDENTITY" --arg reviewer "$reviewer" --arg verdict "$verdict" \
     --arg policy "$policy_hash" --arg did "${DISPATCH_ID:-}" --arg aid "${ATTEMPT_ID:-}" \
-    --arg rel "${VALIDATOR_RELATIONSHIP:-}" --arg now "$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)" '
+    --arg rel "${VALIDATOR_RELATIONSHIP:-}" --slurpfile fxs <(printf '%s' "$fx_json") --slurpfile cp <(printf '%s' "${RR_CHANGED_PATHS_JSON:-}") --arg now "$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)" '
     def nn: if . == "" then null else . end;
+    $fxs[0] as $fx |
     {schema_version: 1, kind: "cross-lab-review-receipt", role: "cross-lab-review",
      repo: $repo, repo_id: $repo_id, pr: $pr, head_sha: $head, head_tree: $head_tree,
      base_sha: $base, expected_merge_tree: $merge_tree, diff_stat: $stat, diff_sha256: $dsha,
      producer_identity: $producer, reviewer_identity: $reviewer, validator_relationship: ($rel|nn),
      verdict: $verdict, policy_hash: $policy,
-     dispatch_id: ($did|nn), attempt_id: ($aid|nn), created_at: $now}')" || return 1
+     dispatch_id: ($did|nn), attempt_id: ($aid|nn), created_at: $now,
+     findings: (($fx.findings // [])[:200]),
+     findings_source: (if $fx.source == "unknown" then "unknown" elif $fx.source == "conflict" then "conflict" else "body" end),
+     findings_total: (if $fx.source == "unknown" then null else $fx.total end),
+     changed_paths: ($cp[0].paths // [])}
+    + (if ($cp[0].total // 0) > 200 then {changed_paths_truncated: true} else {} end)
+    + (if (($fx.findings // []) | length) > 200 then {findings_truncated: true} else {} end)
+    + (if $fx.source == "conflict" then {findings_block_total: $fx.block_total} else {} end)')" || return 1
   # Append-only: the first receipt for a head is <pr>-<head>.json; a later run
   # on the same head is recorded as <pr>-<head>.2.json, .3.json, ... and nothing
   # is overwritten or deleted. Each receipt carries its sequence number; readers order by created_at, then sequence. A path that
