@@ -65,7 +65,7 @@ teardown() { rm -rf "$T"; }
     [ "$(_review_receipt_verdict "$OUT")" = "PASS WITH NOTES" ]
     printf 'VERDICT: FAIL\n' > "$OUT"
     [ "$(_review_receipt_verdict "$OUT")" = BLOCK ]
-    for w in APPROVE BLOCK "changes requested" question CLEAN; do
+    for w in APPROVE approve "changes requested" question CLEAN; do
         printf 'VERDICT: %s\n' "$w" > "$OUT"
         run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
     done
@@ -75,6 +75,30 @@ teardown() { rm -rf "$T"; }
     run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
     printf '```\nVERDICT: PASS\n' > "$OUT"
     run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+}
+
+@test "verdict mapping: BLOCK is an alias of FAIL, plain and markdown-wrapped" {
+    _review_receipt_prepare "$R"
+    for line in 'VERDICT: BLOCK' 'verdict: block' '**VERDICT: BLOCK**' '**VERDICT:** BLOCK' '__VERDICT: BLOCK__'; do
+        printf 'x\n\n%s\n' "$line" > "$OUT"
+        [ "$(_review_receipt_verdict "$OUT")" = BLOCK ]
+    done
+    for line in 'VERDICT: PASS' '**VERDICT:** PASS' 'Verdict: pass'; do
+        printf 'x\n\n%s\n' "$line" > "$OUT"
+        [ "$(_review_receipt_verdict "$OUT")" = PASS ]
+    done
+    printf 'x\n\nVERDICT: BLOCKED\n' > "$OUT"
+    run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    printf 'x\n\nVERDICT: approve\n' > "$OUT"
+    run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    [[ "$output" == *"accepted: PASS, PASS WITH NOTES, FAIL"* ]]
+}
+
+@test "write stores a BLOCK verdict word as BLOCK" {
+    _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: BLOCK\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.json")" = BLOCK ]
 }
 
 @test "no receipt for same-lab, substitute, failed or hashless runs" {
