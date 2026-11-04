@@ -378,3 +378,27 @@ teardown() { rm -rf "$T"; }
     [ "$(jq -r .findings_source "$f")" = body ]
     [ "$(jq -r .verdict "$f")" = BLOCK ]
 }
+
+@test "a stale FINDINGS: 0 block with a parsed heading records a conflict, not zero" {
+    printf '### [P1] [test-gap] Missing case in `scripts/a.sh:4`\n\n--- VERDICT ---\nSTATUS: revise\nFINDINGS: 0 (P0: 0, P1: 0, P2: 0)\n---\n\nVERDICT: FAIL\n' > "$OUT"
+    _review_receipt_prepare "$R"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ "$(jq -r .findings_source "$f")" = conflict ]
+    [ "$(jq -r .findings_total "$f")" = 1 ]
+    [ "$(jq -r .findings_block_total "$f")" = 0 ]
+    [ "$(jq '.findings|length' "$f")" = 1 ]
+    [ "$(jq -r .verdict "$f")" = BLOCK ]
+}
+
+@test "a block claiming more findings than parsed headings records a conflict" {
+    printf '### [P1] [test-gap] one heading\n\n--- VERDICT ---\nSTATUS: revise\nFINDINGS: 3 (P0: 0, P1: 2, P2: 1)\n---\n\nVERDICT: FAIL\n' > "$OUT"
+    _review_receipt_prepare "$R"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ "$(jq -r .findings_source "$f")" = conflict ]
+    [ "$(jq -r .findings_total "$f")" = 1 ]
+    [ "$(jq -r .findings_block_total "$f")" = 3 ]
+}

@@ -175,11 +175,12 @@ _review_receipt_write() {
      verdict: $verdict, policy_hash: $policy,
      dispatch_id: ($did|nn), attempt_id: ($aid|nn), created_at: $now,
      findings: (($fx.findings // [])[:200]),
-     findings_source: (if $fx.source == "unknown" then "unknown" else "body" end),
+     findings_source: (if $fx.source == "unknown" then "unknown" elif $fx.source == "conflict" then "conflict" else "body" end),
      findings_total: (if $fx.source == "unknown" then null else $fx.total end),
      changed_paths: ($cp[0].paths // [])}
     + (if ($cp[0].total // 0) > 200 then {changed_paths_truncated: true} else {} end)
-    + (if (($fx.findings // []) | length) > 200 then {findings_truncated: true} else {} end)')" || return 1
+    + (if (($fx.findings // []) | length) > 200 then {findings_truncated: true} else {} end)
+    + (if $fx.source == "conflict" then {findings_block_total: $fx.block_total} else {} end)')" || return 1
   # Append-only: the first receipt for a head is <pr>-<head>.json; a later run
   # on the same head is recorded as <pr>-<head>.2.json, .3.json, ... and nothing
   # is overwritten or deleted. Each receipt carries its sequence number; readers order by created_at, then sequence. A path that

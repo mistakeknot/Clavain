@@ -212,18 +212,23 @@ def clean_verdict(lines: list[str]) -> bool:
 
 
 def extract(path: Path) -> dict[str, int | str | None]:
-    result = extract_detail(path)
+    result = extract_detail(path, resolve_conflict=False)
     result.pop("findings", None)
     return result
 
 
-def extract_detail(path: Path) -> dict:
+def extract_detail(path: Path, resolve_conflict: bool = True) -> dict:
     """Counts plus the per-finding list, from one pass over the review body.
 
     "findings" holds the parsed headings; it is empty when nothing parsed. The
     count fields are exactly those of extract(). When the counts come from a
     verdict block or a clean verdict but no headings parsed, "findings" is
-    empty and callers must read "source"/"total" for what was observed."""
+    empty and callers must read "source"/"total" for what was observed.
+
+    When a verdict count block and parsed headings both exist but disagree on
+    the total, the headings are the evidence: "source" becomes "conflict",
+    "total" and the severity counts come from the headings, and the block's
+    stated total is kept in the additive "block_total" field."""
     try:
         body = path.read_text()
     except (OSError, UnicodeError):
@@ -231,6 +236,10 @@ def extract_detail(path: Path) -> dict:
     lines = visible_lines(body)
     counts = verdict_counts(lines) or heading_counts(lines) or (ZERO.copy() if clean_verdict(lines) else UNKNOWN.copy())
     findings = [parse_finding(r) for r in heading_findings(lines)]
+    if resolve_conflict and counts["source"] == "verdict" and findings and counts["total"] != len(findings):
+        observed = heading_counts(lines)
+        if observed is not None:
+            counts = {**observed, "source": "conflict", "block_total": counts["total"]}
     return {**counts, "findings": findings}
 
 

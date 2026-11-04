@@ -276,3 +276,48 @@ def test_plain_output_is_unchanged_by_detail_support(tmp_path):
     plain = findings(tmp_path, body)
     assert "findings" not in plain
     assert {k: v for k, v in detail(tmp_path, body).items() if k != "findings"} == plain
+
+
+def test_detail_stale_zero_block_with_headings_is_a_conflict(tmp_path):
+    body = """### [P1] [test-gap] Missing empty case in `scripts/a.sh:42`
+
+--- VERDICT ---
+STATUS: revise
+FINDINGS: 0 (P0: 0, P1: 0, P2: 0)
+---
+"""
+    out = detail(tmp_path, body)
+    assert out["source"] == "conflict"
+    assert out["total"] == len(out["findings"]) == 1
+    assert out["P1"] == 1
+    assert out["block_total"] == 0
+    # The counts-only output still reports the block, unchanged.
+    assert findings(tmp_path, body)["total"] == 0
+
+
+def test_detail_block_larger_than_headings_is_a_conflict(tmp_path):
+    body = """### [P1] [test-gap] only one parsed heading
+
+--- VERDICT ---
+STATUS: revise
+FINDINGS: 3 (P0: 0, P1: 2, P2: 1)
+---
+"""
+    out = detail(tmp_path, body)
+    assert out["source"] == "conflict"
+    assert out["total"] == 1
+    assert out["block_total"] == 3
+
+
+def test_detail_agreeing_block_and_headings_is_not_a_conflict(tmp_path):
+    body = """### [P1] [test-gap] one
+
+--- VERDICT ---
+STATUS: revise
+FINDINGS: 1 (P0: 0, P1: 1, P2: 0)
+---
+"""
+    out = detail(tmp_path, body)
+    assert out["source"] == "verdict"
+    assert "block_total" not in out
+    assert out["total"] == 1
