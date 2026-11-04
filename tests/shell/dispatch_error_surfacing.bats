@@ -233,6 +233,33 @@ PRE
     grep -q "^SUMMARY: Unrecognized verdict: SHIPSHAPE$" "$VERDICT_FILE"
 }
 
+# mk-tl0ou.3.4: plain BLOCK and approve get precise non-pass summaries.
+@test "extract: VERDICT: BLOCK is warn with a precise summary, not Unrecognized" {
+    _load
+    printf 'VERDICT: BLOCK\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q "^STATUS: warn$" "$VERDICT_FILE"
+    grep -q "^SUMMARY: Reviewer verdict BLOCK (read as FAIL); not a pass.$" "$VERDICT_FILE"
+    ! grep -q "Unrecognized" "$VERDICT_FILE"
+}
+
+@test "extract: VERDICT: approve stays warn and names the accepted words" {
+    _load
+    printf 'VERDICT: approve\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q "^STATUS: warn$" "$VERDICT_FILE"
+    grep -q "not an accepted verdict (accepted: PASS, PASS WITH NOTES, FAIL)" "$VERDICT_FILE"
+}
+
+@test "extract: BLOCK or approve is never upgraded by a trailing pass block" {
+    _load
+    for w in BLOCK approve; do
+        printf 'VERDICT: %s\n\n--- VERDICT ---\nSTATUS: pass\nFILES: 0 changed\nFINDINGS: 0 (P0: 0, P1: 0, P2: 0)\nSUMMARY: ok\n---\n' "$w" > "$OUTPUT"
+        _extract_verdict "$OUTPUT"
+        grep -q "^STATUS: warn$" "$VERDICT_FILE"
+    done
+}
+
 # P1-2 (follow-up): the verdict is now read ONLY from the first
 # non-blank line of the output — a later "VERDICT:" line (e.g. after a
 # preceding "body" line) is no longer scanned for at all, so this fixture

@@ -2021,7 +2021,7 @@ not guess. Keep the summary to one line and name the file and line when known.
 
 End your output with a blank line and then, as the very last line, exactly one
 of: \"VERDICT: PASS\", \"VERDICT: PASS WITH NOTES\" or \"VERDICT: FAIL\". No other
-verdict word (not APPROVE, BLOCK or CLEAN) is accepted, and any other word
+verdict word (not APPROVE or CLEAN) is accepted, and any other word
 fails the dispatch without a receipt."
       fi
       # A capacity substitute: the walk that reached this candidate
@@ -3211,6 +3211,17 @@ _extract_verdict() {
                 summary="Agent reports clean completion."
             fi
         fi
+    elif [[ "$verdict_word_upper" =~ ^BLOCK$ ]]; then
+        # BLOCK is read as FAIL (the review receipt does the same). Never a
+        # pass, and a trailing block can only demote, never upgrade (mk-tl0ou.3.4).
+        status="warn"
+        summary="Reviewer verdict BLOCK (read as FAIL); not a pass."
+        first_line_recognized=2
+    elif [[ "$verdict_word_upper" =~ ^APPROVE$ ]]; then
+        # Not an accepted review verdict word. Stays warn and never upgrades.
+        status="warn"
+        summary="Verdict word 'approve' is not an accepted verdict (accepted: PASS, PASS WITH NOTES, FAIL); not a pass."
+        first_line_recognized=2
     elif [[ "$verdict_word_upper" =~ ^(NEEDS-FIXES|NOT[[:space:]]+CLEAN) ]]; then
         # Starts with a NEEDS-FIXES/NOT CLEAN prefix but isn't the exact
         # token (e.g. "NEEDS-FIXES (2 P2)") — still unambiguously a
