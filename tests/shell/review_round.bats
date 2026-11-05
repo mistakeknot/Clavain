@@ -246,32 +246,36 @@ rr() { bash "$RR" --repo "$R" --base main --head "$HEAD_SHA" --producer-identity
 # ---- table tests: every body verdict x terminal block x sidecar x PROVISIONAL ----
 _lens_table_file() { # shape bv blk -> writes $T/lens.md
     local shape=$1 bv=$2 blk=$3
-    { [ "$shape" = both ] && printf 'VERDICT: %s\n' "$bv"; printf -- '- MEDIUM: x\nVERDICT: %s\n' "$bv"
-      [ "$blk" = none ] || printf -- '--- VERDICT ---\nSTATUS: %s\n---\n' "$blk"; } > "$BATS_TEST_TMPDIR/lens.md"
+    { [ "$shape" = both ] && printf 'VERDICT: %s\n' "$bv"
+      if [ "$shape" = swap ]; then printf -- '- MEDIUM: x\n\n--- VERDICT ---\nSTATUS: %s\n---\n\nVERDICT: %s' "$blk" "$bv"; else printf -- '- MEDIUM: x\nVERDICT: %s\n' "$bv"
+        [ "$blk" = none ] || printf -- '--- VERDICT ---\nSTATUS: %s\n---\n' "$blk"; fi; } > "$BATS_TEST_TMPDIR/lens.md"
 }
 # Oracle, written from the rule rather than from the code: the block must match the
 # body verdict; the sidecar must be one dispatch can emit for it (PASS:pass,
 # PASS WITH NOTES:warn, or pass only without a block, FAIL:warn|fail); a FAIL stays
 # FAIL even when PROVISIONAL; otherwise PROVISIONAL wins over the body verdict.
+# shape swap = the verdict line comes after the block: dispatch ignores a block
+# that is not trailing, so there PASS WITH NOTES is recorded as pass.
 _lens_expect() { # bv blk sst prov shape
     local bv=$1 blk=$2 sst=$3 prov=$4 shape=${5:-tail} bw
-    [ "$shape" = tail ] || { echo NONE; return; }   # a second VERDICT line is never accepted
+    [ "$shape" != both ] || { echo NONE; return; }   # a second VERDICT line is never accepted
     case "$bv" in PASS) bw=pass;; "PASS WITH NOTES") bw=warn;; FAIL) bw=fail;; esac
     [ "$blk" = none ] || [ "$blk" = "$bw" ] || { echo NONE; return; }
     case "$bv:$sst" in
         PASS:pass|"PASS WITH NOTES:warn"|FAIL:fail|FAIL:warn) ;;
-        "PASS WITH NOTES:pass") [ "$blk" = none ] || { echo NONE; return; } ;;
+        "PASS WITH NOTES:pass") [ "$blk" = none ] || [ "$shape" = swap ] || { echo NONE; return; } ;;
         *) echo NONE; return ;;
     esac
     if [ "$bv" = FAIL ]; then echo FAIL; elif [ "$prov" = 1 ]; then echo PROVISIONAL; else echo "$bv"; fi
 }
 
-@test "table: all body x block x sidecar x PROVISIONAL combinations (144 rows)" {
+@test "table: all body x block x sidecar x PROVISIONAL combinations (198 rows)" {
     export REVIEW_ROUND_SOURCE_ONLY=1
     source "$RR"
     n=0
-    for shape in tail both; do for bv in "PASS" "PASS WITH NOTES" "FAIL"; do for blk in none pass warn fail; do
+    for shape in tail both swap; do for bv in "PASS" "PASS WITH NOTES" "FAIL"; do for blk in none pass warn fail; do
     for sst in pass warn fail; do for prov in 0 1; do
+        [ "$shape" != swap ] || [ "$blk" != none ] || continue
         _lens_table_file "$shape" "$bv" "$blk"
         got=$(lens_verdict "$BATS_TEST_TMPDIR/lens.md" "$sst" "$prov")
         want=$(_lens_expect "$bv" "$blk" "$sst" "$prov" "$shape")
@@ -279,7 +283,7 @@ _lens_expect() { # bv blk sst prov shape
         [ "$want" = NONE ] || [ "$got" = "$want" ] || { echo "row $shape|$bv|$blk|$sst|$prov: got '$got' want '$want'"; return 1; }
         n=$((n+1))
     done; done; done; done; done
-    [ "$n" -eq 144 ]
+    [ "$n" -eq 198 ]
 }
 
 @test "table: rows captured from real dispatch _extract_verdict map as expected" {
@@ -297,7 +301,7 @@ _lens_expect() { # bv blk sst prov shape
         if [ "$shape" = tail ] && [ "$bv" = "PASS WITH NOTES" ] && [ "$blk" = none ] && [ "$prov" = 0 ]; then [ "$got" = "PASS WITH NOTES" ]; fi
         n=$((n+1))
     done < "$BATS_TEST_DIRNAME/fixtures/dispatch-verdict-capture.tsv"
-    [ "$n" -eq 48 ]
+    [ "$n" -eq 66 ]
 }
 
 @test "table: the capture fixture still matches the real dispatch.sh" {

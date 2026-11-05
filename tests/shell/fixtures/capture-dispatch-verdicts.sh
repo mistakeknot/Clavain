@@ -3,7 +3,8 @@
 # every combination of reviewer-output shape. Columns (TAB separated):
 #   shape  body-verdict  terminal-block  provisional  sidecar-STATUS  sidecar-PROVISIONAL
 # shape: tail = verdict only on the last line; both = same verdict on the
-# first line too. terminal-block: none | pass | warn | fail (the reviewer's own
+# first line too; swap = the verdict line comes after the terminal block (needs a
+# block). terminal-block: none | pass | warn | fail (the reviewer's own
 # "--- VERDICT ---" block). provisional: 0|1 (capacity-substitute seat).
 # Usage: capture-dispatch-verdicts.sh /path/to/dispatch.sh
 set -euo pipefail
@@ -14,13 +15,16 @@ write_verdict_block_needed=$(grep -c '_write_verdict_block' "$T/fn.sh" || true)
 [ "$write_verdict_block_needed" -eq 0 ] || awk '/^_write_verdict_block\(\)[[:space:]]*\{/ {e=1} e {print} e && /^}[[:space:]]*$/ {e=0}' "$D" >> "$T/fn.sh"
 # shellcheck disable=SC1091
 source "$T/fn.sh"
-for shape in tail both; do
+for shape in tail both swap; do
 for bv in "PASS" "PASS WITH NOTES" "FAIL"; do
 for blk in none pass warn fail; do
+[ "$shape" != swap ] || [ "$blk" != none ] || continue
 for prov in 0 1; do
   o="$T/out.md"; rm -f "$o.verdict"
-  { [ "$shape" = both ] && printf 'VERDICT: %s\n' "$bv"; printf -- '- MEDIUM: x\nVERDICT: %s\n' "$bv"
-    [ "$blk" = none ] || printf -- '--- VERDICT ---\nSTATUS: %s\n---\n' "$blk"; } > "$o"
+  { [ "$shape" = both ] && printf 'VERDICT: %s\n' "$bv"
+    if [ "$shape" = swap ]; then printf -- '- MEDIUM: x\n\n--- VERDICT ---\nSTATUS: %s\n---\n\nVERDICT: %s' "$blk" "$bv"
+    else printf -- '- MEDIUM: x\nVERDICT: %s\n' "$bv"
+      [ "$blk" = none ] || printf -- '--- VERDICT ---\nSTATUS: %s\n---\n' "$blk"; fi; } > "$o"
   if [ "$prov" = 1 ]; then export CAPACITY_SUBSTITUTE_JSON='{"producer_lab":"a","reviewer_lab":"a","failure_class":"quota"}'; else unset CAPACITY_SUBSTITUTE_JSON; fi
   _extract_verdict "$o" 2>/dev/null
   st=$(sed -n 's/^STATUS: //p' "$o.verdict" | head -1)

@@ -46,3 +46,21 @@ both	FAIL	warn	0	warn	0
 both	FAIL	warn	1	warn	1
 both	FAIL	fail	0	warn	0
 both	FAIL	fail	1	warn	1
+swap	PASS	pass	0	pass	0
+swap	PASS	pass	1	pass	1
+swap	PASS	warn	0	pass	0
+swap	PASS	warn	1	pass	1
+swap	PASS	fail	0	pass	0
+swap	PASS	fail	1	pass	1
+swap	PASS WITH NOTES	pass	0	pass	0
+swap	PASS WITH NOTES	pass	1	pass	1
+swap	PASS WITH NOTES	warn	0	pass	0
+swap	PASS WITH NOTES	warn	1	pass	1
+swap	PASS WITH NOTES	fail	0	pass	0
+swap	PASS WITH NOTES	fail	1	pass	1
+swap	FAIL	pass	0	warn	0
+swap	FAIL	pass	1	warn	1
+swap	FAIL	warn	0	warn	0
+swap	FAIL	warn	1	warn	1
+swap	FAIL	fail	0	warn	0
+swap	FAIL	fail	1	warn	1

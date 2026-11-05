@@ -87,7 +87,9 @@ lens_verdict() {
   ok=0
   case "$last:$sst" in
     "VERDICT: PASS:pass"|"VERDICT: PASS WITH NOTES:warn"|"VERDICT: FAIL:fail"|"VERDICT: FAIL:warn") ok=1;;
-    "VERDICT: PASS WITH NOTES:pass") [ "$ndelim" -ne 0 ] || ok=1;;
+    # dispatch ignores a block that is not trailing, so with the verdict line after
+    # the block it records PASS WITH NOTES as pass, as it does with no block.
+    "VERDICT: PASS WITH NOTES:pass") [ "$ndelim" -eq 0 ] || [ -n "$norm" ] && ok=1;;
   esac
   [ -z "$norm" ] || rm -f "$norm"
   if [ "$tailok" -ne 1 ] || [ "$nver" -ne 1 ] || [ "$fenced" -ne 0 ] || [ "$ok" -ne 1 ]; then
