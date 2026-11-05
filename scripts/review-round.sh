@@ -50,7 +50,19 @@ DISPATCH="${REVIEW_ROUND_DISPATCH:-$HERE/dispatch.sh}"
 # verdict. The sidecar must be one dispatch can produce for that body (dispatch
 # records a first-line FAIL as warn, and a blockless PASS WITH NOTES as pass).
 lens_verdict() {
-  local f=$1 sst=$2 prov=$3 ndelim body blk tailok=1 blkst= last fenced nver bwant ok
+  local f=$1 sst=$2 prov=$3 ndelim body blk tailok=1 blkst= last fenced nver bwant ok norm= tailv
+  # dispatch.sh asks reviewers for 'VERDICT: ...' as the very last line, so a
+  # reviewer may emit STATUS block then VERDICT. Accept that one order by moving
+  # the final VERDICT line ahead of the block; every agreement check below still
+  # runs on the normalised text. Any other shape is left as is.
+  if [ "$(grep -c '^--- VERDICT ---\r\?$' "$f" || true)" -eq 1 ]; then
+    tailv=$(awk 'f&&NF{sub(/\r$/,""); print} /^--- VERDICT ---\r?$/{f=1}' "$f")
+    if [ "$(wc -l <<< "$tailv")" -eq 3 ] && [ "$(sed -n 2p <<< "$tailv")" = "---" ] && [[ "$(sed -n 3p <<< "$tailv")" =~ ^VERDICT:\  ]]; then
+      norm=$(mktemp)
+      { awk '/^--- VERDICT ---\r?$/ {exit} {print}' "$f"; sed -n 3p <<< "$tailv"; printf -- '--- VERDICT ---\n%s\n---\n' "$(sed -n 1p <<< "$tailv")"; } > "$norm"
+      f=$norm
+    fi
+  fi
   ndelim=$(grep -c '^--- VERDICT ---\r\?$' "$f" || true)
   if [ "$ndelim" -eq 0 ]; then body=$(cat "$f")
   elif [ "$ndelim" -eq 1 ]; then
@@ -77,6 +89,7 @@ lens_verdict() {
     "VERDICT: PASS:pass"|"VERDICT: PASS WITH NOTES:warn"|"VERDICT: FAIL:fail"|"VERDICT: FAIL:warn") ok=1;;
     "VERDICT: PASS WITH NOTES:pass") [ "$ndelim" -ne 0 ] || ok=1;;
   esac
+  [ -z "$norm" ] || rm -f "$norm"
   if [ "$tailok" -ne 1 ] || [ "$nver" -ne 1 ] || [ "$fenced" -ne 0 ] || [ "$ok" -ne 1 ]; then
     echo "NONE (verdict line malformed, fenced, or disagrees with sidecar STATUS: $sst)"
   elif [ "$last" = "VERDICT: FAIL" ]; then echo FAIL
