@@ -312,3 +312,35 @@ _lens_expect() { # bv blk sst prov shape
     grep -q 'general: FAIL' "$OUT/receipt.md"
     [ "$(tail -1 "$OUT/receipt.md")" = "VERDICT: FAIL" ]
 }
+
+# ---- block-then-VERDICT order (dispatch.sh asks for VERDICT as the last line) ----
+_lens_blockfirst() { # bv blk [extra-before] -> writes lens.md
+    printf -- '- MEDIUM: x\n%s\n--- VERDICT ---\nSTATUS: %s\n---\n\nVERDICT: %s\n' "${3:-}" "$2" "$1" > "$BATS_TEST_TMPDIR/lens.md"
+}
+
+@test "block then VERDICT last line is accepted when block, line and sidecar agree" {
+    export REVIEW_ROUND_SOURCE_ONLY=1
+    source "$RR"
+    _lens_blockfirst "PASS" pass;                got=$(lens_verdict "$BATS_TEST_TMPDIR/lens.md" pass 0); [ "$got" = PASS ]
+    _lens_blockfirst "PASS WITH NOTES" warn;     got=$(lens_verdict "$BATS_TEST_TMPDIR/lens.md" warn 0); [ "$got" = "PASS WITH NOTES" ]
+    _lens_blockfirst "FAIL" fail;                got=$(lens_verdict "$BATS_TEST_TMPDIR/lens.md" fail 0); [ "$got" = FAIL ]
+    _lens_blockfirst "PASS" pass;                got=$(lens_verdict "$BATS_TEST_TMPDIR/lens.md" pass 1); [ "$got" = PROVISIONAL ]
+}
+
+@test "block then VERDICT keeps every agreement check" {
+    export REVIEW_ROUND_SOURCE_ONLY=1
+    source "$RR"
+    # block disagrees with the line
+    _lens_blockfirst "PASS" fail;  got=$(lens_verdict "$BATS_TEST_TMPDIR/lens.md" pass 0); [ "${got%% *}" = NONE ]
+    # sidecar disagrees with the line
+    _lens_blockfirst "PASS" pass;  got=$(lens_verdict "$BATS_TEST_TMPDIR/lens.md" fail 0); [ "${got%% *}" = NONE ]
+    _lens_blockfirst "PASS" pass;  got=$(lens_verdict "$BATS_TEST_TMPDIR/lens.md" warn 0); [ "${got%% *}" = NONE ]
+    # a second VERDICT line before the block
+    _lens_blockfirst "PASS" pass "VERDICT: PASS"; got=$(lens_verdict "$BATS_TEST_TMPDIR/lens.md" pass 0); [ "${got%% *}" = NONE ]
+    # extra text between the block and the VERDICT line
+    printf -- '- x\n--- VERDICT ---\nSTATUS: pass\n---\nnote\nVERDICT: PASS\n' > "$BATS_TEST_TMPDIR/lens.md"
+    got=$(lens_verdict "$BATS_TEST_TMPDIR/lens.md" pass 0); [ "${got%% *}" = NONE ]
+    # VERDICT inside an open fence
+    printf -- '```\n--- VERDICT ---\nSTATUS: pass\n---\nVERDICT: PASS\n' > "$BATS_TEST_TMPDIR/lens.md"
+    got=$(lens_verdict "$BATS_TEST_TMPDIR/lens.md" pass 0); [ "${got%% *}" = NONE ]
+}
