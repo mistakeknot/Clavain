@@ -260,6 +260,37 @@ _review_scratch_git() {
     git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"
 }
 
+# Dispatcher-owned writes (failure evidence, capacity forecasts, built review
+# packets) normally land under <checkout>/.clavain. Those writes run outside the
+# codex sandbox, and a source-controlled .clavain symlink could point them at
+# any directory the caller can write, which the content fingerprint cannot see.
+# In scratch mode they go to a subdirectory of the trusted receipt directory
+# instead, and the source checkout's .clavain is never opened for writing.
+# Prints the directory; returns 1 (fail closed) when it cannot be made safely.
+_review_scratch_state_dir() {
+  local name="$1" base dir
+  base="$(_review_receipt_dir)"
+  [[ "$base" == /* ]] || return 1
+  dir="$base/$name"
+  [[ ! -L "$dir" ]] || { echo "Error: --review-scratch: refusing symlinked state directory $dir" >&2; return 1; }
+  mkdir -p -m 700 -- "$dir" 2>/dev/null || return 1
+  [[ -d "$dir" && ! -L "$dir" ]] || return 1
+  printf '%s\n' "$dir"
+}
+
+# Fails closed when the source checkout's .clavain (at -C and at the repository
+# top) is a symlink: nothing in scratch mode may write through it.
+_review_scratch_refuse_clavain_symlink() {
+  local src="$1" top c
+  top="$(_review_scratch_git -C "$src" rev-parse --show-toplevel 2>/dev/null)" || top=""
+  for c in "$src/.clavain" "${top:+$top/.clavain}"; do
+    [[ -n "$c" && -L "$c" ]] || continue
+    echo "Error: --review-scratch: refusing a symlinked .clavain in the source checkout ($c)" >&2
+    return 1
+  done
+  return 0
+}
+
 # Content fingerprint of a real checkout, taken without running anything the
 # repository's own configuration names. Only plumbing that runs no filter:
 # rev-parse HEAD, ls-files --stage (the index), and for every tracked or
@@ -940,7 +971,11 @@ _dispatch_role_profile() {
     exclusions="$(jq -c '.exclude | unique' <<< "$advice")"
     if [[ "$exclusions" != '[]' ]]; then
       local capacity_dir="${WORKDIR:-.}/.clavain/capacity" seat
-      mkdir -p "$capacity_dir" || return 1
+      if [[ "${REVIEW_SCRATCH:-false}" == true ]]; then
+        capacity_dir="$(_review_scratch_state_dir capacity)" || return 1
+      else
+        mkdir -p "$capacity_dir" || return 1
+      fi
       # Python's suffix support is portable; BSD mktemp requires trailing Xs.
       evidence="$(python3 -c 'import os,sys,tempfile; fd,path=tempfile.mkstemp(dir=sys.argv[1], prefix=sys.argv[2]+"-", suffix="-headroom.json"); os.close(fd); print(path)' "$capacity_dir" "$(date -u +%Y%m%dT%H%M%SZ)")" || return 1
       printf '%s\n' "$headroom" > "$evidence"
@@ -1218,7 +1253,11 @@ _dispatch_prepare_review_packet() {
     fi
     local out_dir built
     out_dir="${WORKDIR:-.}/.clavain/review-packets"
-    mkdir -p "$out_dir" || return 1
+    if [[ "${REVIEW_SCRATCH:-false}" == true ]]; then
+      out_dir="$(_review_scratch_state_dir review-packets)" || return 1
+    else
+      mkdir -p "$out_dir" || return 1
+    fi
     built="$(python3 "$DISPATCH_SCRIPT_DIR/build-review-packet.py" --input "$REVIEW_INPUT" --output-dir "$out_dir" 2>&1)" || {
       echo "Error: failed to build review packet from --review-input: $REVIEW_INPUT" >&2
       echo "$built" >&2
@@ -1795,6 +1834,10 @@ if [[ "$REVIEW_SCRATCH" == true ]]; then
         ;;
     esac
   done
+  _review_scratch_refuse_clavain_symlink "$WORKDIR" || {
+    _dispatch_write_failure_class terminal_configuration
+    exit 1
+  }
   SANDBOX="workspace-write"
 fi
 
@@ -3762,13 +3805,23 @@ _surface_codex_errors() {
 _persist_dispatch_failure_evidence() {
   local failure_class="$1" root evidence_id relative_path evidence_path reference
   local -a evidence_cmd
-  if ! root="$(git -C "${WORKDIR:-.}" rev-parse --show-toplevel 2>/dev/null)"; then
+  if [[ "${REVIEW_SCRATCH:-false}" == true ]]; then
+    root=""
+  elif ! root="$(git -C "${WORKDIR:-.}" rev-parse --show-toplevel 2>/dev/null)"; then
     root="$(cd "${WORKDIR:-.}" && pwd -P)" || return 1
   fi
   evidence_id="${ATTEMPT_ID:-${DISPATCH_ID:-$(_dispatch_audit_id)}}"
   evidence_id="$(printf '%s' "$evidence_id" | tr -c 'A-Za-z0-9._-' '_')"
   relative_path=".clavain/intercept/${evidence_id}.json"
   evidence_path="$root/$relative_path"
+  if [[ "${REVIEW_SCRATCH:-false}" == true ]]; then
+    # Never through the source checkout: the evidence lands in the trusted
+    # receipt directory, and the reference carries its absolute path.
+    local intercept_dir
+    intercept_dir="$(_review_scratch_state_dir intercept)" || return 1
+    evidence_path="$intercept_dir/${evidence_id}.json"
+    relative_path="$evidence_path"
+  fi
   evidence_cmd=(python3 "$DISPATCH_SCRIPT_DIR/provider-errors.py" "$PROVIDER_EVENTS"
     --stderr "$STDERR_FILE" --write-evidence "$evidence_path"
     --receipt-path "$relative_path" --failure-class "$failure_class"

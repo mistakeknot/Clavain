@@ -767,3 +767,150 @@ EOF
     run sed -n '/^_post_dispatch_validate()/,/^}/p' "$DISPATCH"
     [[ "$output" == *'REVIEW_SCRATCH:-false}" != true ]] || return 0'* ]]
 }
+
+# ---- Failure evidence and signals (fix round 3) -------------------------------
+# Failure evidence is written by the dispatcher, outside the codex sandbox. In
+# scratch mode it must land in the trusted receipt directory and never in the
+# source checkout, and a symlinked .clavain must be refused outright.
+
+fake_codex_http429() {
+    cat > "$T/bin/codex" <<EOF
+#!/usr/bin/env bash
+[[ "\$1" == exec ]] || { echo "codex-cli 0.166.0"; exit 0; }
+cat > /dev/null
+echo "ERROR: unexpected status 429 Too Many Requests: rate limit exceeded" >&2
+exit 1
+EOF
+    chmod +x "$T/bin/codex"
+}
+
+@test "a failed codex run writes its failure evidence to the receipt directory, not the source checkout" {
+    fake_codex_http429
+    run_scratch
+    [ "$status" -ne 0 ]
+    [ ! -e "$R/.clavain" ]
+    [ -z "$(git -C "$R" status --porcelain --ignored)" ]
+    ev="$(find "$T/reviews/intercept" -maxdepth 1 -name '*.json' 2>/dev/null)"
+    [ -n "$ev" ]
+    [ "$(printf '%s\n' "$ev" | wc -l)" -eq 1 ]
+    jq -e '.failure_class != null and .schema_version == 1' "$ev" >/dev/null
+    [ -z "$(scratch_dirs)" ]
+}
+
+@test "a symlinked .clavain in the source is refused: codex never runs and nothing is written through it" {
+    mkdir -p "$T/elsewhere"
+    ln -s "$T/elsewhere" "$R/.clavain"
+    fake_codex_http429
+    rm -f "$T/codex.argv"
+    run_scratch
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"symlinked .clavain"* ]]
+    [ -z "$(find "$T/elsewhere" -mindepth 1 2>/dev/null)" ]
+    [ -z "$(find "$T/reviews" -mindepth 1 2>/dev/null)" ]
+    [ -z "$(scratch_dirs)" ]
+}
+
+@test "a symlinked .clavain is refused on a dry run too" {
+    mkdir -p "$T/elsewhere"
+    ln -s "$T/elsewhere" "$R/.clavain"
+    run_scratch --dry-run
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"symlinked .clavain"* ]]
+}
+
+@test "a symlinked .clavain at the repository top is refused when -C is a subdirectory" {
+    mkdir -p "$T/elsewhere" "$R/sub"
+    ln -s "$T/elsewhere" "$R/.clavain"
+    PATH="$T/bin:$PATH" run bash "$DISPATCH" --role-resolved --role cross-lab-review \
+        --to codex --model gpt-6.1-sol --resolved-route-json "$ROUTE_JSON" \
+        --review-scratch --producer-identity claude-sonnet-5-5 "${RECEIPT_FLAGS[@]}" -C "$R/sub" \
+        --prompt-file "$T/prompt.md" -o "$OUT"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"symlinked .clavain"* ]]
+    [ -z "$(find "$T/elsewhere" -mindepth 1 2>/dev/null)" ]
+}
+
+@test "a real .clavain directory with a symlinked intercept is never written through on failure" {
+    mkdir -p "$T/elsewhere" "$R/.clavain"
+    ln -s "$T/elsewhere" "$R/.clavain/intercept"
+    fake_codex_http429
+    run_scratch
+    [ "$status" -ne 0 ]
+    [ -z "$(find "$T/elsewhere" -mindepth 1 2>/dev/null)" ]
+    [ -n "$(find "$T/reviews/intercept" -maxdepth 1 -name '*.json' 2>/dev/null)" ]
+}
+
+@test "a symlinked evidence directory in the receipt directory fails closed and is not written through" {
+    mkdir -p "$T/elsewhere" "$T/reviews"
+    ln -s "$T/elsewhere" "$T/reviews/intercept"
+    fake_codex_http429
+    run_scratch
+    [ "$status" -ne 0 ]
+    [ -z "$(find "$T/elsewhere" -mindepth 1 2>/dev/null)" ]
+    [ ! -e "$R/.clavain" ]
+    [ -z "$(scratch_dirs)" ]
+}
+
+@test "the scratch state directories are under the receipt directory and refuse symlinks" {
+    run bash -c '
+        source <(sed -n "/^_review_scratch_state_dir()/,/^}/p" "$1")
+        rdir="$2"
+        _review_receipt_dir() { printf "%s\n" "$rdir"; }
+        d="$(_review_scratch_state_dir capacity)" || exit 1
+        [[ "$d" == "$2/capacity" && -d "$d" ]] || exit 2
+        mkdir -p "$3"; ln -s "$3" "$2/packets"
+        ! _review_scratch_state_dir packets 2>/dev/null
+    ' _ "$DISPATCH" "$T/reviews" "$T/elsewhere"
+    [ "$status" -eq 0 ]
+    [ -z "$(find "$T/elsewhere" -mindepth 1 2>/dev/null)" ]
+}
+
+# Runs dispatch in its own process group with a codex that announces itself and
+# then hangs, delivers the signal to the whole group (what a terminal ^C or a
+# supervising `kill -- -pgid` does) and waits for dispatch to exit.
+signal_scratch_run() {
+    local sig="$1" pid i
+    cat > "$T/bin/codex" <<EOF
+#!/usr/bin/env bash
+[[ "\$1" == exec ]] || { echo "codex-cli 0.166.0"; exit 0; }
+cat > /dev/null
+cd_dir=""
+while [[ \$# -gt 0 ]]; do case "\$1" in -C) cd_dir="\$2"; shift 2 ;; *) shift ;; esac; done
+echo "\$cd_dir" > "$T/codex.cwd"
+touch "$T/codex.started"
+exec sleep 60
+EOF
+    chmod +x "$T/bin/codex"
+    PATH="$T/bin:$PATH" setsid bash "$DISPATCH" --role-resolved --role cross-lab-review \
+        --to codex --model gpt-6.1-sol --resolved-route-json "$ROUTE_JSON" \
+        --review-scratch --producer-identity claude-sonnet-5-5 "${RECEIPT_FLAGS[@]}" -C "$R" \
+        --prompt-file "$T/prompt.md" -o "$OUT" >"$T/run.out" 2>&1 &
+    pid=$!
+    for i in $(seq 1 200); do [ -e "$T/codex.started" ] && break; sleep 0.1; done
+    [ -e "$T/codex.started" ]
+    [ -n "$(scratch_dirs)" ]
+    kill -"$sig" -- -"$pid"
+    for i in $(seq 1 200); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+    ! kill -0 "$pid" 2>/dev/null
+    wait "$pid" && SIG_RC=0 || SIG_RC=$?
+}
+
+@test "SIGINT mid-run leaves no scratch directory and writes nothing outside it" {
+    signal_scratch_run INT
+    [ "$SIG_RC" -ne 0 ]
+    [ -z "$(scratch_dirs)" ]
+    [ ! -e "$R/.clavain" ]
+    [ -z "$(git -C "$R" status --porcelain --ignored)" ]
+    [ "$(git -C "$R" rev-parse HEAD)" = "$HEAD_SHA" ]
+    [ -z "$(find "$T/home" -mindepth 1 2>/dev/null)" ]
+}
+
+@test "SIGTERM mid-run leaves no scratch directory and writes nothing outside it" {
+    signal_scratch_run TERM
+    [ "$SIG_RC" -ne 0 ]
+    [ -z "$(scratch_dirs)" ]
+    [ ! -e "$R/.clavain" ]
+    [ -z "$(git -C "$R" status --porcelain --ignored)" ]
+    [ "$(git -C "$R" rev-parse HEAD)" = "$HEAD_SHA" ]
+    [ -z "$(find "$T/home" -mindepth 1 2>/dev/null)" ]
+}
