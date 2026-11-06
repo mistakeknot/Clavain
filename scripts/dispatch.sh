@@ -238,6 +238,17 @@ _review_scratch_cleanup() {
   esac
 }
 
+# Every git command of the scratch setup and source check runs here, outside
+# the codex sandbox, so none may execute anything the caller's configuration
+# names. Global and system config are replaced with /dev/null (HOME is left
+# alone), environment-injected config is dropped, and hooks and fsmonitor are
+# switched off on the command line, which outranks every config file.
+_review_scratch_git() {
+  env -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS -u GIT_TEMPLATE_DIR \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+    git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"
+}
+
 _review_scratch_fail() {
   echo "Error: --review-scratch: $1" >&2
   _review_scratch_cleanup
@@ -249,9 +260,9 @@ _review_scratch_fail() {
 # REVIEW_SCRATCH_TREE and the source-checkout baseline. Fails closed.
 _review_scratch_setup() {
   local src="${WORKDIR:-.}" root clone_head clone_tree
-  REVIEW_SCRATCH_SRC_HEAD="$(git -C "$src" rev-parse HEAD 2>/dev/null)" \
+  REVIEW_SCRATCH_SRC_HEAD="$(_review_scratch_git -C "$src" rev-parse HEAD 2>/dev/null)" \
     || _review_scratch_fail "cannot read HEAD of the -C checkout"
-  REVIEW_SCRATCH_SRC_STATUS="$(git -C "$src" status --porcelain 2>/dev/null)" \
+  REVIEW_SCRATCH_SRC_STATUS="$(_review_scratch_git -C "$src" status --porcelain 2>/dev/null)" \
     || _review_scratch_fail "cannot read status of the -C checkout"
   root="$(mktemp -d "${TMPDIR:-/tmp}/clavain-review-scratch.XXXXXX")" \
     || _review_scratch_fail "cannot create the scratch directory"
@@ -261,18 +272,18 @@ _review_scratch_setup() {
   mkdir -p -m 700 "$root/tmp" || _review_scratch_fail "cannot create the scratch tmp directory"
   # A clone, never a worktree: a worktree writes into the source .git. An empty
   # template directory means the clone gets no hooks at all.
-  git clone --quiet --no-checkout --no-hardlinks --template= "$src" "$root/repo" >/dev/null 2>&1 \
+  _review_scratch_git clone --quiet --no-checkout --no-hardlinks --template= "$src" "$root/repo" >/dev/null 2>&1 \
     || _review_scratch_fail "git clone of the -C checkout failed"
-  git -C "$root/repo" remote remove origin >/dev/null 2>&1 || true
-  git -C "$root/repo" checkout --quiet --detach "$RR_HEAD" >/dev/null 2>&1 \
+  _review_scratch_git -C "$root/repo" remote remove origin >/dev/null 2>&1 || true
+  _review_scratch_git -C "$root/repo" checkout --quiet --detach "$RR_HEAD" >/dev/null 2>&1 \
     || _review_scratch_fail "--head $RR_HEAD is not in the clone"
-  clone_head="$(git -C "$root/repo" rev-parse HEAD 2>/dev/null)"
-  clone_tree="$(git -C "$root/repo" rev-parse 'HEAD^{tree}' 2>/dev/null)"
+  clone_head="$(_review_scratch_git -C "$root/repo" rev-parse HEAD 2>/dev/null)"
+  clone_tree="$(_review_scratch_git -C "$root/repo" rev-parse 'HEAD^{tree}' 2>/dev/null)"
   [[ "$clone_head" == "$RR_HEAD" ]] \
     || _review_scratch_fail "clone HEAD $clone_head is not --head $RR_HEAD"
   [[ -n "$clone_tree" && "$clone_tree" == "${RR_HEAD_TREE:-}" ]] \
     || _review_scratch_fail "clone tree ${clone_tree:-<none>} does not match the tree of --head ${RR_HEAD_TREE:-<none>}"
-  [[ -z "$(git -C "$root/repo" status --porcelain 2>/dev/null)" ]] \
+  [[ -z "$(_review_scratch_git -C "$root/repo" status --porcelain 2>/dev/null)" ]] \
     || _review_scratch_fail "clone worktree is not clean at --head"
   REVIEW_SCRATCH_TREE="$clone_tree"
 }
@@ -282,8 +293,8 @@ _review_scratch_setup() {
 _review_scratch_verify_source() {
   [[ -n "${REVIEW_SCRATCH_SRC_HEAD:-}" ]] || return 0
   local src="${WORKDIR:-.}" head status
-  head="$(git -C "$src" rev-parse HEAD 2>/dev/null)" || head="<unreadable>"
-  status="$(git -C "$src" status --porcelain 2>/dev/null)" || status="<unreadable>"
+  head="$(_review_scratch_git -C "$src" rev-parse HEAD 2>/dev/null)" || head="<unreadable>"
+  status="$(_review_scratch_git -C "$src" status --porcelain 2>/dev/null)" || status="<unreadable>"
   if [[ "$head" != "$REVIEW_SCRATCH_SRC_HEAD" ]]; then
     echo "Error: --review-scratch: the real checkout HEAD changed during the run ($REVIEW_SCRATCH_SRC_HEAD -> $head)" >&2
     return 1
@@ -407,7 +418,11 @@ Options:
                                   mktemp can run. The real checkout is untouched (HEAD and
                                   status are checked after the run) and the directory is
                                   deleted. The receipt records sandbox "scratch-write" and
-                                  scratch_tree.
+                                  scratch_tree. Setup git runs with global and system
+                                  config ignored and hooks off. Codex passthrough is
+                                  allowlisted (--json, --skip-git-repo-check, --color,
+                                  --output-schema); any other flag is refused, with no
+                                  receipt.
   --plan <FILE>                 The contract the seat must read. It must exist before any
                                   model runs; for --to claude its directory is added as a
                                   readable root (--add-dir) so a plan outside -C is readable
@@ -1706,6 +1721,24 @@ if [[ "$REVIEW_SCRATCH" == true ]]; then
     echo "Error: --review-scratch cannot be combined with --via" >&2
     exit 1
   fi
+  # Passthrough allowlist. EXTRA_ARGS is appended after the enforced sandbox
+  # settings, so anything that can change authority (-c/--config, --profile,
+  # --add-dir, --sandbox/--cd forms, approval flags, --full-auto, --yolo,
+  # --enable/--disable, --oss, --search, ...) would silently widen the boundary
+  # the scratch-write receipt claims. Only inert output/format flags pass; every
+  # other flag, including `--flag=value` spellings and unknown flags, is
+  # refused with no receipt.
+  for ((_sa = 0; _sa < ${#EXTRA_ARGS[@]}; _sa++)); do
+    case "${EXTRA_ARGS[$_sa]}" in
+      --json|--skip-git-repo-check) ;;
+      --color|--output-schema) _sa=$((_sa + 1)) ;;
+      *)
+        echo "Error: --review-scratch refuses passthrough '${EXTRA_ARGS[$_sa]}': it can change sandbox authority (allowed: --json, --skip-git-repo-check, --color, --output-schema)" >&2
+        _dispatch_write_failure_class terminal_configuration
+        exit 1
+        ;;
+    esac
+  done
   SANDBOX="workspace-write"
 fi
 
