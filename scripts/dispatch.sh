@@ -39,6 +39,11 @@ MINIMUM_CODEX_VERSION=""
 FALLBACK_REASON=""
 PRODUCER_IDENTITY=""
 RR_REPO=""; RR_REPO_ID=""; RR_PR=""; RR_HEAD=""; RR_BASE=""
+REVIEW_SCRATCH=false
+REVIEW_SCRATCH_DIR=""
+REVIEW_SCRATCH_TREE=""
+REVIEW_SCRATCH_SRC_HEAD=""
+REVIEW_SCRATCH_SRC_STATUS=""
 VALIDATOR_RELATIONSHIP=""
 CAPACITY_SUBSTITUTE_JSON=""
 RECHECK_ITEMS=""
@@ -215,14 +220,95 @@ _dispatch_on_signal() {
   exit "$1"
 }
 
+# Review scratch mode (mk-fdj7h). A cross-lab-review run may need to execute test
+# suites that call mktemp. Instead of widening the read-only sandbox, dispatch
+# clones the repository at --head into a private directory and lets codex write
+# only there: the clone (cwd) and a sibling tmp directory (TMPDIR). No other
+# writable root, no network, /tmp excluded. The source checkout is untouched;
+# its HEAD and `git status --porcelain` are compared after the run.
+_review_scratch_cleanup() {
+  local d="${REVIEW_SCRATCH_DIR:-}"
+  [[ -n "$d" ]] || return 0
+  REVIEW_SCRATCH_DIR=""
+  case "$d" in
+    */clavain-review-scratch.*)
+      chmod -R u+rwX -- "$d" 2>/dev/null || true
+      rm -rf -- "$d" 2>/dev/null || true
+      ;;
+  esac
+}
+
+_review_scratch_fail() {
+  echo "Error: --review-scratch: $1" >&2
+  _review_scratch_cleanup
+  _dispatch_write_failure_class terminal_configuration
+  exit 1
+}
+
+# Creates the private scratch clone at --head. Sets REVIEW_SCRATCH_DIR,
+# REVIEW_SCRATCH_TREE and the source-checkout baseline. Fails closed.
+_review_scratch_setup() {
+  local src="${WORKDIR:-.}" root clone_head clone_tree
+  REVIEW_SCRATCH_SRC_HEAD="$(git -C "$src" rev-parse HEAD 2>/dev/null)" \
+    || _review_scratch_fail "cannot read HEAD of the -C checkout"
+  REVIEW_SCRATCH_SRC_STATUS="$(git -C "$src" status --porcelain 2>/dev/null)" \
+    || _review_scratch_fail "cannot read status of the -C checkout"
+  root="$(mktemp -d "${TMPDIR:-/tmp}/clavain-review-scratch.XXXXXX")" \
+    || _review_scratch_fail "cannot create the scratch directory"
+  chmod 700 "$root"
+  REVIEW_SCRATCH_DIR="$root"
+  trap '_review_scratch_cleanup' EXIT
+  mkdir -p -m 700 "$root/tmp" || _review_scratch_fail "cannot create the scratch tmp directory"
+  # A clone, never a worktree: a worktree writes into the source .git. An empty
+  # template directory means the clone gets no hooks at all.
+  git clone --quiet --no-checkout --no-hardlinks --template= "$src" "$root/repo" >/dev/null 2>&1 \
+    || _review_scratch_fail "git clone of the -C checkout failed"
+  git -C "$root/repo" remote remove origin >/dev/null 2>&1 || true
+  git -C "$root/repo" checkout --quiet --detach "$RR_HEAD" >/dev/null 2>&1 \
+    || _review_scratch_fail "--head $RR_HEAD is not in the clone"
+  clone_head="$(git -C "$root/repo" rev-parse HEAD 2>/dev/null)"
+  clone_tree="$(git -C "$root/repo" rev-parse 'HEAD^{tree}' 2>/dev/null)"
+  [[ "$clone_head" == "$RR_HEAD" ]] \
+    || _review_scratch_fail "clone HEAD $clone_head is not --head $RR_HEAD"
+  [[ -n "$clone_tree" && "$clone_tree" == "${RR_HEAD_TREE:-}" ]] \
+    || _review_scratch_fail "clone tree ${clone_tree:-<none>} does not match the tree of --head ${RR_HEAD_TREE:-<none>}"
+  [[ -z "$(git -C "$root/repo" status --porcelain 2>/dev/null)" ]] \
+    || _review_scratch_fail "clone worktree is not clean at --head"
+  REVIEW_SCRATCH_TREE="$clone_tree"
+}
+
+# After the run: the source checkout must be exactly as it was. Returns 1 and
+# says why when its HEAD or porcelain status changed.
+_review_scratch_verify_source() {
+  [[ -n "${REVIEW_SCRATCH_SRC_HEAD:-}" ]] || return 0
+  local src="${WORKDIR:-.}" head status
+  head="$(git -C "$src" rev-parse HEAD 2>/dev/null)" || head="<unreadable>"
+  status="$(git -C "$src" status --porcelain 2>/dev/null)" || status="<unreadable>"
+  if [[ "$head" != "$REVIEW_SCRATCH_SRC_HEAD" ]]; then
+    echo "Error: --review-scratch: the real checkout HEAD changed during the run ($REVIEW_SCRATCH_SRC_HEAD -> $head)" >&2
+    return 1
+  fi
+  if [[ "$status" != "$REVIEW_SCRATCH_SRC_STATUS" ]]; then
+    echo "Error: --review-scratch: the real checkout status changed during the run" >&2
+    return 1
+  fi
+  return 0
+}
+
 _dispatch_cleanup_state() {
   local _rc=$?
+  if [[ "${REVIEW_SCRATCH:-false}" == true && -n "${REVIEW_SCRATCH_SRC_HEAD:-}" ]]; then
+    if ! _review_scratch_verify_source; then
+      [[ "$_rc" != 0 ]] || _rc=1
+    fi
+  fi
   # Review receipt (mk-zek32): only the resolved child that ran the review
   # writes it. A requested receipt that cannot be written fails the run, so a
   # caller never mistakes "no file" for a clean review.
   if [[ "${ROLE_RESOLVED:-}" == true && "${ROLE:-}" == cross-lab-review ]] && _review_receipt_requested; then
     _review_receipt_write "${OUTPUT:-}" "$_rc" || { [[ "$_rc" != 0 ]] || _rc=1; }
   fi
+  _review_scratch_cleanup
   # Governed per-run receipt, best-effort. A signal before the write only sets
   # _sig_rc; the record is built after the status is final, and INT/TERM are
   # ignored just for the short append, so the receipt and the exit status agree.
@@ -312,6 +398,16 @@ Options:
                                 PR head under ${CLAVAIN_REVIEW_RECEIPT_DIR:-~/.local/state/clavain/reviews},
                                 mode 0600, never overwritten. No file for a same-lab,
                                 substitute or verdict-less review; the run then exits 1.
+  --review-scratch              Scratch-writable review (cross-lab-review, codex engine,
+                                  needs the receipt flags and -C). Clones -C at --head into
+                                  a private 0700 directory (tree must match --head, or the
+                                  run fails closed) and runs codex workspace-write there
+                                  with TMPDIR inside it, no other writable root, /tmp
+                                  excluded and network off, so test suites that call
+                                  mktemp can run. The real checkout is untouched (HEAD and
+                                  status are checked after the run) and the directory is
+                                  deleted. The receipt records sandbox "scratch-write" and
+                                  scratch_tree.
   --plan <FILE>                 The contract the seat must read. It must exist before any
                                   model runs; for --to claude its directory is added as a
                                   readable root (--add-dir) so a plan outside -C is readable
@@ -1308,6 +1404,10 @@ while [[ $# -gt 0 ]]; do
       esac
       shift 2
       ;;
+    --review-scratch)
+      REVIEW_SCRATCH=true
+      shift
+      ;;
     --repo|--repo-id|--pr|--head|--base)
       require_arg "$1" "${2:-}"
       case "$1" in
@@ -1581,6 +1681,32 @@ fi
 # the canonical --review-packet ROLE_PASSTHROUGH already injected below).
 if [[ -n "$REVIEW_INPUT" || -n "$REVIEW_PACKET" ]]; then
   _dispatch_prepare_review_packet "${1:-}" || exit 1
+fi
+
+# Review scratch mode (mk-fdj7h): cross-lab-review only, with the receipt flags,
+# a -C checkout, and never a wider sandbox than workspace-write.
+if [[ "$REVIEW_SCRATCH" == true ]]; then
+  if [[ "$ROLE" != cross-lab-review ]]; then
+    echo "Error: --review-scratch applies to --role cross-lab-review only" >&2
+    exit 1
+  fi
+  if [[ -z "$RR_REPO" || -z "$RR_REPO_ID" || -z "$RR_PR" || -z "$RR_HEAD" || -z "$RR_BASE" ]]; then
+    echo "Error: --review-scratch needs the receipt flags --repo --repo-id --pr --head --base" >&2
+    exit 1
+  fi
+  if [[ -z "$WORKDIR" ]]; then
+    echo "Error: --review-scratch needs -C <checkout> (the repository to clone at --head)" >&2
+    exit 1
+  fi
+  if [[ "$SANDBOX_SET" == true && "$SANDBOX" != read-only && "$SANDBOX" != workspace-write ]]; then
+    echo "Error: --review-scratch cannot be combined with -s $SANDBOX" >&2
+    exit 1
+  fi
+  if [[ -n "$VIA" ]]; then
+    echo "Error: --review-scratch cannot be combined with --via" >&2
+    exit 1
+  fi
+  SANDBOX="workspace-write"
 fi
 
 # Review receipt (mk-zek32): all five flags or none, cross-lab-review only.
@@ -2256,6 +2382,12 @@ if [[ "$VIA" == "zaka" ]]; then
   exit 0
 fi
 
+if [[ "$REVIEW_SCRATCH" == true && "$ROLE_RESOLVED" == true && "$ENGINE" != codex ]]; then
+  echo "Error: --review-scratch is supported for the codex engine only (resolved engine: $ENGINE)" >&2
+  _dispatch_write_failure_class terminal_configuration
+  exit 1
+fi
+
 # Ordered executor failover for --to auto. The recursive invocation receives
 # the exact original arguments except the routing controls, so it cannot
 # recurse and preserves all backend-specific dispatch behavior.
@@ -2536,13 +2668,34 @@ else
       exit 1
     fi
   fi
+  # Review scratch mode: codex writes only to the private clone (cwd) and its
+  # sibling tmp (TMPDIR). No extra roots, /tmp excluded, network off. A dry run
+  # prints the same flags over a placeholder and creates nothing.
+  SCRATCH_CODEX_ARGS=()
+  SCRATCH_CODEX_CD=""
+  SCRATCH_CODEX_TMPDIR=""
+  if [[ "$REVIEW_SCRATCH" == true ]]; then
+    if [[ "$DRY_RUN" == true ]]; then
+      SCRATCH_CODEX_CD="<review-scratch>/repo"
+      SCRATCH_CODEX_TMPDIR="<review-scratch>/tmp"
+    else
+      _review_scratch_setup
+      SCRATCH_CODEX_CD="$REVIEW_SCRATCH_DIR/repo"
+      SCRATCH_CODEX_TMPDIR="$REVIEW_SCRATCH_DIR/tmp"
+    fi
+    SCRATCH_CODEX_ARGS=(-c 'sandbox_workspace_write.writable_roots=[]'
+      -c 'sandbox_workspace_write.exclude_slash_tmp=true'
+      -c 'sandbox_workspace_write.exclude_tmpdir_env_var=false'
+      -c 'sandbox_workspace_write.network_access=false')
+    CMD+=("${SCRATCH_CODEX_ARGS[@]}")
+  fi
   # Tool caches outside the workspace (uv's, by default) are denied under
   # workspace-write, so a seat replaying `uv run pytest` cannot run it and a
   # validator has to answer UNRUN (run d9dd99e0, goal a7f02287). Grant the
   # roots named by CLAVAIN_CODEX_WRITABLE_ROOTS (colon-separated; default the
   # user's uv cache; set it empty to grant nothing) when they exist.
   CODEX_WRITABLE_ROOTS_TOML=""
-  if [[ "$SANDBOX" == "workspace-write" ]]; then
+  if [[ "$SANDBOX" == "workspace-write" && "$REVIEW_SCRATCH" != true ]]; then
     IFS=':' read -r -a _roots <<< "${CLAVAIN_CODEX_WRITABLE_ROOTS-$HOME/.cache/uv}"
     for _r in "${_roots[@]}"; do
       [[ -n "$_r" && -d "$_r" ]] || continue
@@ -2553,7 +2706,9 @@ else
     fi
   fi
 
-  if [[ -n "$WORKDIR" ]]; then
+  if [[ -n "$SCRATCH_CODEX_CD" ]]; then
+    CMD+=(-C "$SCRATCH_CODEX_CD")
+  elif [[ -n "$WORKDIR" ]]; then
     CMD+=(-C "$WORKDIR")
   fi
   # uv's sync step builds a network client, and under the codex sandbox that
@@ -2593,6 +2748,10 @@ else
   fi
 
   CMD+=("$PROMPT")
+  if [[ -n "$SCRATCH_CODEX_TMPDIR" && "$DRY_RUN" != true ]]; then
+    # TMPDIR only for the codex process, not for dispatch's own temp files.
+    CMD=(env "TMPDIR=$SCRATCH_CODEX_TMPDIR" "${CMD[@]}")
+  fi
 fi
 
 # Dry run: print command and exit
@@ -2640,10 +2799,15 @@ if [[ "$DRY_RUN" == true ]]; then
   else
     if [[ -n "${UV_NO_SYNC:-}" ]]; then echo "# Env: UV_NO_SYNC=$UV_NO_SYNC (validation seat replays without syncing)" >&2; fi
     DISPLAY_CMD=(codex exec -s "$SANDBOX")
+    if [[ -n "${SCRATCH_CODEX_TMPDIR:-}" ]]; then
+      echo "# Env: TMPDIR=$SCRATCH_CODEX_TMPDIR (review scratch)" >&2
+      DISPLAY_CMD+=("${SCRATCH_CODEX_ARGS[@]}")
+    fi
     if [[ -n "${CODEX_WRITABLE_ROOTS_TOML:-}" ]]; then
       DISPLAY_CMD+=(-c "sandbox_workspace_write.writable_roots=[${CODEX_WRITABLE_ROOTS_TOML}]")
     fi
-    if [[ -n "$WORKDIR" ]]; then DISPLAY_CMD+=(-C "$WORKDIR"); fi
+    if [[ -n "${SCRATCH_CODEX_CD:-}" ]]; then DISPLAY_CMD+=(-C "$SCRATCH_CODEX_CD")
+    elif [[ -n "$WORKDIR" ]]; then DISPLAY_CMD+=(-C "$WORKDIR"); fi
     if [[ -n "$OUTPUT" ]]; then DISPLAY_CMD+=(-o "$OUTPUT"); fi
     if [[ -n "$MODEL" ]]; then DISPLAY_CMD+=(-m "$MODEL"); fi
     if [[ -n "$REASONING_EFFORT" ]]; then DISPLAY_CMD+=(-c "model_reasoning_effort=$REASONING_EFFORT"); fi
