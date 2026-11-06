@@ -101,10 +101,10 @@ teardown() { rm -rf "$T"; }
     [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.json")" = BLOCK ]
 }
 
-@test "verdict suffixes preserve the leading ruling across existing forms" {
-    for verdict in PASS 'PASS WITH NOTES' BLOCK FAIL; do
+@test "blocking verdict suffixes preserve the leading ruling across existing forms" {
+    for verdict in BLOCK FAIL; do
         want="$verdict"; [[ "$verdict" != FAIL ]] || want=BLOCK
-        for suffix in '' ' (fetch can erase unpushed refs).' ' - explanation' ': explanation' '. Explanation' ' because checks completed'; do
+        for suffix in '' ' (fetch can erase unpushed refs).' ' - explanation' ': explanation' '. Explanation' ' because checks completed' ' (not safe to merge)' ' (tests pass but data loss)'; do
             for line in "VERDICT: $verdict$suffix" "**VERDICT: $verdict$suffix**" "**VERDICT:** $verdict$suffix" "__Verdict: $verdict$suffix__"; do
                 printf 'Findings\n\n%s\n' "$line" > "$OUT"
                 run _review_receipt_verdict "$OUT"
@@ -113,6 +113,60 @@ teardown() { rm -rf "$T"; }
             done
         done
     done
+}
+
+@test "passing verdicts accept only whitespace and at most one trailing period" {
+    for verdict in PASS 'PASS WITH NOTES'; do
+        for suffix in '' ' ' '.' '.  '; do
+            for line in "VERDICT: $verdict$suffix" "**VERDICT: $verdict$suffix**" "**VERDICT:** $verdict$suffix" "__Verdict: $verdict$suffix__"; do
+                printf 'Findings\n\n%s\n' "$line" > "$OUT"
+                run _review_receipt_verdict "$OUT"
+                [ "$status" -eq 0 ]
+                [ "$output" = "$verdict" ]
+            done
+        done
+        for suffix in ' (explanation)' ' - explanation' ': explanation' '. Explanation' '..' ' because checks completed'; do
+            printf 'Findings\n\nVERDICT: %s%s\n' "$verdict" "$suffix" > "$OUT"
+            run _review_receipt_verdict "$OUT"
+            [ "$status" -ne 0 ]
+        done
+    done
+}
+
+_reject_passing_suffix() {
+    _review_receipt_prepare "$R"
+    for verdict in PASS 'PASS WITH NOTES'; do
+        printf 'Findings\n\nVERDICT: %s%s\n' "$verdict" "$1" > "$OUT"
+        run _review_receipt_verdict "$OUT"
+        [ "$status" -ne 0 ]
+        run _review_receipt_write "$OUT" 0
+        [ "$status" -ne 0 ]
+        [ ! -e "$T/reviews/o__r/7-$HEAD_SHA.json" ]
+    done
+}
+
+@test "PASS with blocking findings writes no receipt" {
+    _reject_passing_suffix ' (two blocking findings)'
+}
+
+@test "PASS contradicted by blocked writes no receipt" {
+    _reject_passing_suffix ' - no, blocked'
+}
+
+@test "PASS contradicted by failed tests writes no receipt" {
+    _reject_passing_suffix ' (tests failed)'
+}
+
+@test "PASS with a merge prohibition writes no receipt" {
+    _reject_passing_suffix " (don't merge)"
+}
+
+@test "PASS conditional on fixes writes no receipt" {
+    _reject_passing_suffix ' (conditional on fixes)'
+}
+
+@test "PASS followed by rejection after a period writes no receipt" {
+    _reject_passing_suffix '. No — REJECTED.'
 }
 
 @test "ambiguous or malformed suffixes never yield a passing verdict" {
@@ -129,7 +183,7 @@ teardown() { rm -rf "$T"; }
 @test "write records suffixed rulings and refuses ambiguous ones" {
     _review_receipt_prepare "$R"
     sequence=1
-    for verdict in PASS 'PASS WITH NOTES' BLOCK FAIL; do
+    for verdict in BLOCK FAIL; do
         printf 'Findings\n\nVERDICT: %s (explanation).\n' "$verdict" > "$OUT"
         _review_receipt_write "$OUT" 0
         receipt="$T/reviews/o__r/7-$HEAD_SHA.json"
@@ -141,7 +195,7 @@ teardown() { rm -rf "$T"; }
     printf 'Findings\n\nVERDICT: PASS / BLOCK\n' > "$OUT"
     run _review_receipt_write "$OUT" 0
     [ "$status" -ne 0 ]
-    [ "$(find "$T/reviews" -name '*.json' | wc -l)" -eq 4 ]
+    [ "$(find "$T/reviews" -name '*.json' | wc -l)" -eq 2 ]
 }
 
 @test "cleanup preserves successful process status when a suffixed BLOCK receipt is written" {
