@@ -113,7 +113,9 @@ json.dump({"total": len(names), "paths": names[:200]}, sys.stdout)
   RR_CHANGED_PATHS_JSON="${pj% *}"
 }
 
-# Strict verdict from the reviewer's final line. Prints PASS, "PASS WITH NOTES"
+# Strict verdict token from the reviewer's final line; explanatory suffixes are
+# allowed after whitespace or punctuation. Conflicting verdicts, incomplete
+# "WITH NOTES", and conditional qualifications fail closed. Prints PASS, "PASS WITH NOTES"
 # or BLOCK (the words PASS, PASS WITH NOTES, FAIL; FAIL and its alias BLOCK
 # both record BLOCK; mk-tl0ou.3.4);
 # prints nothing (rc 1) when there is no acceptable VERDICT line or the word is
@@ -137,9 +139,22 @@ _review_receipt_verdict() {
     $0 ~ /[^[:space:]]/ { last = $0; lastok = (blank || NR == 1); blank = 0; next }
     { blank = 1 }
     END { if (lastok) print last }' "$out")" || return 1
-  local re='^(\*\*|__)?[Vv][Ee][Rr][Dd][Ii][Cc][Tt][[:space:]]*:(\*\*|__)?[[:space:]]*(([^[:space:]*_`.]|[^[:space:]*_`].*[^[:space:]*_`.]))(\*\*|__)?[[:space:]]*$'
+  local re='^(\*\*|__)?[Vv][Ee][Rr][Dd][Ii][Cc][Tt][[:space:]]*:(\*\*|__)?[[:space:]]*(([^[:space:]*_`]|[^[:space:]*_`].*[^[:space:]*_`]))(\*\*|__)?[[:space:]]*$'
   [[ "$last" =~ $re ]] || return 1
   local v="${BASH_REMATCH[3]}"
+  # Match the multiword token first: POSIX submatch selection can otherwise
+  # split PASS WITH NOTES into PASS plus an apparent qualification.
+  local notes_re='^(PASS WITH NOTES)($|[[:space:]:;.,(].*)'
+  local token_re='^(PASS|FAIL|BLOCK)($|[[:space:]:;.,(].*)'
+  if [[ "${v^^}" =~ $notes_re ]] || [[ "${v^^}" =~ $token_re ]]; then
+    local token="${BASH_REMATCH[1]}" suffix="${v:${#BASH_REMATCH[1]}}"
+    # Never turn a partial/contradictory ruling into PASS by ignoring its tail.
+    # These are whole words, so ordinary explanations such as "no blockers"
+    # do not introduce a second verdict.
+    local ambiguous='(^|[^[:alnum:]_])(PASS|FAIL|BLOCK|VERDICT|IF|UNLESS|PENDING|BUT|EXCEPT|NOT|OR|WITH)([^[:alnum:]_]|$)'
+    [[ ! "${suffix^^}" =~ $ambiguous ]] || return 1
+    v="$token"
+  fi
   case "${v^^}" in
     PASS) echo PASS ;;
     "PASS WITH NOTES") echo "PASS WITH NOTES" ;;
@@ -178,7 +193,7 @@ _review_receipt_write() {
   fi
   [[ "${CAPACITY_SUBSTITUTE_JSON:-}" == "" ]] || { echo "review receipt: not written (capacity substitute review)" >&2; return 1; }
   local verdict
-  verdict="$(_review_receipt_verdict "$out")" || { echo "review receipt: not written (no usable VERDICT line in review output; the last line must be 'VERDICT: PASS', 'VERDICT: PASS WITH NOTES' or 'VERDICT: FAIL')" >&2; return 1; }
+  verdict="$(_review_receipt_verdict "$out")" || { echo "review receipt: not written (no usable VERDICT line in review output; the last line must start with 'VERDICT: PASS', 'VERDICT: PASS WITH NOTES', 'VERDICT: FAIL' or 'VERDICT: BLOCK', with an unambiguous optional explanation)" >&2; return 1; }
 
   # Additive fields (schema_version stays 1; verdict logic is untouched). One
   # extractor, scripts/receipt-findings.py: unparsed bodies record
