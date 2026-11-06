@@ -55,7 +55,7 @@ lease coupling remains unavailable until an existing admission supplies a lease.
 
 ## Transports and identities
 
-`--via bb` is an explicit transport for `plan-review`, `validation`,
+`--via bb` is an explicit transport for `plan-review`, `validation`, `cross-lab-review`,
 `routine-execution`, and `deep-execution`. A role-to-sandbox allowlist is
 enforced by both dispatch and the seat adapter: review roles permit only
 `read-only`, while execution roles retain `workspace-write` and
@@ -97,8 +97,15 @@ child worktree. Plan deltas, completed plan items, and pending plan approvals
 are folded by item ID so a terminal plan can replace its partial delta without
 losing the review output. Token-usage events are reduced to an explicit numeric
 field allowlist before they enter the journal or receipt; arbitrary event
-payload fields are never retained. Cross-lab review and every role absent from
-the allowlist remain unsupported.
+payload fields are never retained. Cross-lab review uses the same read-only
+allowlist as plan review and validation. Only Claude currently qualifies; a
+Codex candidate remains `unsupported_adapter` until BB enforces a read-only
+provider sandbox. Model and permission evidence remain unknown and acceptance
+stays blocked until BB attests them for the submitted request and accepted
+turn. Thread settings and requested model names cannot supply that evidence.
+The separate `--review-scratch` path still rejects `--via` and retains its
+existing sandbox, passthrough and source-mutation checks. Every role absent
+from the allowlist remains unsupported.
 
 Inside enrolled BB, next-goal helpers use `CLAUDE_SESSION_ID` when present,
 otherwise `BB_THREAD_ID`. The Stop receipt consumer uses the same fallback.

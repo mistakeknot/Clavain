@@ -96,6 +96,7 @@ EXTRA_ARGS=()
 PHASE=""
 CONTEXT_GATEWAY_MODE="${CLAVAIN_CONTEXT_GATEWAY_MODE:-auto}"
 BB_ROLE_SANDBOX_ALLOWLIST=(
+  "cross-lab-review:read-only"
   "plan-review:read-only"
   "validation:read-only"
   "routine-execution:workspace-write"
