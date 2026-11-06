@@ -39,7 +39,43 @@ _review_receipt_prepare() {
   [[ "$RR_BASE" =~ ^[0-9a-f]{40}$ ]] || { echo "Error: --base must be a full 40-hex commit sha" >&2; return 1; }
   command -v git >/dev/null 2>&1 || { echo "Error: git is required for a review receipt" >&2; return 1; }
   command -v jq >/dev/null 2>&1 || { echo "Error: jq is required for a review receipt" >&2; return 1; }
+  # Review scratch mode: the -C checkout is the caller's real repository and its
+  # local config is untrusted (merge drivers fire in merge-tree, and a clean
+  # filter, textconv or external diff in a diff). Read it only through an
+  # objects-only bare repository that borrows the real object store via
+  # alternates, so no repo-local config or attributes are ever consulted. Every
+  # object these commands write lands in that throwaway, not in the real repo.
+  local shim="" rc
+  if [[ "${REVIEW_SCRATCH:-false}" == true ]]; then
+    shim="$(_review_receipt_shim "${workdir:-.}")" || {
+      echo "Error: cannot open the -C checkout object store read-only for the review receipt" >&2; return 1; }
+  fi
+  _review_receipt_derive "${workdir:-.}" "$shim"; rc=$?
+  [[ -z "$shim" ]] || rm -rf -- "$shim" 2>/dev/null || true
+  return "$rc"
+}
+
+# Prints the path of an objects-only bare repository whose alternates point at
+# the object store of the checkout in $1. No config, no attributes, no hooks.
+_review_receipt_shim() {
+  local workdir="$1" objdir shim
+  declare -F _review_scratch_git >/dev/null || return 1
+  objdir="$(_review_scratch_git -C "$workdir" rev-parse --path-format=absolute --git-path objects 2>/dev/null)" \
+    && [[ -d "$objdir" ]] || return 1
+  shim="$(mktemp -d "${TMPDIR:-/tmp}/clavain-review-shim.XXXXXX")" || return 1
+  if _review_scratch_git init --bare --quiet --template= "$shim" >/dev/null 2>&1 \
+     && printf '%s\n' "$objdir" >"$shim/objects/info/alternates"; then
+    printf '%s\n' "$shim"
+  else
+    rm -rf -- "$shim" 2>/dev/null || true
+    return 1
+  fi
+}
+
+_review_receipt_derive() {
+  local workdir="$1" shim="$2"
   local g=(git -C "${workdir:-.}")
+  [[ -z "$shim" ]] || g=(_review_scratch_git --git-dir "$shim")
   local sha
   for sha in "$RR_HEAD" "$RR_BASE"; do
     [[ "$("${g[@]}" cat-file -t "$sha" 2>/dev/null)" == commit ]] || {

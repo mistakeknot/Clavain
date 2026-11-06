@@ -475,10 +475,295 @@ EOF
     [ ! -e "$T/marker-outside-scratch" ]
 }
 
-@test "setup git commands name hooks off and ignore global and system config" {
-    run grep -n '_review_scratch_git()' -A5 "$DISPATCH"
+@test "setup git commands run under an env -i allowlist with hooks off and global and system config ignored" {
+    run grep -n '_review_scratch_git()' -A16 "$DISPATCH"
+    [[ "$output" == *"env -i"* ]]
     [[ "$output" == *"GIT_CONFIG_GLOBAL=/dev/null"* ]]
     [[ "$output" == *"GIT_CONFIG_NOSYSTEM=1"* ]]
     # No bare git call remains in the setup and source-check functions.
-    ! sed -n '/^_review_scratch_setup()/,/^_dispatch_cleanup_state()/p' "$DISPATCH" | grep -E '(\$\(|^[[:space:]]+)git (-C|clone)'
+    ! sed -n '/^_review_scratch_snapshot_in()/,/^_dispatch_cleanup_state()/p' "$DISPATCH" | grep -E '(\$\(|^[[:space:]]+)git (-C|clone)'
+}
+
+# ---- Fix round 2: inherited environment and repo-local configuration --------
+# Setup, the source fingerprint and the receipt run git outside the codex
+# sandbox against the caller's real checkout. (1) No inherited GIT_* variable
+# may steer them; (2) nothing executable named by the checkout's own
+# configuration or attributes (filters, textconv, external diff, merge drivers,
+# fsmonitor, includes) may run.
+
+# A repository whose root commit holds .gitattributes ($1, optional). The base
+# and the head diverge from that root and both edit file a, so merging the head
+# onto the base is a real content merge and a head-side edit exists to diff.
+mk_diverged_repo() {
+    R="$T/drepo"; git init -q -b main "$R"
+    git -C "$R" config user.email t@t; git -C "$R" config user.name t
+    seq 1 10 > "$R/a"
+    [ -z "${1:-}" ] || printf '%s\n' "$1" > "$R/.gitattributes"
+    git -C "$R" add -A; git -C "$R" commit -qm root
+    local root; root="$(git -C "$R" rev-parse HEAD)"
+    sed -i '1s/.*/one/' "$R/a"; git -C "$R" commit -qam base-side
+    BASE="$(git -C "$R" rev-parse HEAD)"
+    git -C "$R" checkout -q -b pr "$root"
+    sed -i '10s/.*/ten/' "$R/a"; git -C "$R" commit -qam head-side
+    HEAD_SHA="$(git -C "$R" rev-parse HEAD)"
+    RECEIPT_FLAGS=(--repo o/r --repo-id R_abc123 --pr 7 --head "$HEAD_SHA" --base "$BASE")
+}
+
+# Edit a tracked file without changing its size, so git must read the content
+# (and run any clean filter) to learn whether it changed.
+dirty_same_size() { printf 'X' | dd of="$R/a" bs=1 count=1 conv=notrunc 2>/dev/null; }
+
+# A hostile helper that proves it ran by touching a marker outside any scratch
+# directory. Mode "cat" behaves as a pass-through filter; "none" just exits.
+evil_script() {  # name [cat|none]
+    {
+        printf '#!/usr/bin/env bash\ntouch %q\n' "$T/marker-$1"
+        [ "${2:-cat}" = cat ] && printf 'cat\n' || printf 'exit 0\n'
+    } > "$T/evil-$1.sh"
+    chmod +x "$T/evil-$1.sh"
+}
+
+# Control: the same hostile checkout, copied, really fires the route under
+# plain git, so the "does not run" assertions below are not vacuous.
+assert_fires() {  # marker-name, then the plain command to run in a copy
+    local name="$1"; shift
+    rm -f "$T/marker-$name"; rm -rf "$T/ctl"; cp -a "$R" "$T/ctl"
+    ( cd "$T/ctl" && "$@" ) >/dev/null 2>&1 </dev/null || true
+    [ -e "$T/marker-$name" ] || { echo "control did not fire: $name" >&2; return 1; }
+    rm -f "$T/marker-$name"; rm -rf "$T/ctl"
+}
+
+# Dispatch survives the hostile checkout: succeeds, the route never ran, the
+# scratch is gone and the receipt exists.
+assert_survives() {  # marker-name
+    run_scratch
+    [ "$status" -eq 0 ] || { echo "$output" >&2; return 1; }
+    [ ! -e "$T/marker-$1" ] || { echo "hostile route ran: $1" >&2; return 1; }
+    [ -z "$(scratch_dirs)" ]
+    [ -f "$T/reviews/o__r/7-$HEAD_SHA.json" ]
+}
+
+@test "an inherited GIT_INDEX_FILE outside scratch is never written" {
+    fake_codex_plain
+    export GIT_INDEX_FILE="$T/outside.index"
+    # Control: plain git does write the external index.
+    rm -rf "$T/ctl"
+    git clone -q --no-checkout "$R" "$T/ctl"
+    git -C "$T/ctl" checkout -q --detach "$HEAD_SHA"
+    [ -e "$T/outside.index" ]
+    rm -rf "$T/outside.index" "$T/ctl"
+    run_scratch
+    [ "$status" -eq 0 ]
+    [ ! -e "$T/outside.index" ]
+    [ "$(cat "$T/codex.clone_head")" = "$HEAD_SHA" ]
+    [ -z "$(scratch_dirs)" ]
+}
+
+@test "an inherited GIT_DIR and GIT_WORK_TREE cannot redirect setup to another repository" {
+    fake_codex_plain
+    local d="$T/decoy"; git init -q -b main "$d"
+    git -C "$d" config user.email t@t; git -C "$d" config user.name t
+    echo z > "$d/z"; git -C "$d" add z; git -C "$d" commit -qm decoy
+    local before; before="$(cd "$d" && find . -type f -not -name '*.lock' | LC_ALL=C sort | xargs sha256sum | sha256sum)"
+    # Control: plain git is redirected by it.
+    [ "$(GIT_DIR="$d/.git" git -C "$R" rev-parse HEAD)" != "$HEAD_SHA" ]
+    export GIT_DIR="$d/.git" GIT_WORK_TREE="$d"
+    run_scratch
+    [ "$status" -eq 0 ]
+    [ "$(cat "$T/codex.clone_head")" = "$HEAD_SHA" ]
+    [ "$(cd "$d" && find . -type f -not -name '*.lock' | LC_ALL=C sort | xargs sha256sum | sha256sum)" = "$before" ]
+    [ -z "$(scratch_dirs)" ]
+}
+
+@test "an inherited GIT_OBJECT_DIRECTORY receives no objects from setup or the receipt" {
+    fake_codex_plain
+    mkdir -p "$T/outobj"
+    # Control: plain git writes objects there.
+    echo probe | GIT_OBJECT_DIRECTORY="$T/outobj" git -C "$R" hash-object -w --stdin >/dev/null
+    [ -n "$(find "$T/outobj" -type f)" ]
+    rm -rf "$T/outobj"; mkdir -p "$T/outobj"
+    export GIT_OBJECT_DIRECTORY="$T/outobj" GIT_ALTERNATE_OBJECT_DIRECTORIES="$R/.git/objects"
+    run_scratch
+    [ "$status" -eq 0 ]
+    [ -z "$(find "$T/outobj" -type f)" ]
+    [ "$(cat "$T/codex.clone_head")" = "$HEAD_SHA" ]
+}
+
+@test "the scratch git helper hands git none of the inherited GIT_* or other hostile variables" {
+    local names="GIT_SSH GIT_SSH_COMMAND GIT_ASKPASS SSH_ASKPASS GIT_EXTERNAL_DIFF GIT_PAGER GIT_EDITOR GIT_PROXY_COMMAND GIT_DIFF_OPTS GIT_ATTR_SOURCE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_CONFIG GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS GIT_TEMPLATE_DIR GIT_TRACE GIT_NAMESPACE"
+    local n
+    # Control: plain git hands them to an alias subprocess.
+    run bash -c 'cd "$1"; shift; for n in "$@"; do export "$n=HOSTILE-$n"; done; unset GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS GIT_CONFIG GIT_OBJECT_DIRECTORY GIT_INDEX_FILE GIT_TEMPLATE_DIR GIT_TRACE GIT_NAMESPACE; git -c "alias.penv=!env" penv' _ "$T" $names
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"HOSTILE-GIT_SSH_COMMAND"* ]]
+    # The helper: only the allowlist reaches git.
+    run bash -c 'cd "$1"; src="$2"; shift 2; source <(sed -n "/^_review_scratch_git()/,/^}/p" "$src")
+        for n in "$@"; do export "$n=HOSTILE-$n"; done
+        _review_scratch_git -c "alias.penv=!env" penv' _ "$T" "$DISPATCH" $names
+    [ "$status" -eq 0 ]
+    ! grep -q HOSTILE <<<"$output"
+    [[ "$output" == *"GIT_CONFIG_GLOBAL=/dev/null"* ]]
+    [[ "$output" == *"GIT_CONFIG_NOSYSTEM=1"* ]]
+    [[ "$output" == *"GIT_OPTIONAL_LOCKS=0"* ]]
+}
+
+@test "a repo-local clean filter does not run on the real checkout (baseline and final check)" {
+    fake_codex_plain
+    mk_diverged_repo 'a filter=evil'
+    evil_script clean cat
+    git -C "$R" config filter.evil.clean "$T/evil-clean.sh"
+    dirty_same_size
+    assert_fires clean git status --porcelain
+    assert_survives clean
+}
+
+@test "a clean filter defined through include.path does not run" {
+    fake_codex_plain
+    mk_diverged_repo 'a filter=evil'
+    evil_script inc cat
+    git config --file "$T/inc.gitconfig" filter.evil.clean "$T/evil-inc.sh"
+    git -C "$R" config include.path "$T/inc.gitconfig"
+    dirty_same_size
+    assert_fires inc git status --porcelain
+    assert_survives inc
+}
+
+@test "a repo-local core.fsmonitor does not run on the real checkout" {
+    fake_codex_plain
+    evil_script fsm none
+    git -C "$R" config core.fsmonitor "$T/evil-fsm.sh"
+    assert_fires fsm git status --porcelain
+    assert_survives fsm
+}
+
+@test "a repo-local merge driver does not run in the receipt's merge-tree" {
+    fake_codex_plain
+    mk_diverged_repo 'a merge=evil'
+    printf '#!/usr/bin/env bash\ntouch %q\ncat "$3" > "$2"\n' "$T/marker-merge" > "$T/evil-merge.sh"
+    chmod +x "$T/evil-merge.sh"
+    git -C "$R" config merge.evil.driver "$T/evil-merge.sh %O %A %B"
+    assert_fires merge git merge-tree --write-tree "$BASE" "$HEAD_SHA"
+    assert_survives merge
+    [[ "$(jq -r .expected_merge_tree "$T/reviews/o__r/7-$HEAD_SHA.json")" =~ ^[0-9a-f]{40}$ ]]
+}
+
+@test "a repo-local textconv does not run on a dirty real checkout" {
+    fake_codex_plain
+    mk_diverged_repo 'a diff=evil'
+    evil_script textconv cat
+    git -C "$R" config diff.evil.textconv "$T/evil-textconv.sh"
+    echo dirty >> "$R/a"
+    assert_fires textconv git diff HEAD
+    assert_survives textconv
+}
+
+@test "a repo-local diff.external does not run on a dirty real checkout" {
+    fake_codex_plain
+    mk_diverged_repo ''
+    evil_script ext none
+    git -C "$R" config diff.external "$T/evil-ext.sh"
+    echo dirty >> "$R/a"
+    assert_fires ext git diff HEAD
+    assert_survives ext
+}
+
+@test "an inherited GIT_EXTERNAL_DIFF does not run on a dirty real checkout" {
+    fake_codex_plain
+    mk_diverged_repo ''
+    evil_script envext none
+    echo dirty >> "$R/a"
+    export GIT_EXTERNAL_DIFF="$T/evil-envext.sh"
+    assert_fires envext git diff HEAD
+    assert_survives envext
+}
+
+@test "a repo-local credential helper and core.sshCommand are never reached" {
+    fake_codex_plain
+    evil_script cred none
+    git -C "$R" config credential.helper "!$T/evil-cred.sh"
+    git -C "$R" config core.sshCommand "$T/evil-cred.sh"
+    assert_survives cred
+}
+
+@test "the source's smudge filter is not carried into the scratch clone checkout" {
+    fake_codex_plain
+    mk_diverged_repo 'a filter=evil'
+    evil_script smudge cat
+    git -C "$R" config filter.evil.smudge "$T/evil-smudge.sh"
+    # Control: a clone that does carry the source configuration fires it.
+    rm -f "$T/marker-smudge"; rm -rf "$T/ctl"
+    git clone -q --no-checkout "$R" "$T/ctl"
+    cp "$R/.git/config" "$T/ctl/.git/config"
+    git -C "$T/ctl" checkout -q --detach "$HEAD_SHA"
+    [ -e "$T/marker-smudge" ]
+    rm -rf "$T/ctl" "$T/marker-smudge"
+    assert_survives smudge
+}
+
+# ---- Source fingerprint (replaces git status --porcelain) --------------------
+
+# A codex stand-in that runs a shell snippet ($1) before writing its verdict.
+fake_codex_runs() {
+    cat > "$T/bin/codex" <<EOF
+#!/usr/bin/env bash
+[[ "\$1" == exec ]] || { echo "codex-cli 0.166.0"; exit 0; }
+cat > /dev/null
+outfile=""
+while [[ \$# -gt 0 ]]; do case "\$1" in -o) outfile="\$2"; shift 2 ;; *) shift ;; esac; done
+$1
+printf 'Findings: none\n\nVERDICT: PASS\n' > "\$outfile"
+exit 0
+EOF
+    chmod +x "$T/bin/codex"
+}
+
+@test "the fingerprint catches a further edit to a file that was already dirty" {
+    echo first >> "$R/a"
+    fake_codex_runs "echo second >> '$R/a'"
+    run_scratch
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"real checkout status changed"* ]]
+}
+
+@test "the fingerprint catches staging, a mode change and a retargeted symlink" {
+    ln -s a "$R/lnk"
+    git -C "$R" add lnk; git -C "$R" commit -qm lnk
+    HEAD_SHA="$(git -C "$R" rev-parse HEAD)"
+    RECEIPT_FLAGS=(--repo o/r --repo-id R_abc123 --pr 7 --head "$HEAD_SHA" --base "$BASE")
+    echo first >> "$R/a"
+    fake_codex_runs "git -C '$R' add a"
+    run_scratch; [ "$status" -ne 0 ]; [[ "$output" == *"status changed"* ]]
+    git -C "$R" restore --staged a
+    fake_codex_runs "chmod +x '$R/b'"
+    run_scratch; [ "$status" -ne 0 ]; [[ "$output" == *"status changed"* ]]
+    chmod -x "$R/b"
+    fake_codex_runs "ln -sfn b '$R/lnk'"
+    run_scratch; [ "$status" -ne 0 ]; [[ "$output" == *"status changed"* ]]
+}
+
+@test "changes to ignored paths do not fail the run" {
+    mkdir -p "$R/.git/info"; echo ignored.log > "$R/.git/info/exclude"
+    fake_codex_runs "echo noise > '$R/ignored.log'"
+    run_scratch
+    [ "$status" -eq 0 ]
+}
+
+@test "the fingerprint is stable, works from a subdirectory, and does not hang on a fifo" {
+    mkdir -p "$R/sub"; echo s > "$R/sub/f"; mkfifo "$R/pipe"
+    run timeout 60 bash -c '
+        source <(sed -n "/^_review_scratch_git()/,/^_review_scratch_fail()/p" "$1" | head -n -1)
+        a="$(_review_scratch_snapshot "$2")"; b="$(_review_scratch_snapshot "$2")"; c="$(_review_scratch_snapshot "$2/sub")"
+        [[ "$a" =~ ^[0-9a-f]{64}$ && "$a" == "$b" && "$a" == "$c" ]] || { echo "a=$a b=$b c=$c"; exit 1; }
+        echo changed >> "$2/b"
+        d="$(_review_scratch_snapshot "$2")"
+        [[ "$d" != "$a" ]]
+    ' _ "$DISPATCH" "$R"
+    [ "$status" -eq 0 ]
+}
+
+@test "scratch mode skips the post-dispatch git diff and status on the real checkout" {
+    run sed -n '/^_seat_snapshot()/,/^}/p' "$DISPATCH"
+    [[ "$output" == *'REVIEW_SCRATCH:-false}" != true ]] || return 0'* ]]
+    run sed -n '/^_post_dispatch_validate()/,/^}/p' "$DISPATCH"
+    [[ "$output" == *'REVIEW_SCRATCH:-false}" != true ]] || return 0'* ]]
 }

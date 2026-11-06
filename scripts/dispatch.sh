@@ -225,7 +225,7 @@ _dispatch_on_signal() {
 # clones the repository at --head into a private directory and lets codex write
 # only there: the clone (cwd) and a sibling tmp directory (TMPDIR). No other
 # writable root, no network, /tmp excluded. The source checkout is untouched;
-# its HEAD and `git status --porcelain` are compared after the run.
+# its HEAD and a plumbing content fingerprint (no git status) are compared after the run.
 _review_scratch_cleanup() {
   local d="${REVIEW_SCRATCH_DIR:-}"
   [[ -n "$d" ]] || return 0
@@ -239,14 +239,70 @@ _review_scratch_cleanup() {
 }
 
 # Every git command of the scratch setup and source check runs here, outside
-# the codex sandbox, so none may execute anything the caller's configuration
-# names. Global and system config are replaced with /dev/null (HOME is left
-# alone), environment-injected config is dropped, and hooks and fsmonitor are
-# switched off on the command line, which outranks every config file.
+# the codex sandbox, so none may execute anything the caller's environment or
+# configuration names. The environment is an allowlist (env -i): no inherited
+# GIT_* variable survives (GIT_DIR, GIT_INDEX_FILE, GIT_OBJECT_DIRECTORY,
+# GIT_EXTERNAL_DIFF, GIT_SSH, GIT_ASKPASS, GIT_EXEC_PATH, GIT_TRACE* and so on),
+# only PATH, HOME and the locale pass through. Global and system config are
+# replaced with /dev/null, system attributes are off, and hooks and fsmonitor
+# are switched off on the command line, which outranks every config file.
+# Repo-local config is NOT neutralised here: the commands that read a real
+# checkout (_review_scratch_snapshot, the receipt shim) use only plumbing that
+# runs no filter, textconv, external diff or merge driver, and nothing runs git
+# inside the clone after codex has had write access to its .git.
 _review_scratch_git() {
-  env -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS -u GIT_TEMPLATE_DIR \
-    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+  local -a keep=(PATH="$PATH" HOME="${HOME:-/nonexistent}")
+  [[ -n "${LANG:-}" ]] && keep+=(LANG="$LANG")
+  [[ -n "${LC_ALL:-}" ]] && keep+=(LC_ALL="$LC_ALL")
+  env -i "${keep[@]}" \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_ATTR_NOSYSTEM=1 \
+    GIT_TERMINAL_PROMPT=0 GIT_OPTIONAL_LOCKS=0 \
     git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"
+}
+
+# Content fingerprint of a real checkout, taken without running anything the
+# repository's own configuration names. Only plumbing that runs no filter:
+# rev-parse HEAD, ls-files --stage (the index), and for every tracked or
+# untracked-but-not-ignored path its type, exec bit or symlink target, plus a
+# raw sha256 of regular files (sha256sum, not git, so no clean filter). `git
+# status`/`git diff` are deliberately not used: they run clean filters,
+# textconv, external diff and fsmonitor from repo-local config. Prints one
+# sha256 line; returns 1 when any step cannot be read.
+_review_scratch_snapshot_in() {
+  local src="$1" w="$2" top p f
+  top="$(_review_scratch_git -C "$src" rev-parse --show-toplevel 2>/dev/null)" && [[ -n "$top" ]] || return 1
+  _review_scratch_git -C "$top" rev-parse HEAD >"$w/head" 2>/dev/null || return 1
+  _review_scratch_git -C "$top" ls-files --stage -z >"$w/index" 2>/dev/null || return 1
+  _review_scratch_git -C "$top" ls-files --cached --others --exclude-standard -z >"$w/list" 2>/dev/null || return 1
+  : >"$w/regs"
+  {
+    while IFS= read -r -d '' f; do
+      p="$top/$f"
+      if [[ -L "$p" ]]; then
+        printf 'L %s -> %s\0' "$f" "$(readlink -- "$p")"
+      elif [[ -f "$p" ]]; then
+        if [[ -x "$p" ]]; then printf 'X %s\0' "$f"; else printf 'F %s\0' "$f"; fi
+        printf '%s\0' "$f" >>"$w/regs"
+      elif [[ -e "$p" ]]; then
+        printf 'O %s\0' "$f"
+      else
+        printf 'M %s\0' "$f"
+      fi
+    done <"$w/list"
+  } >"$w/meta"
+  # Raw content of regular files; the exit status of xargs is ignored because a
+  # file that vanishes mid-read must change the digest, not abort it.
+  ( cd "$top" && xargs -0 -r sha256sum -- <"$w/regs" ) >"$w/sums" 2>&1 || true
+  cat "$w/head" "$w/index" "$w/meta" "$w/sums" | sha256sum | cut -d' ' -f1
+}
+
+_review_scratch_snapshot() {
+  local w out rc=0
+  w="$(mktemp -d "${TMPDIR:-/tmp}/clavain-review-snap.XXXXXX")" || return 1
+  out="$(_review_scratch_snapshot_in "$1" "$w")" || rc=1
+  rm -rf -- "$w" 2>/dev/null || true
+  [[ "$rc" == 0 && "$out" =~ ^[0-9a-f]{64}$ ]] || return 1
+  printf '%s\n' "$out"
 }
 
 _review_scratch_fail() {
@@ -262,8 +318,8 @@ _review_scratch_setup() {
   local src="${WORKDIR:-.}" root clone_head clone_tree
   REVIEW_SCRATCH_SRC_HEAD="$(_review_scratch_git -C "$src" rev-parse HEAD 2>/dev/null)" \
     || _review_scratch_fail "cannot read HEAD of the -C checkout"
-  REVIEW_SCRATCH_SRC_STATUS="$(_review_scratch_git -C "$src" status --porcelain 2>/dev/null)" \
-    || _review_scratch_fail "cannot read status of the -C checkout"
+  REVIEW_SCRATCH_SRC_STATUS="$(_review_scratch_snapshot "$src")" \
+    || _review_scratch_fail "cannot fingerprint the -C checkout"
   root="$(mktemp -d "${TMPDIR:-/tmp}/clavain-review-scratch.XXXXXX")" \
     || _review_scratch_fail "cannot create the scratch directory"
   chmod 700 "$root"
@@ -289,18 +345,18 @@ _review_scratch_setup() {
 }
 
 # After the run: the source checkout must be exactly as it was. Returns 1 and
-# says why when its HEAD or porcelain status changed.
+# says why when its HEAD or content fingerprint changed.
 _review_scratch_verify_source() {
   [[ -n "${REVIEW_SCRATCH_SRC_HEAD:-}" ]] || return 0
   local src="${WORKDIR:-.}" head status
   head="$(_review_scratch_git -C "$src" rev-parse HEAD 2>/dev/null)" || head="<unreadable>"
-  status="$(_review_scratch_git -C "$src" status --porcelain 2>/dev/null)" || status="<unreadable>"
+  status="$(_review_scratch_snapshot "$src")" || status="<unreadable>"
   if [[ "$head" != "$REVIEW_SCRATCH_SRC_HEAD" ]]; then
     echo "Error: --review-scratch: the real checkout HEAD changed during the run ($REVIEW_SCRATCH_SRC_HEAD -> $head)" >&2
     return 1
   fi
   if [[ "$status" != "$REVIEW_SCRATCH_SRC_STATUS" ]]; then
-    echo "Error: --review-scratch: the real checkout status changed during the run" >&2
+    echo "Error: --review-scratch: the real checkout status changed during the run (tracked or untracked content differs)" >&2
     return 1
   fi
   return 0
@@ -2783,7 +2839,13 @@ else
   CMD+=("$PROMPT")
   if [[ -n "$SCRATCH_CODEX_TMPDIR" && "$DRY_RUN" != true ]]; then
     # TMPDIR only for the codex process, not for dispatch's own temp files.
-    CMD=(env "TMPDIR=$SCRATCH_CODEX_TMPDIR" "${CMD[@]}")
+    # No inherited GIT_* variable reaches codex either: a stale GIT_DIR,
+    # GIT_INDEX_FILE or GIT_WORK_TREE would point its git at the real checkout.
+    SCRATCH_ENV_SCRUB=()
+    while IFS= read -r _gv; do
+      [[ "$_gv" == GIT_* ]] && SCRATCH_ENV_SCRUB+=(-u "$_gv")
+    done < <(compgen -e)
+    CMD=(env "${SCRATCH_ENV_SCRUB[@]+"${SCRATCH_ENV_SCRUB[@]}"}" "TMPDIR=$SCRATCH_CODEX_TMPDIR" "${CMD[@]}")
   fi
 fi
 
@@ -2981,6 +3043,9 @@ _jsonl_parser() {
 # as __pycache__ and .venv stay invisible, as they should).
 _seat_snapshot() {
   local dir="${1:-.}"
+  # Never in review scratch mode: status and diff would run the caller's
+  # repo-local filters outside the sandbox.
+  [[ "${REVIEW_SCRATCH:-false}" != true ]] || return 0
   git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
   git -C "$dir" status --porcelain --untracked-files=all 2>/dev/null
   git -C "$dir" diff HEAD 2>/dev/null | shasum 2>/dev/null | cut -c1-16
@@ -2988,6 +3053,11 @@ _seat_snapshot() {
 
 _post_dispatch_validate() {
     local workdir="${1:-.}"
+    # Review scratch mode: codex wrote only in the scratch clone, and `git diff`
+    # on the caller's checkout would run its repo-local clean filters, textconv
+    # and external diff outside the sandbox. The source is checked by the
+    # plumbing fingerprint in _review_scratch_verify_source instead.
+    [[ "${REVIEW_SCRATCH:-false}" != true ]] || return 0
     [[ -d "$workdir/.git" ]] || return 0
 
     local changed
