@@ -39,6 +39,11 @@ MINIMUM_CODEX_VERSION=""
 FALLBACK_REASON=""
 PRODUCER_IDENTITY=""
 RR_REPO=""; RR_REPO_ID=""; RR_PR=""; RR_HEAD=""; RR_BASE=""
+REVIEW_SCRATCH=false
+REVIEW_SCRATCH_DIR=""
+REVIEW_SCRATCH_TREE=""
+REVIEW_SCRATCH_SRC_HEAD=""
+REVIEW_SCRATCH_SRC_STATUS=""
 VALIDATOR_RELATIONSHIP=""
 CAPACITY_SUBSTITUTE_JSON=""
 RECHECK_ITEMS=""
@@ -215,14 +220,193 @@ _dispatch_on_signal() {
   exit "$1"
 }
 
+# Review scratch mode (mk-fdj7h). A cross-lab-review run may need to execute test
+# suites that call mktemp. Instead of widening the read-only sandbox, dispatch
+# clones the repository at --head into a private directory and lets codex write
+# only there: the clone (cwd) and a sibling tmp directory (TMPDIR). No other
+# writable root, no network, /tmp excluded. The source checkout is untouched;
+# its HEAD and a plumbing content fingerprint (no git status) are compared after the run.
+_review_scratch_cleanup() {
+  local d="${REVIEW_SCRATCH_DIR:-}"
+  [[ -n "$d" ]] || return 0
+  REVIEW_SCRATCH_DIR=""
+  case "$d" in
+    */clavain-review-scratch.*)
+      chmod -R u+rwX -- "$d" 2>/dev/null || true
+      rm -rf -- "$d" 2>/dev/null || true
+      ;;
+  esac
+}
+
+# Every git command of the scratch setup and source check runs here, outside
+# the codex sandbox, so none may execute anything the caller's environment or
+# configuration names. The environment is an allowlist (env -i): no inherited
+# GIT_* variable survives (GIT_DIR, GIT_INDEX_FILE, GIT_OBJECT_DIRECTORY,
+# GIT_EXTERNAL_DIFF, GIT_SSH, GIT_ASKPASS, GIT_EXEC_PATH, GIT_TRACE* and so on),
+# only PATH, HOME and the locale pass through. Global and system config are
+# replaced with /dev/null, system attributes are off, and hooks and fsmonitor
+# are switched off on the command line, which outranks every config file.
+# Repo-local config is NOT neutralised here: the commands that read a real
+# checkout (_review_scratch_snapshot, the receipt shim) use only plumbing that
+# runs no filter, textconv, external diff or merge driver, and nothing runs git
+# inside the clone after codex has had write access to its .git.
+_review_scratch_git() {
+  local -a keep=(PATH="$PATH" HOME="${HOME:-/nonexistent}")
+  [[ -n "${LANG:-}" ]] && keep+=(LANG="$LANG")
+  [[ -n "${LC_ALL:-}" ]] && keep+=(LC_ALL="$LC_ALL")
+  env -i "${keep[@]}" \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_ATTR_NOSYSTEM=1 \
+    GIT_TERMINAL_PROMPT=0 GIT_OPTIONAL_LOCKS=0 \
+    git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"
+}
+
+# Dispatcher-owned writes (failure evidence, capacity forecasts, built review
+# packets) normally land under <checkout>/.clavain. Those writes run outside the
+# codex sandbox, and a source-controlled .clavain symlink could point them at
+# any directory the caller can write, which the content fingerprint cannot see.
+# In scratch mode they go to a subdirectory of the trusted receipt directory
+# instead, and the source checkout's .clavain is never opened for writing.
+# Prints the directory; returns 1 (fail closed) when it cannot be made safely.
+_review_scratch_state_dir() {
+  local name="$1" base dir
+  base="$(_review_receipt_dir)"
+  [[ "$base" == /* ]] || return 1
+  dir="$base/$name"
+  [[ ! -L "$dir" ]] || { echo "Error: --review-scratch: refusing symlinked state directory $dir" >&2; return 1; }
+  mkdir -p -m 700 -- "$dir" 2>/dev/null || return 1
+  [[ -d "$dir" && ! -L "$dir" ]] || return 1
+  printf '%s\n' "$dir"
+}
+
+# Fails closed when the source checkout's .clavain (at -C and at the repository
+# top) is a symlink: nothing in scratch mode may write through it.
+_review_scratch_refuse_clavain_symlink() {
+  local src="$1" top c
+  top="$(_review_scratch_git -C "$src" rev-parse --show-toplevel 2>/dev/null)" || top=""
+  for c in "$src/.clavain" "${top:+$top/.clavain}"; do
+    [[ -n "$c" && -L "$c" ]] || continue
+    echo "Error: --review-scratch: refusing a symlinked .clavain in the source checkout ($c)" >&2
+    return 1
+  done
+  return 0
+}
+
+# Content fingerprint of a real checkout, taken without running anything the
+# repository's own configuration names. Only plumbing that runs no filter:
+# rev-parse HEAD, ls-files --stage (the index), and for every tracked or
+# untracked-but-not-ignored path its type, exec bit or symlink target, plus a
+# raw sha256 of regular files (sha256sum, not git, so no clean filter). `git
+# status`/`git diff` are deliberately not used: they run clean filters,
+# textconv, external diff and fsmonitor from repo-local config. Prints one
+# sha256 line; returns 1 when any step cannot be read.
+_review_scratch_snapshot_in() {
+  local src="$1" w="$2" top p f
+  top="$(_review_scratch_git -C "$src" rev-parse --show-toplevel 2>/dev/null)" && [[ -n "$top" ]] || return 1
+  _review_scratch_git -C "$top" rev-parse HEAD >"$w/head" 2>/dev/null || return 1
+  _review_scratch_git -C "$top" ls-files --stage -z >"$w/index" 2>/dev/null || return 1
+  _review_scratch_git -C "$top" ls-files --cached --others --exclude-standard -z >"$w/list" 2>/dev/null || return 1
+  : >"$w/regs"
+  {
+    while IFS= read -r -d '' f; do
+      p="$top/$f"
+      if [[ -L "$p" ]]; then
+        printf 'L %s -> %s\0' "$f" "$(readlink -- "$p")"
+      elif [[ -f "$p" ]]; then
+        if [[ -x "$p" ]]; then printf 'X %s\0' "$f"; else printf 'F %s\0' "$f"; fi
+        printf '%s\0' "$f" >>"$w/regs"
+      elif [[ -e "$p" ]]; then
+        printf 'O %s\0' "$f"
+      else
+        printf 'M %s\0' "$f"
+      fi
+    done <"$w/list"
+  } >"$w/meta"
+  # Raw content of regular files; the exit status of xargs is ignored because a
+  # file that vanishes mid-read must change the digest, not abort it.
+  ( cd "$top" && xargs -0 -r sha256sum -- <"$w/regs" ) >"$w/sums" 2>&1 || true
+  cat "$w/head" "$w/index" "$w/meta" "$w/sums" | sha256sum | cut -d' ' -f1
+}
+
+_review_scratch_snapshot() {
+  local w out rc=0
+  w="$(mktemp -d "${TMPDIR:-/tmp}/clavain-review-snap.XXXXXX")" || return 1
+  out="$(_review_scratch_snapshot_in "$1" "$w")" || rc=1
+  rm -rf -- "$w" 2>/dev/null || true
+  [[ "$rc" == 0 && "$out" =~ ^[0-9a-f]{64}$ ]] || return 1
+  printf '%s\n' "$out"
+}
+
+_review_scratch_fail() {
+  echo "Error: --review-scratch: $1" >&2
+  _review_scratch_cleanup
+  _dispatch_write_failure_class terminal_configuration
+  exit 1
+}
+
+# Creates the private scratch clone at --head. Sets REVIEW_SCRATCH_DIR,
+# REVIEW_SCRATCH_TREE and the source-checkout baseline. Fails closed.
+_review_scratch_setup() {
+  local src="${WORKDIR:-.}" root clone_head clone_tree
+  REVIEW_SCRATCH_SRC_HEAD="$(_review_scratch_git -C "$src" rev-parse HEAD 2>/dev/null)" \
+    || _review_scratch_fail "cannot read HEAD of the -C checkout"
+  REVIEW_SCRATCH_SRC_STATUS="$(_review_scratch_snapshot "$src")" \
+    || _review_scratch_fail "cannot fingerprint the -C checkout"
+  root="$(mktemp -d "${TMPDIR:-/tmp}/clavain-review-scratch.XXXXXX")" \
+    || _review_scratch_fail "cannot create the scratch directory"
+  chmod 700 "$root"
+  REVIEW_SCRATCH_DIR="$root"
+  trap '_review_scratch_cleanup' EXIT
+  mkdir -p -m 700 "$root/tmp" || _review_scratch_fail "cannot create the scratch tmp directory"
+  # A clone, never a worktree: a worktree writes into the source .git. An empty
+  # template directory means the clone gets no hooks at all.
+  _review_scratch_git clone --quiet --no-checkout --no-hardlinks --template= "$src" "$root/repo" >/dev/null 2>&1 \
+    || _review_scratch_fail "git clone of the -C checkout failed"
+  _review_scratch_git -C "$root/repo" remote remove origin >/dev/null 2>&1 || true
+  _review_scratch_git -C "$root/repo" checkout --quiet --detach "$RR_HEAD" >/dev/null 2>&1 \
+    || _review_scratch_fail "--head $RR_HEAD is not in the clone"
+  clone_head="$(_review_scratch_git -C "$root/repo" rev-parse HEAD 2>/dev/null)"
+  clone_tree="$(_review_scratch_git -C "$root/repo" rev-parse 'HEAD^{tree}' 2>/dev/null)"
+  [[ "$clone_head" == "$RR_HEAD" ]] \
+    || _review_scratch_fail "clone HEAD $clone_head is not --head $RR_HEAD"
+  [[ -n "$clone_tree" && "$clone_tree" == "${RR_HEAD_TREE:-}" ]] \
+    || _review_scratch_fail "clone tree ${clone_tree:-<none>} does not match the tree of --head ${RR_HEAD_TREE:-<none>}"
+  [[ -z "$(_review_scratch_git -C "$root/repo" status --porcelain 2>/dev/null)" ]] \
+    || _review_scratch_fail "clone worktree is not clean at --head"
+  REVIEW_SCRATCH_TREE="$clone_tree"
+}
+
+# After the run: the source checkout must be exactly as it was. Returns 1 and
+# says why when its HEAD or content fingerprint changed.
+_review_scratch_verify_source() {
+  [[ -n "${REVIEW_SCRATCH_SRC_HEAD:-}" ]] || return 0
+  local src="${WORKDIR:-.}" head status
+  head="$(_review_scratch_git -C "$src" rev-parse HEAD 2>/dev/null)" || head="<unreadable>"
+  status="$(_review_scratch_snapshot "$src")" || status="<unreadable>"
+  if [[ "$head" != "$REVIEW_SCRATCH_SRC_HEAD" ]]; then
+    echo "Error: --review-scratch: the real checkout HEAD changed during the run ($REVIEW_SCRATCH_SRC_HEAD -> $head)" >&2
+    return 1
+  fi
+  if [[ "$status" != "$REVIEW_SCRATCH_SRC_STATUS" ]]; then
+    echo "Error: --review-scratch: the real checkout status changed during the run (tracked or untracked content differs)" >&2
+    return 1
+  fi
+  return 0
+}
+
 _dispatch_cleanup_state() {
   local _rc=$?
+  if [[ "${REVIEW_SCRATCH:-false}" == true && -n "${REVIEW_SCRATCH_SRC_HEAD:-}" ]]; then
+    if ! _review_scratch_verify_source; then
+      [[ "$_rc" != 0 ]] || _rc=1
+    fi
+  fi
   # Review receipt (mk-zek32): only the resolved child that ran the review
   # writes it. A requested receipt that cannot be written fails the run, so a
   # caller never mistakes "no file" for a clean review.
   if [[ "${ROLE_RESOLVED:-}" == true && "${ROLE:-}" == cross-lab-review ]] && _review_receipt_requested; then
     _review_receipt_write "${OUTPUT:-}" "$_rc" || { [[ "$_rc" != 0 ]] || _rc=1; }
   fi
+  _review_scratch_cleanup
   # Governed per-run receipt, best-effort. A signal before the write only sets
   # _sig_rc; the record is built after the status is final, and INT/TERM are
   # ignored just for the short append, so the receipt and the exit status agree.
@@ -312,6 +496,20 @@ Options:
                                 PR head under ${CLAVAIN_REVIEW_RECEIPT_DIR:-~/.local/state/clavain/reviews},
                                 mode 0600, never overwritten. No file for a same-lab,
                                 substitute or verdict-less review; the run then exits 1.
+  --review-scratch              Scratch-writable review (cross-lab-review, codex engine,
+                                  needs the receipt flags and -C). Clones -C at --head into
+                                  a private 0700 directory (tree must match --head, or the
+                                  run fails closed) and runs codex workspace-write there
+                                  with TMPDIR inside it, no other writable root, /tmp
+                                  excluded and network off, so test suites that call
+                                  mktemp can run. The real checkout is untouched (HEAD and
+                                  status are checked after the run) and the directory is
+                                  deleted. The receipt records sandbox "scratch-write" and
+                                  scratch_tree. Setup git runs with global and system
+                                  config ignored and hooks off. Codex passthrough is
+                                  allowlisted (--json, --skip-git-repo-check, --color,
+                                  --output-schema); any other flag is refused, with no
+                                  receipt.
   --plan <FILE>                 The contract the seat must read. It must exist before any
                                   model runs; for --to claude its directory is added as a
                                   readable root (--add-dir) so a plan outside -C is readable
@@ -773,7 +971,11 @@ _dispatch_role_profile() {
     exclusions="$(jq -c '.exclude | unique' <<< "$advice")"
     if [[ "$exclusions" != '[]' ]]; then
       local capacity_dir="${WORKDIR:-.}/.clavain/capacity" seat
-      mkdir -p "$capacity_dir" || return 1
+      if [[ "${REVIEW_SCRATCH:-false}" == true ]]; then
+        capacity_dir="$(_review_scratch_state_dir capacity)" || return 1
+      else
+        mkdir -p "$capacity_dir" || return 1
+      fi
       # Python's suffix support is portable; BSD mktemp requires trailing Xs.
       evidence="$(python3 -c 'import os,sys,tempfile; fd,path=tempfile.mkstemp(dir=sys.argv[1], prefix=sys.argv[2]+"-", suffix="-headroom.json"); os.close(fd); print(path)' "$capacity_dir" "$(date -u +%Y%m%dT%H%M%SZ)")" || return 1
       printf '%s\n' "$headroom" > "$evidence"
@@ -1051,7 +1253,11 @@ _dispatch_prepare_review_packet() {
     fi
     local out_dir built
     out_dir="${WORKDIR:-.}/.clavain/review-packets"
-    mkdir -p "$out_dir" || return 1
+    if [[ "${REVIEW_SCRATCH:-false}" == true ]]; then
+      out_dir="$(_review_scratch_state_dir review-packets)" || return 1
+    else
+      mkdir -p "$out_dir" || return 1
+    fi
     built="$(python3 "$DISPATCH_SCRIPT_DIR/build-review-packet.py" --input "$REVIEW_INPUT" --output-dir "$out_dir" 2>&1)" || {
       echo "Error: failed to build review packet from --review-input: $REVIEW_INPUT" >&2
       echo "$built" >&2
@@ -1307,6 +1513,10 @@ while [[ $# -gt 0 ]]; do
         --capacity-substitute) CAPACITY_SUBSTITUTE_JSON="$2" ;;
       esac
       shift 2
+      ;;
+    --review-scratch)
+      REVIEW_SCRATCH=true
+      shift
       ;;
     --repo|--repo-id|--pr|--head|--base)
       require_arg "$1" "${2:-}"
@@ -1581,6 +1791,54 @@ fi
 # the canonical --review-packet ROLE_PASSTHROUGH already injected below).
 if [[ -n "$REVIEW_INPUT" || -n "$REVIEW_PACKET" ]]; then
   _dispatch_prepare_review_packet "${1:-}" || exit 1
+fi
+
+# Review scratch mode (mk-fdj7h): cross-lab-review only, with the receipt flags,
+# a -C checkout, and never a wider sandbox than workspace-write.
+if [[ "$REVIEW_SCRATCH" == true ]]; then
+  if [[ "$ROLE" != cross-lab-review ]]; then
+    echo "Error: --review-scratch applies to --role cross-lab-review only" >&2
+    exit 1
+  fi
+  if [[ -z "$RR_REPO" || -z "$RR_REPO_ID" || -z "$RR_PR" || -z "$RR_HEAD" || -z "$RR_BASE" ]]; then
+    echo "Error: --review-scratch needs the receipt flags --repo --repo-id --pr --head --base" >&2
+    exit 1
+  fi
+  if [[ -z "$WORKDIR" ]]; then
+    echo "Error: --review-scratch needs -C <checkout> (the repository to clone at --head)" >&2
+    exit 1
+  fi
+  if [[ "$SANDBOX_SET" == true && "$SANDBOX" != read-only && "$SANDBOX" != workspace-write ]]; then
+    echo "Error: --review-scratch cannot be combined with -s $SANDBOX" >&2
+    exit 1
+  fi
+  if [[ -n "$VIA" ]]; then
+    echo "Error: --review-scratch cannot be combined with --via" >&2
+    exit 1
+  fi
+  # Passthrough allowlist. EXTRA_ARGS is appended after the enforced sandbox
+  # settings, so anything that can change authority (-c/--config, --profile,
+  # --add-dir, --sandbox/--cd forms, approval flags, --full-auto, --yolo,
+  # --enable/--disable, --oss, --search, ...) would silently widen the boundary
+  # the scratch-write receipt claims. Only inert output/format flags pass; every
+  # other flag, including `--flag=value` spellings and unknown flags, is
+  # refused with no receipt.
+  for ((_sa = 0; _sa < ${#EXTRA_ARGS[@]}; _sa++)); do
+    case "${EXTRA_ARGS[$_sa]}" in
+      --json|--skip-git-repo-check) ;;
+      --color|--output-schema) _sa=$((_sa + 1)) ;;
+      *)
+        echo "Error: --review-scratch refuses passthrough '${EXTRA_ARGS[$_sa]}': it can change sandbox authority (allowed: --json, --skip-git-repo-check, --color, --output-schema)" >&2
+        _dispatch_write_failure_class terminal_configuration
+        exit 1
+        ;;
+    esac
+  done
+  _review_scratch_refuse_clavain_symlink "$WORKDIR" || {
+    _dispatch_write_failure_class terminal_configuration
+    exit 1
+  }
+  SANDBOX="workspace-write"
 fi
 
 # Review receipt (mk-zek32): all five flags or none, cross-lab-review only.
@@ -2256,6 +2514,12 @@ if [[ "$VIA" == "zaka" ]]; then
   exit 0
 fi
 
+if [[ "$REVIEW_SCRATCH" == true && "$ROLE_RESOLVED" == true && "$ENGINE" != codex ]]; then
+  echo "Error: --review-scratch is supported for the codex engine only (resolved engine: $ENGINE)" >&2
+  _dispatch_write_failure_class terminal_configuration
+  exit 1
+fi
+
 # Ordered executor failover for --to auto. The recursive invocation receives
 # the exact original arguments except the routing controls, so it cannot
 # recurse and preserves all backend-specific dispatch behavior.
@@ -2536,13 +2800,34 @@ else
       exit 1
     fi
   fi
+  # Review scratch mode: codex writes only to the private clone (cwd) and its
+  # sibling tmp (TMPDIR). No extra roots, /tmp excluded, network off. A dry run
+  # prints the same flags over a placeholder and creates nothing.
+  SCRATCH_CODEX_ARGS=()
+  SCRATCH_CODEX_CD=""
+  SCRATCH_CODEX_TMPDIR=""
+  if [[ "$REVIEW_SCRATCH" == true ]]; then
+    if [[ "$DRY_RUN" == true ]]; then
+      SCRATCH_CODEX_CD="<review-scratch>/repo"
+      SCRATCH_CODEX_TMPDIR="<review-scratch>/tmp"
+    else
+      _review_scratch_setup
+      SCRATCH_CODEX_CD="$REVIEW_SCRATCH_DIR/repo"
+      SCRATCH_CODEX_TMPDIR="$REVIEW_SCRATCH_DIR/tmp"
+    fi
+    SCRATCH_CODEX_ARGS=(-c 'sandbox_workspace_write.writable_roots=[]'
+      -c 'sandbox_workspace_write.exclude_slash_tmp=true'
+      -c 'sandbox_workspace_write.exclude_tmpdir_env_var=false'
+      -c 'sandbox_workspace_write.network_access=false')
+    CMD+=("${SCRATCH_CODEX_ARGS[@]}")
+  fi
   # Tool caches outside the workspace (uv's, by default) are denied under
   # workspace-write, so a seat replaying `uv run pytest` cannot run it and a
   # validator has to answer UNRUN (run d9dd99e0, goal a7f02287). Grant the
   # roots named by CLAVAIN_CODEX_WRITABLE_ROOTS (colon-separated; default the
   # user's uv cache; set it empty to grant nothing) when they exist.
   CODEX_WRITABLE_ROOTS_TOML=""
-  if [[ "$SANDBOX" == "workspace-write" ]]; then
+  if [[ "$SANDBOX" == "workspace-write" && "$REVIEW_SCRATCH" != true ]]; then
     IFS=':' read -r -a _roots <<< "${CLAVAIN_CODEX_WRITABLE_ROOTS-$HOME/.cache/uv}"
     for _r in "${_roots[@]}"; do
       [[ -n "$_r" && -d "$_r" ]] || continue
@@ -2553,7 +2838,9 @@ else
     fi
   fi
 
-  if [[ -n "$WORKDIR" ]]; then
+  if [[ -n "$SCRATCH_CODEX_CD" ]]; then
+    CMD+=(-C "$SCRATCH_CODEX_CD")
+  elif [[ -n "$WORKDIR" ]]; then
     CMD+=(-C "$WORKDIR")
   fi
   # uv's sync step builds a network client, and under the codex sandbox that
@@ -2593,6 +2880,16 @@ else
   fi
 
   CMD+=("$PROMPT")
+  if [[ -n "$SCRATCH_CODEX_TMPDIR" && "$DRY_RUN" != true ]]; then
+    # TMPDIR only for the codex process, not for dispatch's own temp files.
+    # No inherited GIT_* variable reaches codex either: a stale GIT_DIR,
+    # GIT_INDEX_FILE or GIT_WORK_TREE would point its git at the real checkout.
+    SCRATCH_ENV_SCRUB=()
+    while IFS= read -r _gv; do
+      [[ "$_gv" == GIT_* ]] && SCRATCH_ENV_SCRUB+=(-u "$_gv")
+    done < <(compgen -e)
+    CMD=(env "${SCRATCH_ENV_SCRUB[@]+"${SCRATCH_ENV_SCRUB[@]}"}" "TMPDIR=$SCRATCH_CODEX_TMPDIR" "${CMD[@]}")
+  fi
 fi
 
 # Dry run: print command and exit
@@ -2640,10 +2937,15 @@ if [[ "$DRY_RUN" == true ]]; then
   else
     if [[ -n "${UV_NO_SYNC:-}" ]]; then echo "# Env: UV_NO_SYNC=$UV_NO_SYNC (validation seat replays without syncing)" >&2; fi
     DISPLAY_CMD=(codex exec -s "$SANDBOX")
+    if [[ -n "${SCRATCH_CODEX_TMPDIR:-}" ]]; then
+      echo "# Env: TMPDIR=$SCRATCH_CODEX_TMPDIR (review scratch)" >&2
+      DISPLAY_CMD+=("${SCRATCH_CODEX_ARGS[@]}")
+    fi
     if [[ -n "${CODEX_WRITABLE_ROOTS_TOML:-}" ]]; then
       DISPLAY_CMD+=(-c "sandbox_workspace_write.writable_roots=[${CODEX_WRITABLE_ROOTS_TOML}]")
     fi
-    if [[ -n "$WORKDIR" ]]; then DISPLAY_CMD+=(-C "$WORKDIR"); fi
+    if [[ -n "${SCRATCH_CODEX_CD:-}" ]]; then DISPLAY_CMD+=(-C "$SCRATCH_CODEX_CD")
+    elif [[ -n "$WORKDIR" ]]; then DISPLAY_CMD+=(-C "$WORKDIR"); fi
     if [[ -n "$OUTPUT" ]]; then DISPLAY_CMD+=(-o "$OUTPUT"); fi
     if [[ -n "$MODEL" ]]; then DISPLAY_CMD+=(-m "$MODEL"); fi
     if [[ -n "$REASONING_EFFORT" ]]; then DISPLAY_CMD+=(-c "model_reasoning_effort=$REASONING_EFFORT"); fi
@@ -2784,6 +3086,9 @@ _jsonl_parser() {
 # as __pycache__ and .venv stay invisible, as they should).
 _seat_snapshot() {
   local dir="${1:-.}"
+  # Never in review scratch mode: status and diff would run the caller's
+  # repo-local filters outside the sandbox.
+  [[ "${REVIEW_SCRATCH:-false}" != true ]] || return 0
   git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
   git -C "$dir" status --porcelain --untracked-files=all 2>/dev/null
   git -C "$dir" diff HEAD 2>/dev/null | shasum 2>/dev/null | cut -c1-16
@@ -2791,6 +3096,11 @@ _seat_snapshot() {
 
 _post_dispatch_validate() {
     local workdir="${1:-.}"
+    # Review scratch mode: codex wrote only in the scratch clone, and `git diff`
+    # on the caller's checkout would run its repo-local clean filters, textconv
+    # and external diff outside the sandbox. The source is checked by the
+    # plumbing fingerprint in _review_scratch_verify_source instead.
+    [[ "${REVIEW_SCRATCH:-false}" != true ]] || return 0
     [[ -d "$workdir/.git" ]] || return 0
 
     local changed
@@ -3495,13 +3805,23 @@ _surface_codex_errors() {
 _persist_dispatch_failure_evidence() {
   local failure_class="$1" root evidence_id relative_path evidence_path reference
   local -a evidence_cmd
-  if ! root="$(git -C "${WORKDIR:-.}" rev-parse --show-toplevel 2>/dev/null)"; then
+  if [[ "${REVIEW_SCRATCH:-false}" == true ]]; then
+    root=""
+  elif ! root="$(git -C "${WORKDIR:-.}" rev-parse --show-toplevel 2>/dev/null)"; then
     root="$(cd "${WORKDIR:-.}" && pwd -P)" || return 1
   fi
   evidence_id="${ATTEMPT_ID:-${DISPATCH_ID:-$(_dispatch_audit_id)}}"
   evidence_id="$(printf '%s' "$evidence_id" | tr -c 'A-Za-z0-9._-' '_')"
   relative_path=".clavain/intercept/${evidence_id}.json"
   evidence_path="$root/$relative_path"
+  if [[ "${REVIEW_SCRATCH:-false}" == true ]]; then
+    # Never through the source checkout: the evidence lands in the trusted
+    # receipt directory, and the reference carries its absolute path.
+    local intercept_dir
+    intercept_dir="$(_review_scratch_state_dir intercept)" || return 1
+    evidence_path="$intercept_dir/${evidence_id}.json"
+    relative_path="$evidence_path"
+  fi
   evidence_cmd=(python3 "$DISPATCH_SCRIPT_DIR/provider-errors.py" "$PROVIDER_EVENTS"
     --stderr "$STDERR_FILE" --write-evidence "$evidence_path"
     --receipt-path "$relative_path" --failure-class "$failure_class"
