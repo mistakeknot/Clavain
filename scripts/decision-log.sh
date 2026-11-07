@@ -35,20 +35,22 @@ append() {
 }
 
 # One locked write for header and row, so concurrent callers cannot interleave.
-# flock is absent on macOS, so fall back to a mkdir lock there.
+# flock is absent on macOS, so fall back to Bash's exclusive file creation.
+# Do not use mkdir's exit status as a mutex: uutils 0.8.0 can report success
+# after a concurrent EEXIST (uutils/coreutils#13970).
 if command -v flock >/dev/null 2>&1; then
   { flock 9; append; } 9>>"$log" >>"$log"
 else
-  lockdir="$log.lock.d"
+  lockfile="$log.lock"
   tries=0
-  until mkdir "$lockdir" 2>/dev/null; do
+  until (set -C; : > "$lockfile") 2>/dev/null; do
     tries=$((tries + 1))
     if [ "$tries" -gt 600 ]; then
-      echo "decision-log.sh: could not take $lockdir" >&2
+      echo "decision-log.sh: could not take $lockfile" >&2
       exit 1
     fi
     sleep 0.05
   done
-  trap 'rmdir "$lockdir"' EXIT
+  trap 'rm -- "$lockfile"' EXIT
   append >>"$log"
 fi
