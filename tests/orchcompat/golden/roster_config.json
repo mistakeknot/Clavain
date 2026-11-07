@@ -1,0 +1,485 @@
+{
+ "families": {
+  "claude-fable-5-1": [
+   "anthropic",
+   "fable",
+   "Claude Fable 5.1"
+  ],
+  "claude-haiku-4-5": [
+   "anthropic",
+   "haiku",
+   "Claude 4.5 Haiku"
+  ],
+  "claude-opus-5": [
+   "anthropic",
+   "opus",
+   "Claude Opus 5"
+  ],
+  "claude-opus-5-5": [
+   "anthropic",
+   "opus",
+   "Claude Opus 5.5"
+  ],
+  "claude-sonnet-5": [
+   "anthropic",
+   "sonnet",
+   "Claude Sonnet 5"
+  ],
+  "claude-sonnet-5-5": [
+   "anthropic",
+   "sonnet",
+   "Claude Sonnet 5.5"
+  ],
+  "gpt-5.5": [
+   "openai",
+   "gpt-5.5",
+   "GPT-5.5"
+  ],
+  "gpt-5.6-luna": [
+   "openai",
+   "luna",
+   "GPT-5.6 Luna"
+  ],
+  "gpt-6-astra": [
+   "openai",
+   "astra",
+   "GPT-6 Astra"
+  ],
+  "gpt-6-luna": [
+   "openai",
+   "luna",
+   "GPT-6 Luna"
+  ],
+  "gpt-6-sol": [
+   "openai",
+   "sol",
+   "GPT-6 Sol"
+  ],
+  "gpt-6.1-sol": [
+   "openai",
+   "sol",
+   "GPT-6.1 Sol"
+  ],
+  "gpt-oss-120b": [
+   "openai",
+   "gpt-oss",
+   "gpt-oss-120b"
+  ],
+  "kimi-code/k3": [
+   "moonshot",
+   "kimi",
+   "Kimi K3"
+  ],
+  "nemotron-cascade-2-30b-a3b": [
+   "nvidia",
+   "nemotron",
+   "Nemotron Cascade 2 30B A3B"
+  ],
+  "qwen3.5-122b-a10b": [
+   "alibaba",
+   "qwen",
+   "Qwen3.5 122B A10B"
+  ],
+  "qwen3.5-9b": [
+   "alibaba",
+   "qwen",
+   "Qwen3.5 9B"
+  ],
+  "qwen3.6-35b-a3b": [
+   "alibaba",
+   "qwen",
+   "Qwen3.6 35B A3B"
+  ]
+ },
+ "families_top_level_keys": [
+  "candidates",
+  "luna_class_evaluations",
+  "models"
+ ],
+ "fleet_agents": {
+  "agent-native-reviewer": [
+   "review",
+   "intercraft",
+   [
+    "agent-native-reviewer"
+   ],
+   false
+  ],
+  "best-practices-researcher": [
+   "research",
+   "interflux",
+   [
+    "research-agent"
+   ],
+   false
+  ],
+  "bug-reproduction-validator": [
+   "workflow",
+   "clavain",
+   [
+    "bug-reproduction-validator"
+   ],
+   false
+  ],
+  "data-migration-expert": [
+   "review",
+   "clavain",
+   [
+    "data-migration-expert"
+   ],
+   false
+  ],
+  "fd-architecture": [
+   "review",
+   "interflux",
+   [
+    "fd-architecture"
+   ],
+   false
+  ],
+  "fd-correctness": [
+   "review",
+   "interflux",
+   [
+    "fd-correctness"
+   ],
+   false
+  ],
+  "fd-decisions": [
+   "review",
+   "interflux",
+   [
+    "fd-decisions"
+   ],
+   false
+  ],
+  "fd-game-design": [
+   "review",
+   "interflux",
+   [
+    "fd-game-design"
+   ],
+   false
+  ],
+  "fd-people": [
+   "review",
+   "interflux",
+   [
+    "fd-people"
+   ],
+   false
+  ],
+  "fd-perception": [
+   "review",
+   "interflux",
+   [
+    "fd-perception"
+   ],
+   false
+  ],
+  "fd-performance": [
+   "review",
+   "interflux",
+   [
+    "fd-performance"
+   ],
+   false
+  ],
+  "fd-quality": [
+   "review",
+   "interflux",
+   [
+    "fd-quality"
+   ],
+   false
+  ],
+  "fd-resilience": [
+   "review",
+   "interflux",
+   [
+    "fd-resilience"
+   ],
+   false
+  ],
+  "fd-safety": [
+   "review",
+   "interflux",
+   [
+    "fd-safety"
+   ],
+   false
+  ],
+  "fd-systems": [
+   "review",
+   "interflux",
+   [
+    "fd-systems"
+   ],
+   false
+  ],
+  "fd-user-product": [
+   "review",
+   "interflux",
+   [
+    "fd-user-product"
+   ],
+   false
+  ],
+  "framework-docs-researcher": [
+   "research",
+   "interflux",
+   [
+    "research-agent"
+   ],
+   false
+  ],
+  "git-history-analyzer": [
+   "research",
+   "interflux",
+   [
+    "research-agent"
+   ],
+   false
+  ],
+  "learnings-researcher": [
+   "research",
+   "interflux",
+   [
+    "research-agent"
+   ],
+   false
+  ],
+  "mycroft": [
+   "orchestrator",
+   "autarch",
+   [
+    "fleet-orchestrator"
+   ],
+   false
+  ],
+  "plan-reviewer": [
+   "review",
+   "clavain",
+   [
+    "plan-reviewer"
+   ],
+   false
+  ],
+  "pr-comment-resolver": [
+   "workflow",
+   "clavain",
+   [
+    "pr-comment-resolver"
+   ],
+   false
+  ],
+  "repo-research-analyst": [
+   "research",
+   "interflux",
+   [
+    "research-agent"
+   ],
+   false
+  ],
+  "synthesize-research": [
+   "synthesis",
+   "intersynth",
+   [
+    "synthesis"
+   ],
+   false
+  ],
+  "synthesize-review": [
+   "synthesis",
+   "intersynth",
+   [
+    "synthesis"
+   ],
+   false
+  ],
+  "voice-analyzer": [
+   "research",
+   "interfluence",
+   [
+    "voice-analyzer"
+   ],
+   false
+  ]
+ },
+ "fleet_version": "1.0",
+ "registry_entries": {
+  "claude-fable-5-1@high": [
+   "exact",
+   "claude-fable-5-1",
+   "claude-fable-5-1-high"
+  ],
+  "claude-opus-5-5@high": [
+   "exact",
+   "claude-opus-5-5",
+   "claude-opus-5-5-high"
+  ],
+  "claude-opus-5-5@medium": [
+   "exact",
+   "claude-opus-5-5",
+   "claude-opus-5-5-medium"
+  ],
+  "claude-opus-5@high": [
+   "exact",
+   "claude-opus-5",
+   "claude-opus-5-high"
+  ],
+  "claude-sonnet-5-5@high": [
+   "exact",
+   "claude-sonnet-5-5",
+   "claude-sonnet-5-5-high"
+  ],
+  "claude-sonnet-5-5@medium": [
+   "exact",
+   "claude-sonnet-5-5",
+   "claude-sonnet-5-5-medium"
+  ],
+  "claude-sonnet-5@high": [
+   "exact",
+   "claude-sonnet-5",
+   "claude-sonnet-5-high"
+  ],
+  "claude-sonnet-5@medium": [
+   "exact",
+   "claude-sonnet-5",
+   "claude-sonnet-5-medium"
+  ],
+  "cloud": [
+   "waiver-ratified",
+   "gpt-5.5",
+   "gpt-5-5"
+  ],
+  "executor:codex": [
+   "waiver-ratified",
+   "gpt-5.5",
+   "gpt-5-5"
+  ],
+  "executor:kimi": [
+   "waiver-ratified",
+   "kimi-code/k3",
+   "kimi-k3"
+  ],
+  "gpt-6-astra@high": [
+   "exact",
+   "gpt-6-astra",
+   "gpt-6-astra-high"
+  ],
+  "gpt-6-astra@medium": [
+   "exact",
+   "gpt-6-astra",
+   "gpt-6-astra-medium"
+  ],
+  "gpt-6-astra@xhigh": [
+   "exact",
+   "gpt-6-astra",
+   "gpt-6-astra-xhigh"
+  ],
+  "gpt-6-sol@high": [
+   "exact",
+   "gpt-6-sol",
+   "gpt-6-sol-high"
+  ],
+  "gpt-6-sol@medium": [
+   "exact",
+   "gpt-6-sol",
+   "gpt-6-sol-medium"
+  ],
+  "gpt-6.1-sol@high": [
+   "exact",
+   "gpt-6.1-sol",
+   "gpt-6.1-sol-high"
+  ],
+  "gpt-6.1-sol@medium": [
+   "exact",
+   "gpt-6.1-sol",
+   "gpt-6.1-sol-medium"
+  ],
+  "kimi-code/k3@high": [
+   "waiver-ratified",
+   "kimi-code/k3",
+   "kimi-k3"
+  ],
+  "local:gpt-oss-120b-mxfp4": [
+   "waiver-ratified",
+   "gpt-oss-120b",
+   "gpt-oss-120b"
+  ],
+  "local:nemotron-30b-a3b-8bit": [
+   "exact",
+   "nemotron-cascade-2-30b-a3b",
+   "nemotron-cascade-2-30b-a3b"
+  ],
+  "local:qwen3.5-122b-a10b-4bit": [
+   "waiver-ratified",
+   "qwen3.5-122b-a10b",
+   "qwen3-5-122b-a10b"
+  ],
+  "local:qwen3.5-9b-4bit": [
+   "waiver-ratified",
+   "qwen3.5-9b",
+   "qwen3-5-9b"
+  ],
+  "local:qwen3.6-35b-a3b-4bit": [
+   "exact",
+   "qwen3.6-35b-a3b",
+   "qwen3-6-35b-a3b-non-reasoning"
+  ],
+  "subagent:fable": [
+   "waiver-ratified",
+   "claude-fable-5-1",
+   "claude-fable-5-1-xhigh"
+  ],
+  "subagent:haiku": [
+   "waiver-ratified",
+   "claude-haiku-4-5",
+   "claude-4-5-haiku"
+  ],
+  "subagent:opus": [
+   "waiver-ratified",
+   "claude-opus-5-5",
+   "claude-opus-5-5-xhigh"
+  ],
+  "subagent:sonnet": [
+   "waiver-proposed",
+   "claude-sonnet-5-5",
+   "claude-sonnet-5-5-xhigh"
+  ]
+ },
+ "registry_gaps": [],
+ "slug_rows": [
+  "claude-fable-5-1@high",
+  "claude-opus-5-5@high",
+  "claude-opus-5-5@medium",
+  "claude-opus-5@high",
+  "claude-sonnet-5-5@high",
+  "claude-sonnet-5-5@medium",
+  "claude-sonnet-5@high",
+  "claude-sonnet-5@medium",
+  "gpt-6-astra@high",
+  "gpt-6-astra@medium",
+  "gpt-6-astra@xhigh",
+  "gpt-6-sol@high",
+  "gpt-6-sol@medium",
+  "gpt-6.1-sol@high",
+  "gpt-6.1-sol@medium",
+  "local:nemotron-30b-a3b-8bit",
+  "local:qwen3.6-35b-a3b-4bit"
+ ],
+ "slug_waivers": {
+  "cloud": "RATIFIED",
+  "executor:codex": "RATIFIED",
+  "executor:kimi": "RATIFIED",
+  "kimi-code/k3@high": "RATIFIED",
+  "local:gpt-oss-120b-mxfp4": "RATIFIED",
+  "local:qwen3.5-122b-a10b-4bit": "RATIFIED",
+  "local:qwen3.5-9b-4bit": "RATIFIED",
+  "subagent:fable": "RATIFIED",
+  "subagent:haiku": "RATIFIED",
+  "subagent:opus": "RATIFIED",
+  "subagent:sonnet": "PROPOSED"
+ }
+}

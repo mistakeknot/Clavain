@@ -1,0 +1,6 @@
+# Fixed policy fixture for the contract generator tests.
+# The generator hashes these bytes and never parses them.
+dispatch:
+  roles:
+    planning:
+      profile: example

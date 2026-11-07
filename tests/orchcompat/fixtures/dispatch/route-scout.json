@@ -1,0 +1,41 @@
+{
+ "classification_reasons": [],
+ "decision_context": {
+  "available_models": null,
+  "rationale": "x",
+  "reasons": []
+ },
+ "fallback_chain": [
+  {
+   "profile": {
+    "backend": "claude",
+    "description": "Capacity fallback for scout when the Codex lane is out of usage",
+    "model": "claude-sonnet-5-5",
+    "model_identity": "claude-sonnet-5-5",
+    "reasoning_effort": "medium",
+    "role": "scout",
+    "service_tier": "standard"
+   },
+   "profile_ref": "scout-sonnet"
+  }
+ ],
+ "frontier_required": false,
+ "policy_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+ "policy_profile": "default",
+ "policy_source": "<POLICY>",
+ "profile": {
+  "backend": "codex",
+  "description": "Repository exploration and bounded read-only reconnaissance",
+  "fallbacks": [
+   "scout-sonnet"
+  ],
+  "model": "gpt-6.1-sol",
+  "model_identity": "gpt-6.1-sol",
+  "reasoning_effort": "medium",
+  "role": "scout",
+  "service_tier": "standard"
+ },
+ "profile_ref": "scout-sol",
+ "requested_role": "scout",
+ "review_requirement": "existing-gates"
+}
