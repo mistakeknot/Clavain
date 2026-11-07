@@ -40,6 +40,47 @@ Fall back to prose only when none of the stronger options can catch the pattern.
 - **CI:** gates run through the repo's registered checks. A gardening change is not done until the required checks pass in fresh isolated guests at the exact commit. Do not add a GitHub Actions dependency to run a new rule.
 - **Beads:** one bead per gardening task; name the bead in the commit and the PR.
 
+## Suppression count check
+
+Source: bead mk-3czro. Apply this check only where a linter already runs; add no
+linter to an unlinted repository. Existing linter rules remain the authority on
+syntax: use golangci-lint's `nolintlint` specificity/explanation checks, Ruff's
+PGH003/PGH004, or ESLint comments specificity/description rules as applicable.
+
+`scripts/suppressions.py` counts `nolint`, `noqa`, `type: ignore`,
+`eslint-disable` (including line variants), `ts-ignore`/`ts-expect-error`,
+`ts-nocheck`, and `pylint: disable` on comment-looking source lines. It flags a
+missing specific rule or explanation. TypeScript directives name a diagnostic
+such as `TS2322`; blanket directives cannot qualify as specific.
+
+Design choice: this is a simple, deterministic scanner, not a full lexer. It
+can over-count markers inside strings, and it can miss TSX or regex edge cases
+and descriptions split across lines. Over-counting is acceptable because the
+adoption baseline absorbs it. It does not track comment moves or claim to
+recognize every tool's suppression syntax. Keep its counting semantics stable
+after adoption; review scanner changes and recount before updating consumers.
+All tracked regular Go, Python and JavaScript/TypeScript source is scanned,
+including tracked vendor/research copies; symlink targets are not followed.
+
+Adopt once without rewriting old comments in bulk, then commit the generated
+`.suppression-baseline.json`. The baseline contains the total count by kind and
+malformed counts by kind. The repository's total suppression count and each
+malformed count may only shrink. Both the live counts and baseline changes are
+checked against the baseline committed on an explicitly supplied trusted target
+ref; never pass the topic branch's own HEAD as that target. A reduction requires
+updating the baseline in the same change. There is no upward regeneration flag.
+
+```sh
+python3 -I "$SKILL_DIR/scripts/suppressions.py" --root "$REPO" --adopt
+python3 -I "$SKILL_DIR/scripts/suppressions.py" --root "$REPO" --base-ref origin/main
+python3 -I "$SKILL_DIR/scripts/suppressions.py" --root "$REPO" --base-ref origin/main --update
+```
+
+Use the repository's actual fetched target branch in place of `origin/main`.
+Wire the check through existing registered checks when adopting it; do not add
+a GitHub Actions workflow. `--json` prints counts, findings and errors for an
+inventory. Baseline-covered malformed comments are reported as `BASELINED`.
+
 ## Docs-pins check
 
 `scripts/docs-pins.py` in this skill compares versions quoted in `AGENTS.md` and `README.md` (at the root and beside each manifest) with `package.json`, `go.mod` and `pyproject.toml`. A nested document answers to the nearest manifest, in its directory or above, that pins the name; a root document answers to the root manifest when it pins the name, otherwise to every nested manifest that does. It compares plain versions only. Anything else (ranges, wildcards, comparators, `||`, URLs, VCS refs, `workspace:`, tags, prereleases, local `replace` paths, unreadable manifests, and a name pinned with differing specs in one manifest) is listed as a note, not guessed at. It follows the same idea as a figures test that reads numbers in the docs and compares them with the code, but it is reusable across repositories and reports drift as a **warning**: it prints `WARNING <doc>:<line>: <name> documented as X, manifest pins Y (manifest file)` and exits 0. It never rewrites a document.
