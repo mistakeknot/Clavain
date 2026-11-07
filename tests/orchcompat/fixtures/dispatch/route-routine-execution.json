@@ -1,0 +1,56 @@
+{
+ "classification_reasons": [],
+ "decision_context": {
+  "available_models": null,
+  "rationale": "x",
+  "reasons": []
+ },
+ "fallback_chain": [
+  {
+   "profile": {
+    "backend": "codex",
+    "description": "High-volume routine implementation",
+    "fallbacks": [
+     "routine-sonnet"
+    ],
+    "model": "gpt-6.1-sol",
+    "model_identity": "gpt-6.1-sol",
+    "reasoning_effort": "medium",
+    "role": "routine-execution",
+    "service_tier": "standard"
+   },
+   "profile_ref": "routine-sol"
+  },
+  {
+   "profile": {
+    "backend": "claude",
+    "description": "Capacity fallback for routine execution when the Codex lane is out of usage",
+    "model": "claude-sonnet-5-5",
+    "model_identity": "claude-sonnet-5-5",
+    "reasoning_effort": "high",
+    "role": "routine-execution",
+    "service_tier": "standard"
+   },
+   "profile_ref": "routine-sonnet"
+  }
+ ],
+ "frontier_required": false,
+ "policy_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+ "policy_profile": "default",
+ "policy_source": "<POLICY>",
+ "profile": {
+  "backend": "claude",
+  "description": "Default routine (mechanical) execution seat",
+  "fallbacks": [
+   "routine-sol"
+  ],
+  "model": "claude-sonnet-5-5",
+  "model_identity": "claude-sonnet-5-5",
+  "reasoning_effort": "high",
+  "role": "routine-execution",
+  "service_tier": "standard"
+ },
+ "profile_ref": "routine-exec-sonnet",
+ "requested_role": "routine-execution",
+ "review_requirement": "existing-gates"
+}
