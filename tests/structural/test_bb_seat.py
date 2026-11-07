@@ -35,7 +35,7 @@ if a[:1]==['status']: value={'thread':{'id':'thr_parent','environment':{'hostId'
 elif a[:2]==['pool','status']: value={'accounts':[{'id':'fixture-'+p,'provider':p,'enabled':True,'sevenDayUtilization':v,'fiveHourUtilization':.1} for p,v in [('codex',.8),('claude',.2)]]}
 elif a[:2]==['project','list']: value=[{'id':'proj_fixture','sources':[{'hostId':'host_pda34naxgq','path':str(root/'work')}]}]
 elif a[:2]==['provider','list']: value=[{'id':p,'available':True,'capabilities':{'permissionModes':['auto']},'serviceTiers':[{'id':'default'}]} for p in ('codex','claude-code')]
-elif a[:2]==['provider','models']: value=[{'id':m,'supportedReasoningEfforts':[{'reasoningEffort':e} for e in es]} for m,es in [('gpt-6-astra',['xhigh']),('claude-sonnet-5-5',['medium','high','max']),('claude-opus-5-5',['high'])]]
+elif a[:2]==['provider','models']: value=[{'id':m,'supportedReasoningEfforts':[{'reasoningEffort':e} for e in es]} for m,es in [('gpt-6-astra',['xhigh']),('claude-sonnet-5-5',['medium','high','max']),('claude-opus-5-5',['medium','high'])]]
 elif a[:2]==['thread','spawn']:
  sys.stdin.read()
  if '--plan' in a: (root/'plan-mode').touch()
@@ -96,7 +96,7 @@ print(json.dumps(value))
             context.write_text(json.dumps({'reasons':[], 'rationale':'fixture'}))
             command=['bash',str(ROOT/'scripts/dispatch.sh'),'--role',role,
                 '--via','bb','--context-file',str(context),'-C',str(work),'-o',str(tmp_path/'result')]
-            if role in ('plan-review','validation'):
+            if role in ('plan-review','validation','cross-lab-review'):
                 command += ['--producer-identity',producer_identity]
             if sandbox is not None:
                 command += ['--sandbox',sandbox]
@@ -220,7 +220,7 @@ def test_unknown_evidence(seat):
 
 
 @pytest.mark.requires_ic
-@pytest.mark.parametrize('role', ['plan-review','validation'])
+@pytest.mark.parametrize('role', ['plan-review','validation','cross-lab-review'])
 def test_review_roles_accept_only_read_only_and_record_receipt(seat,role):
     root,run=seat
     result=run(role=role,sandbox='read-only',backend='claude',model='claude-opus-5-5',effort='high')
@@ -287,10 +287,11 @@ def test_recovery_preserves_review_sandbox_violation(seat):
 
 
 @pytest.mark.requires_ic
-def test_codex_review_rejected_without_enforced_read_only_bb_permission(seat):
+@pytest.mark.parametrize('role', ['plan-review','cross-lab-review'])
+def test_codex_review_rejected_without_enforced_read_only_bb_permission(seat,role):
     root,run=seat
     failure=root/'failure-class'
-    result=run(role='plan-review',sandbox='read-only',
+    result=run(role=role,sandbox='read-only',
                extra_env={'CLAVAIN_DISPATCH_FAILURE_FILE':str(failure)})
     assert result.returncode!=0
     assert 'cannot enforce read-only' in result.stderr
@@ -318,6 +319,7 @@ def test_dispatch_astra_first_review_falls_back_to_read_only_claude_seat(seat):
                extra_env={'CLAVAIN_ROUTING_POLICY':str(policy)})
     assert result.returncode==1,result.stderr  # Fallback ran; observed identity remains unknown.
     assert "review-astra' unavailable (unsupported_adapter)" in result.stderr
+    assert (root/'result.receipt.json').exists(), result.stderr
     receipt=json.loads((root/'result.receipt.json').read_text())
     assert receipt['resolved_profile_ref']=='review-opus'
     assert receipt['requested_provider']=='claude-code'
@@ -340,7 +342,7 @@ def test_dispatch_dry_run_applies_backend_check_and_reports_read_only_fallback(s
 
 
 @pytest.mark.requires_ic
-@pytest.mark.parametrize('role', ['plan-review','validation'])
+@pytest.mark.parametrize('role', ['plan-review','validation','cross-lab-review'])
 @pytest.mark.parametrize('sandbox', ['workspace-write','danger-full-access'])
 def test_review_roles_reject_writable_sandboxes_before_bb(seat,role,sandbox):
     root,run=seat
@@ -353,7 +355,7 @@ def test_review_roles_reject_writable_sandboxes_before_bb(seat,role,sandbox):
 @pytest.mark.requires_ic
 def test_unknown_role_rejected_before_bb(seat):
     root,run=seat
-    result=run(role='cross-lab-review',sandbox='read-only')
+    result=run(role='unsupported-role',sandbox='read-only')
     assert result.returncode!=0
     assert 'unsupported role' in result.stderr
     assert not (root/'calls').exists()
@@ -376,11 +378,12 @@ def test_execution_roles_keep_writable_auto_mode(seat,role,sandbox):
 
 
 @pytest.mark.requires_ic
-@pytest.mark.parametrize('role', ['plan-review','validation'])
+@pytest.mark.parametrize('role', ['plan-review','validation','cross-lab-review'])
 def test_dispatch_review_roles_default_read_only_through_helper(seat,role):
     root,run=seat
     result=run(role=role,via_dispatch=True)
     assert result.returncode==1,result.stderr  # Missing observed identity still blocks acceptance.
+    assert (root/'result.receipt.json').exists(), result.stderr
     receipt=json.loads((root/'result.receipt.json').read_text())
     assert receipt['role']==role
     assert receipt['sandbox']=='read-only'

@@ -25,6 +25,7 @@ class UnsupportedAdapter(SeatError):
 
 
 ROLE_SANDBOX_ALLOWLIST = {
+    'cross-lab-review': frozenset({'read-only'}),
     'plan-review': frozenset({'read-only'}),
     'validation': frozenset({'read-only'}),
     'routine-execution': frozenset({'workspace-write', 'danger-full-access'}),
