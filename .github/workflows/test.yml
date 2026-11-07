@@ -16,11 +16,11 @@ on:
 jobs:
   structural-and-shell:
     runs-on: ubuntu-latest
-    # 15, not 5 (Sylveste-psey). The last run that reached Tier 2 used 268 of
-    # the 300 seconds this cap allowed, at 830 cases; there are 876 now, so the
-    # old ceiling had 32 seconds of headroom and no longer holds. Nothing else
-    # about this job's dependencies changes.
-    timeout-minutes: 15
+    # 25, not 15 (mk-yajsi). Green runs now take 13 to nearly 15 minutes, and
+    # three PR runs were cancelled at the 15-minute cap with no failing test.
+    # 25 restores headroom; a hung job still stops. Before that, 15 replaced 5
+    # (Sylveste-psey) for the same reason. Nothing else about this job changes.
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: os/Clavain
