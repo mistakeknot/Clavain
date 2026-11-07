@@ -2448,7 +2448,7 @@ if [[ "$VIA" == "zaka" ]]; then
 
   # Backend preflight: fail fast with a clear message when zaka/tmux are missing
   if ! command -v zaka >/dev/null 2>&1; then
-    echo "Error: zaka CLI not found on PATH (required for --via zaka). See /Users/sma/projects/Sylveste/os/Zaka" >&2
+    echo "Error: zaka CLI not found on PATH (required for --via zaka). Install it and put it on PATH." >&2
     exit 1
   fi
   if [[ "$ZAKA_AGENT" != codex ]] && ! command -v tmux >/dev/null 2>&1; then

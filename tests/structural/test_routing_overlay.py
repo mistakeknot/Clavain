@@ -553,3 +553,33 @@ def test_lib_explicit_policy_is_left_alone(box):
     result = lib_call(box, str(tmp / "absent.yaml"), "routing_resolve_dispatch_tier coordination",
                       extra={"CLAVAIN_ROUTING_POLICY": str(BASE)})
     assert result.returncode == 0 and seen.read_text().strip() == str(BASE)
+
+
+PUBLIC_FILES = [
+    "scripts/dispatch.sh",
+    "scripts/routing_overlay.py",
+    "scripts/lib-routing.sh",
+    "scripts/sync-agent-instructions.py",
+    "config/routing.yaml",
+    "config/agent-instructions.md",
+    "docs/canon/reasoning-routing.md",
+    "docs/canon/reasoning-routing-operations.md",
+    "docs/canon/reasoning-routing-verification.md",
+    "skills/project-onboard/SKILL.md",
+    "skills/project-onboard/SKILL-compact.md",
+    "skills/project-onboard/templates/AGENTS.md.tmpl",
+]
+
+
+def test_public_files_carry_no_private_paths_or_hostnames():
+    host = "".join(["zk", "lw"]) + "(?:-ci)?"
+    pattern = re.compile(
+        r"/Users/[a-z]|/home/[A-Za-z]|\.bb-machines|\b" + host + r"\b|\bsma@|thr_[a-z0-9]{8,}"
+    )
+    offenders = []
+    for name in PUBLIC_FILES:
+        path = ROOT / name
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            if pattern.search(line):
+                offenders.append(f"{name}:{number}")
+    assert offenders == []

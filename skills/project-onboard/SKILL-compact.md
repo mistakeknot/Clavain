@@ -72,12 +72,12 @@ Skip anything that exists. Execute in order:
 
 ## Phase 4: Observability
 
-For active mistakeknot/gensysven repos, inspect `zklw-ci status --repo OWNER/REPO
+For active mistakeknot/gensysven repos, inspect `<fleet-ci> status --repo OWNER/REPO
 --json` on the CI host and claim the existing migration task for the repository.
-New code projects need reproducible Q5/manifest-based checks and `zklw-ci onboard
+New code projects need reproducible Q5/manifest-based checks and `<fleet-ci> onboard
 --repo OWNER/REPO --json` registration. Registration is a review proposal, not
 verified CI. Complete reviewed registry and fresh-guest verification before
-claiming readiness. Use independently scheduled zklw automation; no Linux Actions
+claiming readiness. Use independently scheduled CI-host automation; no Linux Actions
 or Actions-controlled runners. Preserve macOS/Windows jobs, destinations, signing
 and publication gates. Documentation-only projects get an explicit disposition;
 unavailable service/authentication remains a prerequisite failure.

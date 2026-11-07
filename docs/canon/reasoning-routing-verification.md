@@ -112,7 +112,7 @@ does not cover the concurrent validation-seat change in `5fb851a`.
 
 The two blocked pushes are resolved. Sylveste `affe02be` and Interflux `60b93c6`
 include the prepared changes and source-repository check recipes. Both are on
-`main`. Their required checks were registered with the independent zklw fleet;
+`main`. Their required checks were registered with the independent CI fleet;
 jobs **8/10** and **9/11**, respectively, passed in four distinct fresh guests.
 Protected receipts were authenticated against source bundles, recipe and policy
 hashes, image identity and logs. Existing GitHub checks also passed on those
@@ -124,7 +124,7 @@ The admission extension passed independent Fable review and 182 ops tests.
 Manual, main-push and PR-merge triggers are registered for these two check recipes.
 See the [authenticated canary evidence](https://github.com/mistakeknot/ops/blob/main/ci/fleet/evidence/2026-09-08-reasoning-checks-canary.json).
 
-The two required check classes completed their independent zklw cutover on
+The two required check classes completed their independent CI-host cutover on
 2026-09-09. Dedicated App `4881945` published successful results from two fresh
 guests per exact revision under its new policy. Two isolated PRs proved that
 merge-only App checks satisfy the protected gate; completed results replayed

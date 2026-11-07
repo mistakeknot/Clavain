@@ -582,4 +582,4 @@ fresh-session model/effort receipts. Compare identical contexts from nested repo
 outside Git roots, standalone installs and alternate profiles. Upgrade only the
 selected instruction block or adapter. Roll back by selecting the previous
 version's policy and rerendering its block; preserve receipts and local content.
-Build/release/deployment automation remains independently scheduled on zklw.
+Build/release/deployment automation remains independently scheduled on the CI host.
