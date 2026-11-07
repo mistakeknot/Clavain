@@ -22,6 +22,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import orchlib as o  # noqa: E402
 
+# Which behavior the checkout is required to have is read from its git history
+# (see the comment above the scope-check tests).
+SCOPE_CHECK = o.dispatch_feature("scope-check")
+
 
 @pytest.fixture
 def rig(tmp_path):
@@ -123,7 +127,8 @@ CORE_RECEIPT = {
     "exit_code": 0, "outcome": "completed", "tokens_in": None, "tokens_out": None,
 }
 # Added after the baseline: what the receipt says about the model actually
-# observed. All or none of these are present, so the test is strict both ways.
+# observed. Which of the two receipt shapes is required comes from the git
+# history of the checkout (o.dispatch_feature), never from the receipt itself.
 OBSERVED_RECEIPT = {
     "observed_model": "unknown", "observed_source": "unavailable",
     "observed_reason": "no request-bound model evidence for this transport or state",
@@ -141,9 +146,65 @@ def test_receipt_fields_for_a_completed_run(rig):
     rec = o.normalize_receipt(rec)
     digest = rec.pop("decision_context_sha256")
     assert digest == hashlib.sha256(rig.ctx.read_bytes()).hexdigest()
-    extras = {k: rec.pop(k) for k in list(rec) if k in OBSERVED_RECEIPT}
-    assert rec == CORE_RECEIPT
-    assert extras in ({}, OBSERVED_RECEIPT), extras
+    expected = dict(CORE_RECEIPT)
+    if o.dispatch_feature("observed-receipt"):
+        expected.update(OBSERVED_RECEIPT)
+    assert rec == expected
+
+
+def test_a_run_writes_only_the_known_state_files_in_tmp(rig):
+    """dispatch.sh ignores TMPDIR for its state files; pin which ones it makes."""
+    rig.dispatch("--role", "routine-execution", *rig.base_args(),
+                 CLAVAIN_DECISION_CONTEXT=rig.ctx)
+    assert set(rig.tmp_files) <= set(o.DISPATCH_TMP_SUFFIXES)
+    assert ".json" in rig.tmp_files or rig.tmp_files == []  # the script removes its own state file
+
+
+@pytest.mark.skipif(SCOPE_CHECK, reason="only the older script runs the inner dispatch here")
+def test_the_inner_run_of_a_role_dispatch_is_reaped_too(rig):
+    """A role is resolved, then dispatch.sh runs itself with the resolved
+    backend; that inner run names its own /tmp files. They must be found by
+    the fake CLI's ancestry, not left behind."""
+    rig.dispatch("--role", "routine-execution", "--review-scratch", "x", *rig.base_args(),
+                 CLAVAIN_DECISION_CONTEXT=rig.ctx)
+    assert ".json.events.jsonl" in rig.tmp_files
+
+
+def test_reaping_removes_known_files_and_rejects_unknown_ones():
+    pid = 2**31 - 1  # no such process; names files nothing else uses
+    known = Path(f"/tmp/clavain-dispatch-{pid}.json.stderr")
+    weird = Path(f"/tmp/clavain-dispatch-{pid}.surprise")
+    try:
+        known.write_text("x")
+        assert o.reap_dispatch_tmp(pid) == [".json.stderr"]
+        assert not known.exists()
+        known.write_text("x")
+        weird.write_text("x")
+        with pytest.raises(AssertionError, match="unexpected dispatch file"):
+            o.reap_dispatch_tmp(pid)
+        assert weird.exists()  # left for inspection
+    finally:
+        known.unlink(missing_ok=True)
+        weird.unlink(missing_ok=True)
+
+
+def test_session_variables_do_not_reach_the_script(rig, tmp_path, monkeypatch):
+    """BASH_ENV, ENV and INTERBAND_LIB of the caller must not be inherited."""
+    leak = tmp_path / "leak"
+    hook = tmp_path / "hook.sh"
+    hook.write_text(f"touch {leak}\n")
+    monkeypatch.setenv("BASH_ENV", str(hook))
+    monkeypatch.setenv("ENV", str(hook))
+    monkeypatch.setenv("INTERBAND_LIB", str(hook))
+    monkeypatch.setenv("CLAVAIN_ROUTING_POLICY", "/nonexistent")
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path))
+    env = rig.env()
+    assert not {"BASH_ENV", "ENV", "CLAVAIN_ROUTING_POLICY", "PYTHONPATH"} & set(env)
+    assert env["INTERBAND_LIB"] != str(hook)
+    r = rig.dispatch("--role", "routine-execution", *rig.base_args(),
+                     CLAVAIN_DECISION_CONTEXT=rig.ctx)
+    assert r.returncode == 0, r.stderr
+    assert not leak.exists()
 
 
 def test_receipt_carries_producer_and_bead(rig):
@@ -294,9 +355,10 @@ def test_bead_id_accepts_the_documented_charset(rig, bead):
 
 
 # At the baseline these flags were accepted and ignored with a warning on a
-# non-review role (the seat then ran); today they are refused before any call. Both behaviors are pinned, chosen by
-# the presence of the refusal text in the script under test.
-SCOPE_CHECK = "apply to --role cross-lab-review only" in o.DISPATCH.read_text()
+# non-review role (the seat then ran); today they are refused before any call.
+# Both behaviors are pinned. Which one is required comes from the git history of
+# the checkout (o.dispatch_feature), not from the script text, so a change that
+# brings the old warn-and-run behavior back into a current tree fails.
 
 
 def test_review_scratch_on_a_non_review_role(rig):

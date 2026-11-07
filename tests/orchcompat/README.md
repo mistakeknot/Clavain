@@ -27,15 +27,39 @@ From the repository root:
     nice -n 19 python3 -m pytest -q -p no:cacheprovider tests/orchcompat
 
 The suite needs `python3` with `pytest` and `pyyaml`, plus `bash`, `jq` and
-`yq` (for the fleet reader). Tests that need the real `ic` binary
-(`requires_ic`) are deselected, with a printed notice, when `ic` is not on
-PATH. Pass `--orchcompat-require-ic` to turn that into an error instead; use
-it in any run that is meant to gate a change.
+`yq` v4 (for the fleet reader). Without the real `ic` binary the
+`requires_ic` tests are deselected, and without `yq` the fleet-reader tests
+are skipped; both are printed in the run header and summary. Pass
+`--orchcompat-require-ic` for the strict gate: a missing `ic`, `yq` or `jq`
+then stops the run with an error instead. Use it in any run that is meant to
+gate a change (the flag keeps its name; it now covers all three tools).
 
-Everything runs in a temp HOME and temp data dirs with the policy path passed
-explicitly, so the tests do not read or write the operator's real state.
+## Hermeticity: what is isolated and what is not
+
+Every script runs with an allowlisted environment, built from nothing: temp
+`HOME` and `TMPDIR`, a fixed `PATH` (fakes first), `LANG`/`LC_ALL`, and
+`TZ` if the caller has one. Nothing else is inherited, so `BASH_ENV`, `ENV`,
+`CLAVAIN_*`, `PYTHONPATH` and the like cannot reach a script. `INTERBAND_LIB`
+points at an empty file in the temp HOME: `dispatch.sh` sources that variable
+first and stops at the first library it finds, so no interband library next to
+the checkout or in the operator's home is ever loaded. The policy path is
+passed explicitly, so the tests do not read or write the operator's state.
 Fake CLIs record their arguments and exit; no model is launched and no network
 is used.
+
+One exception, by necessity: `scripts/dispatch.sh` hard-codes its state files
+as `/tmp/clavain-dispatch-<pid>.json` (plus `.tmp`, `.stderr` and
+`.events.jsonl`), so `TMPDIR` does not move them and the script cannot be
+edited here. The rig does not claim to isolate them. It launches bash directly,
+so the child's pid names the files. A role dispatch also runs `dispatch.sh`
+again for the resolved backend, and that inner run has its own pid; the fake
+CLIs record their ancestor pids, so the rig finds the inner pid from them.
+After each run it asserts that only those four suffixes exist for each such
+pid, records them, and deletes exactly those files (`orchlib.reap_dispatch_tmp`).
+An unknown name fails the test and is left in place. A run killed by the OS or
+a timeout of the test process itself, or one that dies before any fake CLI
+starts below the launched bash, can still leave its files behind; they hold no
+secrets and carry a dead pid.
 
 Environment overrides:
 
@@ -45,6 +69,10 @@ Environment overrides:
   the policy produced by neutral defaults plus the overlay.
 * `ORCHCOMPAT_GOLDEN_POLICY`: the recorded policy hash the resolved policy
   must equal when it is not the checkout's own file.
+* `ORCHCOMPAT_DISPATCH_GEN`: `baseline` or `main`; see Version awareness.
+
+Each role resolution also asserts that the `policy_hash` `ic` returns is the
+sha256 of the policy file that was passed.
 
 ## Goldens
 
@@ -67,11 +95,18 @@ Existing keys for other policies are kept.
 ## Version awareness
 
 The suite passes at the baseline commit and at current main. Where the two
-differ, the test checks the version it finds: `dispatch.sh` receipts carry
+differ, the expected behavior is chosen from the git history of the checkout,
+never from what the script under test does: `dispatch.sh` receipts carry
 `observed_*` and `usage_*` fields only on main, and main refuses
 `--review-scratch` and `--repo` on non-review roles where the baseline warns
-and runs the seat. The test detects which behavior the script has and asserts
-that one, so a regression in either direction still fails.
+and runs the seat. `orchlib.DISPATCH_FEATURES` names the commit that
+introduced each behavior; if it is an ancestor of `HEAD` the new behavior is
+required, otherwise the old one. So a change that brings the old behavior
+back into a current tree fails, and so does one that drops a field. The choice
+reads the commit graph, not the working tree: run the suite on a committed
+checkout. `ORCHCOMPAT_DISPATCH_GEN=baseline|main` overrides it (mutcheck uses
+this; its scratch copy has no `.git`), and a checkout where git cannot answer
+is an error, not a guess.
 
 ## Known drift pinned, not fixed
 
@@ -92,7 +127,10 @@ errors and zero tests are ERROR.
     python3 tests/orchcompat/mutcheck.py FILE OLD NEW [TESTS ...] [--count N]
 
 Exit 0 caught, 1 survived, 2 error. The tracked tree is never edited. The
-name of the first failing test is printed.
+name of the first failing test is printed. The last three standing mutants
+break behavior that exists on main only (observed receipt fields, usage
+fields, the scope refusal); run `--all` at main, where the baseline would
+report them as ERROR because the text they replace is not there.
 
 A mutation to `config/routing.yaml` changes the policy hash, so by default the
 role tests fail with "no recorded table" before they compare any row. That is

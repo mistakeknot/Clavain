@@ -15,6 +15,7 @@ control or execution error. The tracked tree is never edited.
 table; it exits 1 if any mutant survives.
 """
 import argparse
+import os
 import re
 import shutil
 import subprocess
@@ -45,6 +46,17 @@ MUTANTS = [
     ("config/routing.yaml", "      role: main-integrator\n      backend: main\n      model: opus\n      reasoning_effort: high", "      role: main-integrator\n      backend: main\n      model: opus\n      reasoning_effort: low",
      "tests/orchcompat/test_role_resolution.py tests/orchcompat/test_dispatch_args.py",
      "pilot-opus profile effort"),
+    # Main only (the behavior they break does not exist at the baseline):
+    ("scripts/lib-dispatch-audit.sh",
+     'observed=\'{"observed_model":"unknown","observed_source":"unavailable","observed_reason":"no request-bound model evidence for this transport or state","observed_model_matches_requested":null}\'',
+     "observed='{}'", "tests/orchcompat/test_dispatch_args.py",
+     "receipt loses every observed_* field (main only)"),
+    ("scripts/lib-dispatch-audit.sh", "{usage_status, usage_basis, usage_note, tokens_in,",
+     "{usage_basis, tokens_in,", "tests/orchcompat/test_dispatch_args.py",
+     "receipt loses usage_status/usage_note (main only)"),
+    ("scripts/dispatch.sh", "if _review_receipt_requested; then", "if false && _review_receipt_requested; then",
+     "tests/orchcompat/test_dispatch_args.py",
+     "scope refusal gone: --repo on a non-review role is accepted again (main only)"),
 ]
 
 
@@ -62,10 +74,24 @@ def copy_tree(root):
             shutil.copy2(src, dst)
 
 
+def dispatch_generation():
+    """baseline|main for the REAL tree, decided from its git history. The
+    scratch copy has no .git, so it is handed the answer; the mutated files
+    never take part in the choice."""
+    sys.path.insert(0, str(HERE))
+    import orchlib
+    feats = [orchlib.dispatch_feature(f) for f in orchlib.DISPATCH_FEATURES]
+    if len(set(feats)) != 1:
+        raise SystemExit("mutcheck: tree is between baseline and main; set ORCHCOMPAT_DISPATCH_GEN")
+    return "main" if feats[0] else "baseline"
+
+
 def run_tests(root, tests):
+    env = dict(os.environ, ORCHCOMPAT_DISPATCH_GEN=os.environ.get("ORCHCOMPAT_DISPATCH_GEN")
+               or dispatch_generation())
     cmd = ["nice", "-n", "19", sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider",
            "--orchcompat-require-ic", *tests]
-    return subprocess.run(cmd, cwd=root, capture_output=True, text=True)
+    return subprocess.run(cmd, cwd=root, capture_output=True, text=True, env=env)
 
 
 def classify(r):

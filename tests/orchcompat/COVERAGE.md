@@ -2,7 +2,7 @@
 
 What the characterization suite pins, and what it does not. A row marked
 "not covered" is deliberate; the reason is given, nothing is skipped silently.
-Counts are the tests collected per module (210 in all).
+Counts are the tests collected per module (222 in all; 221 run on current main, one applies to the older script only).
 
 ## Covered
 
@@ -22,9 +22,13 @@ Counts are the tests collected per module (210 in all).
 | A malformed policy still renders (it is only hashed) | `test_contract_generator.py` | Pinned as current behavior |
 | Write, check and dry-run modes; marker handling (duplicates, legacy markers, symlinks, missing directory) | `test_contract_generator.py` | File effects and diff output |
 | `check-instruction-contract.sh`: current, missing file, no receipt, version drift, policy drift, content drift, usage errors, renderer error | `test_contract_generator.py` | Exit codes 0/1/2 and drift codes |
-| `dispatch.sh --role` argument handling: role validation, optional decision-context file, inline JSON refused, unreadable context, missing `ic`, bead-id charset, incompatible flags, help | `test_dispatch_args.py` (42) | Fake `ic`, `codex`, `claude` on PATH; exit code and message |
+| `dispatch.sh --role` argument handling: role validation, optional decision-context file, inline JSON refused, unreadable context, missing `ic`, bead-id charset, incompatible flags, help | `test_dispatch_args.py` (46) | Fake `ic`, `codex`, `claude` on PATH; exit code and message |
 | What `dispatch.sh` hands to `ic` and to the seat: policy argument, role, context file, resolved model and effort, claude and codex command lines | `test_dispatch_args.py` | Fake CLIs record their arguments |
-| Dispatch receipt: fields, producer and bead, one line per dispatch, failed model exit recorded with that code, started and terminal routing decisions | `test_dispatch_args.py` | JSONL read back; version-aware for main-only fields |
+| Dispatch receipt: fields, producer and bead, one line per dispatch, failed model exit recorded with that code, started and terminal routing decisions | `test_dispatch_args.py` | JSONL read back; the expected shape (with or without `observed_*`/`usage_*`) is chosen from git history, not from the receipt |
+| `--review-scratch` and `--repo` on a non-review role | `test_dispatch_args.py` | Refused (main) or warned and run (baseline), chosen from git history, not from the script text |
+| The state files `dispatch.sh` leaves in `/tmp` and the environment it can see | `test_dispatch_args.py` | Asserted per run and deleted by pid; caller's `BASH_ENV`, `ENV`, `INTERBAND_LIB`, `PYTHONPATH`, `CLAVAIN_*` shown not to arrive |
+| `ic` answers for the policy that was passed | `test_role_resolution.py`, `test_policy_binding.py` (4) | Returned `policy_hash` equals the sha256 of the policy bytes before any row is compared |
+| The strict gate | `test_gate.py` (3) | Child pytest with a PATH missing `yq` or `jq`: errors under `--orchcompat-require-ic`, announced in the header otherwise |
 | `dispatch.sh --dry-run` output for every role and reason set | `test_dispatch_args.py` | Golden `dispatch_dry_run.json`, both policies |
 
 ## Not covered
@@ -40,6 +44,7 @@ Counts are the tests collected per module (210 in all).
 | Hooks that read the roster or contract at session start | Need a running host session; the generator and checker they call are covered. |
 | Installing a rendered contract into a host's real instruction file | Writes outside the temp dirs by design; write and check modes are covered on temp copies. |
 | `generate.py` truth-table case `repo-routing-end-to-end` | Stale at baseline and main (the shipped self-test reports 58 of 59). Pinned as is, not fixed; see Open items. |
+| Isolation of `/tmp/clavain-dispatch-<pid>.*` from the host | The script hard-codes the path and may not be edited here. Not isolated: asserted and deleted per run (see `README.md`, Hermeticity). |
 | Windows and macOS behavior | These scripts are Linux automation here; no cross-platform run was made. |
 
 ## Open items

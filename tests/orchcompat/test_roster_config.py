@@ -307,7 +307,8 @@ def test_cli_self_test_reports_an_edited_failing_case(home, tmp_path):
 # ------------------------------------------------------------------ lib-fleet --
 
 YQ = shutil.which("yq")
-needs_yq = pytest.mark.skipif(YQ is None, reason="yq v4 not installed: lib-fleet.sh tests skipped")
+needs_yq = pytest.mark.skipif(YQ is None, reason="yq v4 not installed: lib-fleet.sh tests skipped "
+                                                  "(--orchcompat-require-ic makes this an error)")
 
 
 def fleet(home, call, registry=None, **extra):

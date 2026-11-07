@@ -25,9 +25,12 @@ REASONS = (
     "capability-failure",
 )
 
-# Env prefixes that would leak the operator's session into a test.
-_SCRUB_PREFIXES = ("CLAVAIN_", "BB_", "CLAUDE", "CODEX", "DISPATCH_", "INTERCORE", "IC_")
-
+# The subprocess environment is built from nothing and filled from this
+# allowlist, so no variable of the operator's session (BASH_ENV, ENV,
+# INTERBAND_LIB, CLAVAIN_*, PYTHONPATH, ...) reaches a script under test. These
+# are the only variables inherited from the parent; each is harmless to
+# behavior (locale of the terminal is overridden below).
+INHERITED_ENV = ("TZ",)
 
 def real_ic():
     """The real `ic` binary, or None. Honors ORCHCOMPAT_IC for a pinned build."""
@@ -48,17 +51,65 @@ def policy_under_test():
 
 
 def hermetic_env(home, *path_dirs, **extra):
-    """A scrubbed environment: temp HOME, fakes first on PATH, no session vars."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith(_SCRUB_PREFIXES)}
-    for key in ("HOME", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME",
-                "TMPDIR", "PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
-        env.pop(key, None)
-    tmp = Path(home) / "tmp"
+    """An allowlisted environment: temp HOME and TMPDIR, fakes first on PATH.
+
+    Built from nothing: only HOME, TMPDIR, LANG, LC_ALL, PATH and INTERBAND_LIB
+    are set, plus `extra`. INTERBAND_LIB names an empty library inside the temp
+    HOME. dispatch.sh sources that variable first and returns on the first
+    candidate it finds, so a library next to the checkout or in the operator's
+    home can never be picked up; an empty one defines nothing, which is what
+    "no interband library" already means to the script. BASH_ENV and ENV are
+    absent, so a non-interactive bash sources no startup file.
+    """
+    home = Path(home)
+    tmp = home / "tmp"
     tmp.mkdir(parents=True, exist_ok=True)
+    stub = home / "no-interband.sh"
+    if not stub.exists():
+        stub.write_text("# intentionally empty: isolates optional interband discovery\n")
+    env = {k: os.environ[k] for k in INHERITED_ENV if k in os.environ}
     env.update(HOME=str(home), TMPDIR=str(tmp), LANG="C.UTF-8", LC_ALL="C.UTF-8",
+               INTERBAND_LIB=str(stub),
                PATH=":".join([*map(str, path_dirs), SYSTEM_PATH]))
     env.update({k: str(v) for k, v in extra.items()})
     return env
+
+
+# ---------------------------------------------------------------------------
+# Which generation of scripts/dispatch.sh is checked out
+# ---------------------------------------------------------------------------
+# Two dispatch behaviors changed after the baseline (54d2fa43). A test must pick
+# the expected one WITHOUT looking at what the script under test does, or a
+# regression that reverts the change would pick the old expectation and pass.
+# The selector is therefore git ancestry of the commit that introduced the
+# behavior: if that commit is in the checkout's history the new behavior is
+# required, otherwise the old one is. ORCHCOMPAT_DISPATCH_GEN=baseline|main
+# overrides it (used by mutcheck.py, whose scratch copy has no .git, and for a
+# checkout that carries the behavior without the commit).
+DISPATCH_FEATURES = {
+    # per-run receipts carry observed_* / usage_* fields
+    "observed-receipt": "a4723741c3e89808bf0eb99cf26508f0353ce01e",
+    # --review-scratch / --repo on a non-review role are refused, not ignored
+    "scope-check": "3e97d744729acd49bcb601bf5106723f23bad07f",
+}
+
+
+def dispatch_feature(name):
+    """True when the checked-out history contains the commit that introduced
+    `name`. Raises if neither git nor the override can say (never guesses)."""
+    forced = os.environ.get("ORCHCOMPAT_DISPATCH_GEN")
+    if forced:
+        if forced not in ("baseline", "main"):
+            raise RuntimeError("ORCHCOMPAT_DISPATCH_GEN must be 'baseline' or 'main'")
+        return forced == "main"
+    r = subprocess.run(["git", "-C", str(ROOT), "merge-base", "--is-ancestor",
+                        DISPATCH_FEATURES[name], "HEAD"], capture_output=True, text=True)
+    if r.returncode in (0, 1):
+        # 1 = not an ancestor; but a missing object also exits 128, handled below.
+        return r.returncode == 0
+    raise RuntimeError(
+        f"cannot tell which dispatch.sh generation is checked out ({r.stderr.strip()}); "
+        "set ORCHCOMPAT_DISPATCH_GEN=baseline or main")
 
 
 def write_exec(path, text):
@@ -76,6 +127,22 @@ FAKE_MODEL_CLI = r"""#!/usr/bin/env python3
 import json, os, sys
 name = os.path.basename(sys.argv[0])
 args = sys.argv[1:]
+
+
+def ancestors():
+    # Process ids above this one, nearest first: dispatch.sh runs itself again
+    # for a resolved role, and the inner run names its own /tmp files.
+    out, pid = [], os.getppid()
+    while pid > 1:
+        out.append(pid)
+        try:
+            with open("/proc/%d/stat" % pid) as fh:
+                pid = int(fh.read().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+    return out
+
+
 if args[:1] in (["--version"], ["-V"]):
     print(name + " " + os.environ.get("FAKE_VERSION", "9.9.9"))
     sys.exit(0)
@@ -84,7 +151,7 @@ calls = os.environ.get("FAKE_CALLS")
 if calls:
     with open(calls, "a") as fh:
         fh.write(json.dumps({"cli": name, "argv": args, "stdin_bytes": len(stdin),
-                             "stdin_head": stdin[:40]}) + "\n")
+                             "stdin_head": stdin[:40], "ancestors": ancestors()}) + "\n")
 print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "done"}))
 sys.exit(int(os.environ.get("FAKE_EXIT", "0")))
 """
@@ -160,7 +227,8 @@ def _seat(profile):
 def resolve_role(ic, policy, role, reasons, producer, home):
     """Run `ic route dispatch` with the policy passed explicitly and normalize.
 
-    Drops fields that vary by checkout (policy_source, policy_hash). A refusal
+    Drops fields that vary by checkout (policy_source, policy_hash) after
+    asserting the returned policy_hash is the sha256 of the policy bytes. A refusal
     is recorded as its exit code and message, which is part of the behavior.
     """
     home = Path(home)
@@ -175,6 +243,11 @@ def resolve_role(ic, policy, role, reasons, producer, home):
     if r.returncode != 0:
         return {"rc": r.returncode, "error": (r.stderr or r.stdout).strip()}
     d = json.loads(r.stdout)
+    # The answer must come from the policy we passed: check the hash ic
+    # reports against the bytes of that file before dropping the field.
+    assert d.get("policy_hash") == policy_sha256(policy), (
+        "ic resolved a different policy than the one passed: "
+        f"{d.get('policy_hash')!r} != {policy_sha256(policy)!r}")
     out = {"rc": 0, "profile_ref": d.get("profile_ref"), **_seat(d.get("profile", {}))}
     out["fallbacks"] = [{"profile_ref": f.get("profile_ref"), **_seat(f.get("profile", {}))}
                         for f in d.get("fallback_chain", [])]
@@ -329,6 +402,26 @@ DISPATCH = ROOT / "scripts" / "dispatch.sh"
 ROUTE_FIXTURES = FIXTURES / "dispatch"
 
 
+# The only files dispatch.sh may leave in /tmp for a run, as suffixes of
+# /tmp/clavain-dispatch-<pid>. The path is hard-coded in the script (STATE_FILE
+# and the files derived from it), so it ignores TMPDIR.
+DISPATCH_TMP_SUFFIXES = (".json", ".json.tmp", ".json.stderr", ".json.events.jsonl")
+
+
+def reap_dispatch_tmp(pid):
+    """Assert dispatch's /tmp files for `pid` are the known set, then delete
+    exactly those. Returns the suffixes that existed. An unknown name fails the
+    test (and is left in place for inspection)."""
+    found = []
+    for path in sorted(Path("/tmp").glob(f"clavain-dispatch-{pid}.*")):
+        suffix = path.name[len(f"clavain-dispatch-{pid}"):]
+        assert suffix in DISPATCH_TMP_SUFFIXES, f"unexpected dispatch file in /tmp: {path}"
+        found.append(suffix)
+    for suffix in found:
+        Path(f"/tmp/clavain-dispatch-{pid}{suffix}").unlink(missing_ok=True)
+    return found
+
+
 class Rig:
     """A hermetic place to run dispatch.sh: fake ic/claude/codex first on PATH.
 
@@ -363,6 +456,7 @@ class Rig:
         self.calls_file = self.t / "calls.jsonl"
         self.ic_file = self.t / "ic-calls.jsonl"
         self.receipt_file = self.t / "receipt.jsonl"
+        self.tmp_files = []
 
     def use_route(self, name):
         """Install a canned `ic` answer. policy_source/policy_hash are filled in
@@ -388,11 +482,48 @@ class Rig:
         env.update({k: str(v) for k, v in extra.items()})
         return env
 
-    def dispatch(self, *args, env_path=None, **extra):
+    def dispatch(self, *args, env_path=None, timeout=90, **extra):
+        """Run dispatch.sh once; see DISPATCH_TMP_SUFFIXES for the /tmp files.
+
+        dispatch.sh hard-codes its state files under /tmp/clavain-dispatch-$$
+        (the process id of the bash it runs in), so TMPDIR does not move them
+        and the script cannot be edited here. The rig launches bash directly,
+        so the child's pid names those files: after the run it asserts that
+        only the known suffixes exist for that pid, records them in
+        `self.tmp_files`, and removes exactly those. Nothing else in /tmp is
+        touched.
+        """
         env = self.env(**extra)
         if env_path is not None:
             env["PATH"] = env_path
-        return run(["bash", DISPATCH, *args], env, cwd=ROOT)
+        mark = len(self.calls())
+        proc = subprocess.Popen(["bash", str(DISPATCH), *map(str, args)], env=env, cwd=ROOT,
+                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True)
+        try:
+            out, err = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            out, err = proc.communicate()
+            raise
+        finally:
+            self.tmp_files = self._reap(proc.pid, mark)
+        return subprocess.CompletedProcess(proc.args, proc.returncode, out, err)
+
+    def _reap(self, root_pid, mark):
+        """Reap the /tmp files of the launched bash and of every dispatch.sh
+        below it that a fake CLI saw in its ancestry (the inner run for a
+        resolved role). A run that dies before any fake CLI starts, below the
+        launched bash, is not seen; its files carry a dead pid and no secrets."""
+        pids = [root_pid]
+        for call in self.calls()[mark:]:
+            chain = call.get("ancestors", [])
+            if root_pid in chain:
+                pids += [p for p in chain[:chain.index(root_pid)] if p not in pids]
+        found = []
+        for pid in pids:
+            found += reap_dispatch_tmp(pid)
+        return found
 
     def calls(self):
         return read_jsonl(self.calls_file)
