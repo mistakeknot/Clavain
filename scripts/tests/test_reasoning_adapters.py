@@ -26,7 +26,7 @@ class ReasoningAdapters(unittest.TestCase):
         for relative in ('config/agent-instructions.md', 'config/codex-instructions.md',
                          'config/host-adapters.json', 'config/routing.yaml',
                          '.claude-plugin/plugin.json', 'scripts/sync-agent-instructions.py',
-                         'scripts/sync-codex-instructions.py'):
+                         'scripts/sync-codex-instructions.py', 'scripts/routing_overlay.py'):
             (source/relative).parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT/relative, source/relative)
         (source/'skills').mkdir()

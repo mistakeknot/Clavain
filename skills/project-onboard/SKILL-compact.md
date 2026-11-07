@@ -73,7 +73,7 @@ Skip anything that exists. Execute in order:
 ## Phase 4: Observability
 
 For active mistakeknot/gensysven repos, inspect `zklw-ci status --repo OWNER/REPO
---json` on zklw and claim the existing migration task in campaign `mk-ag2s`.
+--json` on the CI host and claim the existing migration task for the repository.
 New code projects need reproducible Q5/manifest-based checks and `zklw-ci onboard
 --repo OWNER/REPO --json` registration. Registration is a review proposal, not
 verified CI. Complete reviewed registry and fresh-guest verification before

@@ -10,12 +10,37 @@ import subprocess
 import sys
 import tempfile
 
+import yaml
+
+
+def profile_sentences(policy):
+    try:
+        data = yaml.safe_load(policy.read_text())
+    except (yaml.YAMLError, UnicodeError):
+        return ''
+    reasoning = data.get('reasoning') if isinstance(data, dict) else None
+    profiles = reasoning.get('profiles') if isinstance(reasoning, dict) else None
+    if not isinstance(profiles, dict):
+        return ''
+    out = []
+    for name, profile in profiles.items():
+        scope = profile.get('scope') if isinstance(profile, dict) else None
+        if scope:
+            out.append(f' `CLAVAIN_POLICY_PROFILE={name}` requires `scope: {scope}` and applies only there.')
+    return ''.join(out)
+
 
 def render(source, host, portable_policy=False, policy_source=None, expected_policy_hash=None):
     source = source.resolve(strict=True)
     hosts = json.loads((source/'config/host-adapters.json').read_text())
     adapter = hosts[host]
     policy = Path(policy_source).resolve(strict=True) if policy_source else source/'config/routing.yaml'
+    helper = Path(__file__).resolve().parent/'routing_overlay.py'
+    if not policy_source and source == helper.parent.parent and helper.is_file():
+        spec = importlib.util.spec_from_file_location('routing_overlay', helper)
+        overlay_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(overlay_module)
+        policy, _ = overlay_module.effective(policy)
     policy_hash = hashlib.sha256(policy.read_bytes()).hexdigest()
     if expected_policy_hash and policy_hash != expected_policy_hash:
         raise ValueError('Reasoning policy changed after resolution; reclassify before dispatch')
@@ -34,7 +59,7 @@ def render(source, host, portable_policy=False, policy_source=None, expected_pol
         hash_input += '\0'+selection+'\0'+policy_arg
     content_hash = hashlib.sha256(hash_input.encode()).hexdigest()
     receipt = f'Host: {host}; package: {version}; policy selection: {selection}; policy SHA256: {policy_hash}; contract SHA256: {content_hash}.'
-    body = body.replace('{{INSTALLATION_RECEIPT}}', receipt).replace('{{POLICY_PATH}}', policy_arg).replace('{{HOST_ADAPTER}}', host_text.strip())
+    body = body.replace('{{INSTALLATION_RECEIPT}}', receipt).replace('{{POLICY_PATH}}', policy_arg).replace('{{HOST_ADAPTER}}', host_text.strip()).replace('{{POLICY_PROFILES}}', profile_sentences(policy))
     metadata = dict(host=host, source=str(source), version=version, policy_hash=policy_hash,
                     contract_hash=content_hash, policy_selection=selection,
                     surface=adapter['surface'], routing='instructional',

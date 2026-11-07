@@ -148,7 +148,7 @@ Personas live in `docs/canon/` because they are durable canonical knowledge that
 
 **Independent automation:** For active mistakeknot/gensysven repositories,
 inspect `zklw-ci status --repo OWNER/REPO --json` on zklw and claim the existing
-repository migration task from campaign `mk-ag2s` before changing CI. For new
+repository migration task before changing CI. For new
 code projects, derive reproducible baseline checks from Q5 and manifests;
 register using `zklw-ci onboard --repo OWNER/REPO --json`. Onboard creates a
 review proposal, not execution authority: complete the registry review and

@@ -225,6 +225,13 @@ func submitPrepare(base string, s prepareRequest) (r prepareReceipt, path string
 	}
 	policy := os.Getenv("CLAVAIN_ROUTING_POLICY")
 	if policy == "" {
+		out, oe := exec.Command("python3", filepath.Join(filepath.Dir(script), "routing_overlay.py"), "path").Output()
+		if oe != nil {
+			return r, "", fmt.Errorf("routing overlay: %w", oe)
+		}
+		policy = strings.TrimSpace(string(out))
+	}
+	if policy == "" {
 		policy = filepath.Join(filepath.Dir(filepath.Dir(script)), "config", "routing.yaml")
 	}
 	policy, e = filepath.Abs(policy)

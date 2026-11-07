@@ -1,7 +1,7 @@
 # Reasoning routing verification — 2026-09-08
 
-Implementation is tracked as `Sylveste-drqs`. The CI campaign mix remains scoped
-to `mk-ag2s`; the global default retains Astra and Fable.
+The CI campaign mix remains scoped to its campaign profile; the global default
+retains Astra and Fable.
 
 ## Verified
 

@@ -28,7 +28,6 @@ CLAUSES = {
         "role_resolution": "ic --json route dispatch --policy={{POLICY_PATH}} --role=<role> --context-file=<json>",
         "governed_execution": "scripts/dispatch.sh --role <role>` with the same `CLAVAIN_ROUTING_POLICY` and `CLAVAIN_DECISION_CONTEXT",
         "unsupported_role": "Unsupported `--role` resolution remains an open gate; legacy `--type` or `--tier` output cannot satisfy it",
-        "overlay_scope": "`CLAVAIN_POLICY_PROFILE=ci-campaign-pilot` requires `scope: mk-ag2s` and applies only there",
         "independent_review": "Foundational or especially consequential plans need an independent other-frontier reviewer; pass `--producer-identity` from the actual producer receipt",
         "no_downgrade": "Never self-review, downgrade frontier work, or evade blocked review",
         "escalation": "Two demonstrated capability failures request escalation; a disproven premise escalates immediately",
@@ -83,7 +82,7 @@ CLAUSES = {
         "frontier_review": "Foundational or especially consequential plans require independent other-frontier plan review",
         "review_identity": "Aliases and dated/provider-decorated identities cannot evade reviewer separation",
         "no_frontier_downgrade": "No fallback may review its producer, route frontier-required work to a non-frontier seat",
-        "campaign_scope": "`ci-campaign-pilot` requires `scope: mk-ag2s`",
+        "profile_scope": "A policy profile selected with `CLAVAIN_POLICY_PROFILE` requires the scope its policy declares",
         "operational": "Quota, authentication, permission, timeout, and infrastructure failures are operational, not capability strikes",
         "capacity_roles": "`main-integrator` and `release-authority` have no capacity substitute",
         "headroom_scope": "planning, plan-review, validation, escalation and cross-lab-review receive no headroom input",
@@ -129,7 +128,7 @@ class BootstrapSurvivalTests(unittest.TestCase):
         template = (ROOT / "config/agent-instructions.md").read_text()
         self.assertEqual(template.count("<!-- BEGIN CLAVAIN CODEX TOOL MAP -->"), 1)
         self.assertEqual(template.count("<!-- END CLAVAIN CODEX TOOL MAP -->"), 1)
-        for placeholder in ("{{INSTALLATION_RECEIPT}}", "{{HOST_ADAPTER}}", "{{POLICY_PATH}}"):
+        for placeholder in ("{{INSTALLATION_RECEIPT}}", "{{HOST_ADAPTER}}", "{{POLICY_PATH}}", "{{POLICY_PROFILES}}"):
             self.assertIn(placeholder, template)
         router = (ROOT / "skills/using-clavain/SKILL.md").read_text()
         self.assertTrue(router.startswith("---\nname: using-clavain\n"))

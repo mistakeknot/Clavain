@@ -31,7 +31,11 @@ def governed_dispatch(args, **kwargs):
     required = ('role', 'context_file', 'prompt_file', 'project', 'output')
     if any(not isinstance(args.get(k), str) or not args[k] for k in required):
         return json.dumps({'error': 'role, context_file, prompt_file, project and output are required'})
-    env = dict(os.environ, CLAVAIN_ROUTING_POLICY=str(ROOT/'config/routing.yaml'), CLAVAIN_DECISION_CONTEXT=str(Path(args['context_file']).resolve()))
+    resolved = subprocess.run([sys.executable, str(ROOT/'scripts/routing_overlay.py'), 'path'], capture_output=True, text=True)
+    if resolved.returncode != 0:
+        return json.dumps({'error': resolved.stderr.strip() or 'routing overlay failed'})
+    policy = resolved.stdout.strip() or str(ROOT/'config/routing.yaml')
+    env = dict(os.environ, CLAVAIN_ROUTING_POLICY=policy, CLAVAIN_DECISION_CONTEXT=str(Path(args['context_file']).resolve()))
     if args.get('policy_profile'):
         env['CLAVAIN_POLICY_PROFILE'] = args['policy_profile']
     cmd = ['bash', str(ROOT/'scripts/dispatch.sh'), '--role', args['role'], '--prompt-file', args['prompt_file'], '-C', args['project'], '-o', args['output']]

@@ -1674,6 +1674,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -z "${CLAVAIN_ROUTING_POLICY:-}" ]]; then
+  overlay_policy="$(python3 "$DISPATCH_SCRIPT_DIR/routing_overlay.py" path)" || exit 1
+  if [[ -n "$overlay_policy" ]]; then
+    export CLAVAIN_ROUTING_POLICY="$overlay_policy"
+  fi
+  unset overlay_policy
+fi
+
 # Replayed resolved decisions are a separate governed entry point. Derive the
 # role from the decision, never from a caller's --role alone. Keep all parsing
 # and evidence work inside the opt-in boundary so unset dispatch is unchanged.
