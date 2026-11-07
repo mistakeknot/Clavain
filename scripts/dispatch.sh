@@ -1304,7 +1304,7 @@ _dispatch_tier_profile() {
   # CLAUDE_PLUGIN_ROOT search the rest of the routing stack uses.
   policy="${CLAVAIN_ROUTING_POLICY:-}"
   if [[ -z "$policy" ]] && declare -f _routing_find_config >/dev/null 2>&1; then
-    policy="$(_routing_find_config 2>/dev/null)" || policy=""
+    policy="$(_routing_find_config 2>/dev/null)" || { [[ $? -ne 2 ]] || return 1; policy=""; }
   fi
   policy="${policy:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
 
@@ -1727,7 +1727,7 @@ fi
 if [[ -n "$TIER" && "$ENGINE" != kimi && "${CLAVAIN_ROUTING_PRECHECK:-}" != "" && "${CLAVAIN_ROUTING_PRECHECK:-}" != 0 ]]; then
   precheck_policy="${CLAVAIN_ROUTING_POLICY:-}"
   if [[ -z "$precheck_policy" ]] && declare -f _routing_find_config >/dev/null 2>&1; then
-    precheck_policy="$(_routing_find_config 2>/dev/null)" || precheck_policy=""
+    precheck_policy="$(_routing_find_config 2>/dev/null)" || { [[ $? -ne 2 ]] || exit 1; precheck_policy=""; }
   fi
   _dispatch_routing_precheck "" "${precheck_policy:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}" || exit 1
 fi

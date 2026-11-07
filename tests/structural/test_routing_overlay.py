@@ -139,9 +139,10 @@ def test_untouched_keys_survive_unchanged(box):
     assert merged == base
 
 
-def test_empty_overlay_file_equals_base(box):
-    merged, _ = resolved(box, "")
-    assert merged == yaml.safe_load(BASE.read_text())
+@pytest.mark.parametrize("text", ["", "\n", "# only a comment\n", "null\n", "~\n"])
+def test_empty_or_null_overlay_is_an_error(box, text):
+    stderr = fail_with(box, text)
+    assert "empty or null document" in stderr
 
 
 def test_scalar_replaces(box):
@@ -380,3 +381,175 @@ def test_route_spawn_reads_the_overlay_for_project_slugs(box):
     base_env["CLAVAIN_ROUTING_OVERLAY"] = str(tmp / "absent.yaml")
     broken = subprocess.run(command, capture_output=True, text=True, env=base_env, timeout=120)
     assert broken.returncode == 3 and "routing overlay:" in broken.stderr
+
+
+def overlay_module():
+    spec = importlib.util.spec_from_file_location("routing_overlay_under_test", HELPER)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize("text", ["", "\n", "# comment only\n", "null\n", "~\n"])
+def test_build_rejects_empty_and_null_overlay(tmp_path, text):
+    module = overlay_module()
+    overlay = tmp_path / "overlay.yaml"
+    overlay.write_text(text)
+    with pytest.raises(module.OverlayError, match="empty or null document"):
+        module.build(BASE, overlay)
+
+
+def test_build_accepts_explicit_empty_mapping(tmp_path):
+    module = overlay_module()
+    overlay = tmp_path / "overlay.yaml"
+    overlay.write_text("{}\n")
+    text, _ = module.build(BASE, overlay)
+    assert yaml.safe_load(text) == yaml.safe_load(BASE.read_text())
+
+
+def test_null_overlay_never_restores_neutral_routing(box):
+    home, env, tmp = box
+    overlay = write(tmp / "null.yaml", "null\n")
+    result = run("policy", env={**env, "CLAVAIN_ROUTING_OVERLAY": str(overlay)}, home=home)
+    assert result.returncode == 1 and result.stdout == ""
+    assert "empty or null document" in result.stderr
+
+
+def test_policy_verb_prints_effective_path(box):
+    home, env, tmp = box
+    neutral = run("policy", env={**env, "CLAVAIN_ROUTING_OVERLAY": ""}, home=home)
+    assert neutral.returncode == 0 and Path(neutral.stdout.strip()) == BASE
+    overlay = write(tmp / "alex.yaml", DEVBOX_OVERLAY)
+    active = run("policy", env={**env, "CLAVAIN_ROUTING_OVERLAY": str(overlay)}, home=home)
+    assert active.returncode == 0
+    path = Path(active.stdout.strip())
+    assert path != BASE and yaml.safe_load(path.read_text())["reasoning"]["projects"] == ["alex-app", "alex-site"]
+
+
+@pytest.mark.parametrize("bad", ["absent", "unknown-key", "malformed"])
+def test_policy_verb_fails_on_bad_overlay(box, bad):
+    home, env, tmp = box
+    if bad == "absent":
+        target = tmp / "absent.yaml"
+    elif bad == "unknown-key":
+        target = write(tmp / "bad.yaml", {"no_such_section": {"a": 1}})
+    else:
+        target = write(tmp / "bad.yaml", "reasoning: [")
+    result = run("policy", env={**env, "CLAVAIN_ROUTING_OVERLAY": str(target)}, home=home)
+    assert result.returncode == 1 and result.stdout == ""
+    assert result.stderr.startswith("routing overlay: ")
+
+
+LIB = ROOT / "scripts" / "lib-routing.sh"
+
+
+def lib_env(box, overlay, extra=None):
+    home, env, tmp = box
+    merged = {k: v for k, v in os.environ.items()
+              if not k.startswith(("CLAVAIN_ROUTING", "CLAVAIN_ORCH", "ALEPH_ORCH", "CLAVAIN_RUN_ID"))}
+    merged.update(env, HOME=str(home))
+    merged["CLAVAIN_ROUTING_OVERLAY"] = overlay
+    merged["PATH"] = f"{tmp / 'bin'}:{os.environ['PATH']}" if (tmp / "bin").is_dir() else os.environ["PATH"]
+    merged.update(extra or {})
+    return merged
+
+
+def lib_call(box, overlay, snippet, extra=None):
+    return subprocess.run(["bash", "-c", f'source "{LIB}"; {snippet}'], capture_output=True, text=True,
+                          env=lib_env(box, overlay, extra), timeout=120)
+
+
+def stub_ic(box, body):
+    _, _, tmp = box
+    (tmp / "bin").mkdir(exist_ok=True)
+    stub = tmp / "bin" / "ic"
+    stub.write_text("#!/bin/sh\n" + body)
+    stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+    return stub
+
+
+def test_lib_find_config_returns_neutral_without_overlay(box):
+    result = lib_call(box, "", '_routing_find_config')
+    assert result.returncode == 0
+    assert Path(result.stdout.strip()).resolve() == BASE
+
+
+def test_lib_find_config_returns_the_overlaid_file(box):
+    _, _, tmp = box
+    overlay = write(tmp / "alex.yaml", DEVBOX_OVERLAY)
+    result = lib_call(box, str(overlay), '_routing_find_config')
+    assert result.returncode == 0
+    found = Path(result.stdout.strip())
+    assert found.resolve() != BASE
+    assert yaml.safe_load(found.read_text())["dispatch"]["roles"]["coordination"] == "lane-status-quo"
+
+
+@pytest.mark.parametrize("kind", ["absent", "invalid", "null"])
+def test_lib_find_config_fails_closed_on_bad_overlay(box, kind):
+    _, _, tmp = box
+    target = {"absent": tmp / "absent.yaml", "invalid": write(tmp / "bad.yaml", {"nope": 1}),
+              "null": write(tmp / "null.yaml", "null\n")}[kind]
+    result = lib_call(box, str(target), '_routing_find_config; echo "rc=$?"')
+    assert "rc=2" in result.stdout
+    assert str(BASE) not in result.stdout
+    assert "routing overlay:" in result.stderr
+
+
+@pytest.mark.parametrize("snippet", [
+    "routing_executor_mode",
+    "routing_executor_order_raw default",
+    "routing_resolve_dispatch_tier coordination",
+    "routing_list_mappings",
+    "routing_resolve_model --phase plan",
+    "routing_classify_complexity --prompt-tokens 100",
+])
+def test_lib_public_resolvers_fail_on_bad_overlay(box, snippet):
+    _, _, tmp = box
+    result = lib_call(box, str(tmp / "absent.yaml"), f'{snippet}; echo "rc=$?"',
+                      extra={"CLAVAIN_EXECUTOR_ROUTING_MODE": ""})
+    assert "rc=0" not in result.stdout
+    assert "routing overlay:" in result.stderr
+
+
+def test_lib_ic_fast_path_receives_the_effective_policy(box):
+    _, _, tmp = box
+    overlay = write(tmp / "alex.yaml", DEVBOX_OVERLAY)
+    seen = tmp / "seen.txt"
+    stub_ic(box, f'printf "%s\\n" "${{CLAVAIN_ROUTING_POLICY:-unset}}" >> "{seen}"\necho stub-tier\n')
+    result = lib_call(box, str(overlay), "routing_resolve_dispatch_tier coordination")
+    assert result.returncode == 0 and result.stdout.strip() == "stub-tier"
+    policy = Path(seen.read_text().strip().splitlines()[0])
+    assert policy.is_file() and policy.resolve() != BASE
+    assert yaml.safe_load(policy.read_text())["dispatch"]["roles"]["coordination"] == "lane-status-quo"
+
+
+def test_lib_ic_fast_path_gets_no_policy_without_overlay(box):
+    _, _, tmp = box
+    seen = tmp / "seen.txt"
+    stub_ic(box, f'printf "%s\\n" "${{CLAVAIN_ROUTING_POLICY:-unset}}" >> "{seen}"\necho stub-tier\n')
+    result = lib_call(box, "", "routing_resolve_dispatch_tier coordination")
+    assert result.returncode == 0
+    assert seen.read_text().strip() == "unset"
+
+
+@pytest.mark.parametrize("snippet", [
+    "routing_resolve_dispatch_tier coordination",
+    "routing_resolve_model --phase plan",
+])
+def test_lib_ic_is_not_called_when_overlay_is_bad(box, snippet):
+    _, _, tmp = box
+    marker = tmp / "called.txt"
+    stub_ic(box, f'echo called >> "{marker}"\necho stub-tier\n')
+    result = lib_call(box, str(tmp / "absent.yaml"), f'{snippet}; echo "rc=$?"')
+    assert not marker.exists()
+    assert "rc=0" not in result.stdout and "stub-tier" not in result.stdout
+    assert "routing overlay:" in result.stderr
+
+
+def test_lib_explicit_policy_is_left_alone(box):
+    _, _, tmp = box
+    seen = tmp / "seen.txt"
+    stub_ic(box, f'printf "%s\\n" "${{CLAVAIN_ROUTING_POLICY:-unset}}" >> "{seen}"\necho stub-tier\n')
+    result = lib_call(box, str(tmp / "absent.yaml"), "routing_resolve_dispatch_tier coordination",
+                      extra={"CLAVAIN_ROUTING_POLICY": str(BASE)})
+    assert result.returncode == 0 and seen.read_text().strip() == str(BASE)

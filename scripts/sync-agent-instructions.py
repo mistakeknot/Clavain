@@ -48,9 +48,9 @@ def render(source, host, portable_policy=False, policy_source=None, expected_pol
     body = (source/'config/agent-instructions.md').read_text()
     host_text = (source/adapter['adapter']).read_text() if 'adapter' in adapter else adapter['instruction']
     selection = 'portable-managed-installation' if portable_policy else 'explicit-installation'
-    portable_arg = ('"${CLAVAIN_ROUTING_POLICY:-${CLAVAIN_SELECTED_ROOT:?set from native Clavain skill location}/config/routing.yaml}"'
+    portable_arg = ('"${CLAVAIN_ROUTING_POLICY:-$( (python3 "${CLAVAIN_SELECTED_ROOT:?set from native Clavain skill location}/scripts/routing_overlay.py" policy) || echo /dev/null/clavain-invalid-routing-overlay)}"'
                     if host == 'claude' else
-                    '"${CLAVAIN_ROUTING_POLICY:-$HOME/.agents/skills/clavain/../config/routing.yaml}"')
+                    '"${CLAVAIN_ROUTING_POLICY:-$( (python3 "$HOME/.agents/skills/clavain/../scripts/routing_overlay.py" policy) || echo /dev/null/clavain-invalid-routing-overlay)}"')
     policy_arg = portable_arg if portable_policy else shlex.quote(str(policy))
     # Keep existing explicit-install hashes stable, but distinguish portable
     # selection and its executable expression in portable contract receipts.

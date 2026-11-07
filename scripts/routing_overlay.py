@@ -109,7 +109,7 @@ def build(base_path, overlay_path):
         raise OverlayError(f"policy {base_path}: top level is not a mapping")
     overlay_bytes, overlay = load_yaml(overlay_path, "overlay")
     if overlay is None:
-        overlay = {}
+        raise OverlayError(f"overlay {overlay_path}: empty or null document (write {{}} for no overrides)")
     if not isinstance(overlay, dict):
         raise OverlayError(f"overlay {overlay_path}: top level is not a mapping")
     merged = merge(base, overlay)
@@ -209,7 +209,7 @@ def effective(base_path=BASE, overlay=None, out=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["path", "resolve", "check"])
+    parser.add_argument("command", choices=["path", "policy", "resolve", "check"])
     parser.add_argument("--base", type=Path, default=BASE)
     parser.add_argument("--overlay", type=Path)
     parser.add_argument("--out", type=Path)

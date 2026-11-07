@@ -4,6 +4,8 @@ These guard source and rendering regressions; native session canaries still deci
 whether an agent loads and follows the contract.
 """
 import importlib.util
+import os
+from unittest import mock
 from pathlib import Path
 import unittest
 
@@ -71,7 +73,7 @@ CLAUSES = {
         "resolution": "ic --json route dispatch --policy=<selected-policy> --role=planning --context-file=<decision.json>",
         "packaged_dispatch": "Execute through packaged `scripts/dispatch.sh --role <role>`",
         "routine_example": '{"reasons": [], "rationale": "Settled routine change; tests define acceptance", "investigation_active": false}',
-        "routine_example_policy": 'export CLAVAIN_ROUTING_POLICY="${CLAVAIN_ROUTING_POLICY:-${CLAVAIN_SELECTED_ROOT:?set from native Clavain skill location}/config/routing.yaml}"',
+        "routine_example_policy": 'export CLAVAIN_ROUTING_POLICY="${CLAVAIN_ROUTING_POLICY:-$( (python3 "${CLAVAIN_SELECTED_ROOT:?set from native Clavain skill location}/scripts/routing_overlay.py" policy) || echo /dev/null/clavain-invalid-routing-overlay)}"',
         "routine_example_resolve": 'ic --json route dispatch --policy="${CLAVAIN_ROUTING_POLICY:?}" --role=routine-execution --context-file=/tmp/decision.json',
         "routine_example_dispatch": 'bash "${CLAVAIN_SELECTED_ROOT:?}/scripts/dispatch.sh" --policy "${CLAVAIN_ROUTING_POLICY:?}" --role routine-execution --prompt-file /tmp/brief.md',
         "producer_identity_roles": "`plan-review`, `validation` and `cross-lab-review` add `--producer-identity=<author receipt identity>`",
@@ -102,6 +104,11 @@ CLAUSES = {
 
 
 class BootstrapSurvivalTests(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.dict(os.environ, {"CLAVAIN_ROUTING_OVERLAY": ""})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_enumerated_clauses_survive_at_required_sources(self):
         for relative, clauses in CLAUSES.items():
             body = normalized((ROOT / relative).read_text())

@@ -25,7 +25,7 @@ Routine example (settled scope). `CLAVAIN_SELECTED_ROOT` is the verified root of
 ```
 
 ```bash
-export CLAVAIN_ROUTING_POLICY="${CLAVAIN_ROUTING_POLICY:-${CLAVAIN_SELECTED_ROOT:?set from native Clavain skill location}/config/routing.yaml}"
+export CLAVAIN_ROUTING_POLICY="${CLAVAIN_ROUTING_POLICY:-$( (python3 "${CLAVAIN_SELECTED_ROOT:?set from native Clavain skill location}/scripts/routing_overlay.py" policy) || echo /dev/null/clavain-invalid-routing-overlay)}"
 ic --json route dispatch --policy="${CLAVAIN_ROUTING_POLICY:?}" --role=routine-execution --context-file=/tmp/decision.json
 CLAVAIN_DECISION_CONTEXT=/tmp/decision.json bash "${CLAVAIN_SELECTED_ROOT:?}/scripts/dispatch.sh" --policy "${CLAVAIN_ROUTING_POLICY:?}" --role routine-execution --prompt-file /tmp/brief.md
 ```
