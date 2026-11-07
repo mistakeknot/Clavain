@@ -156,9 +156,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 overlap() { [[ "$1" == "$2" || "$1" == '**' || "$2" == '**' ]]; }
-# check-then-create is one step, as it is in the real store
-i=0; until mkdir "$store/.mutex" 2>/dev/null; do sleep 0.02; i=$((i+1)); [[ $i -gt 500 ]] && break; done
-trap 'rmdir "$store/.mutex" 2>/dev/null' EXIT
+# check-then-create is one step, as it is in the real store. Use Bash's
+# exclusive create: uutils mkdir 0.8.0 can falsely succeed on EEXIST.
+i=0; until (set -C; : > "$store/.mutex") 2>/dev/null; do
+  sleep 0.02; i=$((i+1))
+  if [[ $i -gt 500 ]]; then echo "stub ic: mutex timeout" >&2; exit 2; fi
+done
+trap 'rm -- "$store/.mutex"' EXIT
 case "$sub" in
   reserve)
     if [[ -n "${PF_STUB_IC_FAIL_PATTERN:-}" && "$pattern" == "$PF_STUB_IC_FAIL_PATTERN" ]]; then
