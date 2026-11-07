@@ -129,6 +129,12 @@ def _routing_policy_path() -> Path:
     override = os.environ.get("CLAVAIN_ROUTING_POLICY")
     if override:
         return Path(override)
+    resolved = subprocess.run([sys.executable, str(Path(__file__).resolve().parent / "routing_overlay.py"), "path"],
+                              capture_output=True, text=True)
+    if resolved.returncode != 0:
+        raise SystemExit(resolved.stderr.strip() or "routing overlay failed")
+    if resolved.stdout.strip():
+        return Path(resolved.stdout.strip())
     return Path(__file__).resolve().parent.parent / "config" / "routing.yaml"
 
 

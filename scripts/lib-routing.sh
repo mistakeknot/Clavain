@@ -153,13 +153,7 @@ _routing_downgrade() {
 }
 
 # --- Find routing.yaml ---
-_routing_find_config() {
-  # 0. Explicit env var override
-  if [[ -n "${CLAVAIN_ROUTING_CONFIG:-}" && -f "$CLAVAIN_ROUTING_CONFIG" ]]; then
-    echo "$CLAVAIN_ROUTING_CONFIG"
-    return 0
-  fi
-
+_routing_find_raw_config() {
   local script_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   local source_dir="${CLAVAIN_SOURCE_DIR:-${CLAVAIN_DIR:-}}"
@@ -182,6 +176,65 @@ _routing_find_config() {
   return 1
 }
 
+# Prints the merged policy path when an operator overlay is active and nothing
+# otherwise. Returns 2 when a configured overlay is missing or invalid.
+_routing_overlay_policy() {
+  local base="$1"
+  if [[ -n "${CLAVAIN_ROUTING_OVERLAY+x}" ]]; then
+    [[ -n "$CLAVAIN_ROUTING_OVERLAY" ]] || return 0
+  elif [[ -z "${ALEPH_ORCH_CONFIG:-}" && ! -f "$HOME/.config/aleph-orchestration/operator.toml" ]]; then
+    return 0
+  fi
+  local helper
+  helper="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/routing_overlay.py"
+  [[ -f "$helper" ]] || return 0
+  python3 "$helper" path --base "$base" || return 2
+}
+
+_routing_find_config() {
+  # 0. Explicit env var override
+  if [[ -n "${CLAVAIN_ROUTING_CONFIG:-}" && -f "$CLAVAIN_ROUTING_CONFIG" ]]; then
+    echo "$CLAVAIN_ROUTING_CONFIG"
+    return 0
+  fi
+
+  local raw effective
+  raw="$(_routing_find_raw_config)" || return 1
+  effective="$(_routing_overlay_policy "$raw")" || return 2
+  echo "${effective:-$raw}"
+}
+
+# Resolves, once per process, the merged policy an ic fast path must read.
+# Returns 1 when a configured overlay is missing or invalid.
+_routing_ic_policy() {
+  if [[ -n "${_ROUTING_IC_POLICY_DONE:-}" ]]; then
+    [[ -z "${_ROUTING_IC_POLICY_FAILED:-}" ]]
+    return
+  fi
+  _ROUTING_IC_POLICY=""
+  _ROUTING_IC_POLICY_DONE=1
+  [[ -z "${CLAVAIN_ROUTING_POLICY:-}" && -z "${CLAVAIN_ROUTING_CONFIG:-}" ]] || return 0
+  local raw
+  raw="$(_routing_find_raw_config)" || return 0
+  _ROUTING_IC_POLICY="$(_routing_overlay_policy "$raw")" || {
+    _ROUTING_IC_POLICY_FAILED=1
+    return 1
+  }
+}
+
+_routing_ic() {
+  if [[ -n "${_ROUTING_IC_POLICY:-}" ]]; then
+    CLAVAIN_ROUTING_POLICY="$_ROUTING_IC_POLICY" ic "$@"
+  else
+    ic "$@"
+  fi
+}
+
+_routing_load_cache_strict() {
+  _routing_load_cache
+  [[ -z "${_ROUTING_OVERLAY_FAILED:-}" ]]
+}
+
 # Effective executor-routing mode: CLAVAIN_EXECUTOR_ROUTING_MODE env wins,
 # else executor_routing.mode from routing.yaml, else "off".
 routing_executor_mode() {
@@ -189,7 +242,8 @@ routing_executor_mode() {
     echo "$CLAVAIN_EXECUTOR_ROUTING_MODE"
     return 0
   fi
-  local cfg; cfg="$(_routing_find_config)" || { echo off; return 0; }
+  local cfg; cfg="$(_routing_find_config)"
+  [[ $? -ne 2 ]] || return 1
   [[ -n "$cfg" && -f "$cfg" ]] || { echo off; return 0; }
   python3 - "$cfg" <<'PY' 2>/dev/null || echo off
 import sys, yaml
@@ -202,7 +256,8 @@ PY
 # classes[<class>] or default, space-separated; empty when unconfigured.
 routing_executor_order_raw() {
   local class="$1"
-  local cfg; cfg="$(_routing_find_config)" || return 0
+  local cfg; cfg="$(_routing_find_config)"
+  [[ $? -ne 2 ]] || return 1
   [[ -n "$cfg" && -f "$cfg" ]] || return 0
   python3 - "$cfg" "$class" <<'PY' 2>/dev/null || true
 import sys, yaml
@@ -306,10 +361,17 @@ _routing_find_roles_config() {
 _routing_load_cache() {
   [[ -n "$_ROUTING_CACHE_POPULATED" ]] && return 0
 
-  _ROUTING_CONFIG_PATH="$(_routing_find_config)" || {
+  _ROUTING_CONFIG_PATH="$(_routing_find_config)"
+  local _find_rc=$?
+  if [[ $_find_rc -eq 2 ]]; then
+    _ROUTING_OVERLAY_FAILED=1
+    _ROUTING_CACHE_POPULATED=1
+    return 1
+  fi
+  if [[ $_find_rc -ne 0 ]]; then
     _ROUTING_CACHE_POPULATED=1
     return 0  # No config — all resolvers return empty
-  }
+  fi
 
   # Parse and hash the same bytes. Re-reading the path at audit time could
   # attribute a cached decision to a concurrently replaced policy.
@@ -1116,14 +1178,15 @@ routing_resolve_model() {
   # Skip fast path when CLAVAIN_ROUTING_CONFIG is set — explicit config override (tests/fixtures) the Go router doesn't read.
   if [[ -z "${CLAVAIN_RUN_ID:-}" && -z "$_ovr_check" && -z "$_cal_check" && -z "${CLAVAIN_ROUTING_CONFIG:-}" ]] && command -v ic >/dev/null 2>&1; then
     local _ic_result
-    _ic_result=$(ic route model "$@" 2>/dev/null) && {
+    _routing_ic_policy || return 1
+    _ic_result=$(_routing_ic route model "$@" 2>/dev/null) && {
       echo "$_ic_result"
       return 0
     }
     # Fall through on failure — bash implementation is the safety net
   fi
 
-  _routing_load_cache
+  _routing_load_cache_strict || return 1
 
   local phase="" category="" agent=""
   while [[ $# -gt 0 ]]; do
@@ -1284,7 +1347,7 @@ routing_resolve_model() {
 # Returns the highest complexity tier whose ANY threshold is met.
 # Evaluates top-down (C5 first). Returns empty string if complexity is off.
 routing_classify_complexity() {
-  _routing_load_cache
+  _routing_load_cache_strict || return 1
 
   # Zero-cost bypass: if mode is off or not set, return immediately
   if [[ "${_ROUTING_CX_MODE:-off}" == "off" ]]; then
@@ -1334,7 +1397,7 @@ routing_classify_complexity() {
 # In enforce mode: returns complexity-overridden result.
 # When complexity is off or tier is empty: delegates directly to routing_resolve_model.
 routing_resolve_model_complex() {
-  _routing_load_cache
+  _routing_load_cache_strict || return 1
 
   local complexity="" phase="" category="" agent=""
   while [[ $# -gt 0 ]]; do
@@ -1411,7 +1474,7 @@ routing_resolve_model_complex() {
 # In enforce mode, complexity tier can promote/demote the dispatch tier.
 # In shadow mode, logs what would change. When off, delegates to base.
 routing_resolve_dispatch_tier_complex() {
-  _routing_load_cache
+  _routing_load_cache_strict || return 1
 
   local complexity="" tier=""
   while [[ $# -gt 0 ]]; do
@@ -1461,13 +1524,14 @@ routing_resolve_dispatch_tier() {
   # Skip fast path when CLAVAIN_ROUTING_CONFIG is set — explicit config override (tests/fixtures) the Go router doesn't read.
   if [[ -z "${CLAVAIN_ROUTING_CONFIG:-}" ]] && command -v ic >/dev/null 2>&1; then
     local _ic_result
-    _ic_result=$(ic route dispatch --tier="$1" 2>/dev/null) && {
+    _routing_ic_policy || return 1
+    _ic_result=$(_routing_ic route dispatch --tier="$1" 2>/dev/null) && {
       echo "$_ic_result"
       return 0
     }
   fi
 
-  _routing_load_cache
+  _routing_load_cache_strict || return 1
   local tier="$1"
   local hops=0
 
@@ -1491,7 +1555,7 @@ routing_resolve_dispatch_tier() {
 
 # --- Public: print routing table ---
 routing_list_mappings() {
-  _routing_load_cache
+  _routing_load_cache_strict || return 1
 
   if [[ -z "$_ROUTING_CACHE_POPULATED" || -z "$_ROUTING_CONFIG_PATH" ]]; then
     echo "No routing.yaml found. Using agent frontmatter defaults."
@@ -1617,7 +1681,7 @@ routing_list_mappings() {
 routing_resolve_agents() {
   # Load cache first — idempotent (guarded by _ROUTING_CACHE_POPULATED).
   # Must run before fast-path so _ROUTING_CX_MODE is available for the guard.
-  _routing_load_cache
+  _routing_load_cache_strict || return 1
 
   # Fast path: delegate to compiled Go router when available.
   # Skips when CLAVAIN_RUN_ID is set, complexity mode is active, or Go router unavailable.
@@ -1635,7 +1699,8 @@ routing_resolve_agents() {
       # shellcheck disable=SC2086
       local _ic_result
       local IFS=','
-      _ic_result=$(ic route batch --json --phase="$_phase" $_agents_csv 2>/dev/null) && {
+      _routing_ic_policy || return 1
+      _ic_result=$(_routing_ic route batch --json --phase="$_phase" $_agents_csv 2>/dev/null) && {
         echo "$_ic_result"
         return 0
       }

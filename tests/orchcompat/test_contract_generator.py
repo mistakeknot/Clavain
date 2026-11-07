@@ -74,9 +74,9 @@ def test_rendered_block_shape(key):
 
 def test_policy_argument_by_mode():
     claude = GOLDEN["claude|portable"]["body"]
-    assert '--policy="${CLAVAIN_ROUTING_POLICY:-${CLAVAIN_SELECTED_ROOT:?set from native Clavain skill location}/config/routing.yaml}"' in claude
+    assert '--policy="${CLAVAIN_ROUTING_POLICY:-$( (python3 "${CLAVAIN_SELECTED_ROOT:?set from native Clavain skill location}/scripts/routing_overlay.py" policy) || echo /dev/null/clavain-invalid-routing-overlay)}"' in claude
     codex = GOLDEN["codex|portable"]["body"]
-    assert '--policy="${CLAVAIN_ROUTING_POLICY:-$HOME/.agents/skills/clavain/../config/routing.yaml}"' in codex
+    assert '--policy="${CLAVAIN_ROUTING_POLICY:-$( (python3 "$HOME/.agents/skills/clavain/../scripts/routing_overlay.py" policy) || echo /dev/null/clavain-invalid-routing-overlay)}"' in codex
     assert "--policy=<POLICY> " in GOLDEN["claude|explicit"]["body"]
     # Default (no --policy) names the source's own routing.yaml, which is the
     # fixture policy here, so it renders the same as the explicit form.

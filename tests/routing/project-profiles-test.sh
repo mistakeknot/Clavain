@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# Coordinator-seat routing for the fleet's project table (reverses
-# the mk-42j9.25/mk-42j9.5 per-project Opus coordinator-seat table). Real
-# Intercore resolver against the packaged policy; no model calls.
+# Coordinator-seat routing for a synthetic project table layered over the
+# packaged policy. Real Intercore resolver; no model calls.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-POLICY="$ROOT/config/routing.yaml"
+PACKAGED="$ROOT/config/routing.yaml"
 command -v ic >/dev/null
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
@@ -15,10 +14,16 @@ fail() {
   exit 1
 }
 
-# the owner ruled 2026-09-27: every coordinator seat resolves the fleet
-# default, coordinator-seat-sonnet. The former nine-Opus/six-Sonnet split is
-# gone; all fifteen table slugs are equivalent for coordinator-seat purposes.
-ALL_SLUGS=(aleph clavain autarch after-them bbops shadow-work quilan sylvesteops nartopo autosigil rakes uncrancher cujgel agmodb linsenkasten)
+ALL_SLUGS=(alpha clavain bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november)
+POLICY="$TMP_ROOT/devbox.yaml"
+python3 - "$PACKAGED" "$POLICY" <<'DEVBOX'
+import sys, yaml
+cfg = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
+cfg["reasoning"]["projects"] = ["alpha", "clavain", "bravo", "charlie", "delta", "echo", "foxtrot", "golf",
+                                "hotel", "india", "juliet", "kilo", "lima", "mike", "november"]
+cfg["reasoning"]["project_aliases"] = {"proj_synth1": "bravo", "proj_synth2": "charlie"}
+yaml.safe_dump(cfg, open(sys.argv[2], "w"))
+DEVBOX
 
 policy_json() {
   python3 - "$POLICY" <<'PY'
@@ -28,14 +33,16 @@ PY
 }
 CFG="$(policy_json)"
 
-# No project overrides coordinator-seat (or any other role) any more.
-jq -e '(.reasoning.project_profiles // {}) == {}' <<< "$CFG" >/dev/null \
-  || fail "project_profiles must be empty; mk-h73i removed every per-project coordinator-seat override"
+PACKAGED_CFG="$(python3 -c 'import json, sys, yaml; print(json.dumps(yaml.safe_load(open(sys.argv[1], encoding="utf-8"))))' "$PACKAGED")"
+jq -e '.reasoning.projects == [] and .reasoning.project_aliases == {} and .reasoning.project_profiles == {} and .reasoning.profiles == {}' <<< "$PACKAGED_CFG" >/dev/null \
+  || fail "the packaged policy must carry no projects, aliases, project profiles or profiles"
 
-# reasoning.projects is the explicit 15-slug table route-spawn.sh trusts.
+jq -e '(.reasoning.project_profiles // {}) == {}' <<< "$CFG" >/dev/null \
+  || fail "project_profiles must be empty"
+
 jq -e --argjson slugs "$(printf '%s\n' "${ALL_SLUGS[@]}" | jq -R . | jq -s 'sort')" \
   '(.reasoning.projects | sort) == $slugs' <<< "$CFG" >/dev/null \
-  || fail "reasoning.projects must list exactly the 15 table slugs"
+  || fail "reasoning.projects must list exactly the table slugs"
 
 # Every alias targets a table slug; shared bb projects have no alias.
 jq -e --argjson slugs "$(printf '%s\n' "${ALL_SLUGS[@]}" | jq -R . | jq -s .)" \
@@ -43,8 +50,6 @@ jq -e --argjson slugs "$(printf '%s\n' "${ALL_SLUGS[@]}" | jq -R . | jq -s .)" \
   || fail "every project alias must target a table slug"
 jq -e '.reasoning.project_aliases | has("proj_personal") | not' <<< "$CFG" >/dev/null \
   || fail "proj_personal is shared and must not have an alias"
-jq -e '.reasoning.project_aliases | has("proj_bnq4zi2wiv") | not' <<< "$CFG" >/dev/null \
-  || fail "proj_bnq4zi2wiv (projects/Sylveste) is shared and must not have an alias"
 
 # No profile overrides main-session, lane, coordination or coordinator-seat.
 jq -e '[.reasoning.profiles | to_entries[] | .value.roles | to_entries[] | select(.key == "main-session" or .key == "lane" or .key == "coordination" or .key == "coordinator-seat")] | length == 0' <<< "$CFG" >/dev/null \
@@ -58,19 +63,18 @@ jq -e '[.dispatch.tiers | to_entries[] | select(.value.role == "coordination") |
   || fail "coordination is the relay role; its tiers admit Sonnet or Sol only (roster rule 6)"
 jq -e '.dispatch.tiers | has("coordination-opus") | not' <<< "$CFG" >/dev/null \
   || fail "coordination-opus is replaced by coordinator-seat-opus"
-# coordinator-seat-opus itself stays defined (is about resolution,
-# not about deleting the tier): nothing in dispatch.roles or
+# coordinator-seat-opus itself stays defined: nothing in dispatch.roles or
 # reasoning.profiles points to it any more, so no role/project resolution
 # ever lands on it, but it stays explicitly selectable via
 # `--tier=coordinator-seat-opus` for an operator who wants it directly.
 jq -e '.dispatch.tiers | has("coordinator-seat-opus")' <<< "$CFG" >/dev/null \
-  || fail "coordinator-seat-opus tier must still exist (mk-h73i left the tier definition in place)"
+  || fail "coordinator-seat-opus tier must still exist "
 jq -e '[.reasoning.profiles | to_entries[] | .value.roles | to_entries[] | select(.value == "coordinator-seat-opus")] | length == 0' <<< "$CFG" >/dev/null \
   || fail "no profile may still point at coordinator-seat-opus"
 jq -e '.dispatch.roles | to_entries | all(.value != "coordinator-seat-opus")' <<< "$CFG" >/dev/null \
   || fail "no fleet role may point at coordinator-seat-opus"
 
-# mk ruling 2026-09-27: no spawn chain (lane, main-session, coordinator-seat,
+# No spawn chain (lane, main-session, coordinator-seat,
 # or any profile override of them) ever reaches gpt-5.6-sol. Claude exhaustion
 # lands on gpt-6-astra medium.
 python3 - "$POLICY" <<'NOSOL' || fail "a spawn role chain reaches gpt-5.6-sol"
@@ -128,7 +132,7 @@ jq -e '.profile_ref == "coordinator-seat-sonnet" and .profile.model_identity == 
   || fail "the fleet coordinator seat must be Sonnet 5.5 medium"
 
 # Every table slug resolves coordinator-seat to the fleet Sonnet default,
-# unprofiled — no project scope is required or consulted any more.
+# unprofiled.
 for slug in "${ALL_SLUGS[@]}"; do
   jq --arg s "project:$slug" '. + {scope: $s}' "$TMP_ROOT/plain.json" > "$TMP_ROOT/$slug.json"
   out="$(route "$TMP_ROOT/$slug.json" --role=coordinator-seat)"

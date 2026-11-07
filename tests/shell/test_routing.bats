@@ -11,6 +11,8 @@ setup() {
 
     # Reset the source guard and all caches so each test starts clean
     unset _ROUTING_LOADED
+    unset _ROUTING_IC_POLICY_DONE _ROUTING_IC_POLICY_FAILED _ROUTING_OVERLAY_FAILED
+    export CLAVAIN_ROUTING_OVERLAY=""
 
     # Write a standard routing.yaml for most tests
     mkdir -p "$TEST_DIR/config"

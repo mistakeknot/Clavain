@@ -13,6 +13,7 @@ dispatch.sh consumes a route, not what the routing policy says (that is
 test_role_resolution.py).
 """
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -483,7 +484,7 @@ def _dry_golden():
 
 
 def _dry_cases():
-    sha = o.policy_sha256(o.policy_under_test())
+    sha = os.environ.get("ORCHCOMPAT_GOLDEN_POLICY") or o.policy_sha256(o.policy_under_test())
     table = _dry_golden().get(sha)
     return sha, table
 
