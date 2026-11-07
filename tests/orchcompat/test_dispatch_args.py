@@ -170,22 +170,31 @@ def test_the_inner_run_of_a_role_dispatch_is_reaped_too(rig):
     assert ".json.events.jsonl" in rig.tmp_files
 
 
-def test_reaping_removes_known_files_and_rejects_unknown_ones():
-    pid = 2**31 - 1  # no such process; names files nothing else uses
-    known = Path(f"/tmp/clavain-dispatch-{pid}.json.stderr")
-    weird = Path(f"/tmp/clavain-dispatch-{pid}.surprise")
-    try:
-        known.write_text("x")
-        assert o.reap_dispatch_tmp(pid) == [".json.stderr"]
-        assert not known.exists()
-        known.write_text("x")
-        weird.write_text("x")
-        with pytest.raises(AssertionError, match="unexpected dispatch file"):
-            o.reap_dispatch_tmp(pid)
-        assert weird.exists()  # left for inspection
-    finally:
-        known.unlink(missing_ok=True)
-        weird.unlink(missing_ok=True)
+def test_reaping_removes_known_files_and_rejects_unknown_ones(tmp_path):
+    # Its own directory: nothing here is shared with another suite or the host.
+    pid = 4242
+    known = tmp_path / f"clavain-dispatch-{pid}.json.stderr"
+    weird = tmp_path / f"clavain-dispatch-{pid}.surprise"
+    other = tmp_path / "clavain-dispatch-4243.json"  # another pid: never touched
+    other.write_text("y")
+    known.write_text("x")
+    assert o.reap_dispatch_tmp(pid, tmp_path) == [".json.stderr"]
+    assert not known.exists() and other.exists()
+    known.write_text("x")
+    weird.write_text("x")
+    with pytest.raises(AssertionError, match="unexpected dispatch file"):
+        o.reap_dispatch_tmp(pid, tmp_path)
+    assert weird.exists() and known.exists()  # nothing deleted when one name is unknown
+
+
+def test_reaping_refuses_a_symlink_and_leaves_its_target_alone(tmp_path):
+    victim = tmp_path / "victim"
+    victim.write_text("precious")
+    link = tmp_path / "clavain-dispatch-4242.json"
+    link.symlink_to(victim)
+    with pytest.raises(AssertionError, match="not a regular file of ours"):
+        o.reap_dispatch_tmp(4242, tmp_path)
+    assert link.is_symlink() and victim.read_text() == "precious"
 
 
 def test_session_variables_do_not_reach_the_script(rig, tmp_path, monkeypatch):
@@ -505,3 +514,85 @@ def test_dry_golden_covers_every_role_and_reason_set():
         assert len(table) == len(o.ROLES) * len(o.DRY_REASON_SETS)
         refused = {k.split("|")[0] for k, v in table.items() if v["rc"] != 0}
         assert refused == {"release-authority"}
+
+
+# ---------------------------------------------------------------------------
+# git is run without the caller's environment or config
+# ---------------------------------------------------------------------------
+def _commit(repo, name):
+    (repo / name).write_text(name)
+    ident = dict(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid",
+                 GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.invalid")
+    assert o.run_git("add", name, cwd=repo).returncode == 0
+    r = o.run_git("commit", "-q", "-m", name, cwd=repo, **ident)
+    assert r.returncode == 0, r.stderr
+    return o.run_git("rev-parse", "HEAD", cwd=repo).stdout.strip()
+
+
+def _hostile_git_env(monkeypatch, tmp_path):
+    decoy = tmp_path / "decoy"
+    decoy.mkdir()
+    assert o.run_git("init", "-q", cwd=decoy).returncode == 0
+    template = tmp_path / "template"
+    (template / "hooks").mkdir(parents=True)
+    (template / "hooks" / "pre-commit").write_text("#!/bin/sh\nexit 1\n")
+    gitconfig = tmp_path / "gitconfig"
+    gitconfig.write_text("[user]\n\tname = leaked\n[core]\n\thooksPath = /nonexistent\n")
+    monkeypatch.setenv("GIT_DIR", str(decoy / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(decoy))
+    monkeypatch.setenv("GIT_TEMPLATE_DIR", str(template))
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(gitconfig))
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "user.email")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "leaked@example.invalid")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    return decoy, template
+
+
+def test_hostile_git_variables_do_not_redirect_the_rig_repo(tmp_path, monkeypatch):
+    decoy, template = _hostile_git_env(monkeypatch, tmp_path)
+    before = sorted(p.name for p in (decoy / ".git").iterdir())
+    rig = o.Rig(tmp_path / "rig")
+    assert (rig.repo / ".git").is_dir(), "git init was redirected by the caller's GIT_DIR"
+    assert sorted(p.name for p in (decoy / ".git").iterdir()) == before  # decoy untouched
+    assert not (rig.repo / ".git" / "hooks" / "pre-commit").exists()  # template not used
+    cfg = o.run_git("config", "--list", "--show-origin", cwd=rig.repo).stdout
+    assert "leaked" not in cfg and "hooksPath" not in cfg
+
+
+def test_hostile_git_variables_do_not_change_the_ancestry_answer(tmp_path, monkeypatch):
+    repo = tmp_path / "real"
+    repo.mkdir()
+    assert o.run_git("init", "-q", "-b", "main", cwd=repo).returncode == 0
+    first = _commit(repo, "a")
+    assert o.run_git("checkout", "-q", "-b", "side", cwd=repo).returncode == 0
+    side = _commit(repo, "s")
+    assert o.run_git("checkout", "-q", "main", cwd=repo).returncode == 0
+    second = _commit(repo, "b")
+    # GIT_DIR now names a repository that has none of these commits.
+    _hostile_git_env(monkeypatch, tmp_path)
+    assert o.is_ancestor(repo, first) is True
+    assert o.is_ancestor(repo, second) is True
+    assert o.is_ancestor(repo, side) is False
+
+
+def test_git_init_ignores_a_template_even_when_one_is_handed_in(tmp_path):
+    # Second layer: besides the allowlist, `git init` is given an empty template.
+    template = tmp_path / "template"
+    (template / "hooks").mkdir(parents=True)
+    (template / "hooks" / "pre-commit").write_text("#!/bin/sh\nexit 1\n")
+    repo = tmp_path / "r"
+    assert o.run_git("init", "-q", str(repo), GIT_TEMPLATE_DIR=template).returncode == 0
+    assert (repo / ".git").is_dir()
+    assert not (repo / ".git" / "hooks" / "pre-commit").exists()
+
+
+def test_git_runs_with_system_and_global_config_switched_off(tmp_path):
+    env = o.git_env()
+    assert env["GIT_CONFIG_NOSYSTEM"] == "1" and env["GIT_CONFIG_GLOBAL"] == "/dev/null"
+    assert not any(k in env for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_TEMPLATE_DIR", "GIT_INDEX_FILE"))
+    # and the effect: a user-level config file in HOME is not read
+    (tmp_path / ".gitconfig").write_text("[user]\n\tname = leaked\n")
+    repo = tmp_path / "r"
+    assert o.run_git("init", "-q", str(repo), HOME=tmp_path).returncode == 0
+    assert o.run_git("config", "user.name", cwd=repo, HOME=tmp_path).stdout.strip() == ""

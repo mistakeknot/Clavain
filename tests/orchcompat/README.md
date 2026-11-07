@@ -44,8 +44,13 @@ points at an empty file in the temp HOME: `dispatch.sh` sources that variable
 first and stops at the first library it finds, so no interband library next to
 the checkout or in the operator's home is ever loaded. The policy path is
 passed explicitly, so the tests do not read or write the operator's state.
-Fake CLIs record their arguments and exit; no model is launched and no network
-is used.
+The rig's own `git` calls (initializing the scratch repo, and the ancestry check
+that picks the baseline or main expectations) go through the same allowlist, with
+system and global git config switched off (`GIT_CONFIG_NOSYSTEM=1`,
+`GIT_CONFIG_GLOBAL=/dev/null`), no `GIT_DIR` or `GIT_WORK_TREE`, and an empty
+template, so a caller's git variables or gitconfig cannot redirect them
+(`orchlib.run_git`). Fake CLIs record their arguments and exit; no model is
+launched and no network is used.
 
 One exception, by necessity: `scripts/dispatch.sh` hard-codes its state files
 as `/tmp/clavain-dispatch-<pid>.json` (plus `.tmp`, `.stderr` and
@@ -56,7 +61,10 @@ again for the resolved backend, and that inner run has its own pid; the fake
 CLIs record their ancestor pids, so the rig finds the inner pid from them.
 After each run it asserts that only those four suffixes exist for each such
 pid, records them, and deletes exactly those files (`orchlib.reap_dispatch_tmp`).
-An unknown name fails the test and is left in place. A run killed by the OS or
+An unknown name fails the test and is left in place, and so is anything that is
+not a regular file owned by the current user (a symlink, say). The helper takes
+a directory, so its own tests run in a pytest temp directory and never touch
+real `/tmp`. A run killed by the OS or
 a timeout of the test process itself, or one that dies before any fake CLI
 starts below the launched bash, can still leave its files behind; they hold no
 secrets and carry a dead pid.

@@ -2,7 +2,7 @@
 
 What the characterization suite pins, and what it does not. A row marked
 "not covered" is deliberate; the reason is given, nothing is skipped silently.
-Counts are the tests collected per module (222 in all; 221 run on current main, one applies to the older script only).
+Counts are the tests collected per module (227 in all; 226 run on current main, one applies to the older script only).
 
 ## Covered
 
@@ -22,11 +22,12 @@ Counts are the tests collected per module (222 in all; 221 run on current main, 
 | A malformed policy still renders (it is only hashed) | `test_contract_generator.py` | Pinned as current behavior |
 | Write, check and dry-run modes; marker handling (duplicates, legacy markers, symlinks, missing directory) | `test_contract_generator.py` | File effects and diff output |
 | `check-instruction-contract.sh`: current, missing file, no receipt, version drift, policy drift, content drift, usage errors, renderer error | `test_contract_generator.py` | Exit codes 0/1/2 and drift codes |
-| `dispatch.sh --role` argument handling: role validation, optional decision-context file, inline JSON refused, unreadable context, missing `ic`, bead-id charset, incompatible flags, help | `test_dispatch_args.py` (46) | Fake `ic`, `codex`, `claude` on PATH; exit code and message |
+| `dispatch.sh --role` argument handling: role validation, optional decision-context file, inline JSON refused, unreadable context, missing `ic`, bead-id charset, incompatible flags, help | `test_dispatch_args.py` (51) | Fake `ic`, `codex`, `claude` on PATH; exit code and message |
 | What `dispatch.sh` hands to `ic` and to the seat: policy argument, role, context file, resolved model and effort, claude and codex command lines | `test_dispatch_args.py` | Fake CLIs record their arguments |
 | Dispatch receipt: fields, producer and bead, one line per dispatch, failed model exit recorded with that code, started and terminal routing decisions | `test_dispatch_args.py` | JSONL read back; the expected shape (with or without `observed_*`/`usage_*`) is chosen from git history, not from the receipt |
 | `--review-scratch` and `--repo` on a non-review role | `test_dispatch_args.py` | Refused (main) or warned and run (baseline), chosen from git history, not from the script text |
-| The state files `dispatch.sh` leaves in `/tmp` and the environment it can see | `test_dispatch_args.py` | Asserted per run and deleted by pid; caller's `BASH_ENV`, `ENV`, `INTERBAND_LIB`, `PYTHONPATH`, `CLAVAIN_*` shown not to arrive |
+| The state files `dispatch.sh` leaves in `/tmp` and the environment it can see | `test_dispatch_args.py` | Asserted per run and deleted by pid; the deletion helper refuses a symlink, a non-regular file or one owned by another user, and its own tests use a temp directory, not `/tmp`; caller's `BASH_ENV`, `ENV`, `INTERBAND_LIB`, `PYTHONPATH`, `CLAVAIN_*` shown not to arrive |
+| The rig's own `git` calls (`git init` of the scratch repo, the ancestry check that picks baseline or main) | `test_dispatch_args.py` | Run with an allowlisted environment, system and global config off, empty template; a hostile caller `GIT_DIR`, `GIT_WORK_TREE`, `GIT_TEMPLATE_DIR`, `GIT_CONFIG_*` or `HOME` config changes neither the scratch repo nor the ancestry answer |
 | `ic` answers for the policy that was passed | `test_role_resolution.py`, `test_policy_binding.py` (4) | Returned `policy_hash` equals the sha256 of the policy bytes before any row is compared |
 | The strict gate | `test_gate.py` (3) | Child pytest with a PATH missing `yq` or `jq`: errors under `--orchcompat-require-ic`, announced in the header otherwise |
 | `dispatch.sh --dry-run` output for every role and reason set | `test_dispatch_args.py` | Golden `dispatch_dry_run.json`, both policies |

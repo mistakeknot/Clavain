@@ -7,6 +7,7 @@ Nothing launches a model, and nothing touches a real bb, gh or network.
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -76,6 +77,41 @@ def hermetic_env(home, *path_dirs, **extra):
 
 
 # ---------------------------------------------------------------------------
+# git, run without the caller's environment
+# ---------------------------------------------------------------------------
+def git_env(**extra):
+    """An allowlisted environment for git: no GIT_DIR, GIT_WORK_TREE, GIT_*
+    object or template variables from the caller, no system or global config,
+    and a HOME with no gitconfig. `extra` is applied last (identity, tests)."""
+    env = {"PATH": SYSTEM_PATH, "HOME": "/nonexistent", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
+           "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null",
+           "GIT_TERMINAL_PROMPT": "0"}
+    env.update({k: str(v) for k, v in extra.items()})
+    return env
+
+
+def run_git(*args, cwd=None, **extra_env):
+    """Run git with git_env(); `git init` also gets an empty template so no
+    hooks or config are copied in from a template directory."""
+    args = list(args)
+    if args[:1] == ["init"]:
+        args.insert(1, "--template=")
+    return subprocess.run(["git", *args], cwd=cwd, env=git_env(**extra_env),
+                          capture_output=True, text=True)
+
+
+def is_ancestor(repo, sha):
+    """git merge-base --is-ancestor SHA HEAD in `repo`: True, False, or raises
+    when git cannot answer (never guesses)."""
+    r = run_git("-C", str(repo), "merge-base", "--is-ancestor", sha, "HEAD")
+    if r.returncode in (0, 1):
+        return r.returncode == 0
+    raise RuntimeError(
+        f"cannot tell which dispatch.sh generation is checked out ({r.stderr.strip()}); "
+        "set ORCHCOMPAT_DISPATCH_GEN=baseline or main")
+
+
+# ---------------------------------------------------------------------------
 # Which generation of scripts/dispatch.sh is checked out
 # ---------------------------------------------------------------------------
 # Two dispatch behaviors changed after the baseline (54d2fa43). A test must pick
@@ -102,14 +138,7 @@ def dispatch_feature(name):
         if forced not in ("baseline", "main"):
             raise RuntimeError("ORCHCOMPAT_DISPATCH_GEN must be 'baseline' or 'main'")
         return forced == "main"
-    r = subprocess.run(["git", "-C", str(ROOT), "merge-base", "--is-ancestor",
-                        DISPATCH_FEATURES[name], "HEAD"], capture_output=True, text=True)
-    if r.returncode in (0, 1):
-        # 1 = not an ancestor; but a missing object also exits 128, handled below.
-        return r.returncode == 0
-    raise RuntimeError(
-        f"cannot tell which dispatch.sh generation is checked out ({r.stderr.strip()}); "
-        "set ORCHCOMPAT_DISPATCH_GEN=baseline or main")
+    return is_ancestor(ROOT, DISPATCH_FEATURES[name])
 
 
 def write_exec(path, text):
@@ -408,17 +437,23 @@ ROUTE_FIXTURES = FIXTURES / "dispatch"
 DISPATCH_TMP_SUFFIXES = (".json", ".json.tmp", ".json.stderr", ".json.events.jsonl")
 
 
-def reap_dispatch_tmp(pid):
-    """Assert dispatch's /tmp files for `pid` are the known set, then delete
-    exactly those. Returns the suffixes that existed. An unknown name fails the
-    test (and is left in place for inspection)."""
+def reap_dispatch_tmp(pid, directory="/tmp"):
+    """Assert dispatch's files for `pid` in `directory` are the known set, then
+    delete exactly those. Returns the suffixes that existed. An unknown name,
+    a symlink, or anything that is not a regular file of ours fails the test
+    and nothing is deleted (it is left in place for inspection)."""
+    directory = Path(directory)
+    stem = f"clavain-dispatch-{pid}"
     found = []
-    for path in sorted(Path("/tmp").glob(f"clavain-dispatch-{pid}.*")):
-        suffix = path.name[len(f"clavain-dispatch-{pid}"):]
-        assert suffix in DISPATCH_TMP_SUFFIXES, f"unexpected dispatch file in /tmp: {path}"
+    for path in sorted(directory.glob(stem + ".*")):
+        suffix = path.name[len(stem):]
+        assert suffix in DISPATCH_TMP_SUFFIXES, f"unexpected dispatch file in {directory}: {path}"
+        st = path.lstat()
+        assert stat.S_ISREG(st.st_mode) and st.st_uid == os.getuid(), \
+            f"refusing to touch {path}: not a regular file of ours"
         found.append(suffix)
     for suffix in found:
-        Path(f"/tmp/clavain-dispatch-{pid}{suffix}").unlink(missing_ok=True)
+        (directory / (stem + suffix)).unlink(missing_ok=True)
     return found
 
 
@@ -447,7 +482,8 @@ class Rig:
         self.codex_version = codex_version
         self.repo = self.t / "repo"
         self.repo.mkdir(exist_ok=True)
-        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
+        init = run_git("init", "-q", str(self.repo))
+        assert init.returncode == 0, init.stderr
         self.prompt = self.t / "prompt.md"
         self.prompt.write_text("PROMPT\n")
         self.out = self.t / "out.md"
