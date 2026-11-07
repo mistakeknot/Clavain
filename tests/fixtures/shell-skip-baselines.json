@@ -333,7 +333,7 @@
       "cases": [
         "in scratch mode mktemp and scratch writes succeed; real repo, HOME and /tmp are denied"
       ],
-      "why": "tests/shell/dispatch_review_scratch.bats runs the --review-scratch sandbox against a real codex CLI to prove writes outside scratch are denied, so it needs codex installed and skips on a hosted runner by design. The live probe was run on a host with codex at the PR head before merge, and its output is attached to the PR. Its stub-backed siblings in the same file run in CI and pass. No assertion that used to run here stopped running.",
+      "why": "tests/shell/dispatch_review_scratch.bats runs the --review-scratch sandbox against a real codex CLI to prove writes outside scratch are denied, so it needs codex installed and skips on a hosted runner by design. The live probe was run on a host with codex at the head of PR 128 before it merged, and its output is attached to PR 128 as a comment. Its stub-backed siblings in the same file run in CI and pass. No assertion that used to run here stopped running.",
       "source": "bead mk-7bb3q; skip added with the probe in PR 128 (bead mk-fdj7h)",
       "first_observed_in_run": "42182253658",
       "accepted_on": "2026-11-06"
