@@ -113,7 +113,9 @@ json.dump({"total": len(names), "paths": names[:200]}, sys.stdout)
   RR_CHANGED_PATHS_JSON="${pj% *}"
 }
 
-# Strict verdict from the reviewer's final line. Prints PASS, "PASS WITH NOTES"
+# Strict verdict token from the reviewer's final line. Only FAIL and BLOCK may
+# carry explanatory suffixes; passing rulings allow at most a trailing period.
+# Prints PASS, "PASS WITH NOTES"
 # or BLOCK (the words PASS, PASS WITH NOTES, FAIL; FAIL and its alias BLOCK
 # both record BLOCK; mk-tl0ou.3.4);
 # prints nothing (rc 1) when there is no acceptable VERDICT line or the word is
@@ -137,15 +139,22 @@ _review_receipt_verdict() {
     $0 ~ /[^[:space:]]/ { last = $0; lastok = (blank || NR == 1); blank = 0; next }
     { blank = 1 }
     END { if (lastok) print last }' "$out")" || return 1
-  local re='^(\*\*|__)?[Vv][Ee][Rr][Dd][Ii][Cc][Tt][[:space:]]*:(\*\*|__)?[[:space:]]*(([^[:space:]*_`.]|[^[:space:]*_`].*[^[:space:]*_`.]))(\*\*|__)?[[:space:]]*$'
+  local re='^(\*\*|__)?[Vv][Ee][Rr][Dd][Ii][Cc][Tt][[:space:]]*:(\*\*|__)?[[:space:]]*(([^[:space:]*_`]|[^[:space:]*_`].*[^[:space:]*_`]))[[:space:]]*(\*\*|__)?[[:space:]]*$'
   [[ "$last" =~ $re ]] || return 1
   local v="${BASH_REMATCH[3]}"
-  case "${v^^}" in
-    PASS) echo PASS ;;
-    "PASS WITH NOTES") echo "PASS WITH NOTES" ;;
-    FAIL|BLOCK) echo BLOCK ;;
-    *) echo "review receipt: unrecognised verdict word '$v'; accepted: PASS, PASS WITH NOTES, FAIL (BLOCK is read as FAIL)" >&2; return 1 ;;
-  esac
+  # Never infer approval from explanatory prose: any suffix could contradict a
+  # PASS using wording we cannot enumerate. Blocking tokens can safely ignore
+  # their explanation because the normalized result always remains BLOCK.
+  local pass_re='^(PASS|PASS WITH NOTES)\.?$'
+  local block_re='^(FAIL|BLOCK)($|[[:space:]:;.,(].*)'
+  if [[ "${v^^}" =~ $pass_re ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+  elif [[ "${v^^}" =~ $block_re ]]; then
+    echo BLOCK
+  else
+    echo "review receipt: unrecognised verdict word '$v'; accepted: PASS, PASS WITH NOTES, FAIL (BLOCK is read as FAIL)" >&2
+    return 1
+  fi
 }
 
 _review_receipt_lab() {
@@ -178,7 +187,7 @@ _review_receipt_write() {
   fi
   [[ "${CAPACITY_SUBSTITUTE_JSON:-}" == "" ]] || { echo "review receipt: not written (capacity substitute review)" >&2; return 1; }
   local verdict
-  verdict="$(_review_receipt_verdict "$out")" || { echo "review receipt: not written (no usable VERDICT line in review output; the last line must be 'VERDICT: PASS', 'VERDICT: PASS WITH NOTES' or 'VERDICT: FAIL')" >&2; return 1; }
+  verdict="$(_review_receipt_verdict "$out")" || { echo "review receipt: not written (no usable VERDICT line in review output; the last line must be 'VERDICT: PASS' or 'VERDICT: PASS WITH NOTES' with at most a trailing period, or start with 'VERDICT: FAIL' or 'VERDICT: BLOCK' with an optional explanation)" >&2; return 1; }
 
   # Additive fields (schema_version stays 1; verdict logic is untouched). One
   # extractor, scripts/receipt-findings.py: unparsed bodies record
