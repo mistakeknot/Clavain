@@ -110,6 +110,7 @@ INTERBAND_DISPATCH_FILE=""
 DISPATCH_SESSION_ID="${DISPATCH_SESSION_ID:-${CLAUDE_SESSION_ID:-${CODEX_THREAD_ID:-}}}"
 source "${DISPATCH_SCRIPT_DIR}/lib-dispatch-audit.sh"
 source "${DISPATCH_SCRIPT_DIR}/lib-review-receipt.sh"
+source "${DISPATCH_SCRIPT_DIR}/lib-ui-review-standards.sh"
 source "${DISPATCH_SCRIPT_DIR}/lib-bb.sh"
 
 _bb_role_sandbox_allowed() {
@@ -497,6 +498,10 @@ Options:
                                 PR head under ${CLAVAIN_REVIEW_RECEIPT_DIR:-~/.local/state/clavain/reviews},
                                 mode 0600, never overwritten. No file for a same-lab,
                                 substitute or verdict-less review; the run then exits 1.
+                                When the diff touches UI files, the ui-craft review standards
+                                are added to the brief (CLAVAIN_UI_REVIEW_STANDARDS or
+                                CLAVAIN_UI_CRAFT_DIR, else the installed skill; CLAVAIN_UI_REVIEW=off
+                                disables). A missing file prints a notice and never blocks.
   --review-scratch              Scratch-writable review (cross-lab-review, codex engine,
                                   needs the receipt flags and -C). Clones -C at --head into
                                   a private 0700 directory (tree must match --head, or the
@@ -2268,6 +2273,14 @@ $RESOLVED_ROUTE_JSON
 Task:
 $PROMPT"
       if [[ "$ROLE" == cross-lab-review ]]; then
+        # UI lens (mk-kvwc9): when the diff touches UI files, add the ui-craft
+        # standards before the format and verdict rules below, so the brief's
+        # own VERDICT line stays the last thing the reviewer is told.
+        ui_review_section="$(_ui_review_section)"
+        if [[ -n "$ui_review_section" ]]; then
+          PROMPT="$PROMPT
+$ui_review_section"
+        fi
         PROMPT="$PROMPT
 
 Give each finding its own heading line: a severity (P0, P1, P2 or P3) and then a
