@@ -100,9 +100,26 @@ def run_git(*args, cwd=None, **extra_env):
                           capture_output=True, text=True)
 
 
+def is_shallow(repo):
+    """True when `repo` has a shallow boundary (git's own answer, which reads
+    the `shallow` file). Raises when git cannot say."""
+    r = run_git("-C", str(repo), "rev-parse", "--is-shallow-repository")
+    answer = r.stdout.strip()
+    if r.returncode != 0 or answer not in ("true", "false"):
+        raise RuntimeError(
+            f"cannot tell whether the checkout is shallow ({r.stderr.strip() or answer}); "
+            "set ORCHCOMPAT_DISPATCH_GEN=baseline or main")
+    return answer == "true"
+
+
 def is_ancestor(repo, sha):
     """git merge-base --is-ancestor SHA HEAD in `repo`: True, False, or raises
     when git cannot answer (never guesses)."""
+    if is_shallow(repo):
+        raise RuntimeError(
+            "this checkout is shallow, so git history cannot say whether the commit that "
+            "introduced a dispatch.sh behavior is an ancestor of HEAD (a cut-off history "
+            "answers 'no'); fetch full history or set ORCHCOMPAT_DISPATCH_GEN=baseline or main")
     r = run_git("-C", str(repo), "merge-base", "--is-ancestor", sha, "HEAD")
     if r.returncode in (0, 1):
         return r.returncode == 0

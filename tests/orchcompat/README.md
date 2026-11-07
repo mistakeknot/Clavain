@@ -114,7 +114,12 @@ back into a current tree fails, and so does one that drops a field. The choice
 reads the commit graph, not the working tree: run the suite on a committed
 checkout. `ORCHCOMPAT_DISPATCH_GEN=baseline|main` overrides it (mutcheck uses
 this; its scratch copy has no `.git`), and a checkout where git cannot answer
-is an error, not a guess.
+is an error, not a guess. A shallow checkout is one of those: a shallow
+boundary can cut the introducing commit off from `HEAD` and make git answer
+"not an ancestor", which would read as baseline behavior. So `orchlib.is_ancestor`
+raises when `git rev-parse --is-shallow-repository` is true, naming the override;
+fetch full history or set `ORCHCOMPAT_DISPATCH_GEN` explicitly. This is an error,
+not a skip.
 
 ## Known drift pinned, not fixed
 

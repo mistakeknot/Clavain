@@ -596,3 +596,58 @@ def test_git_runs_with_system_and_global_config_switched_off(tmp_path):
     repo = tmp_path / "r"
     assert o.run_git("init", "-q", str(repo), HOME=tmp_path).returncode == 0
     assert o.run_git("config", "user.name", cwd=repo, HOME=tmp_path).stdout.strip() == ""
+
+
+def _history(tmp_path):
+    repo = tmp_path / "full"
+    repo.mkdir()
+    assert o.run_git("init", "-q", "-b", "main", cwd=repo).returncode == 0
+    return repo, [_commit(repo, n) for n in ("a", "b", "c")]
+
+
+def test_a_shallow_checkout_is_an_error_not_a_baseline_answer(tmp_path, monkeypatch):
+    repo, (first, _, _) = _history(tmp_path)
+    assert o.is_shallow(repo) is False and o.is_ancestor(repo, first) is True
+    # The introducing commit's object stays in the store, but a shallow boundary
+    # at the middle commit cuts it off from HEAD: git alone would answer "no".
+    middle = o.run_git("rev-parse", "HEAD~1", cwd=repo).stdout.strip()
+    (repo / ".git" / "shallow").write_text(middle + "\n")
+    assert o.run_git("-C", str(repo), "merge-base", "--is-ancestor", first, "HEAD").returncode == 1
+    assert o.is_shallow(repo) is True
+    with pytest.raises(RuntimeError, match="shallow"):
+        o.is_ancestor(repo, first)
+    # the same through the selector the tests use
+    monkeypatch.delenv("ORCHCOMPAT_DISPATCH_GEN", raising=False)
+    monkeypatch.setattr(o, "ROOT", repo)
+    with pytest.raises(RuntimeError, match="shallow"):
+        o.dispatch_feature("observed-receipt")
+    # the explicit override still works
+    monkeypatch.setenv("ORCHCOMPAT_DISPATCH_GEN", "main")
+    assert o.dispatch_feature("observed-receipt") is True
+    monkeypatch.setenv("ORCHCOMPAT_DISPATCH_GEN", "baseline")
+    assert o.dispatch_feature("observed-receipt") is False
+
+
+def test_a_real_shallow_clone_is_detected(tmp_path):
+    repo, (first, _, last) = _history(tmp_path)
+    clone = tmp_path / "shallow"
+    r = o.run_git("clone", "-q", "--depth", "1", "--no-local", "--template=", f"file://{repo}", str(clone))
+    assert r.returncode == 0, r.stderr
+    assert o.is_shallow(clone) is True
+    with pytest.raises(RuntimeError, match="shallow"):
+        o.is_ancestor(clone, last)
+
+
+def test_shallow_detection_runs_without_the_callers_git_variables(tmp_path, monkeypatch):
+    repo, (first, _, _) = _history(tmp_path)
+    decoy, _ = _hostile_git_env(monkeypatch, tmp_path)  # GIT_DIR names a decoy repository
+    assert o.is_shallow(repo) is False and o.is_ancestor(repo, first) is True
+    # a shallow decoy must not make a full repository look shallow, and a full
+    # decoy must not hide a shallow one
+    (decoy / ".git" / "shallow").write_text(first + "\n")
+    assert o.run_git("rev-parse", "--is-shallow-repository", GIT_DIR=decoy / ".git").stdout.strip() == "true"
+    assert o.is_shallow(repo) is False
+    (decoy / ".git" / "shallow").unlink()
+    middle = o.run_git("rev-parse", "HEAD~1", cwd=repo).stdout.strip()
+    (repo / ".git" / "shallow").write_text(middle + "\n")
+    assert o.is_shallow(repo) is True
