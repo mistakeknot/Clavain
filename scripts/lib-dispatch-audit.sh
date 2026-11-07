@@ -107,6 +107,39 @@ _prepare_role_audit() {
   fi
 }
 
+# Shared by routing audits and the per-run JSONL attribution receipt.
+_dispatch_observed_model() {
+  local state="$1" bb_receipt="${2:-null}"
+  local findings_helper="${DISPATCH_SCRIPT_DIR:-}"
+  # The requested model is not evidence of the model that ran. On a finished
+  # codex run record the observed one: from the bb seat receipt on the bb path,
+  # else from the session rollout named by the captured thread.started event.
+  local observed=null
+  if [[ "$ENGINE" == codex && ( "$state" == completed || "$state" == failed ) && "${DISPATCH_RESULT_READY:-false}" == true && "${VIA:-exec}" != zaka ]]; then
+    if [[ "${VIA:-}" == bb ]]; then
+      # The installed BB emits no turn event attesting the model (bb-seat.py
+      # leaves actual_model "unknown"), so this is "unknown" until BB does.
+      observed="$(jq -c --arg req "$MODEL" --arg attempt "$ATTEMPT_ID" 'if type == "object" and .attempt_id == $attempt and (.actual_model // "unknown") != "unknown" then
+          {observed_model:.actual_model,observed_effort:(.actual_effort // "unknown"),
+           observed_source:"bb-seat-receipt",observed_model_matches_requested:(.actual_model == $req)}
+        else {observed_model:"unknown",observed_effort:"unknown",observed_source:"unavailable",
+              observed_reason:(if type == "object" and .attempt_id == $attempt then "bb seat receipt does not attest the model that ran" else "no bb seat receipt for this attempt" end),
+              observed_model_matches_requested:null} end' <<< "$bb_receipt" 2>/dev/null || true)"
+    else
+      [[ -n "$findings_helper" ]] || findings_helper="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+      # Bounded: evidence gathering may never stall or fail a finished dispatch.
+      local -a bound=(); command -v timeout >/dev/null 2>&1 && bound=(timeout "${OBSERVED_MODEL_TIMEOUT:-30}")
+      observed="$("${bound[@]}" python3 "$findings_helper/codex-observed-model.py" "${PROVIDER_EVENTS:-/dev/null}" --requested-model "$MODEL" 2>/dev/null | head -c 8192 || true)"
+    fi
+    jq -e 'type == "object"' <<< "${observed:-}" >/dev/null 2>&1 || \
+      observed='{"observed_model":"unknown","observed_source":"unavailable","observed_reason":"observed-model capture failed","observed_model_matches_requested":null}'
+  fi
+  if [[ "$observed" == null ]]; then
+    observed='{"observed_model":"unknown","observed_source":"unavailable","observed_reason":"no request-bound model evidence for this transport or state","observed_model_matches_requested":null}'
+  fi
+  printf '%s\n' "$observed"
+}
+
 _role_audit_context() {
   local state="$1" exit_code="$2" failure_class="$3" version="" verdict="" head_after="" bb_receipt=null findings=null
   local findings_helper="${DISPATCH_SCRIPT_DIR:-}"
@@ -135,28 +168,9 @@ _role_audit_context() {
     findings="$(python3 "$findings_helper/receipt-findings.py" "$OUTPUT" 2>/dev/null)" || findings=null
     jq -e 'type == "object"' <<< "$findings" >/dev/null 2>&1 || findings=null
   fi
-  # The requested model is not evidence of the model that ran. On a finished
-  # codex run record the observed one: from the bb seat receipt on the bb path,
-  # else from the session rollout named by the captured thread.started event.
   local observed=null
   if [[ "$ENGINE" == codex && ( "$state" == completed || "$state" == failed ) && "${DISPATCH_RESULT_READY:-false}" == true && "${VIA:-exec}" != zaka ]]; then
-    if [[ "${VIA:-}" == bb ]]; then
-      # The installed BB emits no turn event attesting the model (bb-seat.py
-      # leaves actual_model "unknown"), so this is "unknown" until BB does.
-      observed="$(jq -c --arg req "$MODEL" --arg attempt "$ATTEMPT_ID" 'if type == "object" and .attempt_id == $attempt and (.actual_model // "unknown") != "unknown" then
-          {observed_model:.actual_model,observed_effort:(.actual_effort // "unknown"),
-           observed_source:"bb-seat-receipt",observed_model_matches_requested:(.actual_model == $req)}
-        else {observed_model:"unknown",observed_effort:"unknown",observed_source:"unavailable",
-              observed_reason:(if type == "object" and .attempt_id == $attempt then "bb seat receipt does not attest the model that ran" else "no bb seat receipt for this attempt" end),
-              observed_model_matches_requested:null} end' <<< "$bb_receipt" 2>/dev/null || true)"
-    else
-      [[ -n "$findings_helper" ]] || findings_helper="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-      # Bounded: evidence gathering may never stall or fail a finished dispatch.
-      local -a bound=(); command -v timeout >/dev/null 2>&1 && bound=(timeout "${OBSERVED_MODEL_TIMEOUT:-30}")
-      observed="$("${bound[@]}" python3 "$findings_helper/codex-observed-model.py" "${PROVIDER_EVENTS:-/dev/null}" --requested-model "$MODEL" 2>/dev/null | head -c 8192 || true)"
-    fi
-    jq -e 'type == "object"' <<< "${observed:-}" >/dev/null 2>&1 || \
-      observed='{"observed_model":"unknown","observed_source":"unavailable","observed_reason":"observed-model capture failed","observed_model_matches_requested":null}'
+    observed="$(_dispatch_observed_model "$state" "$bb_receipt")"
   fi
   head_after="$(git -C "${WORKDIR:-.}" rev-parse HEAD 2>/dev/null || true)"
   # A verified review packet binds this attempt to exact evidence bytes, not
@@ -313,9 +327,15 @@ _build_dispatch_run_receipt() {
       --dispatch-id "${DISPATCH_ID:-}" --exit-code "$exit_code" 2>/dev/null)" || usage_json="{}"
     jq -e 'type == "object"' >/dev/null 2>&1 <<< "$usage_json" || usage_json="{}"
   fi
+  local observed bb_receipt=null
+  if [[ "${VIA:-}" == bb && "${DISPATCH_RESULT_READY:-false}" == true && -f "${OUTPUT:-}.receipt.json" ]]; then
+    bb_receipt="$(jq -c --arg attempt "${ATTEMPT_ID:-}" 'select(.attempt_id == $attempt)' "${OUTPUT}.receipt.json" 2>/dev/null || true)"
+    bb_receipt="${bb_receipt:-null}"
+  fi
+  observed="$(_dispatch_observed_model "$outcome" "$bb_receipt")"
   local u
   for u in "$usage_json" "{}"; do  # a bad usage object must not lose the base receipt
-    line="$(jq -cn --argjson usage "$u" --arg role "$ROLE" --arg backend "${ENGINE:-}" --arg model "${MODEL:-}" \
+    line="$(jq -cn --argjson observed "$observed" --argjson usage "$u" --arg role "$ROLE" --arg backend "${ENGINE:-}" --arg model "${MODEL:-}" \
       --arg effort "${REASONING_EFFORT:-}" --arg producer "${PRODUCER_IDENTITY:-}" \
       --arg bead "${CLAVAIN_BEAD_ID:-}" --arg ctx "$ctx_hash" \
       --arg thread "${BB_THREAD_ID:-}" --arg session "${DISPATCH_SESSION_ID:-}" \
@@ -332,6 +352,7 @@ _build_dispatch_run_receipt() {
        started_at: ($s|todate), ended_at: ($e|todate), exit_code: $rc, outcome: $outcome,
        tokens_in: (if $tin == "" then null else ($tin|tonumber) end),
        tokens_out: (if $tout == "" then null else ($tout|tonumber) end)}
+      + $observed
       + ($usage | {usage_status, usage_basis, usage_note, tokens_in, tokens_out, tokens_cached_in,
                    tokens_cache_write_in, tokens_reasoning_out} | with_entries(select(.value != null)))')"
     [[ -n "$line" ]] && break
