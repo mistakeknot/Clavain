@@ -18,7 +18,7 @@
 
 _UI_EXT_RE='\.(tsx|jsx|vue|svelte|css|scss|sass|less|html|htm|astro|mdx|xaml)$'
 _UI_DIR_RE='(^|/)(components|ui|styles|views|screens|pages)/'
-_UI_TEST_RE='(\.(test|spec|stories)\.[^/]+$|(^|/)(__tests__|__snapshots__|__fixtures__|fixtures|tests?|e2e|node_modules|vendor|vendored|dist|build)/)'
+_UI_TEST_RE='(\.(test|spec|story|stories)\.[^/]+$|(^|/)(__tests__|__snapshots__|__fixtures__|fixtures|stories|\.storybook|tests?|e2e|node_modules|vendor|vendored|dist|build)/)'
 _UI_TOKEN_RE='(^|/)(tailwind\.config\.[^/]+|(theme|tokens)\.(ts|js|mjs|cjs|json|css))$'
 
 # True when $1 is a user-facing file that is not a test, story, fixture or
@@ -70,9 +70,15 @@ _ui_review_section() {
   [[ "${CLAVAIN_UI_REVIEW:-on}" != off ]] || return 0
   [[ -n "${RR_CHANGED_PATHS_JSON:-}" ]] || return 0
   command -v jq >/dev/null 2>&1 || return 0
-  local paths total p
+  local paths total p odd
   local -a ui=()
-  paths="$(jq -r '.paths[]?' <<< "$RR_CHANGED_PATHS_JSON" 2>/dev/null)" || return 0
+  # Path names are untrusted text that ends up in the brief. A name with a
+  # control character (a newline, a carriage return, an escape) could start a
+  # new line of instructions there, so such names are neither checked nor
+  # listed; only their count is reported. Listed names are capped at 200 chars.
+  paths="$(jq -r '.paths[]? | select(type == "string" and (test("[\u0001-\u001f\u007f\u0085\u2028\u2029]") | not))' <<< "$RR_CHANGED_PATHS_JSON" 2>/dev/null)" || return 0
+  odd="$(jq -r '[.paths[]? | select(type != "string" or test("[\u0001-\u001f\u007f\u0085\u2028\u2029]"))] | length' <<< "$RR_CHANGED_PATHS_JSON" 2>/dev/null)" || odd=0
+  [[ "$odd" =~ ^[0-9]+$ ]] || odd=0
   total="$(jq -r '.total // 0' <<< "$RR_CHANGED_PATHS_JSON" 2>/dev/null)" || total=0
   while IFS= read -r p; do
     [[ -n "$p" ]] && _ui_review_is_ui_file "$p" && ui+=("$p")
@@ -92,11 +98,14 @@ _ui_review_section() {
   local i=0
   for p in "${ui[@]}"; do
     (( ++i > 40 )) && break
-    printf -- '- %s\n' "$p"
+    printf -- '- %s\n' "${p:0:200}"
   done
   (( ${#ui[@]} > 40 )) && printf -- '- ... and %d more\n' "$(( ${#ui[@]} - 40 ))"
   if [[ "$total" =~ ^[0-9]+$ ]] && (( total > 200 )); then
     printf '(Only the first 200 of %s changed paths were checked for UI files.)\n' "$total"
+  fi
+  if (( odd > 0 )); then
+    printf '(%d changed path(s) with control characters in the name were not checked or listed.)\n' "$odd"
   fi
   printf '%s\n' \
     'Apply the standards below in addition to your other checks. Report their findings' \
