@@ -2,6 +2,43 @@
 import subprocess
 
 
+def test_fallback_is_exclusive_when_mkdir_reports_false_success(project_root, tmp_path):
+    """uutils 0.8.0 can report success after mkdir(2) returned EEXIST.
+
+    Model that false success with mkdir -p, without requiring a buggy binary.
+    The fallback must still preserve every row and release its own lock.
+    """
+    import os
+    import shutil
+    from concurrent.futures import ThreadPoolExecutor
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for tool in ("bash", "date", "sleep", "rmdir", "rm"):
+        os.symlink(shutil.which(tool), bin_dir / tool)
+    mkdir = bin_dir / "mkdir"
+    mkdir.write_text(f'#!{shutil.which("bash")}\nexec {shutil.which("mkdir")} -p "$@"\n')
+    mkdir.chmod(0o755)
+    log = tmp_path / "f.tsv"
+
+    def call(i):
+        return subprocess.run(
+            [str(bin_dir / "bash"), str(project_root / "scripts" / "decision-log.sh"),
+             str(log), "p", f"d{i}", "w", "e", "r"],
+            capture_output=True, text=True, timeout=60, env={"PATH": str(bin_dir)},
+        )
+
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        results = list(pool.map(call, range(30)))
+    assert {p.returncode for p in results} == {0}, [p.stderr for p in results if p.returncode]
+    lines = log.read_text().splitlines()
+    assert len(lines) == 31
+    assert lines.count("ts\tphase\tdecision\twhy\tevidence\tresult") == 1
+    assert sorted(line.split("\t")[2] for line in lines[1:]) == sorted(f"d{i}" for i in range(30))
+    assert all(len(line.split("\t")) == 6 for line in lines)
+    assert not (tmp_path / "f.tsv.lock").exists()
+
+
 def run(project_root, log, *cells):
     return subprocess.run(
         ["bash", str(project_root / "scripts" / "decision-log.sh"), str(log), *cells],
@@ -55,14 +92,14 @@ def test_quoted_formula_cells_and_concurrent_writers(project_root, tmp_path):
     assert all(len(line.split("\t")) == 6 for line in lines)
 
 
-def test_mkdir_lock_fallback_without_flock(project_root, tmp_path):
+def test_lock_fallback_without_flock(project_root, tmp_path):
     import os
     import shutil
     from concurrent.futures import ThreadPoolExecutor
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    for tool in ("bash", "date", "sleep", "mkdir", "rmdir"):
+    for tool in ("bash", "date", "sleep", "rm"):
         os.symlink(shutil.which(tool), bin_dir / tool)
     log = tmp_path / "f.tsv"
 
@@ -71,17 +108,18 @@ def test_mkdir_lock_fallback_without_flock(project_root, tmp_path):
             [str(bin_dir / "bash"), str(project_root / "scripts" / "decision-log.sh"),
              str(log), "p", f"d{i}", "w", "e", "r"],
             capture_output=True, text=True, timeout=60, env={"PATH": str(bin_dir)},
-        ).returncode
+        )
 
     with ThreadPoolExecutor(max_workers=12) as pool:
-        codes = list(pool.map(call, range(30)))
-    assert set(codes) == {0}
+        results = list(pool.map(call, range(30)))
+    codes = [p.returncode for p in results]
+    assert set(codes) == {0}, [p.stderr for p in results if p.returncode]
     lines = log.read_text().splitlines()
     assert len(lines) == 31
     assert lines.count("ts\tphase\tdecision\twhy\tevidence\tresult") == 1
     assert sorted(line.split("\t")[2] for line in lines[1:]) == sorted(f"d{i}" for i in range(30))
     assert all(len(line.split("\t")) == 6 for line in lines)
-    assert not (tmp_path / "f.tsv.lock.d").exists()
+    assert not (tmp_path / "f.tsv.lock").exists()
 
 
 def _reap(proc):
@@ -124,24 +162,24 @@ def test_writer_waits_while_flock_is_held(project_root, tmp_path):
             _reap(proc)
 
 
-def test_writer_waits_while_mkdir_lock_is_held(project_root, tmp_path):
+def test_writer_waits_while_fallback_lock_is_held(project_root, tmp_path):
     import os
     import shutil
     import time
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    for tool in ("bash", "date", "sleep", "mkdir", "rmdir"):
+    for tool in ("bash", "date", "sleep", "rm"):
         os.symlink(shutil.which(tool), bin_dir / tool)
     log = tmp_path / "m.tsv"
-    lock = tmp_path / "m.tsv.lock.d"
-    lock.mkdir()
+    lock = tmp_path / "m.tsv.lock"
+    lock.touch()
     proc = _start(project_root, log, env={"PATH": str(bin_dir)}, bash=str(bin_dir / "bash"))
     try:
         time.sleep(1)
         assert proc.poll() is None
         assert not log.exists()
-        lock.rmdir()
+        lock.unlink()
         out, err = proc.communicate(timeout=30)
         assert proc.returncode == 0, err
         assert len(log.read_text().splitlines()) == 2
@@ -149,4 +187,4 @@ def test_writer_waits_while_mkdir_lock_is_held(project_root, tmp_path):
     finally:
         _reap(proc)
         if lock.exists():
-            lock.rmdir()
+            lock.unlink()
