@@ -89,7 +89,7 @@ def scan(root):
             continue
         relative = raw.decode('utf-8')
         path = root / relative
-        if path.suffix not in EXTENSIONS or path.is_symlink():
+        if path.suffix not in EXTENSIONS or path.is_symlink() or not path.is_file():
             continue
         try:
             raw_source = path.read_bytes()
@@ -139,10 +139,15 @@ def main():
     root = args.root.resolve()
     path = root / '.suppression-baseline.json'
     try:
-        live, findings = scan(root)
         has_ref = subprocess.run(['git', '-C', str(root), 'rev-parse', '--verify', args.base_ref + '^{commit}'], capture_output=True).returncode == 0
         if not has_ref and not (args.base_ref == 'HEAD' and (args.adopt or not path.exists())):
             raise ValueError('comparison ref does not resolve: ' + args.base_ref)
+        if has_ref and not args.adopt:
+            target = git(root, 'rev-parse', '--verify', args.base_ref + '^{commit}').strip()
+            head = git(root, 'rev-parse', '--verify', 'HEAD^{commit}').strip()
+            if target == head:
+                raise ValueError('comparison ref resolves to the same commit as HEAD; use an independently fetched target ref')
+        live, findings = scan(root)
         previous = None
         if has_ref and git(root, 'ls-tree', '--name-only', args.base_ref, '--', path.name).strip():
             previous = validate(json.loads(git(root, 'show', args.base_ref + ':./' + path.name)))

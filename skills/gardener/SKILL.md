@@ -60,14 +60,16 @@ adoption baseline absorbs it. It does not track comment moves or claim to
 recognize every tool's suppression syntax. Keep its counting semantics stable
 after adoption; review scanner changes and recount before updating consumers.
 All tracked regular Go, Python and JavaScript/TypeScript source is scanned,
-including tracked vendor/research copies; symlink targets are not followed.
+including tracked vendor/research copies; symlinks and non-regular files such as
+gitlink directories are skipped.
 
 Adopt once without rewriting old comments in bulk, then commit the generated
 `.suppression-baseline.json`. The baseline contains the total count by kind and
 malformed counts by kind. The repository's total suppression count and each
 malformed count may only shrink. Both the live counts and baseline changes are
 checked against the baseline committed on an explicitly supplied trusted target
-ref; never pass the topic branch's own HEAD as that target. A reduction requires
+ref; checks and updates reject a ref resolving to the same commit as HEAD
+(including aliases), with exit 2. A reduction requires
 updating the baseline in the same change. There is no upward regeneration flag.
 
 ```sh

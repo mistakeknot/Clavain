@@ -17,16 +17,21 @@ def repo(tmp_path, text=''):
     git(tmp_path, 'init', '-q')
     (tmp_path / 'sample.py').write_text(text)
     git(tmp_path, 'add', '.')
+    git(tmp_path, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'initial source')
+    git(tmp_path, 'branch', 'trusted')
+    git(tmp_path, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '--allow-empty', '-qm', 'topic work')
     return tmp_path
 
 
 def run(root, *args):
-    return subprocess.run([sys.executable, str(SCRIPT), '--root', str(root), '--base-ref', 'HEAD', *args], capture_output=True, text=True)
+    return subprocess.run([sys.executable, str(SCRIPT), '--root', str(root), '--base-ref', 'trusted', *args], capture_output=True, text=True)
 
 
 def commit(root):
     git(root, 'add', '.')
     git(root, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture')
+    git(root, 'update-ref', 'refs/heads/trusted', 'HEAD')
+    git(root, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '--allow-empty', '-qm', 'topic work')
 
 
 @pytest.mark.parametrize('text,suffix,kind,valid', [
@@ -98,7 +103,7 @@ def test_committed_baseline_increase_rejected(tmp_path):
     root = repo(tmp_path, 'x = 1\n')
     assert run(root, '--adopt').returncode == 0
     commit(root)
-    git(root, 'branch', 'target')
+    git(root, 'branch', 'target', 'trusted')
     (root / 'sample.py').write_text('x = 1 # noqa: F841 # public API\n')
     data = json.loads((root / '.suppression-baseline.json').read_text())
     data['counts']['noqa'] = 1
@@ -146,7 +151,7 @@ def test_nested_baseline_reads_nested_committed_file(tmp_path):
     git(root, 'add', '.')
     assert run(nested, '--adopt').returncode == 0
     commit(root)
-    git(root, 'branch', 'target')
+    git(root, 'branch', 'target', 'trusted')
     assert run(nested, '--base-ref', 'target').returncode == 0
     (nested / 'source.py').write_text('x = 1 # noqa: F841 # public API\n')
     data = json.loads((nested / '.suppression-baseline.json').read_text())
@@ -208,7 +213,7 @@ def test_python_encoding_cookie(tmp_path):
 
 def test_unreadable_source_names_path(tmp_path):
     root = repo(tmp_path)
-    (root / 'sample.py').unlink()
+    (root / 'sample.py').write_bytes(b'# coding: ascii\nx = "\xff"\n')
     result = run(root)
     assert result.returncode == 2
     assert 'sample.py' in result.stdout
@@ -221,3 +226,32 @@ def test_invalid_baseline_counts_fail_closed(tmp_path):
     data['counts']['noqa'] = -1
     (root / '.suppression-baseline.json').write_text(json.dumps(data))
     assert run(root).returncode == 2
+
+
+@pytest.mark.parametrize('mode', [[], ['--update']])
+@pytest.mark.parametrize('ref_kind', ['HEAD', 'sha', 'branch'])
+def test_comparison_ref_must_differ_from_topic_head(tmp_path, mode, ref_kind):
+    root = repo(tmp_path)
+    assert run(root, '--adopt').returncode == 0
+    commit(root)
+    if ref_kind == 'sha':
+        ref = git(root, 'rev-parse', 'HEAD')
+    elif ref_kind == 'branch':
+        git(root, 'branch', 'topic-alias', 'HEAD')
+        ref = 'topic-alias'
+    else:
+        ref = 'HEAD'
+    result = run(root, '--base-ref', ref, *mode)
+    assert result.returncode == 2, result.stdout
+    assert 'same commit as HEAD' in result.stdout
+
+
+def test_gitlink_with_source_extension_is_skipped(tmp_path):
+    root = repo(tmp_path)
+    module = root / 'dependency.ts'
+    module.mkdir()
+    sha = git(root, 'rev-parse', 'HEAD')
+    git(root, 'update-index', '--add', '--cacheinfo', f'160000,{sha},dependency.ts')
+    result = run(root, '--json')
+    assert result.returncode == 0, result.stdout
+    assert sum(json.loads(result.stdout)['scan']['counts'].values()) == 0
