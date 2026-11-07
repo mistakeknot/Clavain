@@ -14,8 +14,8 @@ tail	PASS WITH NOTES	warn	0	warn	0
 tail	PASS WITH NOTES	warn	1	warn	1
 tail	PASS WITH NOTES	fail	0	fail	0
 tail	PASS WITH NOTES	fail	1	fail	1
-tail	FAIL	none	0	warn	0
-tail	FAIL	none	1	warn	1
+tail	FAIL	none	0	fail	0
+tail	FAIL	none	1	fail	1
 tail	FAIL	pass	0	pass	0
 tail	FAIL	pass	1	pass	1
 tail	FAIL	warn	0	warn	0

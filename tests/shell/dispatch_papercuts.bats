@@ -65,11 +65,11 @@ _load() {
     grep -q '^STATUS: pass$' "$VERDICT_FILE"
 }
 
-@test "verdict: a final FAIL line stays warn, never pass" {
+@test "verdict: a bold final FAIL line is a fail, never pass" {
     _load
     printf 'Narrative first.\n\n**VERDICT: FAIL**' > "$OUTPUT"
     _extract_verdict "$OUTPUT"
-    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+    grep -q '^STATUS: fail$' "$VERDICT_FILE"
 }
 
 @test "verdict: blockquoted unclosed fence ending in a quoted verdict is warn" {
@@ -273,4 +273,125 @@ _assert_no_leak() {
 
 @test "surface: dispatch.sh never cats the raw stderr capture" {
     ! grep -n 'cat "\$STDERR_FILE"' "$DISPATCH_SCRIPT"
+}
+
+@test "verdict: final-line 'VERDICT: BLOCK' is fail, not 'No verdict line'" {
+    _load
+    printf 'Round 4 requires human handoff.\n\nVERDICT: BLOCK\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: fail$' "$VERDICT_FILE"
+    grep -q '^SUMMARY: Reviewer ruling BLOCK\.$' "$VERDICT_FILE"
+    ! grep -q 'No verdict line' "$VERDICT_FILE"
+}
+
+@test "verdict: final-line 'VERDICT: FAIL' is fail, not 'No verdict line'" {
+    _load
+    printf 'Findings above.\n\nVERDICT: FAIL' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: fail$' "$VERDICT_FILE"
+    grep -q '^SUMMARY: Reviewer ruling FAIL\.$' "$VERDICT_FILE"
+}
+
+@test "verdict: markdown-bold final 'VERDICT: BLOCK' is fail" {
+    _load
+    printf 'Narrative first.\n\n**VERDICT: BLOCK**\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: fail$' "$VERDICT_FILE"
+}
+
+@test "verdict: final-line 'VERDICT: PASS WITH NOTES' stays pass beside BLOCK/FAIL handling" {
+    _load
+    printf 'Notes below.\n\nVerdict: pass with notes\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+@test "verdict: a BLOCK mention that is not the final line stays warn" {
+    _load
+    printf 'VERDICT: BLOCK is what I would write if X.\n\nBut on balance this is fine; see notes.\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+    ! grep -q '^STATUS: fail$' "$VERDICT_FILE"
+}
+
+@test "verdict: output ending in prose with no verdict line stays warn" {
+    _load
+    printf 'Reviewed.\n\nThe remaining finding needs escalation.\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+    grep -q 'No verdict line' "$VERDICT_FILE"
+}
+
+@test "verdict: a blockquoted final 'VERDICT: BLOCK' is example text and stays warn" {
+    _load
+    printf 'Narration.\n> VERDICT: BLOCK\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
+@test "verdict: a blockquoted final 'VERDICT: FAIL' is example text and stays warn" {
+    _load
+    printf 'Narration.\n> VERDICT: FAIL\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
+@test "verdict: an inline-code final 'VERDICT: BLOCK' is example text and stays warn" {
+    _load
+    printf 'Narration.\n`VERDICT: BLOCK`\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
+@test "verdict: list-marked, nested-quote and wrapped-code BLOCK/FAIL lines stay warn" {
+    _load
+    local shape
+    for shape in '- > VERDICT: BLOCK' '+ `VERDICT: FAIL`' '**`VERDICT: BLOCK`**' '- VERDICT: BLOCK' '# VERDICT: FAIL'; do
+        printf 'Narration.\n%s\n' "$shape" > "$OUTPUT"
+        rm -f "$VERDICT_FILE"
+        _extract_verdict "$OUTPUT"
+        grep -q '^STATUS: warn$' "$VERDICT_FILE" || { echo "shape '$shape' gave: $(cat "$VERDICT_FILE")"; return 1; }
+    done
+}
+
+@test "verdict: bare, bold and bold-label BLOCK/FAIL lines are fail" {
+    _load
+    local shape
+    for shape in 'VERDICT: BLOCK' 'verdict: fail' '**VERDICT: BLOCK**' '**Verdict:** FAIL' 'VERDICT: BLOCK  '; do
+        printf 'Narration.\n\n%s\n' "$shape" > "$OUTPUT"
+        rm -f "$VERDICT_FILE"
+        _extract_verdict "$OUTPUT"
+        grep -q '^STATUS: fail$' "$VERDICT_FILE" || { echo "shape '$shape' gave: $(cat "$VERDICT_FILE")"; return 1; }
+    done
+}
+
+@test "verdict: a BLOCK/FAIL line that lazily continues a blockquote stays warn" {
+    _load
+    local body
+    for body in \
+        'Narration.\n\n> Example of a rejected output:\nVERDICT: BLOCK\n' \
+        'Narration.\n\n> quote start\nmiddle line\nVERDICT: FAIL\n' \
+        'Narration.\n\n  > indented quote\nVERDICT: BLOCK\n'; do
+        printf "$body" > "$OUTPUT"
+        rm -f "$VERDICT_FILE"
+        _extract_verdict "$OUTPUT"
+        grep -q '^STATUS: warn$' "$VERDICT_FILE" || { echo "body '$body' gave: $(cat "$VERDICT_FILE")"; return 1; }
+    done
+}
+
+@test "verdict: a bare BLOCK in its own paragraph after a quote, or directly after a findings list, is fail" {
+    _load
+    local body
+    for body in \
+        'Narration.\n\n> Quoted example.\n\n- an item\n\nVERDICT: BLOCK\n' \
+        'Narration.\n\n- MEDIUM: finding\nVERDICT: BLOCK\n' \
+        'Narration.\n\n> The operation is atomic.\n### HIGH: Writes can partially commit\nSecond write can fail.\nverdict: fail\n' \
+        'Narration.\n\n> The operation is atomic.\n- HIGH: partial commit\nVERDICT: BLOCK\n' \
+        'Narration.\n\n> The operation is atomic.\n---\nVERDICT: FAIL\n' \
+        'Narration.\n\n    indented code\nVERDICT: FAIL\n'; do
+        printf "$body" > "$OUTPUT"
+        rm -f "$VERDICT_FILE"
+        _extract_verdict "$OUTPUT"
+        grep -q '^STATUS: fail$' "$VERDICT_FILE" || { echo "body '$body' gave: $(cat "$VERDICT_FILE")"; return 1; }
+    done
 }
