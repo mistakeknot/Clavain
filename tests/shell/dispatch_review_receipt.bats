@@ -717,7 +717,42 @@ _reject_passing_suffix() {
     [ "$(jq -r .supersedes_verdict "$d/7-$NEW_HEAD.3.json")" = BLOCK ]
 }
 
-@test "the receipt library no longer defines an effective-receipt selector" {
+@test "effective receipt: the latest receipt in the base+diff chain, from any member" {
+    d="$T/reviews/o__r"
+    _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: BLOCK\n' > "$OUT"; _review_receipt_write "$OUT" 0
+    [ "$(_review_receipt_effective "$d/7-$HEAD_SHA.json")" = "$d/7-$HEAD_SHA.json" ]
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"; _review_receipt_write "$OUT" 0
+    printf 'x\n\nVERDICT: PASS WITH NOTES\n' > "$OUT"; _review_receipt_write "$OUT" 0
+    [ "$(_review_receipt_effective "$d/7-$HEAD_SHA.json")" = "$d/7-$HEAD_SHA.3.json" ]
+    [ "$(_review_receipt_effective "$d/7-$HEAD_SHA.2.json")" = "$d/7-$HEAD_SHA.3.json" ]
+    # The original is preserved.
+    [ "$(jq -r .verdict "$d/7-$HEAD_SHA.json")" = BLOCK ]
+}
+
+@test "effective receipt: a receipt for a different base and diff is not part of the chain" {
+    d="$T/reviews/o__r"
+    echo c > "$R/c"; git -C "$R" add c; git -C "$R" commit -qm c
+    NEW_HEAD="$(git -C "$R" rev-parse HEAD)"
+    RR_HEAD="$NEW_HEAD"
+    RR_BASE="$BASE"; _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: BLOCK\n' > "$OUT"; _review_receipt_write "$OUT" 0
+    RR_BASE="$HEAD_SHA"; _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"; _review_receipt_write "$OUT" 0
+    # The later PASS reviewed a different diff, so the BLOCK stays effective.
+    [ "$(_review_receipt_effective "$d/7-$NEW_HEAD.json")" = "$d/7-$NEW_HEAD.json" ]
+}
+
+@test "effective receipt: refuses a missing file, a symlink and a non-receipt" {
+    d="$T/reviews/o__r"; mkdir -p "$d"
+    run _review_receipt_effective "$d/none.json"; [ "$status" -ne 0 ]
+    echo '{}' > "$d/x.json"; ln -s x.json "$d/link.json"
+    run _review_receipt_effective "$d/link.json"; [ "$status" -ne 0 ]
+    run _review_receipt_effective "$d/x.json"; [ "$status" -ne 0 ]
+}
+
+@test "the receipt library header tells readers to follow the numbered chain" {
+    grep -q 'follow the numbered chain' "$BATS_TEST_DIRNAME/../../scripts/lib-review-receipt.sh"
     ! grep -q '_review_receipt_current' "$BATS_TEST_DIRNAME/../../scripts/lib-review-receipt.sh"
 }
 

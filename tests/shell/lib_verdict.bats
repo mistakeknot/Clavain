@@ -153,6 +153,32 @@ TABLE
     [ "$(sed -n 's/^STATUS: //p' "$VERDICT_FILE" | head -1)" != pass ]
 }
 
+@test "cross-lab sidecar: a trailing pass block cannot hide a mid-body FAIL" {
+    source "$HELPERS"
+    ROLE=cross-lab-review
+    printf 'Intro prose.\n\nVERDICT: FAIL\n\nMore analysis follows.\n\n--- VERDICT ---\nSTATUS: pass\nFILES: 0 changed\nFINDINGS: 0 (P0: 0, P1: 0, P2: 0, P3: 0)\nSUMMARY: fine\n---\n' > "$OUTPUT"
+    [ "$(verdict_strict_class "$OUTPUT")" = NONE ]
+    rm -f "$VERDICT_FILE"; _extract_verdict "$OUTPUT" 2>/dev/null
+    [ "$(sed -n 's/^STATUS: //p' "$VERDICT_FILE" | head -1)" != pass ]
+}
+
+@test "cross-lab sidecar: a trailing pass block with no verdict line is not a pass" {
+    source "$HELPERS"
+    ROLE=cross-lab-review
+    printf 'Reviewed everything.\n\n--- VERDICT ---\nSTATUS: pass\nFILES: 0 changed\nFINDINGS: 0 (P0: 0, P1: 0, P2: 0, P3: 0)\nSUMMARY: fine\n---\n' > "$OUTPUT"
+    [ "$(verdict_strict_class "$OUTPUT")" = NONE ]
+    rm -f "$VERDICT_FILE"; _extract_verdict "$OUTPUT" 2>/dev/null
+    [ "$(sed -n 's/^STATUS: //p' "$VERDICT_FILE" | head -1)" != pass ]
+}
+
+@test "other roles: a trailing structured pass block still gives a pass" {
+    source "$HELPERS"
+    ROLE=reviewer
+    printf 'Reviewed everything.\n\n--- VERDICT ---\nSTATUS: pass\nFILES: 0 changed\nFINDINGS: 0 (P0: 0, P1: 0, P2: 0, P3: 0)\nSUMMARY: fine\n---\n' > "$OUTPUT"
+    rm -f "$VERDICT_FILE"; _extract_verdict "$OUTPUT" 2>/dev/null
+    [ "$(sed -n 's/^STATUS: //p' "$VERDICT_FILE" | head -1)" = pass ]
+}
+
 # --- mk-z770: role verdict-block suffix and the REVIEW field ----------------
 
 @test "role suffix: nothing for cross-lab-review or an empty role" {

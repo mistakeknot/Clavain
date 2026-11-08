@@ -3600,7 +3600,17 @@ _extract_verdict() {
         fi
     elif [[ "$has_valid_block" == 1 ]]; then
         # No verdict label at all on the first line — fall back to the
-        # trailing structured block alone.
+        # trailing structured block alone. A cross-lab review is also read by
+        # the receipt writer, so the block cannot make the sidecar a pass when
+        # the receipt would not record one: it is held to the same strict
+        # check as the path below (mk-0qjva).
+        if [[ "${ROLE:-}" == cross-lab-review && "$block_status_lower" == "pass" ]]; then
+            local _blk_class
+            _blk_class="$(verdict_strict_class "$output_file")"
+            if [[ "$_blk_class" != PASS && "$_blk_class" != PASS_WITH_NOTES ]]; then
+                block_status_raw="warn"
+            fi
+        fi
         _write_verdict_block "$verdict_block"
         return 0
     fi

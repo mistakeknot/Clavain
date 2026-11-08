@@ -4,6 +4,14 @@
 # Written with mode 0600 by exclusive create, never overwritten. The file
 # catches mistakes only: writer and verifier share an account.
 #
+# Receipts are append-only per head: <pr>-<head>.json, then .2.json, .3.json.
+# The first file is never rewritten, so a reader that opens only
+# <pr>-<head>.json sees the first ruling and not a later correction. A reader
+# that needs the effective ruling must follow the numbered chain, or call
+# _review_receipt_effective. A later receipt supersedes an earlier one only when
+# both have the same base_sha and diff_sha256 (mk-0qjva). The .verdict sidecar
+# is unchanged by this layout.
+#
 # State, set by the flag parser in dispatch.sh:
 #   RR_REPO RR_REPO_ID RR_PR RR_HEAD RR_BASE   (all five or none)
 # Computed by _review_receipt_prepare, which runs before the review starts so a
@@ -172,6 +180,37 @@ _review_receipt_lab() {
   esac
 }
 
+# Effective receipt for the change reviewed by a receipt. Arg: the path of any
+# receipt in the chain (normally the first, <pr>-<head>.json). Prints the path
+# of the highest-numbered regular receipt with the same base_sha and
+# diff_sha256 as that receipt; prints that receipt's own path when nothing
+# later matches. Returns 1 when the argument is not a readable receipt with a
+# base_sha and diff_sha256. Symlinks and non-regular entries are ignored.
+_review_receipt_effective() {
+  local given="$1" first scope want n pf best=""
+  [[ -f "$given" && ! -L "$given" ]] || return 1
+  first="$given"
+  if [[ "$given" =~ ^(.*)\.[0-9]+\.json$ ]]; then first="${BASH_REMATCH[1]}.json"; fi
+  scope="$(jq -r '[.base_sha, .diff_sha256] | join(" ")' "$given" 2>/dev/null)" || return 1
+  [[ -n "$scope" && "$scope" != " " && "$scope" != null* ]] || return 1
+  best="$given"
+  n=1
+  while :; do
+    if (( n == 1 )); then pf="$first"; else pf="${first%.json}.$n.json"; fi
+    if [[ ! -e "$pf" && ! -L "$pf" ]]; then
+      (( n > 1 )) || { n=$((n + 1)); continue; }
+      break
+    fi
+    if [[ -f "$pf" && ! -L "$pf" ]] \
+      && [[ "$(jq -r '[.base_sha, .diff_sha256] | join(" ")' "$pf" 2>/dev/null)" == "$scope" ]]; then
+      best="$pf"
+    fi
+    n=$((n + 1))
+    (( n <= 999 )) || break
+  done
+  printf '%s\n' "$best"
+}
+
 # Writes the receipt. Args: output file, exit code. Echoes the path on success;
 # on a non-write prints the reason to stderr and returns 1. A receipt whose
 # verdict word is not in the vocabulary is written as UNKNOWN and returns 3. Reviewer identity,
@@ -263,6 +302,17 @@ _review_receipt_write() {
   local tmpf n=1 cand="$file"
   tmpf="$(umask 077; mktemp "$dir/.new.XXXXXX")" || { echo "review receipt: cannot create temp file in $dir" >&2; return 1; }
   while :; do
+    # Find a free numbered path first (cheap existence checks only), so the
+    # predecessor scan below runs once per attempt and not once per occupied
+    # slot. A symlink (dangling included) or non-regular entry is refused.
+    while [[ -e "$cand" || -L "$cand" ]]; do
+      if [[ -L "$cand" || ! -f "$cand" || $n -ge 999 ]]; then
+        rm -f "$tmpf"
+        echo "review receipt: not written ($cand is not a regular file or unwritable)" >&2
+        return 1
+      fi
+      n=$((n + 1)); cand="${file%.json}.$n.json"
+    done
     local prev_name="" prev_file="" prev_verdict="" k pf
     if (( n > 1 )); then
       for (( k = n - 1; k >= 1; k-- )); do
@@ -280,14 +330,12 @@ _review_receipt_write() {
     jq --argjson seq "$n" --arg prev "$prev_name" --arg pv "$prev_verdict" \
       '.sequence = $seq | if $prev != "" then .supersedes = $prev | .supersedes_verdict = (if $pv == "" then null else $pv end) else . end' \
       <<<"$tmp" > "$tmpf" || { rm -f "$tmpf"; echo "review receipt: not written ($file is unwritable)" >&2; return 1; }
+    # Exclusive create. If another writer took the slot in the meantime, loop:
+    # the free-slot search moves past it and the chain is rescanned.
     ln -T "$tmpf" "$cand" 2>/dev/null && break
-    if [[ -L "$cand" || ( -e "$cand" && ! -f "$cand" ) || $n -ge 999 ]]; then
-      rm -f "$tmpf"
-      echo "review receipt: not written ($cand is not a regular file or unwritable)" >&2
-      return 1
+    if [[ ! -e "$cand" && ! -L "$cand" ]]; then
+      rm -f "$tmpf"; echo "review receipt: not written ($cand is unwritable)" >&2; return 1
     fi
-    [[ -e "$cand" ]] || { rm -f "$tmpf"; echo "review receipt: not written ($cand is unwritable)" >&2; return 1; }
-    n=$((n + 1)); cand="${file%.json}.$n.json"
   done
   file="$cand"
   rm -f "$tmpf"
