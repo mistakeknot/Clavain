@@ -300,7 +300,7 @@ def test_existing_loose_files_are_tightened(env, tmp_path):
 
 
 def test_ledger_holds_no_raw_paths_or_command_text(env, tmp_path):
-    secret_cmd = 'pytest --marker=sentinel-value-xyz tests/'
+    secret_cmd = 'pytest --opt=sentinel-value-xyz tests/'
     target = tmp_path / 'private-project-name.py'
     hook('post', env, 'Bash', command=secret_cmd)
     hook('post', env, 'Edit', file_path=str(target))
@@ -655,6 +655,44 @@ def test_module_form_and_other_real_runs_still_count(env, tmp_path, cmd):
     hook('post', env, 'Edit', file_path=str(tmp_path / 'a.py'))
     hook('post', env, 'Bash', command=cmd)
     assert 'verify-after-edit' not in warning(hook('stop', env, ''))
+
+
+@pytest.mark.parametrize('cmd', [
+    'pytest --collectonly', 'pytest --collect-only=yes', 'pytest --coll', 'pytest --collect', 'pytest --hel', 'pytest --versi',
+    'pytest -qh', 'pytest -xqV', 'pytest -lh tests', 'python3 -m pytest --collectonly', 'python3 -m pytest -qh',
+    'python3 -m pytest --coll -q', 'python3 -m pytest --help=x', 'uv run python -m pytest -qV',
+    'ruff --vers', 'tsc --sho', 'cargo test -- --help', 'cargo test -- -h', 'npm test -- -h', 'npm test -- --help',
+])
+def test_help_and_collect_flags_match_by_prefix_and_inside_short_groups(env, tmp_path, cmd):
+    hook('post', env, 'Edit', file_path=str(tmp_path / 'a.py'))
+    hook('post', env, 'Bash', command=cmd)
+    assert 'verify-after-edit' in warning(hook('stop', env, ''))
+    assert 'verify' not in {r['kind'] for r in ledger(env)}
+
+
+@pytest.mark.parametrize('cmd', [
+    'git diff --check -- -h', 'git diff --check -- --help', 'pytest -q -- -h', 'pytest -k help', 'pytest -khelp',
+    'pytest --color=yes', 'pytest --cov=src', 'pytest --confcutdir=tests', 'pytest -rA', 'pytest -qx tests',
+    'python3 -m pytest --color=yes -q', 'go test -short ./...', 'ruff check --select=E .', 'tsc --noEmit --allowJs',
+])
+def test_flag_matching_does_not_misread_paths_values_or_other_flags(env, tmp_path, cmd):
+    hook('post', env, 'Edit', file_path=str(tmp_path / 'a.py'))
+    hook('post', env, 'Bash', command=cmd)
+    assert 'verify-after-edit' not in warning(hook('stop', env, ''))
+
+
+def test_wrapper_drops_an_oversized_message_within_the_deadline(env, tmp_path):
+    body = ("printf '{\"systemMessage\": \"'; head -c 16777216 /dev/zero | tr '\\0' a; printf '\"}\\n'")
+    start = time.time()
+    proc = wrapper('stop', env, EDIT_PAYLOAD, path=fake_python(tmp_path, body, env['PATH']))
+    assert proc.returncode == 0 and proc.stdout == ''
+    assert time.time() - start < 4
+
+
+def test_wrapper_still_relays_a_message_under_the_cap(env, tmp_path):
+    line = '{"systemMessage": "' + 'a' * 8000 + '"}'
+    proc = wrapper('stop', env, EDIT_PAYLOAD, path=fake_python(tmp_path, "cat <<'EOF'\n" + line + "\nEOF", env['PATH']))
+    assert proc.returncode == 0 and proc.stdout == line + '\n'
 
 
 @pytest.mark.parametrize('mode', [0o755, 0o777, 0o750, 0o700])

@@ -40,7 +40,13 @@ status=$?
 kill "$dog" 2>/dev/null
 wait "$dog" 2>/dev/null
 [[ "$status" == 0 ]] || exit 0  # crashed, killed by the watchdog or failed: relay nothing
-out="$(<"$tmp")" 2>/dev/null || exit 0
+# Read at most 16 KiB, under a 1 s limit (bash cannot be held for long by a large
+# helper message). A message that fills the cap, a read that times out or fails,
+# is treated as no evidence.
+LC_ALL=C IFS= read -r -N 16385 -t 1 out <"$tmp" 2>/dev/null
+rc=$?
+(( rc == 0 || rc > 128 )) && exit 0  # filled the cap (too large) or timed out
+out="${out%$'\n'}"
 
 # Relay exactly one key, systemMessage, holding a valid JSON string (JSON string
 # grammar: no raw control characters, only the JSON escapes). Anything else

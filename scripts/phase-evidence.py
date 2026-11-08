@@ -92,7 +92,7 @@ PACKAGE_RUNNERS = {'npm', 'pnpm', 'yarn', 'bun'}
 # help text, list or collect, write config, or (ruff format) rewrite files without checking.
 NO_VERIFY_FLAGS = {
     'pytest': {'--version', '-V', '--help', '-h', '--fixtures', '--fixtures-per-test',
-               '--markers', '--collect-only', '--co', '--setup-plan'},
+               '--markers', '--collect-only', '--collectonly', '--co', '--setup-plan'},
     'bats': {'--version', '-v', '--help', '-h'},
     'shellcheck': {'--version', '-V', '--help'},
     'ruff': {'--version', '-V', '--help', '-h'},
@@ -320,11 +320,39 @@ def is_code(path):
 
 
 HELP_FLAGS = {'-h', '-help', '--help', '--version', '-V'}
+PASSTHROUGH_HEADS = {'cargo'} | PACKAGE_RUNNERS  # their args after `--` go on to the tool they run
+BOOLEAN_SHORT = set('qvxls')  # pytest-style short flags that take no value (for combined groups such as -qh)
+
+
+def info_only(args, flags, passthrough=False, combined=True):
+    """True when `args` carry a help/list/collect flag from `flags`. Long flags match
+    by exact name, by `=value`, and by abbreviation (`--coll` for `--collect-only`);
+    short ones inside a combined group (`-qh`) when only value-less flags precede them.
+    Arguments after `--` are paths unless `passthrough` (the tool forwards them)."""
+    for token in args:
+        if token == '--':
+            if passthrough:
+                continue
+            break
+        if token.startswith('--'):
+            name = token.split('=', 1)[0]
+            if name in flags or (len(name) >= 4 and any(f.startswith(name) for f in flags if f.startswith('--'))):
+                return True
+        elif len(token) > 1 and token.startswith('-'):
+            if token in flags:
+                return True
+            if combined:
+                for ch in token[1:]:
+                    if f'-{ch}' in flags:
+                        return True
+                    if ch not in BOOLEAN_SHORT:
+                        break
+    return False
 
 
 def verifies(head, args):
     """False when a bare verifier invocation only prints, lists or rewrites (see NO_VERIFY_*)."""
-    if NO_VERIFY_FLAGS.get(head, set()) & set(args):
+    if info_only(args, NO_VERIFY_FLAGS.get(head, set())):
         return False
     sub = next((a for a in args if not a.startswith('-')), '')
     if sub in NO_VERIFY_SUBCOMMANDS.get(head, set()):
@@ -375,7 +403,7 @@ def verification_kind(cmd):
             if verifies(head, args):
                 return head
             continue
-        if HELP_FLAGS & set(args):
+        if info_only(args, HELP_FLAGS, passthrough=head in PASSTHROUGH_HEADS, combined=head != 'go'):
             continue  # help or version output runs nothing, whatever the invocation form
         if head == 'go' and first in ('test', 'vet'):
             return f'go-{first}'
