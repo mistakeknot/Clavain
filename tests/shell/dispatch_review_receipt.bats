@@ -523,3 +523,10 @@ _reject_passing_suffix() {
     [ "$(jq -r .findings_total "$f")" = 1 ]
     [ "$(jq -r .findings_block_total "$f")" = 3 ]
 }
+
+@test "receipt records the verified review temp root" {
+    _review_receipt_prepare "$R"
+    REVIEW_CODEX_TMPDIR=/dev/shm
+    _review_receipt_write "$OUT" 0
+    [ "$(jq -r .temp_root "$T/reviews/o__r/7-$HEAD_SHA.json")" = /dev/shm ]
+}
