@@ -156,7 +156,7 @@ today and makes no judgement about what the note says. A note that says
 # NOTE = the handoff file; run from any directory. Skip silently if intermem
 # has no live-state subcommand (older install) or a lookup tool is missing.
 intermem_dir="$(ls -d ~/.claude/plugins/cache/*/intermem/*/ 2>/dev/null | sort -V | tail -1)"
-[[ -n "$intermem_dir" ]] && uv run --directory "$intermem_dir" python -m intermem live-state "$NOTE" \
+[[ -n "$intermem_dir" ]] && uv run --project "$intermem_dir" python -m intermem live-state "$NOTE" \
   --bd-dir "${BD_DIR:-$HOME/hub}" ${WAITS_JSON:+--waits "$WAITS_JSON"} 2>/dev/null || true
 ```
 
@@ -167,9 +167,9 @@ check that item before acting. A PR written without its repo (a bare "PR 12")
 shows as `unqualified` and is not looked up, so write PRs as `owner/repo#N` in
 the handoff (the writer should; see the Directive section).
 
-Evidence: in a fresh-agent test (3 old handoffs, 24 stale open items) a successor
-with the list marked 13 to 14 of them no longer open and none wrongly; without
-it, every item was "can't tell" (bead mk-6mehy).
+Paths (note, waits file, hashed files) resolve against the directory you run from; `--project` keeps it, so relative paths work as written.
+
+Evidence: in a fresh-agent test (3 old handoffs, 24 stale open items, one grader, successors barred from looking anything up themselves) a successor with the list marked 13 to 14 of them no longer open and made no confident-wrong marks; without it, every item was "can't tell" (bead mk-6mehy). It measures what the files allow, not free-running resume behaviour.
 
 ## Rules
 
