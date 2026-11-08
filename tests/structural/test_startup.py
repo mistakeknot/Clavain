@@ -702,9 +702,33 @@ def test_scrub_environ_drops_inherited_secrets(tmp_path):
     assert set(got) == {'PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR'} and got['HOME'] == str(tmp_path)
 
 
+SUBPROCESS_ENV_NAMES = {'PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR', 'PYTEST_CURRENT_TEST', 'LC_CTYPE', 'PYTHONUTF8', 'PYTHONCOERCECLOCALE'}
+# Terminal geometry that a hosted runner's interpreter adds to its own child
+# environment (seen on GitHub runners; never inherited from the parent). They
+# are accepted by name and only while their value is all digits, so no secret
+# can travel under either name.
+TERMINAL_GEOMETRY_NAMES = {'COLUMNS', 'LINES'}
+
+
+def unlisted_env_names(seen):
+    """Names in `seen` ({name: value_is_digits}) that are neither allow-listed nor harmless geometry."""
+    return sorted(name for name, digits in seen.items()
+                  if name not in SUBPROCESS_ENV_NAMES and not (name in TERMINAL_GEOMETRY_NAMES and digits))
+
+
+def test_unlisted_env_names_accepts_only_the_named_runner_variables():
+    assert unlisted_env_names({'PATH': False, 'COLUMNS': True, 'LINES': True}) == []  # simulated runner env
+    assert unlisted_env_names({'PATH': False, 'FAKE_SECRET_TOKEN': False}) == ['FAKE_SECRET_TOKEN']
+    assert unlisted_env_names({'COLUMNS': False}) == ['COLUMNS']  # a non-numeric value is not geometry
+    assert unlisted_env_names({'COLUMNS_X': True, 'LINES': True}) == ['COLUMNS_X']  # exact names, no substring match
+
+
 def test_tests_and_their_subprocesses_run_with_the_minimal_environment(tmp_path, monkeypatch):
     # The fixture ran before this body, so anything the parent exported is already gone.
     assert set(os.environ) <= {'PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR', 'PYTEST_CURRENT_TEST'}  # the last is pytest's own
-    seen = subprocess.run([sys.executable, '-c', 'import os,json; print(json.dumps(sorted(os.environ)))'],
-                          capture_output=True, text=True, check=True).stdout
-    assert set(json.loads(seen)) <= {'PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR', 'PYTEST_CURRENT_TEST', 'LC_CTYPE', 'PYTHONUTF8', 'PYTHONCOERCECLOCALE'}
+    assert 'FAKE_SECRET_TOKEN' not in os.environ
+    # The child reports names and whether each value is all digits, never values.
+    seen = json.loads(subprocess.run(
+        [sys.executable, '-c', 'import os,json; print(json.dumps({k: v.isdigit() for k, v in os.environ.items()}))'],
+        capture_output=True, text=True, check=True).stdout)
+    assert unlisted_env_names(seen) == []
