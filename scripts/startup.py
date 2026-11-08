@@ -27,7 +27,9 @@ TTL = 3600
 MARKER = '<!-- BEGIN CLAVAIN CODEX TOOL MAP -->'
 MARKER_END = '<!-- END CLAVAIN CODEX TOOL MAP -->'
 RECEIPT = re.compile(r'package: ([^;]+); policy selection: ([^;]+); policy SHA256: ([0-9a-f]{64})')
-CONTRACT_EXIT = {'current': 0, 'stale': 1, 'absent': 2}
+# 0 current, 1 stale, 2 absent; 3-5 mean the file cannot be classified or repaired safely.
+CONTRACT_EXIT = {'current': 0, 'stale': 1, 'absent': 2, 'duplicate': 3, 'malformed': 4, 'unreadable': 5}
+CONTRACT_BAD = ('duplicate', 'malformed', 'unreadable')
 
 
 def packed(value):
@@ -296,35 +298,59 @@ def load_renderer(args):
     return module
 
 
+def marker_state(data):
+    """Classify the managed markers of raw bytes: absent, ok, duplicate or malformed."""
+    begin, end = MARKER.encode(), MARKER_END.encode()
+    starts, ends = data.count(begin), data.count(end)
+    if starts == ends == 0:
+        return 'absent'
+    if starts > 1 or ends > 1:
+        return 'duplicate'
+    if starts != 1 or ends != 1 or data.index(begin) > data.index(end):
+        return 'malformed'
+    return 'ok'
+
+
 def contract_report(args):
     """Compare the host instruction file with the selected rendered block.
 
-    Read-only. status is current, stale (a managed block exists but differs) or
-    absent (no managed block; startup injects it for the session). A stale report
-    names what drifted: version, policy-hash, no-receipt or block-content.
+    Read-only, and byte-exact: the file is never decoded as a whole, so bytes
+    outside the block cannot change the verdict. status is current, stale (exactly
+    one managed block that differs), absent (no managed block; startup injects it
+    for the session), duplicate (a marker repeated), malformed (one marker missing
+    or the markers reversed) or unreadable (the file could not be read). The last
+    three are never reported as current; sync refuses them and they need a manual
+    repair. A stale report names what drifted: version, policy-hash, no-receipt or
+    block-content.
     """
     module = load_renderer(args)
     body, metadata = module.render(args.source, args.host, portable_policy=True)
-    try:
-        existing = read(args.instruction_file).decode()
-    except (OSError, ValueError, UnicodeError):
-        existing = ''
     report = {'file': str(args.instruction_file), 'host': args.host, 'installed_version': metadata['version'],
               'policy_hash': metadata['policy_hash'], 'file_version': None, 'file_policy_hash': None,
-              'selection': None, 'drift': []}
-    if body.strip() in existing:
-        report.update(status='current', selection=metadata['policy_selection'])
+              'selection': None, 'drift': [], 'error': None}
+    try:
+        existing = read(args.instruction_file)
+    except FileNotFoundError:
+        existing = b''
+    except (OSError, ValueError) as error:
+        report.update(status='unreadable', error=type(error).__name__ + ': ' + clip(error, 120))
         return report, body, metadata
-    explicit, explicit_meta = module.render(args.source, args.host, portable_policy=False)
-    if explicit.strip() in existing:
-        report.update(status='current', selection=explicit_meta['policy_selection'])
-        return report, '', explicit_meta
-    # An older managed block must be reconciled explicitly, not duplicated.
-    if MARKER in existing:
-        block = existing[existing.index(MARKER):]
-        if MARKER_END in block:
-            block = block[:block.index(MARKER_END)]
-        found = RECEIPT.search(block)
+    state = marker_state(existing)
+    if state in ('duplicate', 'malformed'):
+        report.update(status=state, drift=[state + '-markers'])
+        return report, body, metadata
+    if state == 'ok':
+        begin = existing.index(MARKER.encode())
+        block = existing[begin:existing.index(MARKER_END.encode()) + len(MARKER_END)]
+        if block == body.strip().encode():
+            report.update(status='current', selection=metadata['policy_selection'])
+            return report, '', metadata
+        explicit, explicit_meta = module.render(args.source, args.host, portable_policy=False)
+        if block == explicit.strip().encode():
+            report.update(status='current', selection=explicit_meta['policy_selection'])
+            return report, '', explicit_meta
+        # An older managed block must be reconciled explicitly, not duplicated.
+        found = RECEIPT.search(block.decode(errors='replace'))
         if found:
             report.update(file_version=found.group(1), selection=found.group(2), file_policy_hash=found.group(3))
             if found.group(1) != metadata['version']:
@@ -366,13 +392,17 @@ def contract(args):
         return '', metadata, 'current'
     if report['status'] == 'stale':
         return '', metadata, stale_status(args, report)
+    if report['status'] in CONTRACT_BAD:
+        # The file cannot be trusted or repaired automatically; give the session the contract anyway.
+        return body, metadata, (f"injected; instruction file is {report['status']} ({', '.join(report['drift']) or clip(report['error'], 80)}); "
+                                'repair it by hand, synchronization refuses it')
     return body, metadata, 'injected'
 
 
 def sync_instruction_block(args, report):
     """Explicit refresh-only action: replace the managed block, nothing else."""
     if report['status'] != 'stale':
-        return {'status': report['status'], 'changed': False}
+        return {'status': report['status'], 'changed': False, 'error': report['error']}
     command = [sys.executable, '-I', str(args.source/'scripts/sync-agent-instructions.py'), '--source', str(args.source),
                '--host', args.host, '--file', str(args.instruction_file)]
     if report['selection'] != 'explicit-installation':
@@ -593,7 +623,7 @@ def main():
         if args.operation == 'refresh' and args.sync_instruction_block:
             # Sync first so the snapshot identity records the repaired file.
             synced = sync_instruction_block(args, contract_report(args)[0])
-            if synced['status'] != 'current' and synced['status'] != 'absent':
+            if synced['status'] not in ('current', 'absent'):
                 print(json.dumps({'status':'error','error':'instruction block sync failed','instruction_sync':synced}))
                 return 1
         current = identity(args)
@@ -635,7 +665,7 @@ def main():
                 data['ledger_status'] = 'unknown'
                 data['ledger_reason'] = type(error).__name__+': private ledger unavailable or invalid.'
         print(json.dumps(data,indent=2))
-        return int(args.operation == 'doctor' and (data['installation']['status'] != 'ok' or data['cache_freshness'] != 'fresh' or data['recent_hook_issues'] or data.get('ledger_status') == 'unknown' or data['instruction_contract']['status'] == 'stale'))
+        return int(args.operation == 'doctor' and (data['installation']['status'] != 'ok' or data['cache_freshness'] != 'fresh' or data['recent_hook_issues'] or data.get('ledger_status') == 'unknown' or data['instruction_contract']['status'] not in ('current', 'absent')))
     except (OSError,ValueError,RuntimeError,KeyError,TypeError) as error:
         if args.operation == 'render':
             print(envelope('Clavain startup unknown: '+type(error).__name__+'. Read the selected using-clavain skill and verify task, ownership, authority and acceptance prerequisites before action.'),end='')

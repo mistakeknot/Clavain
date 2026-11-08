@@ -561,3 +561,108 @@ def test_plain_refresh_never_edits_instruction_file(tmp_path):
 def test_sync_flag_requires_refresh(tmp_path):
     result = invoke(tmp_path, tmp_path/'state', 'doctor', extra=('--sync-instruction-block',))
     assert result.returncode != 0 and 'requires refresh' in result.stderr
+
+
+# --- marker validation and byte-exact reads (mk-4xzwm.2, round 2) ------------
+
+def _check(tmp_path, path):
+    return invoke(tmp_path, tmp_path/'state', 'contract-check', extra=('--instruction-file', str(path)))
+
+
+def _stale_and_current(tmp_path):
+    stale_path, _ = _stale_file(tmp_path)
+    stale = stale_path.read_text().split('\n# user text after\n')[0].split('# user text before\n\n')[1]
+    return stale, _rendered_block().rstrip('\n')
+
+
+@pytest.mark.parametrize('order', ['stale-then-current', 'current-then-stale', 'current-twice'])
+def test_duplicate_managed_blocks_are_never_current(tmp_path, order):
+    stale, current = _stale_and_current(tmp_path)
+    first, second = {'stale-then-current': (stale, current), 'current-then-stale': (current, stale),
+                     'current-twice': (current, current)}[order]
+    path = tmp_path/'dup.md'
+    path.write_text('# before\n\n'+first+'\n\nmiddle\n\n'+second+'\n# after\n')
+    result = _check(tmp_path, path)
+    assert result.returncode == 3, result.stdout + result.stderr
+    report = json.loads(result.stdout)
+    assert report['status'] == 'duplicate' and report['drift'] == ['duplicate-markers']
+    context = json.loads(invoke(tmp_path, tmp_path/'s2', extra=('--instruction-file', str(path))).stdout)['hookSpecificOutput']['additionalContext']
+    assert 'Instruction contract: current' not in context and 'duplicate' in context
+
+
+@pytest.mark.parametrize('mutation', ['no-end', 'no-begin', 'reversed'])
+def test_malformed_markers_are_never_current(tmp_path, mutation):
+    _, current = _stale_and_current(tmp_path)
+    begin, end = '<!-- BEGIN CLAVAIN CODEX TOOL MAP -->', '<!-- END CLAVAIN CODEX TOOL MAP -->'
+    text = {'no-end': current.replace(end, ''), 'no-begin': current.replace(begin, ''),
+            'reversed': end+'\nbody\n'+begin}[mutation]
+    path = tmp_path/'bad.md'
+    path.write_text('# before\n'+text+'\n# after\n')
+    result = _check(tmp_path, path)
+    assert result.returncode == 4, result.stdout + result.stderr
+    assert json.loads(result.stdout)['status'] == 'malformed'
+
+
+def test_sync_refuses_duplicate_and_malformed_and_leaves_bytes(tmp_path):
+    project = tmp_path/'project'; project.mkdir()
+    stale, current = _stale_and_current(tmp_path)
+    for name, text in (('dup.md', stale+'\n'+current+'\n'), ('mal.md', current.replace('<!-- END CLAVAIN CODEX TOOL MAP -->', '')+'\n')):
+        path = tmp_path/name
+        path.write_text(text)
+        before = path.read_bytes()
+        result = invoke(project, tmp_path/'state', 'refresh', extra=('--instruction-file', str(path), '--sync-instruction-block'))
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert json.loads(result.stdout)['instruction_sync']['status'] in ('duplicate', 'malformed')
+        assert path.read_bytes() == before
+
+
+def test_stale_block_with_non_utf8_bytes_outside_is_stale_not_absent(tmp_path):
+    stale_path, _ = _stale_file(tmp_path)
+    data = stale_path.read_bytes()
+    path = tmp_path/'bytes.md'
+    path.write_bytes(b'# caf\xe9 \xff\xfe user text\n\n' + data + b'\nafter \x80\x81\n')
+    result = _check(tmp_path, path)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert json.loads(result.stdout)['status'] == 'stale'
+
+
+def test_sync_preserves_every_byte_outside_the_block(tmp_path):
+    project = tmp_path/'project'; project.mkdir()
+    stale_path, _ = _stale_file(tmp_path)
+    begin, end = b'<!-- BEGIN CLAVAIN CODEX TOOL MAP -->', b'<!-- END CLAVAIN CODEX TOOL MAP -->'
+    before_text = b'# caf\xe9 \xff\xfe user text\r\n\r\n'
+    after_text = b'\nafter \x80\x81\r\n\t trailing  \n'
+    data = stale_path.read_bytes()
+    block = data[data.index(begin):data.index(end)+len(end)]
+    path = tmp_path/'bytes.md'
+    path.write_bytes(before_text + block + after_text)
+    result = invoke(project, tmp_path/'state', 'refresh', extra=('--instruction-file', str(path), '--sync-instruction-block'))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(result.stdout)['instruction_sync']['changed'] is True
+    expected_block = _rendered_block().rstrip('\n').encode()
+    assert path.read_bytes() == before_text + expected_block + after_text, 'surrounding bytes must be identical'
+    assert _check(tmp_path, path).returncode == 0
+
+
+def test_unreadable_instruction_file_is_its_own_status_not_absent(tmp_path):
+    project = tmp_path/'project'; project.mkdir()
+    directory = tmp_path/'is-a-dir'; directory.mkdir()
+    oversized = tmp_path/'huge.md'
+    with oversized.open('wb') as stream:
+        stream.truncate(17 * 1024 * 1024)
+    for path in (directory, oversized):
+        result = _check(tmp_path, path)
+        assert result.returncode == 5, result.stdout + result.stderr
+        report = json.loads(result.stdout)
+        assert report['status'] == 'unreadable' and report['error']
+        synced = invoke(project, tmp_path/'state', 'refresh', extra=('--instruction-file', str(path), '--sync-instruction-block'))
+        assert synced.returncode == 1 and json.loads(synced.stdout)['instruction_sync']['status'] == 'unreadable'
+    doctor = invoke(project, tmp_path/'state', 'doctor', extra=('--instruction-file', str(directory)))
+    assert json.loads(doctor.stdout)['instruction_contract']['status'] == 'unreadable' and doctor.returncode == 1
+
+
+def test_current_block_with_non_utf8_bytes_around_stays_current(tmp_path):
+    path = tmp_path/'ok.md'
+    path.write_bytes(b'\xff\xfe leading\n\n' + _rendered_block().rstrip('\n').encode() + b'\n\x80 trailing\n')
+    result = _check(tmp_path, path)
+    assert result.returncode == 0 and json.loads(result.stdout)['status'] == 'current'

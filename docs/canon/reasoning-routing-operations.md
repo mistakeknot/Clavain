@@ -535,10 +535,16 @@ startup. Check explicitly, and as a rig-health probe, with:
 python3 scripts/startup.py contract-check --host claude --instruction-file ~/.claude/CLAUDE.md
 ```
 
-It prints a JSON report and exits 0 (current), 1 (stale) or 2 (no managed block;
-startup injects it per session). `startup.py doctor` embeds the same report under
-`instruction_contract` and exits non-zero when stale. To repair, run the narrow,
-explicit refresh:
+It reads the file as raw bytes (non-UTF-8 text elsewhere in the file cannot change
+the verdict), prints a JSON report and exits 0 (current: exactly one managed block,
+equal to the selected block), 1 (stale), 2 (no managed block; startup injects it
+per session), 3 (duplicate: a marker appears more than once), 4 (malformed: a
+marker is missing or the markers are reversed) or 5 (unreadable: the file could not
+be read or exceeds the read budget; a missing file is "no managed block"). Statuses
+3 to 5 are never "current" and are never repaired automatically: sync refuses them
+and leaves the file unchanged, so fix the file by hand. `startup.py doctor` embeds
+the same report under `instruction_contract` and exits non-zero unless it is current
+or absent. To repair a stale block, run the narrow, explicit refresh:
 
 ```bash
 python3 scripts/startup.py refresh --sync-instruction-block --host claude \
