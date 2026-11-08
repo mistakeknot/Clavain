@@ -66,11 +66,29 @@ chain are unaffected: Intercore dedupes an already-visited profile_ref, so the
 new edge cannot reintroduce a seat the walk already excluded or already used.
 
 The role-resolved kimi seat (`validation`, `cross-lab-review`, `plan-review`)
-runs with Bash, Read, Glob and Grep and without Write or Edit, so it can run a
-plan's Verification the way the claude seat does. Like the claude seat, the
-checkout is snapshotted around the run, and a run that changed it is an error
-verdict. A direct `--to kimi` dispatch stays toolless because it may carry
-untrusted input.
+is asked to use Bash, Read, Glob and Grep and not Write or Edit, so it can run
+a plan's Verification the way the claude seat does. That tool list is a request
+to kimi, not a barrier: a shell can write anywhere the process can. What
+dispatch enforces is containment and a strict reading of the result:
+
+- The seat runs in a disposable copy of the checkout detached at HEAD (a
+  plain copy when the directory is not a git work tree), with a copy of the
+  plan directory, never the originals. Uncommitted changes are not in the copy;
+  a warning says so.
+- Where `bwrap` can create a sandbox, the run also gets a read-only root with
+  only the copy and kimi's own state directory writable. Where it cannot (or
+  `CLAVAIN_SEAT_BWRAP=0`), dispatch says so, and nothing stops the seat writing
+  outside the copy. The seat is not read-only in that case.
+- Both copies are fingerprinted (content, mode, ignored files, `.git`) before
+  and after. Any difference is an error verdict and a failed dispatch. This
+  detects changes inside the copies only.
+- The ruling is read only from kimi's final assistant message
+  (`--output-format stream-json`) and must open that message with a `VERDICT:`
+  line. Narration, quoted output and tool results are never read. A missing,
+  late or ambiguous verdict is an error verdict, never a pass.
+
+A direct `--to kimi` dispatch stays toolless because it may carry untrusted
+input.
 Distinct profile_refs can still name one seat (`crosslab-opus` and
 `validation-opus` are both Opus 5.5), so the dispatch walk also skips a
 candidate whose backend and model already failed on capacity in the same walk.

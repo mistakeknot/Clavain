@@ -110,6 +110,7 @@ for role in validation cross-lab-review; do
   [[ -s "$FAKE_CODEX_LOG" ]] || fail "$role, Sonnet producer: expected the cross-lab (Codex) seat to review, claude: $(paste -sd' ' "$FAKE_CLAUDE_LOG")"
   never_reviewed_by "$role, Sonnet producer" claude-sonnet-5-5
   receipt="$(latest_receipt)"
+  [[ -n "$receipt" ]] || fail "$role, Sonnet producer: no terminal receipt was recorded for the run"
   [[ "$(jq -r '.capacity_substitute // "none"' <<< "$receipt")" == none ]] \
     || fail "$role, Sonnet producer: a cross-lab review recorded a capacity_substitute: $receipt"
 
@@ -121,6 +122,7 @@ for role in validation cross-lab-review; do
   [[ -s "$FAKE_CLAUDE_LOG" ]] || fail "$role, Sonnet producer, Codex out: no Claude substitute ran"
   never_reviewed_by "$role, Sonnet producer, Codex out" claude-sonnet-5-5
   receipt="$(latest_receipt)"
+  [[ -n "$receipt" ]] || fail "$role, Sonnet producer, Codex out: no terminal receipt was recorded for the run"
   [[ "$(jq -r '.capacity_substitute.failure_class // empty' <<< "$receipt")" == quota_exhausted ]] \
     || fail "$role, Sonnet producer, Codex out: capacity_substitute.failure_class not recorded: $receipt"
 
