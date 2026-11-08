@@ -96,6 +96,19 @@
             "args": []
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/phase-evidence.sh",
+            "timeout": 5,
+            "args": [
+              "pre"
+            ]
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -178,6 +191,19 @@
             "args": []
           }
         ]
+      },
+      {
+        "matcher": "Read|Edit|Write|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/phase-evidence.sh",
+            "timeout": 5,
+            "args": [
+              "post"
+            ]
+          }
+        ]
       }
     ],
     "Stop": [
@@ -188,6 +214,18 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/auto-stop-actions.sh",
             "timeout": 5,
             "args": []
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/phase-evidence.sh",
+            "timeout": 5,
+            "args": [
+              "stop"
+            ]
           }
         ]
       }

@@ -585,3 +585,14 @@ outside Git roots, standalone installs and alternate profiles. Upgrade only the
 selected instruction block or adapter. Roll back by selecting the previous
 version's policy and rerendering its block; preserve receipts and local content.
 Build/release/deployment automation remains independently scheduled on zklw.
+
+### Phase evidence (observe mode)
+
+`hooks/phase-evidence.sh` records tool use per session under `$XDG_STATE_HOME/clavain/phase-evidence/` (override with `CLAVAIN_PHASE_EVIDENCE_DIR`) and warns, without blocking, when a phase left no evidence:
+
+- `read-before-edit`: an existing file was edited with no earlier Read, Edit or Write of it.
+- `verify-after-edit`: code was edited and no test, lint or check command ran afterwards. Documentation-only edits are exempt.
+- `decision-context`: code was edited and no valid decision context (`reasons` plus a nonempty `rationale`) was set through `CLAVAIN_DECISION_CONTEXT` or used by `dispatch.sh --role`.
+
+Rows carry `oodarc_role`, the same vocabulary as intercore `PhaseToOODARCRole`. `scripts/phase-evidence.py check --phase <lifecycle phase> --json` reports what a phase's leg expects, and the `lib-gates.sh` `check_phase_gate` fallback calls it. Set `CLAVAIN_PHASE_EVIDENCE_MODE=off` to disable. A rule becomes a gate only by a separate change made from ledger data.
+

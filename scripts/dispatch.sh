@@ -939,6 +939,10 @@ _dispatch_role_profile() {
       return 1
     fi
   fi
+  # Observe mode (mk-4xzwm.1): record the dispatch and warn when its decision
+  # context is missing or unusable. Never changes the dispatch outcome.
+  python3 "$DISPATCH_SCRIPT_DIR/phase-evidence.py" dispatch --role "$role" \
+    --context "${CLAVAIN_DECISION_CONTEXT:-}" || true
   local policy_source="${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
   _dispatch_routing_precheck "$role" "$policy_source" || return 1
   local headroom='{"status":"unknown"}' advice exclusions='[]' evidence derived base_context

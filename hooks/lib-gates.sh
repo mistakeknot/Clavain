@@ -27,7 +27,13 @@ else
     VALID_TRANSITIONS=()
     ARTIFACT_PHASE_DIRS=()
     is_valid_transition() { return 1; }
-    check_phase_gate() { return 0; }
+    # Observe mode (mk-4xzwm.1): report missing phase evidence for the OODARC
+    # leg the target phase maps to, but never block (always returns 0).
+    check_phase_gate() {
+        local _pe="${_GATES_SHIM_DIR}/../scripts/phase-evidence.py"
+        [[ -f "$_pe" ]] && python3 "$_pe" check --phase "${2:-}" || true
+        return 0
+    }
     advance_phase() { return 0; }
     phase_get_with_fallback() { echo ""; }
     phase_set() { return 0; }
