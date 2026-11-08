@@ -93,12 +93,14 @@ Before writing prose, look up the live state of every bead and PR the note will 
 
 ```bash
 # BEADS = bead ids the note names; PRS = owner/repo#N for each PR it names.
-for b in $BEADS; do (cd "${BD_DIR:-$HOME/hub}" && bd show "$b" --json) 2>/dev/null | jq -r '.[0] // . | "\(.id) \(.status)"' || echo "$b unresolved"; done
-for p in $PRS; do gh pr view "${p#*#}" --repo "${p%#*}" --json state,mergedAt,headRefOid \
-  --jq '"'"$p"' \(.state) head \(.headRefOid[:12])"' 2>/dev/null || echo "$p unresolved"; done
+for b in $BEADS; do o="$(cd "${BD_DIR:-$HOME/hub}" && bd show "$b" --json 2>/dev/null | jq -r '.[0] // . | "\(.id) \(.status)"' 2>/dev/null)"
+  echo "${o:-$b unresolved}"; done
+for p in $PRS; do o="$(gh pr view "${p#*#}" --repo "${p%#*}" --json state,mergedAt,headRefOid \
+  --jq '"'"$p"' \(.state) head \(.headRefOid[:12])"' 2>/dev/null)"; echo "${o:-$p unresolved}"; done
 # WAITS_JSON = the thread's waits.json, STATUS_JSON = its status.json, when they exist.
 [[ -r "${WAITS_JSON:-}" ]] && jq -r '.waits[]? | select(.resolved_at == null) | "wait \(.id) open \(.kind) \(.ref)"' "$WAITS_JSON"
-[[ -r "${STATUS_JSON:-}" ]] && jq -c . "$STATUS_JSON"
+# status.json: only its top-level scalar fields, each cut to 80 characters (never the whole file).
+[[ -r "${STATUS_JSON:-}" ]] && jq -r 'to_entries[] | select(.value|type|IN("string","number","boolean")) | "status \(.key)=\(.value|tostring|.[:80])"' "$STATUS_JSON"
 ```
 
 Write PRs as `owner/repo#N`. List only what the note names or what is open; do not dump every bead. Do not write a conclusion from the facts (no "all done"); the Directive says what to do. Facts at write time fix errors made at write time; they do not stop later staleness, which the resume step covers.
