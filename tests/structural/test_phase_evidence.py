@@ -16,15 +16,32 @@ HOOK = ROOT / 'hooks/phase-evidence.sh'
 GOOD_CONTEXT = {'reasons': [], 'rationale': 'Settled routine change; tests define acceptance'}
 
 
+def minimal_env(home):
+    """A small, explicit environment for subprocesses.
+
+    Nothing is copied wholesale from the parent, so an inherited credential can
+    neither reach a subprocess nor be printed in a failure message. Only the
+    command search path and locale are taken from the parent.
+    """
+    return {
+        'PATH': os.environ.get('PATH', '/usr/local/bin:/usr/bin:/bin'),
+        'HOME': str(home),
+        'LANG': 'C.UTF-8',
+        'LC_ALL': 'C.UTF-8',
+        'TMPDIR': str(home),
+    }
+
+
+def make_env(tmp_path):
+    home = tmp_path / 'home'; home.mkdir(exist_ok=True)
+    e = minimal_env(home)
+    e['CLAVAIN_PHASE_EVIDENCE_DIR'] = str(tmp_path / 'ledger')
+    return e
+
+
 @pytest.fixture
 def env(tmp_path):
-    e = dict(os.environ)
-    e['CLAVAIN_PHASE_EVIDENCE_DIR'] = str(tmp_path / 'ledger')
-    # Inherited session ids would change which ledger a record lands in.
-    for k in ('CLAVAIN_DECISION_CONTEXT', 'CLAVAIN_PHASE_EVIDENCE_MODE', 'DISPATCH_SESSION_ID',
-              'CLAUDE_SESSION_ID', 'XDG_STATE_HOME'):
-        e.pop(k, None)
-    return e
+    return make_env(tmp_path)
 
 
 def run(args, env, payload=None):
@@ -205,11 +222,11 @@ def wrapper(event, env, payload, path=None):
                           capture_output=True, text=True, env=e, timeout=30)
 
 
-def fake_python(tmp_path, body):
+def fake_python(tmp_path, body, base_path):
     """A directory with a python3 that behaves badly, placed first on PATH."""
     d = tmp_path / 'badpy'; d.mkdir()
     exe = d / 'python3'; exe.write_text('#!/bin/sh\n' + body + '\n'); exe.chmod(0o755)
-    return f'{d}:{os.environ["PATH"]}'
+    return f'{d}:{base_path}'
 
 
 EDIT_PAYLOAD = {'session_id': 's1', 'tool_name': 'Edit', 'tool_input': {'file_path': '/nonexistent/x.py'}}
@@ -225,7 +242,7 @@ def test_wrapper_without_python3_exits_zero_silently(env, tmp_path):
                                   'echo garbage; exit 0', 'echo \'{"systemMessage": "x"}\'; exit 7',
                                   'kill -SEGV $$'])
 def test_wrapper_survives_python_crash_and_never_relays_a_block(env, tmp_path, body):
-    proc = wrapper('stop', env, EDIT_PAYLOAD, path=fake_python(tmp_path, body))
+    proc = wrapper('stop', env, EDIT_PAYLOAD, path=fake_python(tmp_path, body, env['PATH']))
     assert proc.returncode == 0
     assert 'block' not in proc.stdout and 'garbage' not in proc.stdout
     assert proc.stdout == ''
@@ -241,13 +258,13 @@ def test_wrapper_relays_only_the_system_message(env, tmp_path):
 
 def test_wrapper_gives_up_on_a_hung_python(env, tmp_path):
     start = time.time()
-    proc = wrapper('stop', env, EDIT_PAYLOAD, path=fake_python(tmp_path, 'sleep 30'))
+    proc = wrapper('stop', env, EDIT_PAYLOAD, path=fake_python(tmp_path, 'sleep 30', env['PATH']))
     assert proc.returncode == 0 and proc.stdout == '' and time.time() - start < 10
 
 
 def test_wrapper_skips_python_for_bash_commands_that_cannot_verify(env, tmp_path):
     # python3 would crash loudly if started; the prefilter must not start it
-    path = fake_python(tmp_path, 'touch "$0.ran"; exit 1')
+    path = fake_python(tmp_path, 'touch "$0.ran"; exit 1', env['PATH'])
     wrapper('post', env, {'session_id': 's1', 'tool_name': 'Bash', 'tool_input': {'command': 'ls -la'}}, path=path)
     assert not (tmp_path / 'badpy/python3.ran').exists()
     wrapper('post', env, {'session_id': 's1', 'tool_name': 'Bash', 'tool_input': {'command': 'pytest -q'}}, path=path)
@@ -263,9 +280,9 @@ def test_wrapper_records_through_the_real_hook(env, tmp_path):
 
 @pytest.mark.parametrize('umask', [0o077, 0o000, 0o022])
 def test_state_is_private_whatever_the_umask(env, tmp_path, umask):
-    code = ('import os,subprocess,sys,json; os.umask(%d); '
+    code = ('import os,subprocess,sys,json; ENV=dict(%r); os.umask(%d); '
             'subprocess.run([sys.executable, %r, "hook", "post"], input=json.dumps({"session_id":"s1","tool_name":"Edit",'
-            '"tool_input":{"file_path":"/tmp/zz.py"}}).encode(), env=os.environ)' % (umask, str(SCRIPT)))
+            '"tool_input":{"file_path":"/tmp/zz.py"}}).encode(), env=ENV)' % (env, umask, str(SCRIPT)))
     subprocess.run([sys.executable, '-c', code], env=env, check=True, timeout=30)
     d = Path(env['CLAVAIN_PHASE_EVIDENCE_DIR'])
     assert stat.S_IMODE(d.stat().st_mode) == 0o700
@@ -470,8 +487,22 @@ def test_real_dispatch_wrapper_records_and_survives_a_bad_python(env, tmp_path):
     assert 'could not resolve dispatch role' in proc.stderr  # dispatch carried on to its own, unchanged outcome
     assert [r['kind'] for r in ledger(env, 'sdw')] == ['dispatch']
     # a python3 that hangs must not stall dispatch.sh past the deadline
-    env['PATH'] = fake_python(tmp_path, 'sleep 60').replace(os.environ['PATH'], f'{bindir}:{os.environ["PATH"]}')
+    env['PATH'] = fake_python(tmp_path, 'sleep 60', env['PATH'])
     start = time.time()
     proc = subprocess.run(['bash', str(ROOT / 'scripts/dispatch.sh'), '--role', 'planning', '-C', str(tmp_path), 'hello'],
                           input='', capture_output=True, text=True, env=env, timeout=60)
     assert time.time() - start < 20 and 'could not resolve dispatch role' in proc.stderr
+
+
+def test_subprocess_env_carries_no_inherited_secret(tmp_path, monkeypatch):
+    """A credential in the parent environment must reach no subprocess and no failure message."""
+    monkeypatch.setenv('FAKE_SECRET_TOKEN', 'sentinel-do-not-leak')
+    env = make_env(tmp_path)  # built after the parent variable is set
+    assert 'FAKE_SECRET_TOKEN' not in env and 'sentinel-do-not-leak' not in repr(env)
+    assert set(env) == {'PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR', 'CLAVAIN_PHASE_EVIDENCE_DIR'}
+    proc = subprocess.run([sys.executable, '-c', 'import os; print(os.environ.get("FAKE_SECRET_TOKEN", "absent"))'],
+                          capture_output=True, text=True, env=env, timeout=30)
+    assert proc.stdout.strip() == 'absent'
+    # the real wrapper and helper run under the same env, so neither can echo it
+    wrapped = wrapper('stop', env, EDIT_PAYLOAD)
+    assert 'sentinel-do-not-leak' not in wrapped.stdout + wrapped.stderr
