@@ -4,11 +4,26 @@
 # Written with mode 0600 by exclusive create, never overwritten. The file
 # catches mistakes only: writer and verifier share an account.
 #
+# Receipts are append-only per head: <pr>-<head>.json, then .2.json, .3.json.
+# The first file is never rewritten, so a reader that opens only
+# <pr>-<head>.json sees the first ruling and not a later correction. A reader
+# that needs the effective ruling must follow the numbered chain, or call
+# _review_receipt_effective. A later receipt supersedes an earlier one only when
+# both have the same base_sha and diff_sha256 (mk-0qjva). The .verdict sidecar
+# is unchanged by this layout.
+#
 # State, set by the flag parser in dispatch.sh:
 #   RR_REPO RR_REPO_ID RR_PR RR_HEAD RR_BASE   (all five or none)
 # Computed by _review_receipt_prepare, which runs before the review starts so a
 # bad flag fails fast:
 #   RR_HEAD_TREE RR_MERGE_TREE RR_DIFF_STAT RR_DIFF_SHA256 RR_CHANGED_PATHS_JSON
+
+# Shared verdict word classifier (mk-0qjva): the same one dispatch.sh uses for
+# the .verdict sidecar, so the receipt and the sidecar cannot disagree.
+_rr_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib-verdict.sh
+# shellcheck source=lib-verdict.sh
+source "$_rr_lib_dir/lib-verdict.sh"
 
 _review_receipt_requested() {
   [[ -n "${RR_REPO:-}${RR_REPO_ID:-}${RR_PR:-}${RR_HEAD:-}${RR_BASE:-}" ]]
@@ -113,48 +128,46 @@ json.dump({"total": len(names), "paths": names[:200]}, sys.stdout)
   RR_CHANGED_PATHS_JSON="${pj% *}"
 }
 
-# Strict verdict token from the reviewer's final line. Only FAIL and BLOCK may
-# carry explanatory suffixes; passing rulings allow at most a trailing period.
-# Prints PASS, "PASS WITH NOTES"
-# or BLOCK (the words PASS, PASS WITH NOTES, FAIL; FAIL and its alias BLOCK
-# both record BLOCK; mk-tl0ou.3.4);
-# prints nothing (rc 1) when there is no acceptable VERDICT line or the word is
-# not one of those, so no receipt is written and the dispatch fails. No Markdown is parsed: the output must contain no code
-# fence (three backticks or tildes) and no HTML comment delimiter anywhere, and
-# NUL bytes are rejected; the ruling must be the last non-blank line, start at column 0 and follow a
-# blank line (or begin the file). Reviews that quote fences or comments get no
-# receipt rather than a guess at what they render as.
+# Verdict from the reviewer's final line, in two steps that share one word list
+# (scripts/lib-verdict.sh):
+#   _review_receipt_verdict_word FILE   prints the raw word after "VERDICT:"
+#   _review_receipt_verdict FILE        prints PASS, "PASS WITH NOTES", BLOCK or UNKNOWN
+# PASS, PASS WITH NOTES (also PASS-WITH-NOTES, PASS_WITH_NOTES) and FAIL are the
+# vocabulary. FAIL and its alias BLOCK both record BLOCK (mk-tl0ou.3.4). Only
+# FAIL and BLOCK may carry an explanation; a passing ruling allows at most a
+# trailing period. A word outside the vocabulary (APPROVE, a misspelling, PASS
+# followed by prose) is recorded as UNKNOWN with a warning on stderr: it is
+# neither a pass nor a block, and a later review of the same change (same base
+# and diff hash) can supersede it (mk-0qjva, mk-4c909). Both return 1, printing nothing, when there is no
+# acceptable VERDICT line at all, so no receipt is written and the dispatch
+# fails. No Markdown is parsed: the output must contain no code fence (three
+# backticks or tildes) and no HTML comment delimiter anywhere, and NUL bytes are
+# rejected; the ruling must be the last non-blank line, start at column 0 and
+# follow a blank line (or begin the file). Reviews that quote fences or comments
+# get no receipt rather than a guess at what they render as.
+_review_receipt_verdict_word() {
+  verdict_strict_word "$1"
+}
+
 _review_receipt_verdict() {
-  local out="$1" last
-  [[ -f "$out" ]] || return 1
-  # Continue only on grep status 1 (no delimiter found); a match or any scan
-  # error rejects. NUL bytes are rejected first: shell capture would drop them.
-  local rc
-  LC_ALL=C tr -d '\000' <"$out" | cmp -s - "$out"
-  [[ "${PIPESTATUS[0]}" -eq 0 && "${PIPESTATUS[1]}" -eq 0 ]] || return 1
-  LC_ALL=C grep -qE '```|~~~|<!--|-->' "$out"; rc=$?
-  [[ $rc -eq 1 ]] || return 1
-  last="$(awk '
-    { sub(/\r$/, "") }
-    $0 ~ /[^[:space:]]/ { last = $0; lastok = (blank || NR == 1); blank = 0; next }
-    { blank = 1 }
-    END { if (lastok) print last }' "$out")" || return 1
-  local re='^(\*\*|__)?[Vv][Ee][Rr][Dd][Ii][Cc][Tt][[:space:]]*:(\*\*|__)?[[:space:]]*(([^[:space:]*_`]|[^[:space:]*_`].*[^[:space:]*_`]))[[:space:]]*(\*\*|__)?[[:space:]]*$'
-  [[ "$last" =~ $re ]] || return 1
-  local v="${BASH_REMATCH[3]}"
-  # Never infer approval from explanatory prose: any suffix could contradict a
-  # PASS using wording we cannot enumerate. Blocking tokens can safely ignore
-  # their explanation because the normalized result always remains BLOCK.
-  local pass_re='^(PASS|PASS WITH NOTES)\.?$'
-  local block_re='^(FAIL|BLOCK)($|[[:space:]:;.,(].*)'
-  if [[ "${v^^}" =~ $pass_re ]]; then
-    printf '%s\n' "${BASH_REMATCH[1]}"
-  elif [[ "${v^^}" =~ $block_re ]]; then
-    echo BLOCK
-  else
-    echo "review receipt: unrecognised verdict word '$v'; accepted: PASS, PASS WITH NOTES, FAIL (BLOCK is read as FAIL)" >&2
-    return 1
-  fi
+  local out="$1" v
+  v="$(_review_receipt_verdict_word "$out")" || return 1
+  case "$(verdict_word_class "$v")" in
+    PASS) echo PASS ;;
+    PASS_WITH_NOTES) echo "PASS WITH NOTES" ;;
+    FAIL) echo BLOCK ;;
+    *)
+      echo "review receipt: unrecognised verdict word '$(_review_receipt_clean_word "$v")'; accepted: PASS, PASS WITH NOTES, FAIL (BLOCK is read as FAIL). Recorded as UNKNOWN, not as a pass or a block." >&2
+      echo UNKNOWN ;;
+  esac
+}
+
+# The raw word as stored in a receipt or printed in a warning: control
+# characters removed, at most 120 characters.
+_review_receipt_clean_word() {
+  local w
+  w="$(printf '%s' "$1" | LC_ALL=C tr -d '[:cntrl:]')"
+  printf '%s' "${w:0:120}"
 }
 
 _review_receipt_lab() {
@@ -167,8 +180,35 @@ _review_receipt_lab() {
   esac
 }
 
+# Effective receipt for the change reviewed by a receipt. Arg: the path of any
+# receipt in the chain (normally the first, <pr>-<head>.json). Prints the path
+# of the highest-numbered regular receipt with the same base_sha and
+# diff_sha256 as that receipt, across gaps in the numbering; prints that receipt's own path when nothing
+# later matches. Returns 1 when the argument is not a readable receipt with a
+# base_sha and diff_sha256. Symlinks and non-regular entries are ignored.
+_review_receipt_effective() {
+  local given="$1" first scope want n pf best=""
+  [[ -f "$given" && ! -L "$given" ]] || return 1
+  first="$given"
+  if [[ "$given" =~ ^(.*)\.[0-9]+\.json$ ]]; then first="${BASH_REMATCH[1]}.json"; fi
+  scope="$(jq -r '[.base_sha, .diff_sha256] | join(" ")' "$given" 2>/dev/null)" || return 1
+  [[ -n "$scope" && "$scope" != " " && "$scope" != null* ]] || return 1
+  best="$given"
+  # Scan every possible numbered path, highest first, across gaps. Only
+  # existing regular files are read; the first one in the same scope wins.
+  for (( n = 999; n >= 1; n-- )); do
+    if (( n == 1 )); then pf="$first"; else pf="${first%.json}.$n.json"; fi
+    [[ -f "$pf" && ! -L "$pf" ]] || continue
+    if [[ "$(jq -r '[.base_sha, .diff_sha256] | join(" ")' "$pf" 2>/dev/null)" == "$scope" ]]; then
+      best="$pf"; break
+    fi
+  done
+  printf '%s\n' "$best"
+}
+
 # Writes the receipt. Args: output file, exit code. Echoes the path on success;
-# on a non-write prints the reason to stderr and returns 1. Reviewer identity,
+# on a non-write prints the reason to stderr and returns 1. A receipt whose
+# verdict word is not in the vocabulary is written as UNKNOWN and returns 3. Reviewer identity,
 # producer identity and policy hash come from the run, never from flags.
 _review_receipt_write() {
   local out="$1" rc="$2"
@@ -186,8 +226,9 @@ _review_receipt_write() {
     return 1
   fi
   [[ "${CAPACITY_SUBSTITUTE_JSON:-}" == "" ]] || { echo "review receipt: not written (capacity substitute review)" >&2; return 1; }
-  local verdict
-  verdict="$(_review_receipt_verdict "$out")" || { echo "review receipt: not written (no usable VERDICT line in review output; the last line must be 'VERDICT: PASS' or 'VERDICT: PASS WITH NOTES' with at most a trailing period, or start with 'VERDICT: FAIL' or 'VERDICT: BLOCK' with an optional explanation)" >&2; return 1; }
+  local verdict verdict_raw
+  verdict="$(_review_receipt_verdict "$out")" || { echo "review receipt: not written (no usable VERDICT line in review output; the last line must be 'VERDICT: PASS', 'VERDICT: PASS WITH NOTES' (a trailing period is allowed) or start with 'VERDICT: FAIL' or 'VERDICT: BLOCK' with an optional explanation)" >&2; return 1; }
+  verdict_raw="$(_review_receipt_clean_word "$(_review_receipt_verdict_word "$out")")"
 
   # Additive fields (schema_version stays 1; verdict logic is untouched). One
   # extractor, scripts/receipt-findings.py: unparsed bodies record
@@ -218,7 +259,7 @@ _review_receipt_write() {
   tmp="$(jq -n --arg repo "$RR_REPO" --arg repo_id "$RR_REPO_ID" --argjson pr "$RR_PR" \
     --arg head "$RR_HEAD" --arg head_tree "$RR_HEAD_TREE" --arg base "$RR_BASE" \
     --arg merge_tree "$RR_MERGE_TREE" --arg stat "$RR_DIFF_STAT" --arg dsha "$RR_DIFF_SHA256" \
-    --arg producer "$PRODUCER_IDENTITY" --arg reviewer "$reviewer" --arg verdict "$verdict" \
+    --arg producer "$PRODUCER_IDENTITY" --arg reviewer "$reviewer" --arg verdict "$verdict" --arg verdict_raw "$verdict_raw" \
     --arg policy "$policy_hash" --arg did "${DISPATCH_ID:-}" --arg aid "${ATTEMPT_ID:-}" \
     --arg rel "${VALIDATOR_RELATIONSHIP:-}" --arg sandbox "$sandbox_mode" --arg scratch_tree "$scratch_tree" --slurpfile fxs <(printf '%s' "$fx_json") --slurpfile cp <(printf '%s' "${RR_CHANGED_PATHS_JSON:-}") --arg now "$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)" '
     def nn: if . == "" then null else . end;
@@ -227,7 +268,7 @@ _review_receipt_write() {
      repo: $repo, repo_id: $repo_id, pr: $pr, head_sha: $head, head_tree: $head_tree,
      base_sha: $base, expected_merge_tree: $merge_tree, diff_stat: $stat, diff_sha256: $dsha,
      producer_identity: $producer, reviewer_identity: $reviewer, validator_relationship: ($rel|nn),
-     verdict: $verdict, policy_hash: $policy, sandbox: ($sandbox|nn),
+     verdict: $verdict, verdict_raw: $verdict_raw, policy_hash: $policy, sandbox: ($sandbox|nn),
      dispatch_id: ($did|nn), attempt_id: ($aid|nn), created_at: $now,
      findings: (($fx.findings // [])[:200]),
      findings_source: (if $fx.source == "unknown" then "unknown" elif $fx.source == "conflict" then "conflict" else "body" end),
@@ -239,26 +280,63 @@ _review_receipt_write() {
     + (if $fx.source == "conflict" then {findings_block_total: $fx.block_total} else {} end)')" || return 1
   # Append-only: the first receipt for a head is <pr>-<head>.json; a later run
   # on the same head is recorded as <pr>-<head>.2.json, .3.json, ... and nothing
-  # is overwritten or deleted. Each receipt carries its sequence number; readers order by created_at, then sequence. A path that
+  # is overwritten or deleted, so a reader that only reads <pr>-<head>.json sees
+  # exactly what it always saw. The number is the order of successful insertion,
+  # not of review start; created_at is each receipt's own clock. A path that
   # is not a regular file (directory, symlink) is refused, never skipped.
   # Exclusive create: write a private temp file, then hard-link it into place.
   # link(2) fails on any existing entry, symlinks included, and the receipt
   # appears complete or not at all.
+  #
+  # Supersession is scoped (design choice, mk-0qjva): a later receipt names an
+  # earlier one in supersedes/supersedes_verdict only when both reviewed the same
+  # change, meaning equal base_sha and equal diff_sha256. The nearest earlier
+  # receipt with that scope is named. A receipt for a different base or diff (for
+  # example an empty diff with base equal to head) is written as its own receipt
+  # and supersedes nothing, so it cannot clear a block it did not review.
   local tmpf n=1 cand="$file"
   tmpf="$(umask 077; mktemp "$dir/.new.XXXXXX")" || { echo "review receipt: cannot create temp file in $dir" >&2; return 1; }
   while :; do
-    jq --argjson seq "$n" '.sequence = $seq' <<<"$tmp" > "$tmpf" || { rm -f "$tmpf"; echo "review receipt: not written ($file is unwritable)" >&2; return 1; }
-    ln -T "$tmpf" "$cand" 2>/dev/null && break
-    if [[ -L "$cand" || ( -e "$cand" && ! -f "$cand" ) || $n -ge 999 ]]; then
-      rm -f "$tmpf"
-      echo "review receipt: not written ($cand is not a regular file or unwritable)" >&2
-      return 1
+    # Find a free numbered path first (cheap existence checks only), so the
+    # predecessor scan below runs once per attempt and not once per occupied
+    # slot. A symlink (dangling included) or non-regular entry is refused.
+    while [[ -e "$cand" || -L "$cand" ]]; do
+      if [[ -L "$cand" || ! -f "$cand" || $n -ge 999 ]]; then
+        rm -f "$tmpf"
+        echo "review receipt: not written ($cand is not a regular file or unwritable)" >&2
+        return 1
+      fi
+      n=$((n + 1)); cand="${file%.json}.$n.json"
+    done
+    local prev_name="" prev_file="" prev_verdict="" k pf
+    if (( n > 1 )); then
+      for (( k = n - 1; k >= 1; k-- )); do
+        if (( k == 1 )); then pf="$file"; else pf="${file%.json}.$k.json"; fi
+        [[ -f "$pf" && ! -L "$pf" ]] || continue
+        if [[ "$(jq -r '[.base_sha, .diff_sha256] | join(" ")' "$pf" 2>/dev/null)" == "$RR_BASE $RR_DIFF_SHA256" ]]; then
+          prev_file="$pf"; break
+        fi
+      done
+      if [[ -n "$prev_file" ]]; then
+        prev_name="${prev_file##*/}"
+        prev_verdict="$(jq -r '.verdict // empty' "$prev_file" 2>/dev/null)" || prev_verdict=""
+      fi
     fi
-    [[ -e "$cand" ]] || { rm -f "$tmpf"; echo "review receipt: not written ($cand is unwritable)" >&2; return 1; }
-    n=$((n + 1)); cand="${file%.json}.$n.json"
+    jq --argjson seq "$n" --arg prev "$prev_name" --arg pv "$prev_verdict" \
+      '.sequence = $seq | if $prev != "" then .supersedes = $prev | .supersedes_verdict = (if $pv == "" then null else $pv end) else . end' \
+      <<<"$tmp" > "$tmpf" || { rm -f "$tmpf"; echo "review receipt: not written ($file is unwritable)" >&2; return 1; }
+    # Exclusive create. If another writer took the slot in the meantime, loop:
+    # the free-slot search moves past it and the chain is rescanned.
+    ln -T "$tmpf" "$cand" 2>/dev/null && break
+    if [[ ! -e "$cand" && ! -L "$cand" ]]; then
+      rm -f "$tmpf"; echo "review receipt: not written ($cand is unwritable)" >&2; return 1
+    fi
   done
   file="$cand"
   rm -f "$tmpf"
   echo "review receipt: $file" >&2
+  # An UNKNOWN verdict is on record but is not a usable ruling: return 3 so the
+  # dispatch still exits non-zero and the review is run again (mk-0qjva).
+  [[ "$verdict" != UNKNOWN ]] || return 3
   return 0
 }

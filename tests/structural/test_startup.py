@@ -15,6 +15,33 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/startup.py'
 
 
+ALLOWED_ENV = ('PATH', 'LANG', 'LC_ALL')
+
+
+def scrub_environ(environ, home):
+    """The only environment a test or its subprocesses may see.
+
+    Built from an allow-list so an inherited credential can neither reach a
+    subprocess nor be printed in a failure message (pytest shows env dicts).
+    Tests add anything else they need explicitly.
+    """
+    kept = {k: environ[k] for k in ALLOWED_ENV if k in environ}
+    kept.setdefault('LANG', 'C.UTF-8'); kept.setdefault('LC_ALL', 'C.UTF-8')
+    kept['HOME'] = str(home); kept['TMPDIR'] = str(home)
+    return kept
+
+
+@pytest.fixture(autouse=True)
+def _minimal_environment(tmp_path, monkeypatch):
+    home = tmp_path / 'envhome'; home.mkdir()
+    wanted = scrub_environ(os.environ, home)
+    for key in list(os.environ):
+        if key not in wanted:
+            monkeypatch.delenv(key)
+    for key, value in wanted.items():
+        monkeypatch.setenv(key, value)
+
+
 @pytest.fixture(autouse=True)
 def _no_ambient_git_above_tmp(tmp_path):
     # startup.py refuses state dirs under ANY git worktree (real behavior, kept).
@@ -456,3 +483,252 @@ def test_doctor_requires_current_host_and_source_identity(tmp_path):
     ledger.write_text(json.dumps(row)+'\n')
     result=json.loads(invoke(project,state,'doctor').stdout)
     assert result['ledger_status']=='unknown'
+
+
+# --- stale instruction-contract drift (mk-4xzwm.2) ---------------------------
+
+def _rendered_block():
+    return subprocess.run([sys.executable, str(ROOT/'scripts/sync-agent-instructions.py'), '--source', str(ROOT),
+                           '--host', 'claude', '--portable-policy', '--render'],
+                          capture_output=True, text=True, check=True).stdout
+
+
+def _stale_file(tmp_path, *, version='0.0.1', policy=None):
+    """A host file whose managed block was written by an older installation."""
+    block = _rendered_block()
+    installed = json.loads((ROOT/'.claude-plugin/plugin.json').read_text())['version']
+    stale = block.replace('package: '+installed+';', 'package: '+version+';')
+    assert stale != block or version == installed
+    if policy:
+        stale = stale.replace('policy SHA256: ', 'policy SHA256: '+policy+'#', 1)
+    path = tmp_path/'CLAUDE.md'
+    path.write_text('# user text before\n\n'+stale+'\n# user text after\n')
+    return path, installed
+
+
+def test_stale_block_names_drift_and_narrow_remedy(tmp_path):
+    instruction, installed = _stale_file(tmp_path)
+    out = invoke(tmp_path, tmp_path/'state', extra=('--instruction-file', str(instruction)))
+    context = json.loads(out.stdout)['hookSpecificOutput']['additionalContext']
+    assert 'Instruction contract: stale (drift: version 0.0.1 -> '+installed in context
+    assert 'refresh --sync-instruction-block' in context
+    assert 'no installer' in context
+    assert 'Sylveste operating contract' not in context, 'a stale block must be reconciled, not duplicated'
+    assert len(out.stdout.encode()) <= 10000
+
+
+def test_contract_check_reports_drift_json_and_exit_codes(tmp_path):
+    state = tmp_path/'state'
+    stale, installed = _stale_file(tmp_path)
+    result = invoke(tmp_path, state, 'contract-check', extra=('--instruction-file', str(stale)))
+    assert result.returncode == 1, result.stdout + result.stderr
+    report = json.loads(result.stdout)
+    assert report['status'] == 'stale' and report['drift'] == ['version']
+    assert report['file_version'] == '0.0.1' and report['installed_version'] == installed
+    assert 'refresh --sync-instruction-block' in report['refresh_command']
+    assert not state.exists(), 'contract-check is read-only'
+    current = tmp_path/'current.md'
+    current.write_text(_rendered_block())
+    result = invoke(tmp_path, state, 'contract-check', extra=('--instruction-file', str(current)))
+    assert result.returncode == 0 and json.loads(result.stdout)['status'] == 'current'
+    absent = invoke(tmp_path, state, 'contract-check', extra=('--instruction-file', str(tmp_path/'none.md')))
+    assert absent.returncode == 2 and json.loads(absent.stdout)['status'] == 'absent'
+
+
+def test_contract_check_distinguishes_policy_hash_and_content_drift(tmp_path):
+    block = _rendered_block()
+    report = json.loads(invoke(tmp_path, tmp_path/'s', 'contract-check', extra=('--instruction-file', str(tmp_path/'x'))).stdout)
+    policy_file = tmp_path/'policy.md'
+    policy_file.write_text(block.replace(report['policy_hash'], '0'*64))
+    result = invoke(tmp_path, tmp_path/'s', 'contract-check', extra=('--instruction-file', str(policy_file)))
+    assert result.returncode == 1 and json.loads(result.stdout)['drift'] == ['policy-hash']
+    content_file = tmp_path/'content.md'
+    content_file.write_text(block.replace('Resolve the actual role', 'Resolve the real role'))
+    assert block != content_file.read_text(), 'test edit must change the block'
+    result = invoke(tmp_path, tmp_path/'s', 'contract-check', extra=('--instruction-file', str(content_file)))
+    assert result.returncode == 1 and json.loads(result.stdout)['drift'] == ['block-content']
+
+
+def test_doctor_flags_stale_instruction_block(tmp_path):
+    project = tmp_path/'project'; project.mkdir()
+    stale, _ = _stale_file(tmp_path)
+    result = invoke(project, tmp_path/'state', 'doctor', extra=('--instruction-file', str(stale)))
+    data = json.loads(result.stdout)
+    assert data['instruction_contract']['status'] == 'stale'
+    assert data['instruction_contract']['drift'] == ['version']
+    assert result.returncode == 1
+
+
+def test_sync_refreshes_only_the_managed_block(tmp_path):
+    project = tmp_path/'project'; project.mkdir(); state = tmp_path/'state'
+    instruction, _ = _stale_file(tmp_path)
+    settings = tmp_path/'settings.json'; settings.write_text('{}')
+    result = invoke(project, state, 'refresh', extra=('--instruction-file', str(instruction), '--sync-instruction-block'))
+    assert result.returncode == 0, result.stdout + result.stderr
+    data = json.loads(result.stdout)
+    assert data['instruction_sync']['status'] == 'current' and data['instruction_sync']['changed'] is True
+    text = instruction.read_text()
+    assert text.startswith('# user text before\n') and text.rstrip().endswith('# user text after')
+    assert text.count('<!-- BEGIN CLAVAIN CODEX TOOL MAP -->') == 1
+    assert invoke(project, state, 'contract-check', extra=('--instruction-file', str(instruction))).returncode == 0
+    assert settings.read_text() == '{}'
+    # The snapshot identity records the repaired file, so startup reads it as fresh.
+    out = invoke(project, state, extra=('--instruction-file', str(instruction)))
+    assert 'Startup snapshot: fresh. Instruction contract: current' in json.loads(out.stdout)['hookSpecificOutput']['additionalContext']
+
+
+def test_plain_refresh_never_edits_instruction_file(tmp_path):
+    project = tmp_path/'project'; project.mkdir()
+    instruction, _ = _stale_file(tmp_path)
+    before = instruction.read_bytes()
+    assert invoke(project, tmp_path/'state', 'refresh', extra=('--instruction-file', str(instruction))).returncode == 0
+    assert instruction.read_bytes() == before
+
+
+def test_sync_flag_requires_refresh(tmp_path):
+    result = invoke(tmp_path, tmp_path/'state', 'doctor', extra=('--sync-instruction-block',))
+    assert result.returncode != 0 and 'requires refresh' in result.stderr
+
+
+# --- marker validation and byte-exact reads (mk-4xzwm.2, round 2) ------------
+
+def _check(tmp_path, path):
+    return invoke(tmp_path, tmp_path/'state', 'contract-check', extra=('--instruction-file', str(path)))
+
+
+def _stale_and_current(tmp_path):
+    stale_path, _ = _stale_file(tmp_path)
+    stale = stale_path.read_text().split('\n# user text after\n')[0].split('# user text before\n\n')[1]
+    return stale, _rendered_block().rstrip('\n')
+
+
+@pytest.mark.parametrize('order', ['stale-then-current', 'current-then-stale', 'current-twice'])
+def test_duplicate_managed_blocks_are_never_current(tmp_path, order):
+    stale, current = _stale_and_current(tmp_path)
+    first, second = {'stale-then-current': (stale, current), 'current-then-stale': (current, stale),
+                     'current-twice': (current, current)}[order]
+    path = tmp_path/'dup.md'
+    path.write_text('# before\n\n'+first+'\n\nmiddle\n\n'+second+'\n# after\n')
+    result = _check(tmp_path, path)
+    assert result.returncode == 3, result.stdout + result.stderr
+    report = json.loads(result.stdout)
+    assert report['status'] == 'duplicate' and report['drift'] == ['duplicate-markers']
+    context = json.loads(invoke(tmp_path, tmp_path/'s2', extra=('--instruction-file', str(path))).stdout)['hookSpecificOutput']['additionalContext']
+    assert 'Instruction contract: current' not in context and 'duplicate' in context
+
+
+@pytest.mark.parametrize('mutation', ['no-end', 'no-begin', 'reversed'])
+def test_malformed_markers_are_never_current(tmp_path, mutation):
+    _, current = _stale_and_current(tmp_path)
+    begin, end = '<!-- BEGIN CLAVAIN CODEX TOOL MAP -->', '<!-- END CLAVAIN CODEX TOOL MAP -->'
+    text = {'no-end': current.replace(end, ''), 'no-begin': current.replace(begin, ''),
+            'reversed': end+'\nbody\n'+begin}[mutation]
+    path = tmp_path/'bad.md'
+    path.write_text('# before\n'+text+'\n# after\n')
+    result = _check(tmp_path, path)
+    assert result.returncode == 4, result.stdout + result.stderr
+    assert json.loads(result.stdout)['status'] == 'malformed'
+
+
+def test_sync_refuses_duplicate_and_malformed_and_leaves_bytes(tmp_path):
+    project = tmp_path/'project'; project.mkdir()
+    stale, current = _stale_and_current(tmp_path)
+    for name, text in (('dup.md', stale+'\n'+current+'\n'), ('mal.md', current.replace('<!-- END CLAVAIN CODEX TOOL MAP -->', '')+'\n')):
+        path = tmp_path/name
+        path.write_text(text)
+        before = path.read_bytes()
+        result = invoke(project, tmp_path/'state', 'refresh', extra=('--instruction-file', str(path), '--sync-instruction-block'))
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert json.loads(result.stdout)['instruction_sync']['status'] in ('duplicate', 'malformed')
+        assert path.read_bytes() == before
+
+
+def test_stale_block_with_non_utf8_bytes_outside_is_stale_not_absent(tmp_path):
+    stale_path, _ = _stale_file(tmp_path)
+    data = stale_path.read_bytes()
+    path = tmp_path/'bytes.md'
+    path.write_bytes(b'# caf\xe9 \xff\xfe user text\n\n' + data + b'\nafter \x80\x81\n')
+    result = _check(tmp_path, path)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert json.loads(result.stdout)['status'] == 'stale'
+
+
+def test_sync_preserves_every_byte_outside_the_block(tmp_path):
+    project = tmp_path/'project'; project.mkdir()
+    stale_path, _ = _stale_file(tmp_path)
+    begin, end = b'<!-- BEGIN CLAVAIN CODEX TOOL MAP -->', b'<!-- END CLAVAIN CODEX TOOL MAP -->'
+    before_text = b'# caf\xe9 \xff\xfe user text\r\n\r\n'
+    after_text = b'\nafter \x80\x81\r\n\t trailing  \n'
+    data = stale_path.read_bytes()
+    block = data[data.index(begin):data.index(end)+len(end)]
+    path = tmp_path/'bytes.md'
+    path.write_bytes(before_text + block + after_text)
+    result = invoke(project, tmp_path/'state', 'refresh', extra=('--instruction-file', str(path), '--sync-instruction-block'))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(result.stdout)['instruction_sync']['changed'] is True
+    expected_block = _rendered_block().rstrip('\n').encode()
+    assert path.read_bytes() == before_text + expected_block + after_text, 'surrounding bytes must be identical'
+    assert _check(tmp_path, path).returncode == 0
+
+
+def test_unreadable_instruction_file_is_its_own_status_not_absent(tmp_path):
+    project = tmp_path/'project'; project.mkdir()
+    directory = tmp_path/'is-a-dir'; directory.mkdir()
+    oversized = tmp_path/'huge.md'
+    with oversized.open('wb') as stream:
+        stream.truncate(17 * 1024 * 1024)
+    for path in (directory, oversized):
+        result = _check(tmp_path, path)
+        assert result.returncode == 5, result.stdout + result.stderr
+        report = json.loads(result.stdout)
+        assert report['status'] == 'unreadable' and report['error']
+        synced = invoke(project, tmp_path/'state', 'refresh', extra=('--instruction-file', str(path), '--sync-instruction-block'))
+        assert synced.returncode == 1 and json.loads(synced.stdout)['instruction_sync']['status'] == 'unreadable'
+    doctor = invoke(project, tmp_path/'state', 'doctor', extra=('--instruction-file', str(directory)))
+    assert json.loads(doctor.stdout)['instruction_contract']['status'] == 'unreadable' and doctor.returncode == 1
+
+
+def test_current_block_with_non_utf8_bytes_around_stays_current(tmp_path):
+    path = tmp_path/'ok.md'
+    path.write_bytes(b'\xff\xfe leading\n\n' + _rendered_block().rstrip('\n').encode() + b'\n\x80 trailing\n')
+    result = _check(tmp_path, path)
+    assert result.returncode == 0 and json.loads(result.stdout)['status'] == 'current'
+
+
+def test_scrub_environ_drops_inherited_secrets(tmp_path):
+    parent = {'PATH': '/usr/bin', 'FAKE_SECRET_TOKEN': 'sentinel-do-not-leak', 'HOME': '/elsewhere', 'AWS_X': 'y'}
+    got = scrub_environ(parent, tmp_path)
+    assert 'FAKE_SECRET_TOKEN' not in got and 'sentinel-do-not-leak' not in repr(got)
+    assert set(got) == {'PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR'} and got['HOME'] == str(tmp_path)
+
+
+SUBPROCESS_ENV_NAMES = {'PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR', 'PYTEST_CURRENT_TEST', 'LC_CTYPE', 'PYTHONUTF8', 'PYTHONCOERCECLOCALE'}
+# Terminal geometry that a hosted runner's interpreter adds to its own child
+# environment (seen on GitHub runners; never inherited from the parent). They
+# are accepted by name and only while their value is all digits, so no secret
+# can travel under either name.
+TERMINAL_GEOMETRY_NAMES = {'COLUMNS', 'LINES'}
+
+
+def unlisted_env_names(seen):
+    """Names in `seen` ({name: value_is_digits}) that are neither allow-listed nor harmless geometry."""
+    return sorted(name for name, digits in seen.items()
+                  if name not in SUBPROCESS_ENV_NAMES and not (name in TERMINAL_GEOMETRY_NAMES and digits))
+
+
+def test_unlisted_env_names_accepts_only_the_named_runner_variables():
+    assert unlisted_env_names({'PATH': False, 'COLUMNS': True, 'LINES': True}) == []  # simulated runner env
+    assert unlisted_env_names({'PATH': False, 'FAKE_SECRET_TOKEN': False}) == ['FAKE_SECRET_TOKEN']
+    assert unlisted_env_names({'COLUMNS': False}) == ['COLUMNS']  # a non-numeric value is not geometry
+    assert unlisted_env_names({'COLUMNS_X': True, 'LINES': True}) == ['COLUMNS_X']  # exact names, no substring match
+
+
+def test_tests_and_their_subprocesses_run_with_the_minimal_environment(tmp_path, monkeypatch):
+    # The fixture ran before this body, so anything the parent exported is already gone.
+    assert set(os.environ) <= {'PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR', 'PYTEST_CURRENT_TEST'}  # the last is pytest's own
+    assert 'FAKE_SECRET_TOKEN' not in os.environ
+    # The child reports names and whether each value is all digits, never values.
+    seen = json.loads(subprocess.run(
+        [sys.executable, '-c', 'import os,json; print(json.dumps({k: v.isdigit() for k, v in os.environ.items()}))'],
+        capture_output=True, text=True, check=True).stdout)
+    assert unlisted_env_names(seen) == []

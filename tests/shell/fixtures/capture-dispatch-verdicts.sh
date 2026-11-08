@@ -10,7 +10,8 @@
 set -euo pipefail
 D=${1:?dispatch.sh path}
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-awk '/^_extract_verdict\(\)[[:space:]]*\{/ {e=1} e {print} e && /^}[[:space:]]*$/ {e=0}' "$D" > "$T/fn.sh"
+printf 'source %q\n' "$(dirname "$D")/lib-verdict.sh" > "$T/fn.sh"
+awk '/^_extract_verdict\(\)[[:space:]]*\{/ {e=1} e {print} e && /^}[[:space:]]*$/ {e=0}' "$D" >> "$T/fn.sh"
 write_verdict_block_needed=$(grep -c '_write_verdict_block' "$T/fn.sh" || true)
 [ "$write_verdict_block_needed" -eq 0 ] || awk '/^_write_verdict_block\(\)[[:space:]]*\{/ {e=1} e {print} e && /^}[[:space:]]*$/ {e=0}' "$D" >> "$T/fn.sh"
 # shellcheck disable=SC1091

@@ -5,41 +5,25 @@ description: Delegate well-scoped implementation, exploration, search, test-gene
 
 # Codex Delegate
 
-Take well-scoped tasks, dispatch them to Codex CLI via dispatch.sh, and return results.
+Take well-scoped tasks, dispatch them through dispatch.sh under a governed role, and return results.
+
+**The role decides the backend.** `dispatch.sh` resolves the role through `config/routing.yaml` and runs whatever seat the policy names. That is the Codex CLI backend only when routing resolves the role to it; otherwise the resolved seat (for example a Claude model) runs the task. Do not choose a backend, model or tier yourself, and do not call `codex` directly. Nothing here changes routing, adds a spend path or adds a model choice.
 
 ## Enrolled measured work
 
-For an enrolled task, use the canonical checkout and an explicit role through
-the enrollment helper. This takes precedence over the cached dispatcher and
-tier examples below. Do not choose the first cached dispatcher or use `--tier`
-for enrolled work.
+For a task with an authoritative enrollment, follow the "Enrolled measured work"
+section of `clavain:interserve-engine`. It takes precedence over the dispatcher
+discovery and role examples below, and it is the one place the enrollment
+invocation, role choice and evidence rules are kept. Do not choose the first
+cached dispatcher or use `--tier` for enrolled work.
 
-```bash
-CLAVAIN_ROOT="${CLAVAIN_SOURCE_DIR:-$HOME/projects/Sylveste/os/Clavain}"
-python3 "$CLAVAIN_ROOT/scripts/task-delivery.py" \
-  --db "${CLAVAIN_TASK_INTERCORE_DB:?set the authoritative Intercore database}" \
-  dispatch --enrollment-id "${CLAVAIN_TASK_ENROLLMENT_ID:?enroll before dispatch}" \
-  --role deep-execution -- --prompt-file "$TASK_FILE" -C "$PROJECT_DIR" -o "$OUTPUT"
-```
+## Role Selection
 
-Choose `scout` for exploration, `routine-execution` for bounded routine work,
-`deep-execution` for demanding implementation, and `validation` for independent
-assessment. Validation supplies `--producer-identity`; the canonical resolver
-records the effective validator relationship. The helper retains the enrollment
-hash and dispatch identity; record actual provider session/thread/turn bindings
-and evidence afterward, leaving unavailable identities explicitly incomplete.
-Count failed attempts, validation, repairs and handoff preparation. Never retry
-policy blocks or indeterminate worker outcomes automatically. Execution results
-do not grant independent acceptance; the helper records acceptance separately
-through Intercore decisions. Shared coordinator usage belongs once to
-`cohort_shared`; human active minutes require an explicit estimate.
-
-## Tier Selection
-
-| Category | Tier | Sandbox |
+| Category | Role | Sandbox |
 |----------|------|---------|
-| exploration, doc-update | fast | read-only |
-| implementation, review, test-generation | deep | workspace-write |
+| exploration, doc-update | `scout` | read-only |
+| implementation, test-generation | `deep-execution` (`routine-execution` for bounded routine edits) | workspace-write |
+| review | `validation` (add `--producer-identity` from the author's receipt) | read-only |
 
 ## Workflow
 
@@ -59,13 +43,14 @@ Frame the task as one OODARC **Act** leg (the dispatched agent will also receive
 
 **3. Dispatch**
 ```bash
-CLAVAIN_DISPATCH_PROFILE=interserve bash "$DISPATCH" \
+CLAVAIN_DECISION_CONTEXT="$DECISION_FILE" bash "$DISPATCH" \
+  --role {scout|routine-execution|deep-execution|validation} \
   --prompt-file "$TASK_FILE" \
   -C "{project_dir}" \
   -o "/tmp/codex-result-$(date +%s).md" \
-  -s {read-only|workspace-write} \
-  --tier {fast|deep}
+  -s {read-only|workspace-write}
 ```
+`$DECISION_FILE` is a JSON decision context (see `docs/canon/reasoning-routing.md`); settled routine work is `{"reasons": [], "rationale": "...", "investigation_active": false}`. Set `CLAVAIN_ROUTING_POLICY` as that canon describes. `--tier` cannot satisfy role resolution; do not use it.
 Use `timeout: 600000`.
 
 **4. Read results**
@@ -82,17 +67,17 @@ if command -v sqlite3 &>/dev/null && [ -f "$_db" ]; then
   _seq=$(sqlite3 "$_db" "SELECT COALESCE(MAX(seq),0)+1 FROM evidence WHERE session_id='$_session';" 2>/dev/null || echo "1")
   # oodarc_phase tags which leg this evidence is about, so cross-session
   # learning can attribute by leg. The dispatch performed the Act leg.
-  _ctx="{\"category\":\"$CATEGORY\",\"tier\":\"$TIER\",\"verdict\":\"$VERDICT\",\"retry_needed\":$RETRY,\"duration_s\":$DURATION,\"oodarc_phase\":\"act\"}"
+  _ctx="{\"category\":\"$CATEGORY\",\"role\":\"$ROLE\",\"verdict\":\"$VERDICT\",\"retry_needed\":$RETRY,\"duration_s\":$DURATION,\"oodarc_phase\":\"act\"}"
   sqlite3 "$_db" "INSERT INTO evidence (ts,session_id,seq,source,event,override_reason,context,project) VALUES ('$_ts','$_session',$_seq,'codex-delegate','delegation_outcome','','$_ctx','$_project');" 2>/dev/null || true
 fi
 ```
 Skip silently if DB missing. This writes to the **existing** interspect `evidence` table (no new store); `oodarc_phase` is just an added field in the context JSON.
 
-**6. Return** tier used, verdict, key output, whether retry was needed.
+**6. Return** role used, verdict, key output, whether retry was needed.
 
 ## Memory
 
-Track per-project: which patterns succeed/fail, scope issues, preferred tier/sandbox, build/test commands.
+Track per-project: which patterns succeed/fail, scope issues, preferred role/sandbox, build/test commands.
 
 ## Rules
 
