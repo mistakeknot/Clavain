@@ -259,7 +259,7 @@ def test_wrapper_relays_only_the_system_message(env, tmp_path):
 def test_wrapper_gives_up_on_a_hung_python(env, tmp_path):
     start = time.time()
     proc = wrapper('stop', env, EDIT_PAYLOAD, path=fake_python(tmp_path, 'sleep 30', env['PATH']))
-    assert proc.returncode == 0 and proc.stdout == '' and time.time() - start < 10
+    assert proc.returncode == 0 and proc.stdout == '' and time.time() - start < 6
 
 
 def test_wrapper_skips_python_for_bash_commands_that_cannot_verify(env, tmp_path):
@@ -296,6 +296,7 @@ def test_existing_loose_files_are_tightened(env, tmp_path):
     (d / 's1.sum.json').write_text(''); (d / 's1.sum.json').chmod(0o666)
     hook('post', env, 'Read', file_path=str(tmp_path / 'a.py'))
     assert all(stat.S_IMODE(f.stat().st_mode) == 0o600 for f in d.iterdir())
+    assert stat.S_IMODE(d.stat().st_mode) == 0o700
 
 
 def test_ledger_holds_no_raw_paths_or_command_text(env, tmp_path):
@@ -468,12 +469,6 @@ def test_markdown_edits_never_trigger_the_pre_edit_warning(env, tmp_path):
     assert 'read-before-edit' in warning(hook('pre', env, 'Edit', file_path=str(code)))
 
 
-def test_lib_gates_and_dispatch_calls_carry_a_deadline():
-    for rel in ('hooks/lib-gates.sh', 'scripts/dispatch.sh'):
-        text = (ROOT / rel).read_text()
-        assert 'timeout 5' in text and 'phase-evidence.py' in text, rel
-
-
 def test_real_dispatch_wrapper_records_and_survives_a_bad_python(env, tmp_path):
     """Drive scripts/dispatch.sh itself, not the helper: it must record the dispatch and keep going."""
     bindir = tmp_path / 'bin'; bindir.mkdir()
@@ -506,3 +501,218 @@ def test_subprocess_env_carries_no_inherited_secret(tmp_path, monkeypatch):
     # the real wrapper and helper run under the same env, so neither can echo it
     wrapped = wrapper('stop', env, EDIT_PAYLOAD)
     assert 'sentinel-do-not-leak' not in wrapped.stdout + wrapped.stderr
+
+
+# --- round 3: deadline without `timeout`, relay filter, tab prefilter, non-verifying calls, directory mode ---
+
+@pytest.fixture(scope='session')
+def no_timeout_path(tmp_path_factory):
+    """A PATH holding every command the real PATH has except `timeout`."""
+    d = tmp_path_factory.mktemp('nobin')
+    for part in os.environ.get('PATH', '/usr/local/bin:/usr/bin:/bin').split(':'):
+        if not part or not os.path.isdir(part):
+            continue
+        for name in os.listdir(part):
+            src = os.path.join(part, name)
+            if name != 'timeout' and not (d / name).exists() and os.path.isfile(src) and os.access(src, os.X_OK):
+                os.symlink(src, d / name)
+    assert shutil.which('timeout', path=str(d)) is None and shutil.which('python3', path=str(d))
+    return str(d)
+
+
+def test_hook_deadline_holds_without_the_timeout_command(env, tmp_path, no_timeout_path):
+    start = time.time()
+    proc = wrapper('stop', env, EDIT_PAYLOAD, path=fake_python(tmp_path, 'sleep 60', no_timeout_path))
+    assert proc.returncode == 0 and proc.stdout == '' and proc.stderr == ''
+    assert time.time() - start < 5  # python is killed after 2 s; the host allows 5
+
+
+def test_hook_still_records_and_warns_without_the_timeout_command(env, tmp_path, no_timeout_path):
+    wrapper('post', env, {'session_id': 's1', 'tool_name': 'Edit', 'tool_input': {'file_path': str(tmp_path / 'a.py')}},
+            path=no_timeout_path)
+    proc = wrapper('stop', env, {'session_id': 's1', 'tool_name': ''}, path=no_timeout_path)
+    assert proc.returncode == 0 and 'verify-after-edit' in warning(proc)
+    assert [r['kind'] for r in ledger(env)][:1] == ['edit']
+
+
+def test_hook_gives_up_on_an_incomplete_stdin_stream(env):
+    """A host that never closes stdin must not hold the hook past its deadline."""
+    start = time.time()
+    proc = subprocess.Popen(['/bin/bash', str(HOOK), 'post'], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, env=env, text=True)
+    try:
+        assert proc.stdin is not None
+        proc.stdin.write('{"session_id": "s1", "tool_na'); proc.stdin.flush()  # never completed, never closed
+        rc = proc.wait(timeout=8)
+        out = proc.stdout.read() if proc.stdout else ''
+    finally:
+        proc.kill()
+    assert rc == 0 and out == '' and time.time() - start < 5
+    assert ledger(env) == []  # the cut-off payload is invalid JSON, so nothing is recorded
+
+
+def test_hook_gives_up_when_stdin_stays_silent(env):
+    start = time.time()
+    proc = subprocess.Popen(['/bin/bash', str(HOOK), 'stop'], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, env=env, text=True)
+    try:
+        rc = proc.wait(timeout=8)
+    finally:
+        proc.kill()
+    assert rc == 0 and time.time() - start < 5
+
+
+@pytest.mark.parametrize('out', [
+    '{"systemMessage": "x", "hookSpecificOutput": {"permissionDecision": "deny"}}',
+    '{"hookSpecificOutput": {"permissionDecision": "deny"}, "systemMessage": "x"}',
+    '{"systemMessage": "x", "continue": false}',
+    '{"systemMessage": "x", "decision": "block"}',
+    '{"systemMessage": "x", "suppressOutput": true}',
+    '{"systemMessage": "x"} trailing',
+    '{"systemMessage": "one"}\n{"systemMessage": "two"}',
+    '{"systemMessage": "bad \\q}',
+    '{"systemMessage": 1}',
+    '[{"systemMessage": "x"}]',
+])
+def test_wrapper_relays_nothing_but_a_pure_system_message(env, tmp_path, out):
+    body = "cat <<'EOF'\n" + out + "\nEOF"
+    proc = wrapper('stop', env, EDIT_PAYLOAD, path=fake_python(tmp_path, body, env['PATH']))
+    assert proc.returncode == 0 and proc.stdout == ''
+
+
+def test_wrapper_relays_a_pure_system_message_verbatim(env, tmp_path):
+    line = r'{"systemMessage": "phase evidence missing: \"quoted\" back\\slash\nline two"}'
+    proc = wrapper('stop', env, EDIT_PAYLOAD, path=fake_python(tmp_path, "cat <<'EOF'\n" + line + "\nEOF", env['PATH']))
+    assert proc.returncode == 0 and proc.stdout == line + '\n'
+
+
+@pytest.mark.parametrize('cmd', ['go\ttest ./...', 'git\tdiff\t--check', 'bash\t-n hooks/x.sh', 'cd x &&\tmake\ttest',
+                                 'cd tests\npytest -q', 'cd x\n\tgo\tvet ./...'])
+def test_tab_and_newline_separated_verifiers_reach_python_and_count(env, tmp_path, cmd):
+    edit = {'session_id': 's1', 'tool_name': 'Edit', 'tool_input': {'file_path': str(tmp_path / 'a.py')}}
+    wrapper('post', env, edit)
+    wrapper('post', env, {'session_id': 's1', 'tool_name': 'Bash', 'tool_input': {'command': cmd}})
+    assert 'verify-after-edit' not in warning(wrapper('stop', env, {'session_id': 's1', 'tool_name': ''}))
+    assert 'verify' in [r['kind'] for r in ledger(env)]
+
+
+@pytest.mark.parametrize('cmd', ['ls -la', 'ls\t-la', 'cat\tREADME.md', 'echo hello\nls'])
+def test_prefilter_still_skips_python_for_plainly_irrelevant_commands(env, tmp_path, cmd):
+    path = fake_python(tmp_path, 'touch "$0.ran"; exit 1', env['PATH'])
+    wrapper('post', env, {'session_id': 's1', 'tool_name': 'Bash', 'tool_input': {'command': cmd}}, path=path)
+    assert not (tmp_path / 'badpy/python3.ran').exists()
+
+
+@pytest.mark.parametrize('cmd', [
+    'pytest --version', 'pytest -V', 'pytest --help', 'pytest --collect-only', 'pytest --fixtures',
+    'nice pytest -h', 'ruff format src', 'ruff --version', 'ruff version', 'ruff help', 'ruff clean',
+    'mypy --version', 'tsc --init', 'tsc -v', 'shellcheck --version', 'eslint --version', 'eslint --init',
+    'bats --version', 'golangci-lint version', 'golangci-lint --help',
+])
+def test_verifier_invocations_that_verify_nothing_do_not_count(env, tmp_path, cmd):
+    hook('post', env, 'Edit', file_path=str(tmp_path / 'a.py'))
+    hook('post', env, 'Bash', command=cmd)
+    assert 'verify-after-edit' in warning(hook('stop', env, ''))
+    assert 'verify' not in {r['kind'] for r in ledger(env)}
+
+
+@pytest.mark.parametrize('cmd', [
+    'pytest -q', 'pytest -v tests', 'ruff check .', 'ruff check --fix src', 'ruff .', 'ruff format --check src',
+    'ruff format --diff src', 'mypy src', 'tsc --noEmit', 'eslint src', 'bats -r tests', 'shellcheck a.sh',
+    'golangci-lint run',
+])
+def test_verifier_invocations_that_do_verify_still_count(env, tmp_path, cmd):
+    hook('post', env, 'Edit', file_path=str(tmp_path / 'a.py'))
+    hook('post', env, 'Bash', command=cmd)
+    assert 'verify-after-edit' not in warning(hook('stop', env, ''))
+
+
+@pytest.mark.parametrize('mode', [0o755, 0o777, 0o750, 0o700])
+def test_existing_override_directory_becomes_private(env, tmp_path, mode):
+    d = Path(env['CLAVAIN_PHASE_EVIDENCE_DIR']); d.mkdir(); d.chmod(mode)
+    hook('post', env, 'Read', file_path=str(tmp_path / 'a.py'))
+    assert stat.S_IMODE(d.stat().st_mode) == 0o700
+    assert list(d.iterdir()) and all(stat.S_IMODE(f.stat().st_mode) == 0o600 for f in d.iterdir())
+
+
+def test_existing_override_directory_becomes_private_for_dispatch_too(env, tmp_path):
+    d = Path(env['CLAVAIN_PHASE_EVIDENCE_DIR']); d.mkdir(); d.chmod(0o755)
+    env['DISPATCH_SESSION_ID'] = 'sd'
+    assert run(['dispatch', '--role', 'planning'], env).returncode == 0
+    assert stat.S_IMODE(d.stat().st_mode) == 0o700
+
+
+def dispatch_stub_path(tmp_path, base):
+    bindir = tmp_path / 'stubs'; bindir.mkdir(exist_ok=True)
+    (bindir / 'ic').write_text('#!/bin/sh\nexit 1\n'); (bindir / 'ic').chmod(0o755)
+    if not (bindir / 'jq').exists():
+        (bindir / 'jq').symlink_to(shutil.which('jq') or '/usr/bin/jq')
+    return f'{bindir}:{base}'
+
+
+def run_dispatch(env, tmp_path):
+    return subprocess.run(['bash', str(ROOT / 'scripts/dispatch.sh'), '--role', 'planning', '-C', str(tmp_path), 'hello'],
+                          input='', capture_output=True, text=True, env=env, timeout=60)
+
+
+def run_gate(env):
+    return subprocess.run(['bash', '-c', f'source "{ROOT}/hooks/lib-gates.sh"; check_phase_gate B-1 executing; echo rc=$?'],
+                          capture_output=True, text=True, env=env, timeout=60)
+
+
+def test_dispatch_deadline_holds_without_the_timeout_command(env, tmp_path, no_timeout_path):
+    env['DISPATCH_SESSION_ID'] = 'sdh'
+    env['PATH'] = fake_python(tmp_path, 'sleep 60', dispatch_stub_path(tmp_path, no_timeout_path))
+    start = time.time()
+    proc = run_dispatch(env, tmp_path)
+    assert 'could not resolve dispatch role' in proc.stderr  # dispatch.sh carried on to its own outcome
+    assert time.time() - start < 15  # python killed after 5 s
+
+
+def test_dispatch_warns_without_the_timeout_command(env, tmp_path, no_timeout_path):
+    env['DISPATCH_SESSION_ID'] = 'sdw2'
+    env['PATH'] = dispatch_stub_path(tmp_path, no_timeout_path)
+    proc = run_dispatch(env, tmp_path)
+    assert 'phase evidence missing (observe mode, not blocking): decision-context' in proc.stderr
+    assert [r['kind'] for r in ledger(env, 'sdw2')] == ['dispatch']
+
+
+def test_gate_deadline_holds_without_the_timeout_command(env, tmp_path, no_timeout_path):
+    env['HOME'] = str(tmp_path)  # no interphase companion, so the shim fallback is used
+    env['PATH'] = fake_python(tmp_path, 'sleep 60', no_timeout_path)
+    start = time.time()
+    proc = run_gate(env)
+    assert 'rc=0' in proc.stdout and proc.stderr == ''
+    assert time.time() - start < 15
+
+
+def test_gate_warns_without_the_timeout_command(env, tmp_path, no_timeout_path):
+    env['DISPATCH_SESSION_ID'] = 's9'; env['HOME'] = str(tmp_path); env['PATH'] = no_timeout_path
+    hook('post', env, 'Edit', session='s9', file_path=str(tmp_path / 'a.py'))
+    proc = run_gate(env)
+    assert 'rc=0' in proc.stdout and 'decision-context' in proc.stderr
+
+
+@pytest.mark.parametrize('body', ['echo "Traceback (most recent call last):" >&2; echo "boom: no module" >&2; exit 1',
+                                  'echo "  - fake detail without a header" >&2; exit 0',
+                                  'echo "garbage" >&2; exit 3'])
+def test_python_start_up_failures_stay_silent_in_dispatch_and_gate(env, tmp_path, body):
+    env['DISPATCH_SESSION_ID'] = 'sq'; env['HOME'] = str(tmp_path)
+    env['PATH'] = fake_python(tmp_path, body, dispatch_stub_path(tmp_path, env['PATH']))
+    proc = run_dispatch(env, tmp_path)
+    for word in ('Traceback', 'boom', 'garbage', 'fake detail'):
+        assert word not in proc.stderr
+    assert 'could not resolve dispatch role' in proc.stderr
+    gate = run_gate(env)
+    assert 'rc=0' in gate.stdout and gate.stderr == ''
+
+
+def test_dispatch_and_gate_relay_only_the_warning_block(env, tmp_path):
+    body = ('echo "noise before" >&2; echo "phase evidence missing (observe mode, not blocking): x" >&2; '
+            'echo "  - x: detail" >&2; echo "Traceback after" >&2; echo "  - orphan detail" >&2')
+    env['DISPATCH_SESSION_ID'] = 'sr'; env['HOME'] = str(tmp_path)
+    env['PATH'] = fake_python(tmp_path, body, dispatch_stub_path(tmp_path, env['PATH']))
+    for proc in (run_dispatch(env, tmp_path), run_gate(env)):
+        assert 'phase evidence missing (observe mode, not blocking): x' in proc.stderr and '  - x: detail' in proc.stderr
+        for word in ('noise before', 'Traceback after', 'orphan detail'):
+            assert word not in proc.stderr

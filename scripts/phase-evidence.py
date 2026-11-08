@@ -88,6 +88,24 @@ ASSIGN = re.compile(r'^[A-Za-z_]\w*=')
 OPTION_ARG = re.compile(r'^(-.*|\d+(\.\d+)?[smhd]?)$')
 BARE_VERIFIERS = {'pytest', 'bats', 'shellcheck', 'ruff', 'mypy', 'tsc', 'eslint', 'golangci-lint'}
 PACKAGE_RUNNERS = {'npm', 'pnpm', 'yarn', 'bun'}
+# Invocations of a bare verifier that do not verify anything: they print a version or
+# help text, list or collect, write config, or (ruff format) rewrite files without checking.
+NO_VERIFY_FLAGS = {
+    'pytest': {'--version', '-V', '--help', '-h', '--fixtures', '--fixtures-per-test',
+               '--markers', '--collect-only', '--co', '--setup-plan'},
+    'bats': {'--version', '-v', '--help', '-h'},
+    'shellcheck': {'--version', '-V', '--help'},
+    'ruff': {'--version', '-V', '--help', '-h'},
+    'mypy': {'--version', '-V', '--help', '-h'},
+    'tsc': {'--version', '-v', '--help', '-h', '--init', '--showConfig', '--all'},
+    'eslint': {'--version', '-v', '--help', '-h', '--init', '--print-config'},
+    'golangci-lint': {'--version', '--help', '-h'},
+}
+NO_VERIFY_SUBCOMMANDS = {
+    'ruff': {'version', 'help', 'clean', 'server', 'config', 'linter', 'rule', 'analyze',
+             'generate-shell-completion'},
+    'golangci-lint': {'version', 'help', 'linters', 'cache', 'config', 'completion'},
+}
 
 
 def mode():
@@ -148,10 +166,8 @@ def read_capped(path, limit, follow=False):
 
 def ensure_dir():
     d = state_dir()
-    created = not d.is_dir()
     os.makedirs(d, mode=0o700, exist_ok=True)
-    if created or not os.environ.get('CLAVAIN_PHASE_EVIDENCE_DIR'):
-        os.chmod(d, 0o700)
+    os.chmod(d, 0o700)  # also an existing directory, whatever its mode or the umask was
     return d
 
 
@@ -303,6 +319,18 @@ def is_code(path):
     return Path(path).suffix.lower() not in DOC_SUFFIXES
 
 
+def verifies(head, args):
+    """False when a bare verifier invocation only prints, lists or rewrites (see NO_VERIFY_*)."""
+    if NO_VERIFY_FLAGS.get(head, set()) & set(args):
+        return False
+    sub = next((a for a in args if not a.startswith('-')), '')
+    if sub in NO_VERIFY_SUBCOMMANDS.get(head, set()):
+        return False
+    if head == 'ruff' and sub == 'format':
+        return '--check' in args or '--diff' in args  # plain format rewrites files
+    return True
+
+
 def verification_kind(cmd):
     """Name the verifier a shell command runs as a command, or None. Text that merely
     mentions a verifier (echo pytest, grep -r ruff) does not count."""
@@ -341,7 +369,9 @@ def verification_kind(cmd):
         head, args = os.path.basename(rest[0]), rest[1:]
         first = args[0] if args else ''
         if head in BARE_VERIFIERS:
-            return head
+            if verifies(head, args):
+                return head
+            continue
         if head == 'go' and first in ('test', 'vet'):
             return f'go-{first}'
         if head == 'cargo' and first in ('test', 'check', 'clippy'):

@@ -881,6 +881,34 @@ _dispatch_ic_version() {
 # unrecognized setting, or any nonzero checker exit (drift, UNKNOWN seat
 # evidence under --strict, invalid input) refuses the dispatch. The checker's
 # JSON report goes to stderr so dispatch stdout is unchanged.
+# Observe mode (mk-4xzwm.1): run phase-evidence.py dispatch under a 5 s deadline
+# that needs no `timeout` command (background child plus a bash watchdog). Only
+# the intended warning lines from its stderr are relayed, so a python start-up
+# failure stays silent. Never changes the dispatch outcome.
+_dispatch_phase_evidence() {
+  local role="$1" tmp pid dog line show=0
+  tmp="$(mktemp "${TMPDIR:-/tmp}/clavain-phase-evidence.XXXXXX" 2>/dev/null)" || return 0
+  python3 "$DISPATCH_SCRIPT_DIR/phase-evidence.py" dispatch \
+    --role "$role" --context "${CLAVAIN_DECISION_CONTEXT:-}" </dev/null >/dev/null 2>"$tmp" &
+  pid=$!
+  ( read -rt 5 <> <(:); kill -9 "$pid" ) >/dev/null 2>&1 &
+  dog=$!
+  { wait "$pid"; } 2>/dev/null || true
+  kill "$dog" 2>/dev/null || true
+  { wait "$dog"; } 2>/dev/null || true
+  while IFS= read -r line; do
+    if [[ "$line" == 'phase evidence missing (observe mode, not blocking): '* ]]; then
+      show=1; printf '%s\n' "$line" >&2
+    elif [[ "$show" == 1 && "$line" == '  - '* ]]; then
+      printf '%s\n' "$line" >&2
+    else
+      show=0
+    fi
+  done <"$tmp"
+  rm -f "$tmp"
+  return 0
+}
+
 _dispatch_routing_precheck() {
   local role="$1" policy_source="$2"
   shift 2
@@ -943,10 +971,7 @@ _dispatch_role_profile() {
   # context is missing or unusable. Never changes the dispatch outcome.
   # Bounded by a deadline and silent on any failure (missing python3, timeout).
   if command -v python3 >/dev/null 2>&1; then
-    local _pe_guard=()
-    command -v timeout >/dev/null 2>&1 && _pe_guard=(timeout 5)
-    "${_pe_guard[@]+"${_pe_guard[@]}"}" python3 "$DISPATCH_SCRIPT_DIR/phase-evidence.py" dispatch \
-      --role "$role" --context "${CLAVAIN_DECISION_CONTEXT:-}" </dev/null >/dev/null || true
+    _dispatch_phase_evidence "$role"
   fi
   local policy_source="${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
   _dispatch_routing_precheck "$role" "$policy_source" || return 1
