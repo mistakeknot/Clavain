@@ -40,12 +40,17 @@ status=$?
 kill "$dog" 2>/dev/null
 wait "$dog" 2>/dev/null
 [[ "$status" == 0 ]] || exit 0  # crashed, killed by the watchdog or failed: relay nothing
-# Read at most 16 KiB, under a 1 s limit (bash cannot be held for long by a large
-# helper message). A message that fills the cap, a read that times out or fails,
-# is treated as no evidence.
-LC_ALL=C IFS= read -r -N 16385 -t 1 out <"$tmp" 2>/dev/null
-rc=$?
-(( rc == 0 || rc > 128 )) && exit 0  # filled the cap (too large) or timed out
+# Read at most 16 KiB through a byte-capped pipe under a 1 s limit (bash `read -N`
+# skips NUL bytes and `read -t` does nothing on a regular file). A message over the
+# cap, a read that times out or fails, or one holding NUL bytes is no evidence.
+LC_ALL=C
+cap=16384
+limit=(); command -v timeout >/dev/null 2>&1 && limit=(timeout 1)
+size="$(set -o pipefail; "${limit[@]}" head -c $((cap + 1)) "$tmp" 2>/dev/null | wc -c)" || exit 0
+(( size > 0 && size <= cap )) || exit 0  # empty, over the cap, or timed out (the pipe yields a short count)
+plain="$(set -o pipefail; "${limit[@]}" head -c $((cap + 1)) "$tmp" 2>/dev/null | tr -d '\0' | wc -c)" || exit 0
+(( plain == size )) || exit 0  # NUL bytes: not a pure message
+out="$("${limit[@]}" head -c $((cap + 1)) "$tmp" 2>/dev/null)" || exit 0
 out="${out%$'\n'}"
 
 # Relay exactly one key, systemMessage, holding a valid JSON string (JSON string

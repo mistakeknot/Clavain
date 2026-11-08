@@ -321,13 +321,14 @@ def is_code(path):
 
 HELP_FLAGS = {'-h', '-help', '--help', '--version', '-V'}
 PASSTHROUGH_HEADS = {'cargo'} | PACKAGE_RUNNERS  # their args after `--` go on to the tool they run
-BOOLEAN_SHORT = set('qvxls')  # pytest-style short flags that take no value (for combined groups such as -qh)
+PYTEST_VALUE_SHORT = set('kmrpcoWn')  # pytest short flags that take a value: the rest of the group is that value (-khelp)
 
 
-def info_only(args, flags, passthrough=False, combined=True):
+def info_only(args, flags, passthrough=False, combined=True, value_short=()):
     """True when `args` carry a help/list/collect flag from `flags`. Long flags match
     by exact name, by `=value`, and by abbreviation (`--coll` for `--collect-only`);
-    short ones inside a combined group (`-qh`) when only value-less flags precede them.
+    a short one anywhere inside a combined group (`-aV`, `-rh`) counts, whatever the other
+    letters are, except after a letter in `value_short` (it takes the rest as its value).
     Arguments after `--` are paths unless `passthrough` (the tool forwards them)."""
     for token in args:
         if token == '--':
@@ -345,14 +346,15 @@ def info_only(args, flags, passthrough=False, combined=True):
                 for ch in token[1:]:
                     if f'-{ch}' in flags:
                         return True
-                    if ch not in BOOLEAN_SHORT:
+                    if ch in value_short:
                         break
     return False
 
 
 def verifies(head, args):
     """False when a bare verifier invocation only prints, lists or rewrites (see NO_VERIFY_*)."""
-    if info_only(args, NO_VERIFY_FLAGS.get(head, set())):
+    if info_only(args, NO_VERIFY_FLAGS.get(head, set()),
+                 value_short=PYTEST_VALUE_SHORT if head == 'pytest' else ()):
         return False
     sub = next((a for a in args if not a.startswith('-')), '')
     if sub in NO_VERIFY_SUBCOMMANDS.get(head, set()):

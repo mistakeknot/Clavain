@@ -623,7 +623,7 @@ def test_verifier_invocations_that_verify_nothing_do_not_count(env, tmp_path, cm
 @pytest.mark.parametrize('cmd', [
     'pytest -q', 'pytest -v tests', 'ruff check .', 'ruff check --fix src', 'ruff .', 'ruff format --check src',
     'ruff format --diff src', 'mypy src', 'tsc --noEmit', 'eslint src', 'bats -r tests', 'shellcheck a.sh',
-    'golangci-lint run',
+    'golangci-lint run', 'bats -rt tests', 'shellcheck -ax a.sh',
 ])
 def test_verifier_invocations_that_do_verify_still_count(env, tmp_path, cmd):
     hook('post', env, 'Edit', file_path=str(tmp_path / 'a.py'))
@@ -661,7 +661,7 @@ def test_module_form_and_other_real_runs_still_count(env, tmp_path, cmd):
     'pytest --collectonly', 'pytest --collect-only=yes', 'pytest --coll', 'pytest --collect', 'pytest --hel', 'pytest --versi',
     'pytest -qh', 'pytest -xqV', 'pytest -lh tests', 'python3 -m pytest --collectonly', 'python3 -m pytest -qh',
     'python3 -m pytest --coll -q', 'python3 -m pytest --help=x', 'uv run python -m pytest -qV',
-    'ruff --vers', 'tsc --sho', 'cargo test -- --help', 'cargo test -- -h', 'npm test -- -h', 'npm test -- --help',
+    'shellcheck -aV', 'bats -rh', 'bats -rv', 'ruff --vers', 'tsc --sho', 'cargo test -- --help', 'cargo test -- -h', 'npm test -- -h', 'npm test -- --help',
 ])
 def test_help_and_collect_flags_match_by_prefix_and_inside_short_groups(env, tmp_path, cmd):
     hook('post', env, 'Edit', file_path=str(tmp_path / 'a.py'))
@@ -784,3 +784,23 @@ def test_dispatch_and_gate_relay_only_the_warning_block(env, tmp_path):
         assert 'phase evidence missing (observe mode, not blocking): x' in proc.stderr and '  - x: detail' in proc.stderr
         for word in ('noise before', 'Traceback after', 'orphan detail'):
             assert word not in proc.stderr
+
+
+def test_wrapper_drops_nul_padded_output_even_when_a_valid_relay_follows(env, tmp_path):
+    body = ("head -c 32768 /dev/zero; printf '{\"systemMessage\": \"x\"}\\n'")
+    proc = wrapper('stop', env, EDIT_PAYLOAD, path=fake_python(tmp_path, body, env['PATH']))
+    assert proc.returncode == 0 and proc.stdout == ''
+
+
+def test_wrapper_drops_a_few_nul_bytes_inside_a_small_message(env, tmp_path):
+    body = "printf '{\"systemMessage\": \"a\\0b\"}\\n'"
+    proc = wrapper('stop', env, EDIT_PAYLOAD, path=fake_python(tmp_path, body, env['PATH']))
+    assert proc.returncode == 0 and proc.stdout == ''
+
+
+def test_wrapper_ignores_a_huge_sparse_helper_output_within_the_deadline(env, tmp_path):
+    body = "truncate -s 1G /proc/self/fd/1"
+    start = time.time()
+    proc = wrapper('stop', env, EDIT_PAYLOAD, path=fake_python(tmp_path, body, env['PATH']))
+    assert proc.returncode == 0 and proc.stdout == ''
+    assert time.time() - start < 4
