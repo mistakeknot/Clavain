@@ -583,3 +583,109 @@ def test_public_files_carry_no_private_paths_or_hostnames():
             if pattern.search(line):
                 offenders.append(f"{name}:{number}")
     assert offenders == []
+
+
+# --- PyYAML is only needed when an overlay is configured -------------------
+
+BUILDER = ROOT / "scripts" / "build-review-packet.py"
+
+
+@pytest.fixture
+def no_yaml(tmp_path):
+    """A PYTHONPATH shim directory under which `import yaml` raises ImportError."""
+    shim = tmp_path / "noyaml"
+    shim.mkdir()
+    (shim / "yaml.py").write_text('raise ImportError("PyYAML hidden for this test")\n')
+    return {"PYTHONPATH": str(shim)}
+
+
+def test_hidden_yaml_shim_really_hides_yaml(no_yaml):
+    result = subprocess.run([sys.executable, "-c", "import yaml"], capture_output=True, text=True,
+                            env={**os.environ, **no_yaml})
+    assert result.returncode != 0 and "PyYAML hidden" in result.stderr
+
+
+@pytest.mark.parametrize("verb", ["path", "check"])
+def test_neutral_verbs_need_no_pyyaml_isolated_mode(box, verb):
+    """Same check under -I, where PYTHONPATH is ignored: block yaml in-process instead."""
+    home, env, _ = box
+    code = ("import runpy, sys; sys.modules['yaml'] = None; "
+            "sys.argv = ['routing_overlay.py', %r]; runpy.run_path(%r, run_name='__main__')" % (verb, str(HELPER)))
+    clean = {k: v for k, v in os.environ.items() if not k.startswith(("CLAVAIN_ROUTING", "CLAVAIN_ORCH", "ALEPH_ORCH"))}
+    result = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, timeout=60,
+                            env={**clean, **env, "HOME": str(home)})
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+    if verb == "path":
+        assert result.stdout == ""
+
+
+def test_path_verb_without_pyyaml_via_shim(box, no_yaml):
+    home, env, _ = box
+    clean = {k: v for k, v in os.environ.items() if not k.startswith(("CLAVAIN_ROUTING", "CLAVAIN_ORCH", "ALEPH_ORCH"))}
+    result = subprocess.run([sys.executable, str(HELPER), "path"], capture_output=True, text=True, timeout=60,
+                            env={**clean, **env, **no_yaml, "HOME": str(home)})
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "" and result.stderr == ""
+
+
+def test_configured_overlay_without_pyyaml_fails_closed(box, no_yaml):
+    home, env, tmp = box
+    overlay = write(tmp / "alex.yaml", DEVBOX_OVERLAY)
+    clean = {k: v for k, v in os.environ.items() if not k.startswith(("CLAVAIN_ROUTING", "CLAVAIN_ORCH", "ALEPH_ORCH"))}
+    for verb in ("path", "policy", "check"):
+        result = subprocess.run([sys.executable, str(HELPER), verb], capture_output=True, text=True, timeout=60,
+                                env={**clean, **env, **no_yaml, "HOME": str(home),
+                                     "CLAVAIN_ROUTING_OVERLAY": str(overlay)})
+        assert result.returncode == 1, verb
+        assert result.stdout == ""
+        assert result.stderr.startswith("routing overlay: PyYAML is required"), result.stderr
+        assert "Traceback" not in result.stderr
+
+
+def packet_policy_path(box, extra):
+    home, env, _ = box
+    clean = {k: v for k, v in os.environ.items() if not k.startswith(("CLAVAIN_ROUTING", "CLAVAIN_ORCH", "ALEPH_ORCH"))}
+    code = ("import importlib.util, sys; "
+            "s = importlib.util.spec_from_file_location('brp', %r); m = importlib.util.module_from_spec(s); "
+            "s.loader.exec_module(m); print(m._routing_policy_path())" % str(BUILDER))
+    return subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60,
+                          env={**clean, **env, "HOME": str(home), **extra})
+
+
+def test_packet_builder_policy_path_needs_no_pyyaml_when_neutral(box, no_yaml):
+    result = packet_policy_path(box, no_yaml)
+    assert result.returncode == 0, result.stderr
+    assert Path(result.stdout.strip()).resolve() == BASE
+
+
+def test_packet_builder_policy_path_fails_closed_for_configured_overlay_without_pyyaml(box, no_yaml):
+    _, _, tmp = box
+    overlay = write(tmp / "alex.yaml", DEVBOX_OVERLAY)
+    result = packet_policy_path(box, {**no_yaml, "CLAVAIN_ROUTING_OVERLAY": str(overlay)})
+    assert result.returncode != 0
+    assert "PyYAML is required" in result.stderr
+
+
+def test_lib_find_config_is_neutral_without_pyyaml(box, no_yaml):
+    result = lib_call(box, "", '_routing_find_config', extra=no_yaml)
+    assert result.returncode == 0, result.stderr
+    assert Path(result.stdout.strip()).resolve() == BASE
+
+
+def test_lib_find_config_fails_closed_for_configured_overlay_without_pyyaml(box, no_yaml):
+    _, _, tmp = box
+    overlay = write(tmp / "alex.yaml", DEVBOX_OVERLAY)
+    result = lib_call(box, str(overlay), '_routing_find_config; echo "rc=$?"', extra=no_yaml)
+    assert "rc=2" in result.stdout
+    assert "PyYAML is required" in result.stderr
+
+
+@pytest.mark.parametrize("script", ["capacity-fallback.sh", "dispatch.sh"])
+def test_shell_callers_resolve_neutral_policy_without_pyyaml(box, no_yaml, script):
+    """The overlay call these scripts make at startup must not die on a missing PyYAML."""
+    home, env, tmp = box
+    clean = {k: v for k, v in os.environ.items() if not k.startswith(("CLAVAIN_ROUTING", "CLAVAIN_ORCH", "ALEPH_ORCH"))}
+    result = subprocess.run(["bash", str(ROOT / "scripts" / script), "--help"], capture_output=True, text=True,
+                            timeout=60, env={**clean, **env, **no_yaml, "HOME": str(home)})
+    assert "ModuleNotFoundError" not in result.stderr and "PyYAML" not in result.stderr, result.stderr

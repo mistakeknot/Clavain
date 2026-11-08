@@ -10,8 +10,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-import yaml
-
 ROOT = Path(__file__).resolve().parent.parent
 BASE = ROOT / "config" / "routing.yaml"
 DEFAULT_CONFIG = Path("~/.config/aleph-orchestration/operator.toml")
@@ -91,11 +89,21 @@ def merge(base, overlay, path=()):
     return merged
 
 
+def _yaml():
+    """Import PyYAML only when a policy or overlay actually has to be parsed."""
+    try:
+        import yaml
+    except ImportError as exc:
+        raise OverlayError(f"PyYAML is required to apply a routing overlay: {exc}") from exc
+    return yaml
+
+
 def load_yaml(path, what):
     try:
         text = Path(path).read_bytes()
     except OSError as exc:
         raise OverlayError(f"{what} {path}: {exc.strerror or exc}") from exc
+    yaml = _yaml()
     try:
         data = yaml.safe_load(text)
     except yaml.YAMLError as exc:
@@ -113,7 +121,7 @@ def build(base_path, overlay_path):
     if not isinstance(overlay, dict):
         raise OverlayError(f"overlay {overlay_path}: top level is not a mapping")
     merged = merge(base, overlay)
-    text = yaml.safe_dump(merged, sort_keys=False, default_flow_style=False, allow_unicode=True, width=10000)
+    text = _yaml().safe_dump(merged, sort_keys=False, default_flow_style=False, allow_unicode=True, width=10000)
     digest = hashlib.sha256(base_bytes + b"\0" + overlay_bytes).hexdigest()
     return text, digest
 
