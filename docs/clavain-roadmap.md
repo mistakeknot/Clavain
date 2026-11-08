@@ -112,7 +112,7 @@ Regenerating this roadmap is itself milestone work (`mk-48dhw`).
 | `mk-u3bu2` | Generation-fenced claim/sprint leases | P2 | open |
 | `mk-0o5wm` | Bead IDs on dispatch rows | P2 | in_progress |
 | `mk-629bo` | Verdict and blocking-finding count in review events | P2 | in_progress |
-| `mk-6i8ex` | Merge head and normalized producer identity | P2 | in_progress |
+| `mk-6i8ex` | PR head and normalized producer identity on merge rulings | P2 | in_progress |
 | `mk-8wgql` | Forward-fix provenance and classification | P2 | in_progress |
 | `mk-ji9m` | Quota-aware execution/review routing | P2 | in_progress |
 | `mk-4ma3` | Bead-first enforcement; activation held | P2 | blocked |
