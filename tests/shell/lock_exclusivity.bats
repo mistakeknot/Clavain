@@ -236,6 +236,144 @@ _wait_done() {
     [ ! -e "$LOCK_DIR" ]
 }
 
+# --- lock lifecycle, round 3: interleavings --------------------------------------
+# Each test pauses one actor at the window where the race lives, lets the other
+# actors run, then resumes it. Pauses are shell-function overrides inside a child
+# process (no sleeps standing in for ordering).
+
+_wait_for() {
+    local i
+    for i in $(seq 1 200); do [ -e "$1" ] && return 0; sleep 0.05; done
+    return 1
+}
+
+@test "intercore_lock fallback: a cleaner never takes a record that is still being written" {
+    _lib
+    export PAUSED="$BATS_TEST_TMPDIR/paused" RESUME="$BATS_TEST_TMPDIR/resume"
+    export ACQUIRED="$BATS_TEST_TMPDIR/acquired" FAILED="$BATS_TEST_TMPDIR/failed"
+    export GO="$BATS_TEST_TMPDIR/go"
+    rm -f "$PAUSED" "$RESUME" "$ACQUIRED" "$FAILED" "$GO"
+    cat > "$BATS_TEST_TMPDIR/writer.sh" <<'WRITER'
+source "$LIB"
+intercore_lock_available() { return 1; }
+# Pause the moment the owner record is about to be filled in: whatever file the
+# record is being written to has been created (and is empty) by now.
+printf() {
+    if [[ "$1" == '%s\n' && "$2" == '{"pid"'* ]]; then
+        : > "$PAUSED"
+        until [[ -e "$RESUME" ]]; do sleep 0.05; done
+    fi
+    builtin printf "$@"
+}
+if intercore_lock "$LOCK_NAME" "$LOCK_SCOPE"; then : > "$ACQUIRED"; else : > "$FAILED"; fi
+until [[ -e "$GO" ]]; do sleep 0.05; done
+WRITER
+    LIB="$HOOKS_DIR/lib-intercore.sh" LOCK_NAME="$LOCK_NAME" LOCK_SCOPE="$LOCK_SCOPE" \
+        HOME="$BATS_TEST_TMPDIR" bash "$BATS_TEST_TMPDIR/writer.sh" &
+    HOLDER_PID=$!
+    _wait_for "$PAUSED"
+    # The lock directory is old; a cleaner runs while the record is half written.
+    _age "$LOCK_DIR"
+    intercore_lock_clean 5s
+    : > "$RESUME"
+    _wait_for "$ACQUIRED"
+    # The writer's acquisition is real: the record on disk is complete and names it.
+    [ -s "$LOCK_DIR/owner.json" ]
+    run jq -e '.pid == '"$HOLDER_PID" "$LOCK_DIR/owner.json"
+    [ "$status" -eq 0 ]
+    # So nobody else can take the lock, even when mkdir reports success.
+    PATH="$SHIM_DIR:$PATH" run intercore_lock "$LOCK_NAME" "$LOCK_SCOPE"
+    [ "$status" -eq 1 ]
+}
+
+@test "intercore_lock_clean fallback: an empty or unreadable record is left alone, however old" {
+    _lib
+    "$REAL_MKDIR" -p "$LOCK_DIR"
+    : > "$LOCK_DIR/owner.json"
+    _age "$LOCK_DIR"
+    intercore_lock_clean 5s 2>/dev/null
+    [ -e "$LOCK_DIR/owner.json" ]
+    PATH="$SHIM_DIR:$PATH" run intercore_lock "$LOCK_NAME" "$LOCK_SCOPE"
+    [ "$status" -eq 1 ]
+}
+
+@test "intercore_lock_clean fallback: a delayed cleaner never discards a live successor's record" {
+    _lib
+    export PAUSED="$BATS_TEST_TMPDIR/paused" RESUME="$BATS_TEST_TMPDIR/resume"
+    rm -f "$PAUSED" "$RESUME"
+    # Dead owner A's lock.
+    sleep 0 & local dead=$!; wait "$dead"
+    "$REAL_MKDIR" -p "$LOCK_DIR"
+    printf '{"pid":%d,"host":"h","owner":"%d:h","created":1}\n' "$dead" "$dead" > "$LOCK_DIR/owner.json"
+    _age "$LOCK_DIR"
+    # Cleaner 1 examines A, then stalls just after judging A dead.
+    cat > "$BATS_TEST_TMPDIR/cleaner.sh" <<'CLEANER'
+source "$LIB"
+intercore_lock_available() { return 1; }
+_intercore_pid_alive() {
+    if [[ "$1" == "$DEAD_A" ]]; then
+        : > "$PAUSED"
+        until [[ -e "$RESUME" ]]; do sleep 0.05; done
+        return 1
+    fi
+    kill -0 "$1" 2>/dev/null
+}
+# Client C (mkdir reports success for it) takes the lock the instant a record is
+# taken away from the pathname, which is the window the race needs.
+_c_joins() {
+    [[ -z "${C_DONE:-}" && ! -e "$LOCK_DIR/owner.json" ]] || return 0
+    C_DONE=1
+    PATH="$SHIM_DIR:$PATH" bash -c 'source "$LIB"; intercore_lock_available() { return 1; }; intercore_lock "$LOCK_NAME" "$LOCK_SCOPE"'
+}
+mv() { command mv "$@"; _c_joins; }
+rm() { command rm "$@"; _c_joins; }
+ln() { command ln "$@"; _c_joins; }
+rmdir() { command rmdir "$@"; _c_joins; }
+intercore_lock_clean 5s
+CLEANER
+    export DEAD_A="$dead" SHIM_DIR LOCK_DIR LIB="$HOOKS_DIR/lib-intercore.sh" LOCK_NAME LOCK_SCOPE
+    HOME="$BATS_TEST_TMPDIR" bash "$BATS_TEST_TMPDIR/cleaner.sh" &
+    local cleaner=$!
+    _wait_for "$PAUSED"
+    # Cleaner 2 finishes the job, and live B takes the lock, while cleaner 1 stalls.
+    rm -f "$LOCK_DIR/owner.json"; rmdir "$LOCK_DIR"
+    _start_holder
+    : > "$RESUME"
+    wait "$cleaner"
+    # B still holds, with its own record; C was never admitted.
+    run jq -e '.pid == '"$HOLDER_PID" "$LOCK_DIR/owner.json"
+    [ "$status" -eq 0 ]
+    PATH="$SHIM_DIR:$PATH" run intercore_lock "$LOCK_NAME" "$LOCK_SCOPE"
+    [ "$status" -eq 1 ]
+    : > "$GO"; _wait_done; wait "$HOLDER_PID"
+    [ ! -e "$LOCK_DIR" ]
+}
+
+@test "intercore_lock_clean fallback: a cleaner defers to another cleaner's claim" {
+    _lib
+    sleep 0 & local dead=$!; wait "$dead"
+    "$REAL_MKDIR" -p "$LOCK_DIR"
+    printf '{"pid":%d,"host":"h","owner":"%d:h","created":1}\n' "$dead" "$dead" > "$LOCK_DIR/owner.json"
+    printf '{"pid":%d,"created":1}\n' "$$" > "$LOCK_DIR/cleaner.json"   # another cleaner is mid-way
+    _age "$LOCK_DIR"
+    intercore_lock_clean 5s
+    [ -e "$LOCK_DIR/owner.json" ]
+    [ -e "$LOCK_DIR/cleaner.json" ]
+}
+
+@test "intercore_unlock fallback: no recorded token means no release, even when the pid matches" {
+    _lib
+    # A predecessor's abandoned record that happens to carry this shell's pid.
+    "$REAL_MKDIR" -p "$LOCK_DIR"
+    printf '{"pid":%d,"host":"h","owner":"%d:h","created":1,"token":"predecessor"}\n' "$$" "$$" > "$LOCK_DIR/owner.json"
+    run intercore_unlock "$LOCK_NAME" "$LOCK_SCOPE"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"not releasing"* ]]
+    [ -f "$LOCK_DIR/owner.json" ]
+    run jq -r .token "$LOCK_DIR/owner.json"
+    [ "$output" = "predecessor" ]
+}
+
 # --- scripts/collect-zaka.sh ------------------------------------------------
 
 _collect_fixture() {

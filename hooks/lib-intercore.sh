@@ -391,12 +391,34 @@ _intercore_lock_field() {
     esac
 }
 
-# _intercore_lock_owned_by <owner.json> <pid> <token>: true when the record
-# names that pid and, if a token is given, that token.
+# _intercore_lock_owned_by <owner.json> <pid> <token>: true only when the record
+# names that pid AND that (non-empty) acquire token. A pid alone never proves
+# ownership: pids are reused.
 _intercore_lock_owned_by() {
-    [[ -f "$1" ]] || return 1
+    [[ -f "$1" && -n "$3" ]] || return 1
     [[ "$(_intercore_lock_field "$1" pid)" == "$2" ]] || return 1
-    [[ -z "$3" || "$(_intercore_lock_field "$1" token)" == "$3" ]]
+    [[ "$(_intercore_lock_field "$1" token)" == "$3" ]]
+}
+
+# _intercore_lock_publish <dest> <content>: create <dest> holding <content>, all
+# at once, and fail if <dest> exists. The content is written to a unique pending
+# file in the same directory first, then linked into place with link(2) (plain
+# ln, never -f), which is atomic and refuses to replace an existing name. A
+# reader or cleaner therefore never sees a half-written record, and the claim
+# does not depend on mkdir.
+_intercore_lock_publish() {
+    local dest="$1" content="$2" tmp
+    tmp="${dest%/*}/.pending.$$.$(date +%s%N 2>/dev/null).${RANDOM}${RANDOM}"
+    if ! ( set -C; printf '%s\n' "$content" > "$tmp" ) 2>/dev/null; then
+        rm -f "$tmp" 2>/dev/null || true
+        return 1
+    fi
+    if ln "$tmp" "$dest" 2>/dev/null; then
+        rm -f "$tmp" 2>/dev/null || true
+        return 0
+    fi
+    rm -f "$tmp" 2>/dev/null || true
+    return 1
 }
 
 _intercore_pid_alive() {
@@ -405,23 +427,43 @@ _intercore_pid_alive() {
 }
 
 # _intercore_lock_break_dead <lock_dir>: remove the lock if its owner is dead.
-# The owner record is claimed by an atomic rename, so concurrent cleaners and a
-# new acquirer cannot all act on the same record. If the renamed record turns out
-# not to be the one judged dead (a successor took the lock in between), it is
-# put back with a link that cannot overwrite.
+#
+# A record is never moved or removed on the strength of an earlier look, because
+# its pathname can be reused as soon as it is gone. Cleaners are serialized per
+# lock by a claim file (cleaner.json, published like owner.json, so created
+# complete and exclusively). Under that claim the record is read again and
+# removed only if it is byte-for-byte the record that was judged dead. Nothing
+# else removes a dead owner's record (its owner cannot unlock, and acquirers
+# only create), so the record cannot change between that re-read and the rm.
+#
+# Left alone, deliberately (a stranded lock is acceptable, two holders are not):
+#   - a record with no readable pid (empty, or still being written by another
+#     client such as ic): a half-written record is not a dead owner;
+#   - a cleaner claim held by another cleaner, including one whose cleaner died.
 _intercore_lock_break_dead() {
-    local d="$1" of="$1/owner.json" pid claimed
+    local d="$1" of="$1/owner.json" cf="$1/cleaner.json" rec pid f fpid
+    # Pending files of writers that are gone can never be published; drop them
+    # so they do not pin the directory.
+    for f in "$d"/.pending.*; do
+        [[ -e "$f" ]] || continue
+        fpid="${f##*/.pending.}"; fpid="${fpid%%.*}"
+        _intercore_pid_alive "$fpid" || rm -f "$f" 2>/dev/null || true
+    done
     if [[ -e "$of" ]]; then
+        rec=$(cat "$of" 2>/dev/null) || return 0
         pid=$(_intercore_lock_field "$of" pid)
-        if _intercore_pid_alive "$pid"; then return 0; fi
-        claimed="$of.breaking.$$.${RANDOM}${RANDOM}"
-        mv "$of" "$claimed" 2>/dev/null || return 0   # lost the race: someone else is breaking it
-        if [[ "$(_intercore_lock_field "$claimed" pid)" != "$pid" ]]; then
-            ln "$claimed" "$of" 2>/dev/null || true
-            rm -f "$claimed" 2>/dev/null || true
+        if [[ -z "$pid" ]]; then
+            echo "intercore: lock record without a readable owner left in place: $of" >&2
             return 0
         fi
-        rm -f "$claimed" 2>/dev/null || true
+        _intercore_pid_alive "$pid" && return 0
+        if ! _intercore_lock_publish "$cf" "$(printf '{"pid":%d,"created":%d}' "$$" "$(date +%s)")"; then
+            return 0   # another cleaner holds this lock's claim (or left a stale one)
+        fi
+        if [[ "$(cat "$of" 2>/dev/null)" == "$rec" ]]; then
+            rm -f "$of" 2>/dev/null || true
+        fi
+        rm -f "$cf" 2>/dev/null || true
     fi
     # Only an empty directory is removed: a successor that claimed it meanwhile
     # has an owner.json in it, so rmdir refuses.
@@ -450,13 +492,13 @@ intercore_lock() {
         # Exit 2+ = binary error — fall through to legacy
     fi
     # Fallback: directory + owner.json, the same layout ic uses, so `ic lock
-    # clean` and `ic lock list` see these locks. mkdir alone is NOT trusted for
-    # exclusion: uutils mkdir 0.8.0 can report success for a directory that
-    # already exists (uutils/coreutils#13970), so two callers could both
-    # believe they hold the lock. Ownership is decided by exclusive-creating
-    # owner.json inside the directory (noclobber, i.e. open(O_CREAT|O_EXCL),
-    # a shell builtin that does not depend on the installed coreutils). Only
-    # the caller that creates owner.json holds the lock.
+    # clean` and `ic lock list` see these locks. Neither mkdir nor a plain
+    # redirect is trusted for exclusion: uutils mkdir 0.8.0 can report success
+    # for a directory that already exists (uutils/coreutils#13970). The lock is
+    # held by whoever publishes owner.json: the complete record is written to a
+    # pending file and linked into place with link(2), which fails if owner.json
+    # exists and never exposes a partial record. The directory is only a
+    # container, so an existing directory is not itself contention.
     local lock_dir="${INTERCORE_LOCK_FALLBACK_DIR:-/tmp/intercore/locks}/${name}/${scope}"
     mkdir -p "$(dirname "$lock_dir")" 2>/dev/null || true
     local retries=0 max_retries=10
@@ -465,19 +507,13 @@ intercore_lock() {
     # successor's. ic ignores the extra field.
     local _token _meta
     _token="$$.$(date +%s%N 2>/dev/null).${RANDOM}${RANDOM}"
-    _meta=$(printf '{"pid":%d,"host":"%s","owner":"%s","created":%d,"token":"%s"}\n' \
+    _meta=$(printf '{"pid":%d,"host":"%s","owner":"%s","created":%d,"token":"%s"}' \
         "$$" "$(hostname -s 2>/dev/null || echo unknown)" "$_owner" "$(date +%s)" "$_token")
     while true; do
-        if mkdir "$lock_dir" 2>/dev/null; then
-            # The directory exists, but another caller may hold it (non-exclusive
-            # mkdir). Whoever exclusive-creates owner.json holds the lock.
-            if ( set -C; printf '%s\n' "$_meta" > "$lock_dir/owner.json" ) 2>/dev/null; then
-                _intercore_lock_token_set "$lock_dir" "$_token"
-                return 0
-            fi
-            # Lost the claim. Never remove a held lock: rmdir only succeeds on
-            # an empty directory, which is a leftover from a failed claim.
-            [[ -e "$lock_dir/owner.json" ]] || rmdir "$lock_dir" 2>/dev/null || true
+        mkdir "$lock_dir" 2>/dev/null || true
+        if [[ -d "$lock_dir" ]] && _intercore_lock_publish "$lock_dir/owner.json" "$_meta"; then
+            _intercore_lock_token_set "$lock_dir" "$_token"
+            return 0
         fi
         retries=$((retries + 1))
         [[ $retries -gt $max_retries ]] && return 1
@@ -495,13 +531,19 @@ intercore_unlock() {
         "$INTERCORE_LOCK_BIN" lock release "$name" "$scope" --owner="$_owner" >/dev/null 2>&1 || true
         return 0
     fi
-    # Fallback: remove the lock only if owner.json still names this caller (pid
-    # and, when this shell recorded one, the acquire token). A lock that was
-    # cleaned and re-acquired by someone else is theirs and is left alone.
+    # Fallback: remove the lock only if owner.json names this caller's pid AND
+    # the token this shell recorded when it acquired. With no recorded token this
+    # shell did not acquire the lock (or acquired it in a subshell), so nothing
+    # is removed: a pid alone can match a predecessor's record after pid reuse.
+    # A lock that was cleaned and re-acquired by someone else is theirs too.
     local lock_dir="${INTERCORE_LOCK_FALLBACK_DIR:-/tmp/intercore/locks}/${name}/${scope}"
     local _mytoken
     _mytoken=$(_intercore_lock_token_get "$lock_dir")
     _intercore_lock_token_drop "$lock_dir"
+    if [[ -z "$_mytoken" ]]; then
+        echo "intercore_unlock: no acquire token for ${name}/${scope} in this shell; not releasing" >&2
+        return 0
+    fi
     if _intercore_lock_owned_by "$lock_dir/owner.json" "$$" "$_mytoken"; then
         rm -f "$lock_dir/owner.json" 2>/dev/null || true
         rmdir "$lock_dir" 2>/dev/null || true
