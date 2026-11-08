@@ -383,23 +383,6 @@ _intercore_lock_token_set() {
     _INTERCORE_LOCK_TOKENS+="$1=$2"$'\n'
 }
 
-# _intercore_lock_field <owner.json> <pid|token>: print a field of the record.
-_intercore_lock_field() {
-    case "$2" in
-        pid) sed -n 's/.*"pid":[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$1" 2>/dev/null | head -n1 ;;
-        token) sed -n 's/.*"token":[[:space:]]*"\([^"]*\)".*/\1/p' "$1" 2>/dev/null | head -n1 ;;
-    esac
-}
-
-# _intercore_lock_owned_by <owner.json> <pid> <token>: true only when the record
-# names that pid AND that (non-empty) acquire token. A pid alone never proves
-# ownership: pids are reused.
-_intercore_lock_owned_by() {
-    [[ -f "$1" && -n "$3" ]] || return 1
-    [[ "$(_intercore_lock_field "$1" pid)" == "$2" ]] || return 1
-    [[ "$(_intercore_lock_field "$1" token)" == "$3" ]]
-}
-
 # _intercore_lock_publish <dest> <content>: create <dest> holding <content>, all
 # at once, and fail if <dest> exists. The content is written to a unique pending
 # file in the same directory first, then linked into place with link(2) (plain
@@ -426,44 +409,171 @@ _intercore_pid_alive() {
     kill -0 "$1" 2>/dev/null || ps -p "$1" >/dev/null 2>&1
 }
 
-# _intercore_lock_break_dead <lock_dir>: remove the lock if its owner is dead.
+# A cleaner claim or pending file older than this many seconds belongs to
+# nobody. The same bound as ic's (staleClaimAge in internal/lock/lock.go).
+_INTERCORE_LOCK_STALE_CLAIM_SECS=30
+
+# _intercore_lock_slurp <file>: set _ICL_BYTES to the exact bytes of <file>
+# (trailing newlines included). Fails if the file cannot be read.
+_intercore_lock_slurp() {
+    local _v
+    _v=$(cat -- "$1" 2>/dev/null && printf x) || return 1
+    _ICL_BYTES="${_v%x}"
+}
+
+# _intercore_lock_mtime_age <file>: print the age of <file> in seconds.
+_intercore_lock_mtime_age() {
+    local m
+    m=$(stat -c %Y -- "$1" 2>/dev/null || stat -f %m -- "$1" 2>/dev/null) || return 1
+    printf '%d' $(( $(date +%s) - m ))
+}
+
+# _intercore_lock_json_field <record> <pid|host|created|token|owner>: print one
+# field of a record held in a string.
+_intercore_lock_json_field() {
+    case "$2" in
+        pid|created) printf '%s' "$1" | sed -n "s/.*\"$2\":[[:space:]]*\([0-9][0-9]*\).*/\1/p" | head -n1 ;;
+        *) printf '%s' "$1" | sed -n "s/.*\"$2\":[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -n1 ;;
+    esac
+}
+
+# _intercore_lock_remove_exactly <path> <bytes>: remove <path> only if it holds
+# exactly <bytes>. The file is renamed to a unique name first (atomic: one
+# caller wins), inspected, and linked back if it is not the file the caller
+# meant to remove, so a successor's file is not destroyed by a delayed caller.
+_intercore_lock_remove_exactly() {
+    local path="$1" want="$2" tmp
+    tmp="${path}.stale.$$.$(date +%s%N 2>/dev/null).${RANDOM}${RANDOM}"
+    mv -- "$path" "$tmp" 2>/dev/null || return 1
+    if _intercore_lock_slurp "$tmp" && [[ "$_ICL_BYTES" == "$want" ]]; then
+        rm -f -- "$tmp" 2>/dev/null || true
+        return 0
+    fi
+    ln -- "$tmp" "$path" 2>/dev/null || true   # EEXIST: a newer file already took its place
+    rm -f -- "$tmp" 2>/dev/null || true
+    return 1
+}
+
+# _intercore_lock_claim_abandoned <cleaner.json> <bytes>: true if the claim
+# holding <bytes> belongs to a cleaner that is gone: older than the stale bound,
+# or on this host with a dead pid. An unparsable claim is judged by file age.
+# Hosts are compared as `uname -n` prints them, which is what ic records.
+_intercore_lock_claim_abandoned() {
+    local cf="$1" cur="$2" cpid chost created age
+    cpid=$(_intercore_lock_json_field "$cur" pid)
+    created=$(_intercore_lock_json_field "$cur" created)
+    if [[ -z "$cpid" || -z "$created" ]]; then
+        age=$(_intercore_lock_mtime_age "$cf") || return 1
+        (( age > _INTERCORE_LOCK_STALE_CLAIM_SECS ))
+        return
+    fi
+    if (( $(date +%s) - created > _INTERCORE_LOCK_STALE_CLAIM_SECS )); then return 0; fi
+    chost=$(_intercore_lock_json_field "$cur" host)
+    if [[ -z "$chost" || "$chost" == "$(uname -n 2>/dev/null)" ]]; then
+        _intercore_pid_alive "$cpid" || return 0
+    fi
+    return 1
+}
+
+# _intercore_lock_take_claim <lock_dir>: publish this process's claim
+# (cleaner.json: pid, host, created, token) so that only one cleaner or
+# releaser works on the lock at a time. Sets _ICL_CLAIM to the claim's bytes.
+# An existing claim blocks this unless it is abandoned; an abandoned claim is
+# taken over (removed exactly, then published anew). Same protocol as ic.
+_intercore_lock_take_claim() {
+    local cf="$1/cleaner.json" content cur
+    content=$(printf '{"pid":%d,"host":"%s","created":%d,"token":"%s"}' \
+        "$$" "$(uname -n 2>/dev/null || echo unknown)" "$(date +%s)" \
+        "$$.$(date +%s%N 2>/dev/null).${RANDOM}${RANDOM}")
+    _ICL_CLAIM="$content"$'\n'
+    if _intercore_lock_publish "$cf" "$content"; then return 0; fi
+    _intercore_lock_slurp "$cf" || return 1       # it just went away: retry later
+    cur="$_ICL_BYTES"
+    _intercore_lock_claim_abandoned "$cf" "$cur" || return 1
+    _intercore_lock_remove_exactly "$cf" "$cur" || return 1
+    _intercore_lock_publish "$cf" "$content"
+}
+
+# _intercore_lock_take_claim_wait <lock_dir> <tries>: take_claim, retried
+# (0.02s apart) up to <tries> times.
+_intercore_lock_take_claim_wait() {
+    local i
+    for ((i = 0; i < $2; i++)); do
+        _intercore_lock_take_claim "$1" && return 0
+        sleep 0.02
+    done
+    return 1
+}
+
+# _intercore_lock_drop_claim <lock_dir>: remove cleaner.json only if it still
+# holds the bytes this process published (_ICL_CLAIM). A claim taken over from
+# us is not ours to remove.
+_intercore_lock_drop_claim() {
+    if _intercore_lock_slurp "$1/cleaner.json" && [[ "$_ICL_BYTES" == "$_ICL_CLAIM" ]]; then
+        rm -f -- "$1/cleaner.json" 2>/dev/null || true
+    fi
+}
+
+# _intercore_lock_break_dead <lock_dir>: remove the lock if its owner is dead,
+# or the directory if it is an abandoned, ownerless one.
 #
 # A record is never moved or removed on the strength of an earlier look, because
-# its pathname can be reused as soon as it is gone. Cleaners are serialized per
-# lock by a claim file (cleaner.json, published like owner.json, so created
-# complete and exclusively). Under that claim the record is read again and
-# removed only if it is byte-for-byte the record that was judged dead. Nothing
-# else removes a dead owner's record (its owner cannot unlock, and acquirers
-# only create), so the record cannot change between that re-read and the rm.
+# its pathname can be reused as soon as it is gone. Cleaners (and releasers) are
+# serialized per lock by a claim file (cleaner.json, published like owner.json,
+# so created complete and exclusively; ic takes the same claim). Under that
+# claim the record is read again and removed only if it is byte-for-byte the
+# record that was judged dead. Everything that removes an owner record takes the
+# claim first (this cleaner, unlock, ic's Clean and Release), so the record
+# cannot change between that re-read and the rm. The one gap left is the instant
+# between the comparison and the rm itself, which the claim closes for every
+# participant that follows the protocol.
+#
+# A cleaner that dies holding the claim must not wedge the lock: a claim older
+# than 30s, or whose cleaner is a dead process on this host, is taken over (the
+# stale file is renamed away, compared byte for byte, and only then deleted).
+# Only the cleaner's own claim is ever removed afterwards.
+#
+# Ownerless directories are reclaimed as ic does: pending files of writers that
+# are gone (dead pid, or older than 30s) are dropped; a directory with a live
+# writer's pending file or a live cleaner's claim is left alone.
 #
 # Left alone, deliberately (a stranded lock is acceptable, two holders are not):
 #   - a record with no readable pid (empty, or still being written by another
-#     client such as ic): a half-written record is not a dead owner;
-#   - a cleaner claim held by another cleaner, including one whose cleaner died.
+#     client): a half-written record is not a dead owner;
+#   - a claim held by a live cleaner.
 _intercore_lock_break_dead() {
-    local d="$1" of="$1/owner.json" cf="$1/cleaner.json" rec pid f fpid
-    # Pending files of writers that are gone can never be published; drop them
-    # so they do not pin the directory.
+    local d="$1" of="$1/owner.json" cf="$1/cleaner.json" rec pid f fpid age live=0
     for f in "$d"/.pending.*; do
         [[ -e "$f" ]] || continue
         fpid="${f##*/.pending.}"; fpid="${fpid%%.*}"
-        _intercore_pid_alive "$fpid" || rm -f "$f" 2>/dev/null || true
+        age=$(_intercore_lock_mtime_age "$f") || age=0
+        if ! _intercore_pid_alive "$fpid" || (( age > _INTERCORE_LOCK_STALE_CLAIM_SECS )); then
+            rm -f -- "$f" 2>/dev/null || true
+        else
+            live=1
+        fi
     done
     if [[ -e "$of" ]]; then
-        rec=$(cat "$of" 2>/dev/null) || return 0
-        pid=$(_intercore_lock_field "$of" pid)
+        _intercore_lock_slurp "$of" || return 0
+        rec="$_ICL_BYTES"
+        pid=$(_intercore_lock_json_field "$rec" pid)
         if [[ -z "$pid" ]]; then
             echo "intercore: lock record without a readable owner left in place: $of" >&2
             return 0
         fi
         _intercore_pid_alive "$pid" && return 0
-        if ! _intercore_lock_publish "$cf" "$(printf '{"pid":%d,"created":%d}' "$$" "$(date +%s)")"; then
-            return 0   # another cleaner holds this lock's claim (or left a stale one)
+        _intercore_lock_take_claim "$d" || return 0   # a live cleaner holds this lock's claim
+        if _intercore_lock_slurp "$of" && [[ "$_ICL_BYTES" == "$rec" ]]; then
+            rm -f -- "$of" 2>/dev/null || true
         fi
-        if [[ "$(cat "$of" 2>/dev/null)" == "$rec" ]]; then
-            rm -f "$of" 2>/dev/null || true
+        _intercore_lock_drop_claim "$d"
+    else
+        (( live )) && return 0                          # a writer is mid-publish
+        if [[ -e "$cf" ]]; then
+            _intercore_lock_slurp "$cf" || return 0
+            _intercore_lock_claim_abandoned "$cf" "$_ICL_BYTES" || return 0   # a live cleaner is mid-way
+            _intercore_lock_remove_exactly "$cf" "$_ICL_BYTES" || return 0
         fi
-        rm -f "$cf" 2>/dev/null || true
     fi
     # Only an empty directory is removed: a successor that claimed it meanwhile
     # has an owner.json in it, so rmdir refuses.
@@ -544,8 +654,22 @@ intercore_unlock() {
         echo "intercore_unlock: no acquire token for ${name}/${scope} in this shell; not releasing" >&2
         return 0
     fi
-    if _intercore_lock_owned_by "$lock_dir/owner.json" "$$" "$_mytoken"; then
-        rm -f "$lock_dir/owner.json" 2>/dev/null || true
+    # The record is removed under the same per-lock claim cleaners take (ic's
+    # Release does likewise), after reading it again, so a cleaner that judged it
+    # dead cannot race the removal. If the claim stays held, the lock is left.
+    local _rec
+    _intercore_lock_slurp "$lock_dir/owner.json" || return 0
+    _rec="$_ICL_BYTES"
+    if [[ "$(_intercore_lock_json_field "$_rec" pid)" == "$$" \
+        && "$(_intercore_lock_json_field "$_rec" token)" == "$_mytoken" ]]; then
+        if ! _intercore_lock_take_claim_wait "$lock_dir" 100; then
+            echo "intercore_unlock: ${name}/${scope} busy (cleaner claim held); not releasing" >&2
+            return 0
+        fi
+        if _intercore_lock_slurp "$lock_dir/owner.json" && [[ "$_ICL_BYTES" == "$_rec" ]]; then
+            rm -f -- "$lock_dir/owner.json" 2>/dev/null || true
+        fi
+        _intercore_lock_drop_claim "$lock_dir"
         rmdir "$lock_dir" 2>/dev/null || true
     fi
     return 0

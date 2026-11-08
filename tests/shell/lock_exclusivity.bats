@@ -354,11 +354,169 @@ CLEANER
     sleep 0 & local dead=$!; wait "$dead"
     "$REAL_MKDIR" -p "$LOCK_DIR"
     printf '{"pid":%d,"host":"h","owner":"%d:h","created":1}\n' "$dead" "$dead" > "$LOCK_DIR/owner.json"
-    printf '{"pid":%d,"created":1}\n' "$$" > "$LOCK_DIR/cleaner.json"   # another cleaner is mid-way
+    printf '{"pid":%d,"host":"%s","created":%d,"token":"other"}\n' "$$" "$(uname -n)" "$(date +%s)" > "$LOCK_DIR/cleaner.json"   # a live cleaner is mid-way
     _age "$LOCK_DIR"
     intercore_lock_clean 5s
     [ -e "$LOCK_DIR/owner.json" ]
     [ -e "$LOCK_DIR/cleaner.json" ]
+}
+
+# --- cleaner claims: a dead cleaner must not wedge the lock, and a claim is only
+# --- ever removed by the process that published it ------------------------------
+
+# _dead_pid: print the pid of a process that has exited.
+_dead_pid() { sleep 0 & local p=$!; wait "$p"; printf '%s' "$p"; }
+
+# _seed_dead_lock <dead-pid>: an aged lock whose owner is the dead pid.
+_seed_dead_lock() {
+    "$REAL_MKDIR" -p "$LOCK_DIR"
+    printf '{"pid":%d,"host":"h","owner":"%d:h","created":1}\n' "$1" "$1" > "$LOCK_DIR/owner.json"
+    _age "$LOCK_DIR"
+}
+
+# _seed_claim <pid> <host> <created>: a cleaner.json in ic's format (directory kept aged).
+_seed_claim() {
+    printf '{"pid":%d,"host":"%s","created":%d,"token":"seeded"}\n' "$1" "$2" "$3" > "$LOCK_DIR/cleaner.json"
+    _age "$LOCK_DIR"   # writing the claim touched the directory
+}
+
+@test "intercore_lock_clean fallback: a cleaner that died holding the claim does not wedge the lock" {
+    _lib
+    local dead cdead; dead=$(_dead_pid); cdead=$(_dead_pid)
+    _seed_dead_lock "$dead"
+    _seed_claim "$cdead" "$(uname -n)" "$(date +%s)"   # fresh, but its cleaner is gone
+    intercore_lock_clean 5s
+    [ ! -e "$LOCK_DIR" ]
+    # And the lock is acquirable again.
+    intercore_lock "$LOCK_NAME" "$LOCK_SCOPE"
+    run jq -e '.pid == '"$$" "$LOCK_DIR/owner.json"
+    [ "$status" -eq 0 ]
+    intercore_unlock "$LOCK_NAME" "$LOCK_SCOPE"
+}
+
+@test "intercore_lock_clean fallback: a claim older than the bound is taken over even if its pid looks alive" {
+    _lib
+    local dead; dead=$(_dead_pid)
+    _seed_dead_lock "$dead"
+    _seed_claim "$$" "elsewhere" "$(( $(date +%s) - 120 ))"   # a pid reused by a stranger, on another host
+    intercore_lock_clean 5s
+    [ ! -e "$LOCK_DIR" ]
+}
+
+@test "intercore_lock_clean fallback: a fresh claim of a live cleaner is respected, even for a pid that looks dead elsewhere" {
+    _lib
+    local dead; dead=$(_dead_pid)
+    _seed_dead_lock "$dead"
+    _seed_claim "$$" "$(uname -n)" "$(date +%s)"
+    intercore_lock_clean 5s
+    [ -e "$LOCK_DIR/owner.json" ]
+    [ -e "$LOCK_DIR/cleaner.json" ]
+    # A claim from another host cannot be shown dead from here; only its age abandons it.
+    _seed_claim "$dead" "elsewhere" "$(date +%s)"
+    intercore_lock_clean 5s
+    [ -e "$LOCK_DIR/owner.json" ]
+    [ -e "$LOCK_DIR/cleaner.json" ]
+}
+
+@test "intercore_lock_clean fallback: an unparsable claim is judged by its age" {
+    _lib
+    local dead; dead=$(_dead_pid)
+    _seed_dead_lock "$dead"
+    printf 'not json\n' > "$LOCK_DIR/cleaner.json"
+    _age "$LOCK_DIR"
+    intercore_lock_clean 5s 2>/dev/null
+    [ -e "$LOCK_DIR/owner.json" ]                       # fresh: left alone
+    touch -d '2 minutes ago' "$LOCK_DIR/cleaner.json"
+    _age "$LOCK_DIR"
+    intercore_lock_clean 5s 2>/dev/null
+    [ ! -e "$LOCK_DIR" ]                                # old: taken over
+}
+
+# _wrap_fn <name>: keep the current definition of <name> as <name>_orig, so a test
+# can redefine <name> around it.
+_wrap_fn() { eval "$(declare -f "$1" | sed "1s/.*/${1}_orig ()/")"; }
+
+@test "intercore_lock_clean fallback: the claim is published in ic's format and removed when done" {
+    _lib
+    local dead; dead=$(_dead_pid)
+    _seed_dead_lock "$dead"
+    export SEEN="$BATS_TEST_TMPDIR/claim-seen"
+    rm -f "$SEEN"
+    _wrap_fn _intercore_lock_drop_claim
+    # Look at the claim while the cleaner still holds it.
+    _intercore_lock_drop_claim() { cp "$1/cleaner.json" "$SEEN"; _intercore_lock_drop_claim_orig "$@"; }
+    intercore_lock_clean 5s
+    [ ! -e "$LOCK_DIR" ]
+    run jq -e '.pid == '"$$"' and .host == "'"$(uname -n)"'" and (.created | type == "number") and (.token | length > 0)' "$SEEN"
+    [ "$status" -eq 0 ]
+}
+
+@test "intercore_lock_clean fallback: only a cleaner's own claim is removed, never a successor's" {
+    _lib
+    local dead; dead=$(_dead_pid)
+    _seed_dead_lock "$dead"
+    # The cleaner's claim is taken over by another cleaner while it works.
+    _wrap_fn _intercore_lock_take_claim
+    _intercore_lock_take_claim() {
+        _intercore_lock_take_claim_orig "$@" || return 1
+        rm -f "$1/cleaner.json"
+        printf '{"pid":%d,"host":"%s","created":%d,"token":"successor"}\n' "$$" "$(uname -n)" "$(date +%s)" > "$1/cleaner.json"
+    }
+    intercore_lock_clean 5s
+    [ -f "$LOCK_DIR/cleaner.json" ]
+    run jq -r .token "$LOCK_DIR/cleaner.json"
+    [ "$output" = "successor" ]
+}
+
+@test "intercore_lock_clean fallback: a directory pinned only by a dead writer's pending file is reclaimed; a live writer's is not" {
+    _lib
+    local dead; dead=$(_dead_pid)
+    "$REAL_MKDIR" -p "$LOCK_DIR"
+    printf '{"pid":%d' "$dead" > "$LOCK_DIR/.pending.$dead.1.abc"
+    _age "$LOCK_DIR"
+    intercore_lock_clean 5s
+    [ ! -e "$LOCK_DIR" ]
+    # A writer that is alive and recent is mid-publish: hands off.
+    "$REAL_MKDIR" -p "$LOCK_DIR"
+    printf '{"pid":%d' "$$" > "$LOCK_DIR/.pending.$$.1.abc"
+    _age "$LOCK_DIR"
+    intercore_lock_clean 5s
+    [ -e "$LOCK_DIR/.pending.$$.1.abc" ]
+}
+
+@test "intercore_lock_clean fallback: a directory holding only an abandoned claim is reclaimed; a live claim keeps it" {
+    _lib
+    local dead; dead=$(_dead_pid)
+    "$REAL_MKDIR" -p "$LOCK_DIR"
+    _seed_claim "$$" "$(uname -n)" "$(date +%s)"
+    _age "$LOCK_DIR"
+    intercore_lock_clean 5s
+    [ -e "$LOCK_DIR/cleaner.json" ]
+    _seed_claim "$dead" "$(uname -n)" "$(date +%s)"
+    intercore_lock_clean 5s
+    [ ! -e "$LOCK_DIR" ]
+}
+
+@test "intercore_unlock fallback: release waits on a live cleaner's claim and then leaves the lock in place" {
+    _lib
+    intercore_lock "$LOCK_NAME" "$LOCK_SCOPE"
+    local other; sleep 30 & other=$!
+    _seed_claim "$other" "$(uname -n)" "$(date +%s)"   # a live cleaner holds the claim
+    run intercore_unlock "$LOCK_NAME" "$LOCK_SCOPE"
+    kill "$other" 2>/dev/null || true
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"busy"* ]]
+    [ -f "$LOCK_DIR/owner.json" ]
+    [ -f "$LOCK_DIR/cleaner.json" ]
+}
+
+@test "intercore_unlock fallback: release takes over a dead cleaner's claim and leaves no claim behind" {
+    _lib
+    local cdead; cdead=$(_dead_pid)
+    intercore_lock "$LOCK_NAME" "$LOCK_SCOPE"
+    _seed_claim "$cdead" "$(uname -n)" "$(date +%s)"
+    intercore_unlock "$LOCK_NAME" "$LOCK_SCOPE"
+    [ ! -e "$LOCK_DIR" ]
 }
 
 @test "intercore_unlock fallback: no recorded token means no release, even when the pid matches" {
