@@ -523,6 +523,35 @@ Missing selections fail closed. The receipt identifies this selection mode;
 rerender after installation changes to refresh the recorded policy hash. Keep
 the default explicit selection for standalone installations without a managed link.
 
+### Stale instruction block at session start
+
+Session start compares the host instruction file with the selected installation's
+rendered block and, when a managed block exists but differs, says what drifted
+(`version`, `policy-hash`, `no-receipt` or `block-content`) and prints the narrow
+remedy. Detection is read-only; a stale block is never duplicated or rewritten by
+startup. Check explicitly, and as a rig-health probe, with:
+
+```bash
+python3 scripts/startup.py contract-check --host claude --instruction-file ~/.claude/CLAUDE.md
+```
+
+It prints a JSON report and exits 0 (current), 1 (stale) or 2 (no managed block;
+startup injects it per session). `startup.py doctor` embeds the same report under
+`instruction_contract` and exits non-zero when stale. To repair, run the narrow,
+explicit refresh:
+
+```bash
+python3 scripts/startup.py refresh --sync-instruction-block --host claude \
+  --instruction-file ~/.claude/CLAUDE.md
+```
+
+It runs only `sync-agent-instructions.py` for that file (reusing the receipt's
+policy selection), replaces the managed block and nothing else, and then writes
+the startup snapshot against the repaired file. A plain `refresh` never edits an
+instruction file. No installer, settings or plugin change is involved. For a file
+shared through dotfiles, the change reaches the shared copy, so review it as an
+instruction-file change.
+
 Hermes: use the selected Hermes virtualenv's Python (with PyYAML) to run:
 
 ```bash
