@@ -42,6 +42,8 @@ setup() {
     unset CLAVAIN_BEAD_ID CLAVAIN_RECHECK_BEADS CLAVAIN_RECHECK_BD_TIMEOUT
 
     HELPERS="$TMPDIR_T/helpers.sh"
+    # _extract_verdict classifies verdict words with the shared library.
+    printf 'source %q\n' "$BATS_TEST_DIRNAME/../../scripts/lib-verdict.sh" > "$HELPERS"
     awk '
         /^_dispatch_capacity_recheck_section\(\)[[:space:]]*\{/ { emit=1 }
         /^_dispatch_recheck_tracker_dir\(\)[[:space:]]*\{/ { emit=1 }
@@ -50,7 +52,7 @@ setup() {
             print
             if ($0 ~ /^}[[:space:]]*$/) { emit=0 }
         }
-    ' "$DISPATCH_SCRIPT" > "$HELPERS"
+    ' "$DISPATCH_SCRIPT" >> "$HELPERS"
 
     BD_LOG="$TMPDIR_T/bd.log"
     BINDIR="$TMPDIR_T/bin"
