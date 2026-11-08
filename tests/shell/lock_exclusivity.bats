@@ -32,6 +32,15 @@ EOF
     LOCK_SCOPE="scope"
 }
 
+# A failing test must not leave a holder process waiting on its release file.
+teardown() {
+    if [ -n "${HOLDER_PID:-}" ]; then
+        : > "$BATS_TEST_TMPDIR/go"
+        kill "$HOLDER_PID" 2>/dev/null || true
+        wait "$HOLDER_PID" 2>/dev/null || true
+    fi
+}
+
 # Prints "<overlaps> <max_depth>" for an enter/leave log.
 _overlaps() {
     awk '$1=="enter"{d++; if(d>1)v++; if(d>m)m=d} $1=="leave"{d--} END{print v+0, m+0}' "$1"
@@ -111,6 +120,120 @@ EOF
     [ "$(ls -A "$dir")" = "owner.json" ]
     intercore_unlock "$LOCK_NAME" "$LOCK_SCOPE"
     [ ! -e "$dir" ]
+}
+
+# --- lock lifecycle: cleanup and unlock must not hit a live holder -------------
+
+_lib() {
+    export HOME="$BATS_TEST_TMPDIR"
+    source "$HOOKS_DIR/lib-intercore.sh"
+    intercore_lock_available() { return 1; }
+    LOCK_DIR="$INTERCORE_LOCK_FALLBACK_DIR/$LOCK_NAME/$LOCK_SCOPE"
+}
+
+_age() { touch -d '2 hours ago' "$1"; }
+
+# Holds LOCK_NAME/LOCK_SCOPE in its own process until $GO exists, then unlocks.
+_start_holder() {
+    export READY="$BATS_TEST_TMPDIR/ready" GO="$BATS_TEST_TMPDIR/go" DONE="$BATS_TEST_TMPDIR/done"
+    rm -f "$READY" "$GO" "$DONE"
+    cat > "$BATS_TEST_TMPDIR/holder.sh" <<'HOLDER'
+source "$LIB"
+intercore_lock_available() { return 1; }
+intercore_lock "$LOCK_NAME" "$LOCK_SCOPE" || exit 3
+: > "$READY"
+until [ -e "$GO" ]; do sleep 0.05; done
+intercore_unlock "$LOCK_NAME" "$LOCK_SCOPE"
+: > "$DONE"
+HOLDER
+    LIB="$HOOKS_DIR/lib-intercore.sh" LOCK_NAME="$LOCK_NAME" LOCK_SCOPE="$LOCK_SCOPE" \
+        HOME="$BATS_TEST_TMPDIR" bash "$BATS_TEST_TMPDIR/holder.sh" &
+    HOLDER_PID=$!
+    local i
+    for i in $(seq 1 100); do [ -e "$READY" ] && return 0; sleep 0.05; done
+    return 1
+}
+
+_wait_done() {
+    local i
+    for i in $(seq 1 100); do [ -e "$DONE" ] && return 0; sleep 0.05; done
+    return 1
+}
+
+@test "intercore_lock_clean fallback: leaves an aged lock whose owner is alive, and it still excludes" {
+    _lib
+    intercore_lock "$LOCK_NAME" "$LOCK_SCOPE"
+    _age "$LOCK_DIR"
+    intercore_lock_clean 5s
+    [ -d "$LOCK_DIR" ]
+    run jq -e '.pid == '"$$" "$LOCK_DIR/owner.json"
+    [ "$status" -eq 0 ]
+    PATH="$SHIM_DIR:$PATH" run intercore_lock "$LOCK_NAME" "$LOCK_SCOPE"
+    [ "$status" -eq 1 ]
+    intercore_unlock "$LOCK_NAME" "$LOCK_SCOPE"
+    [ ! -e "$LOCK_DIR" ]
+}
+
+@test "intercore_lock_clean fallback: removes an aged lock whose owner is dead, and an aged empty directory" {
+    _lib
+    sleep 0 & local dead=$!; wait "$dead"
+    "$REAL_MKDIR" -p "$LOCK_DIR" "$INTERCORE_LOCK_FALLBACK_DIR/ghost/scope"
+    printf '{"pid":%d,"host":"h","owner":"%d:h","created":1}\n' "$dead" "$dead" > "$LOCK_DIR/owner.json"
+    _age "$LOCK_DIR"; _age "$INTERCORE_LOCK_FALLBACK_DIR/ghost/scope"
+    intercore_lock_clean 5s
+    [ ! -e "$LOCK_DIR" ]
+    [ ! -e "$INTERCORE_LOCK_FALLBACK_DIR/ghost/scope" ]
+    # A fresh lock is not touched.
+    intercore_lock "$LOCK_NAME" "$LOCK_SCOPE"
+    intercore_lock_clean 5s
+    [ -f "$LOCK_DIR/owner.json" ]
+    intercore_unlock "$LOCK_NAME" "$LOCK_SCOPE"
+}
+
+@test "intercore_unlock fallback: cleanup, re-acquire, then a delayed unlock leaves the new holder's lock" {
+    _lib
+    _start_holder                       # holder A takes the lock in its own process
+    _age "$LOCK_DIR"
+    # Model a cleaner that wrongly judges A dead (pid reuse, a paused process):
+    _intercore_pid_alive() { return 1; }
+    intercore_lock_clean 5s
+    [ ! -e "$LOCK_DIR" ]
+    _lib                                # restore the real liveness check
+    intercore_lock "$LOCK_NAME" "$LOCK_SCOPE"    # B takes it
+    run jq -e '.pid == '"$$" "$LOCK_DIR/owner.json"
+    [ "$status" -eq 0 ]
+    : > "$GO"                           # A's delayed unlock
+    _wait_done
+    wait "$HOLDER_PID"
+    # A's unlock did not remove B's lock, and B still excludes others.
+    [ -d "$LOCK_DIR" ]
+    run jq -e '.pid == '"$$" "$LOCK_DIR/owner.json"
+    [ "$status" -eq 0 ]
+    PATH="$SHIM_DIR:$PATH" run intercore_lock "$LOCK_NAME" "$LOCK_SCOPE"
+    [ "$status" -eq 1 ]
+    intercore_unlock "$LOCK_NAME" "$LOCK_SCOPE"
+    [ ! -e "$LOCK_DIR" ]
+}
+
+@test "intercore_unlock fallback: a record with this pid but another acquire token is not removed" {
+    _lib
+    intercore_lock "$LOCK_NAME" "$LOCK_SCOPE"
+    # Same pid, newer acquisition: the record carries a different token.
+    jq -c '.token = "other"' "$LOCK_DIR/owner.json" > "$LOCK_DIR/owner.new"
+    mv "$LOCK_DIR/owner.new" "$LOCK_DIR/owner.json"
+    intercore_unlock "$LOCK_NAME" "$LOCK_SCOPE"
+    [ -f "$LOCK_DIR/owner.json" ]
+    run jq -r .token "$LOCK_DIR/owner.json"
+    [ "$output" = "other" ]
+}
+
+@test "intercore_unlock fallback: never removes a lock held by another process" {
+    _lib
+    _start_holder
+    intercore_unlock "$LOCK_NAME" "$LOCK_SCOPE"   # not ours
+    [ -f "$LOCK_DIR/owner.json" ]
+    : > "$GO"; _wait_done; wait "$HOLDER_PID"
+    [ ! -e "$LOCK_DIR" ]
 }
 
 # --- scripts/collect-zaka.sh ------------------------------------------------

@@ -357,6 +357,77 @@ intercore_gate_override() {
 # its own default.
 INTERCORE_LOCK_BIN=""
 
+# --- Fallback lock helpers ---------------------------------------------------
+
+# Tokens of the locks this shell holds, one "<lock_dir>=<token>" per line.
+_INTERCORE_LOCK_TOKENS=""
+
+_intercore_lock_token_get() {
+    local line
+    while IFS= read -r line; do
+        if [[ "${line%%=*}" == "$1" ]]; then printf '%s' "${line#*=}"; return 0; fi
+    done <<< "$_INTERCORE_LOCK_TOKENS"
+    return 0
+}
+
+_intercore_lock_token_drop() {
+    local line out=""
+    while IFS= read -r line; do
+        [[ -n "$line" && "${line%%=*}" != "$1" ]] && out+="${line}"$'\n'
+    done <<< "$_INTERCORE_LOCK_TOKENS"
+    _INTERCORE_LOCK_TOKENS="$out"
+}
+
+_intercore_lock_token_set() {
+    _intercore_lock_token_drop "$1"
+    _INTERCORE_LOCK_TOKENS+="$1=$2"$'\n'
+}
+
+# _intercore_lock_field <owner.json> <pid|token>: print a field of the record.
+_intercore_lock_field() {
+    case "$2" in
+        pid) sed -n 's/.*"pid":[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$1" 2>/dev/null | head -n1 ;;
+        token) sed -n 's/.*"token":[[:space:]]*"\([^"]*\)".*/\1/p' "$1" 2>/dev/null | head -n1 ;;
+    esac
+}
+
+# _intercore_lock_owned_by <owner.json> <pid> <token>: true when the record
+# names that pid and, if a token is given, that token.
+_intercore_lock_owned_by() {
+    [[ -f "$1" ]] || return 1
+    [[ "$(_intercore_lock_field "$1" pid)" == "$2" ]] || return 1
+    [[ -z "$3" || "$(_intercore_lock_field "$1" token)" == "$3" ]]
+}
+
+_intercore_pid_alive() {
+    [[ "$1" =~ ^[0-9]+$ && "$1" -gt 0 ]] || return 1
+    kill -0 "$1" 2>/dev/null || ps -p "$1" >/dev/null 2>&1
+}
+
+# _intercore_lock_break_dead <lock_dir>: remove the lock if its owner is dead.
+# The owner record is claimed by an atomic rename, so concurrent cleaners and a
+# new acquirer cannot all act on the same record. If the renamed record turns out
+# not to be the one judged dead (a successor took the lock in between), it is
+# put back with a link that cannot overwrite.
+_intercore_lock_break_dead() {
+    local d="$1" of="$1/owner.json" pid claimed
+    if [[ -e "$of" ]]; then
+        pid=$(_intercore_lock_field "$of" pid)
+        if _intercore_pid_alive "$pid"; then return 0; fi
+        claimed="$of.breaking.$$.${RANDOM}${RANDOM}"
+        mv "$of" "$claimed" 2>/dev/null || return 0   # lost the race: someone else is breaking it
+        if [[ "$(_intercore_lock_field "$claimed" pid)" != "$pid" ]]; then
+            ln "$claimed" "$of" 2>/dev/null || true
+            rm -f "$claimed" 2>/dev/null || true
+            return 0
+        fi
+        rm -f "$claimed" 2>/dev/null || true
+    fi
+    # Only an empty directory is removed: a successor that claimed it meanwhile
+    # has an owner.json in it, so rmdir refuses.
+    rmdir "$d" 2>/dev/null || true
+}
+
 intercore_lock_available() {
     if [[ -n "$INTERCORE_LOCK_BIN" ]]; then return 0; fi
     INTERCORE_LOCK_BIN=$(command -v ic 2>/dev/null || command -v intercore 2>/dev/null)
@@ -389,14 +460,19 @@ intercore_lock() {
     local lock_dir="${INTERCORE_LOCK_FALLBACK_DIR:-/tmp/intercore/locks}/${name}/${scope}"
     mkdir -p "$(dirname "$lock_dir")" 2>/dev/null || true
     local retries=0 max_retries=10
-    local _meta
-    _meta=$(printf '{"pid":%d,"host":"%s","owner":"%s","created":%d}\n' \
-        "$$" "$(hostname -s 2>/dev/null || echo unknown)" "$_owner" "$(date +%s)")
+    # The token makes this acquisition unique even for a process that acquires
+    # the same lock twice, so a delayed unlock can tell its own record from a
+    # successor's. ic ignores the extra field.
+    local _token _meta
+    _token="$$.$(date +%s%N 2>/dev/null).${RANDOM}${RANDOM}"
+    _meta=$(printf '{"pid":%d,"host":"%s","owner":"%s","created":%d,"token":"%s"}\n' \
+        "$$" "$(hostname -s 2>/dev/null || echo unknown)" "$_owner" "$(date +%s)" "$_token")
     while true; do
         if mkdir "$lock_dir" 2>/dev/null; then
             # The directory exists, but another caller may hold it (non-exclusive
             # mkdir). Whoever exclusive-creates owner.json holds the lock.
             if ( set -C; printf '%s\n' "$_meta" > "$lock_dir/owner.json" ) 2>/dev/null; then
+                _intercore_lock_token_set "$lock_dir" "$_token"
                 return 0
             fi
             # Lost the claim. Never remove a held lock: rmdir only succeeds on
@@ -419,9 +495,17 @@ intercore_unlock() {
         "$INTERCORE_LOCK_BIN" lock release "$name" "$scope" --owner="$_owner" >/dev/null 2>&1 || true
         return 0
     fi
-    # Fallback: rm owner.json + rmdir (no owner check in fallback)
-    rm -f "${INTERCORE_LOCK_FALLBACK_DIR:-/tmp/intercore/locks}/${name}/${scope}/owner.json" 2>/dev/null || true
-    rmdir "${INTERCORE_LOCK_FALLBACK_DIR:-/tmp/intercore/locks}/${name}/${scope}" 2>/dev/null || true
+    # Fallback: remove the lock only if owner.json still names this caller (pid
+    # and, when this shell recorded one, the acquire token). A lock that was
+    # cleaned and re-acquired by someone else is theirs and is left alone.
+    local lock_dir="${INTERCORE_LOCK_FALLBACK_DIR:-/tmp/intercore/locks}/${name}/${scope}"
+    local _mytoken
+    _mytoken=$(_intercore_lock_token_get "$lock_dir")
+    _intercore_lock_token_drop "$lock_dir"
+    if _intercore_lock_owned_by "$lock_dir/owner.json" "$$" "$_mytoken"; then
+        rm -f "$lock_dir/owner.json" 2>/dev/null || true
+        rmdir "$lock_dir" 2>/dev/null || true
+    fi
     return 0
 }
 
@@ -434,12 +518,16 @@ intercore_lock_clean() {
         "$INTERCORE_LOCK_BIN" lock clean --older-than="$max_age" >/dev/null 2>&1 || true
         return 0
     fi
-    # Fallback: find + rm stale lock dirs. Parse max_age to seconds for date offset.
+    # Fallback: an aged lock is removed only when its owner process is gone, as
+    # `ic lock clean` does. Age alone never justifies breaking a live holder.
     local _secs
     _secs=$(echo "$max_age" | sed -E 's/([0-9]+)s$/\1/; s/([0-9]+)m$/\1*60/; s/([0-9]+)h$/\1*3600/' | bc 2>/dev/null) || _secs=5
     [[ -z "$_secs" || "$_secs" -eq 0 ]] && _secs=5
-    find "${INTERCORE_LOCK_FALLBACK_DIR:-/tmp/intercore/locks}" -mindepth 2 -maxdepth 2 -type d -not -newermt "${_secs} seconds ago" \
-        -exec sh -c 'rm -f "$1/owner.json" && rmdir "$1"' _ {} \; 2>/dev/null || true
+    local _base="${INTERCORE_LOCK_FALLBACK_DIR:-/tmp/intercore/locks}" _d
+    [[ -d "$_base" ]] || return 0
+    while IFS= read -r -d '' _d; do
+        _intercore_lock_break_dead "$_d"
+    done < <(find "$_base" -mindepth 2 -maxdepth 2 -type d -not -newermt "${_secs} seconds ago" -print0 2>/dev/null)
     return 0
 }
 
