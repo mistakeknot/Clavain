@@ -18,6 +18,8 @@ setup() {
     : > "$STDERR_FILE"
 
     HELPERS="$TMPDIR_T/helpers.sh"
+    # _extract_verdict classifies verdict words with the shared library.
+    printf 'source %q\n' "$BATS_TEST_DIRNAME/../../scripts/lib-verdict.sh" > "$HELPERS"
     awk '
         /^_redact_provider_text\(\)[[:space:]]*\{/ { emit=1 }
         /^_emit_provider_stderr\(\)[[:space:]]*\{/ { emit=1 }
@@ -31,7 +33,7 @@ setup() {
             print
             if ($0 ~ /^}[[:space:]]*$/) { emit=0 }
         }
-    ' "$DISPATCH_SCRIPT" > "$HELPERS"
+    ' "$DISPATCH_SCRIPT" >> "$HELPERS"
 }
 
 teardown() {

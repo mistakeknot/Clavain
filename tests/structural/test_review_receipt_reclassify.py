@@ -95,3 +95,24 @@ def test_refuses_symlinked_destination_file(tmp_path):
     before = (src / "o__r" / "1-a.json").read_bytes()
     assert run(src, out).returncode == 2
     assert (src / "o__r" / "1-a.json").read_bytes() == before
+
+
+def test_receipts_with_verdict_raw_are_verified_and_get_no_note(tmp_path):
+    """mk-0qjva: the writer stores the word it read, so a BLOCK whose
+    verdict_raw is FAIL/BLOCK is verified, and UNKNOWN is already explicit."""
+    src, out = tmp_path / "reviews", tmp_path / "reclass"
+    (src / "o__r").mkdir(parents=True)
+    docs = {
+        "1-a": {"verdict": "BLOCK", "verdict_raw": "BLOCK"},
+        "2-b": {"verdict": "BLOCK", "verdict_raw": "FAIL (data loss)"},
+        "3-c": {"verdict": "UNKNOWN", "verdict_raw": "APPROVE"},
+        "4-d": {"verdict": "BLOCK"},                              # old receipt: still unverified
+        "5-e": {"verdict": "BLOCK", "verdict_raw": "APPROVE"},    # contradictory: still unverified
+    }
+    for name, doc in docs.items():
+        (src / "o__r" / f"{name}.json").write_text(json.dumps(doc))
+    r = run(src, out, "--check")
+    assert r.returncode == 0, r.stderr
+    assert "block-unverified: 2" in r.stdout
+    assert run(src, out).returncode == 0
+    assert {p.name for p in out.rglob("*.note.json")} == {"4-d.note.json", "5-e.note.json"}
