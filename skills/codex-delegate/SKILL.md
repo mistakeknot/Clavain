@@ -5,7 +5,9 @@ description: Delegate well-scoped implementation, exploration, search, test-gene
 
 # Codex Delegate
 
-Take well-scoped tasks, dispatch them to Codex CLI via dispatch.sh, and return results.
+Take well-scoped tasks, dispatch them through dispatch.sh under a governed role, and return results.
+
+**The role decides the backend.** `dispatch.sh` resolves the role through `config/routing.yaml` and runs whatever seat the policy names. That is the Codex CLI backend only when routing resolves the role to it; otherwise the resolved seat (for example a Claude model) runs the task. Do not choose a backend, model or tier yourself, and do not call `codex` directly. Nothing here changes routing, adds a spend path or adds a model choice.
 
 ## Enrolled measured work
 
