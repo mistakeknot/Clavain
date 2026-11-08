@@ -634,9 +634,11 @@ dispatch:
       # can run a plan's Verification. It runs in a disposable copy of the
       # checkout at HEAD with a copy of the plan directory; a change to either
       # copy, or a copy that goes missing, is an error verdict, and only
-      # kimi's final message of a clean stream is read for the ruling. Only
-      # where bwrap works is the rest of the filesystem read-only (kimi's own
-      # state dirs stay writable); reads and network are open either way. It
+      # kimi's final message of a clean stream is read for the ruling (its
+      # VERDICT value must be PASS, FAIL or UNRUN). Only where bwrap works is
+      # the rest of the filesystem read-only, with kimi's state dirs replaced
+      # by scratch copies discarded after the run; without bwrap nothing stops
+      # writes outside the copy. Reads and network are open either way. It
       # is last because the earlier seats are the better-measured ones.
       # token-efficiency cut (bead mk-42j9.20): review/planning seat,
       # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same

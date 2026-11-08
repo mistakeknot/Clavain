@@ -2671,9 +2671,10 @@ elif [[ "$ENGINE" == "kimi" ]]; then
     # with a content digest of both taken around the run. A change to either
     # copy, or a copy that has gone, turns the verdict into an error. That
     # digest says nothing about anywhere else. Only when bwrap is usable is
-    # the rest of the filesystem read-only; kimi's own state dirs stay
-    # writable, and reads and network are open either way. Without bwrap,
-    # writes outside the copy are not prevented and the run says so. A toolless
+    # the rest of the filesystem read-only and kimi's state dirs replaced by
+    # scratch copies (login entries read-only); reads and network are open
+    # either way. Without bwrap, writes outside the copy, including to kimi's
+    # real state, are not prevented and the run says so. A toolless
     # kimi seat could only answer UNRUN. Direct --to kimi dispatches stay
     # toolless; --no-tools still refuses kimi.
     KIMI_SEAT_TOOLS=false
@@ -3203,6 +3204,57 @@ _tree_digest_diff() {
       LC_ALL=C sort -u | head -20 | tr '\n' ' '; } 2>/dev/null || true
 }
 
+# Appends bwrap arguments to the array named by $2 that give the seat a
+# scratch version of one kimi state dir ($1), mounted at the real path. kimi
+# needs to write there (session files, logs, history), so the seat gets:
+#   - a writable copy, discarded with the sandbox, of the small entries
+#     (under 5 MB); larger entries (sessions, caches, logs) start empty;
+#   - the real entries that may hold login or tokens (names containing token,
+#     auth, secret, key or login, and oauth unless it holds only empty lock
+#     files) and the binaries (bin, updates), mounted READ-ONLY at their real
+#     paths; "credentials" is the one exception: kimi rewrites it on start, so
+#     it gets a scratch copy like the small entries.
+# So nothing the seat writes reaches the real state dir, and it cannot replace
+# the real login. The seat can still READ the login material (reads are not
+# restricted), and a token refreshed inside the seat is lost with the copy.
+_kimi_state_binds() {
+  local dir="$1" ref="$2" slot e base kb
+  local -n _out="$ref"
+  slot="$(mktemp -d "$KIMI_SANDBOX/state.XXXXXX")" || return 1
+  chmod 700 "$slot" || return 1
+  _out+=(--bind "$slot" "$dir")
+  shopt -s nullglob dotglob
+  for e in "$dir"/*; do
+    base="${e##*/}"
+    case "${base,,}" in
+      oauth)
+        # kimi takes a lock file in here. A dir holding only empty files has
+        # no login material, so it gets a writable scratch copy; anything
+        # else is read-only like the other login entries.
+        if [[ -d "$e" && ! -L "$e" && -z "$(find "$e" -type f -size +0 -print -quit 2>/dev/null)" ]]; then
+          cp -a -- "$e" "$slot/" 2>/dev/null || mkdir -p -- "$slot/$base"
+        else
+          _out+=(--ro-bind "$e" "$e")
+        fi ;;
+      bin|updates|*token*|*auth*|*secret*|*key*|*login*)
+        _out+=(--ro-bind "$e" "$e") ;;
+      credentials)
+        # kimi rewrites its login file when it starts, so the seat gets a
+        # scratch copy: the rewrite lands in the copy and is discarded, the
+        # real login is never written (a rotated token is lost with the copy).
+        cp -a -- "$e" "$slot/" 2>/dev/null || mkdir -p -- "$slot/$base" ;;
+      *)
+        kb="$(du -sk -- "$e" 2>/dev/null | cut -f1)"
+        if [[ -d "$e" && ! -L "$e" && "${kb:-999999}" -ge 5120 ]]; then
+          mkdir -p -- "$slot/$base"
+        else
+          cp -a -- "$e" "$slot/" 2>/dev/null || mkdir -p -- "$slot/$base"
+        fi ;;
+    esac
+  done
+  shopt -u nullglob dotglob
+}
+
 # Contain the tool-enabled kimi review seat (bead mk-1rbg). Detecting writes
 # after the fact is not enough (a seat can restore what it changed, write
 # where the check does not look, or edit the plan), so the seat never gets
@@ -3214,14 +3266,17 @@ _tree_digest_diff() {
 #     under it in the prompt;
 #   - the agent file: a copy.
 # When bwrap can create a sandbox, the run also gets a read-only root with only
-# this temp dir and kimi's own state dirs (~/.kimi-code, ~/.kimi,
-# ~/.config/kimi-code, whichever exist) writable, and its own pid namespace so
-# no process the seat starts outlives it. Those state dirs can hold kimi's
-# login material, and the digest does not cover them. When bwrap is not usable
-# nothing stops the seat writing outside the copy: it can still reach any file
-# the user can, and a warning says so. Reads and network are not restricted
-# either way. Sets KIMI_SANDBOX, KIMI_RUN_DIR, KIMI_RUN_CMD, KIMI_SANDBOX_MODE
-# and KIMI_FINAL_FILE.
+# this temp dir writable, and its own pid namespace so no process the seat
+# starts outlives it. kimi's state dirs (~/.kimi-code, ~/.kimi,
+# ~/.config/kimi-code, whichever exist) are replaced inside the sandbox by
+# scratch copies that are discarded with it; the entries that hold login
+# material and the binaries are mounted read-only (see _kimi_state_binds), so
+# the seat cannot change the real state. It can still READ that login material.
+# When bwrap is not usable nothing stops the seat writing outside the copy,
+# including in kimi's real state dirs: it can reach any file the user can, and
+# a warning says so. Reads and network are not restricted either way. Sets
+# KIMI_SANDBOX, KIMI_RUN_DIR, KIMI_RUN_CMD, KIMI_SANDBOX_MODE and
+# KIMI_FINAL_FILE.
 _kimi_seat_prepare() {
   local src="${WORKDIR:-.}" top prefix head dirty a
   KIMI_SANDBOX="$(mktemp -d -t clavain-kimi-sandbox.XXXXXX)" || return 1
@@ -3272,16 +3327,16 @@ _kimi_seat_prepare() {
      && bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid true >/dev/null 2>&1; then
     local binds=(--bind "$KIMI_SANDBOX" "$KIMI_SANDBOX") d
     for d in "$HOME/.kimi-code" "$HOME/.kimi" "$HOME/.config/kimi-code"; do
-      [[ ! -d "$d" ]] || binds+=(--bind "$d" "$d")
+      [[ ! -d "$d" ]] || _kimi_state_binds "$d" binds || return 1
     done
     KIMI_RUN_CMD=(bwrap --ro-bind / / "${binds[@]}" --dev /dev --proc /proc --unshare-pid --die-with-parent
                   --setenv TMPDIR "$KIMI_SANDBOX/tmp" -- "${KIMI_RUN_CMD[@]}")
-    KIMI_SANDBOX_MODE="bwrap: root read-only; the copy, its temp dir and kimi's own state dirs writable"
+    KIMI_SANDBOX_MODE="bwrap: root read-only; the copy, its temp dir and scratch copies of kimi's state dirs writable"
   else
     echo "Warning: dispatch: no usable bwrap sandbox; the kimi seat runs in a disposable copy but writes outside it are not prevented" >&2
   fi
-  # The ruling is written outside the sandbox, so nothing the seat runs can
-  # replace it between kimi's last record and the check.
+  # The ruling file is outside the sandbox's writable mounts. Under bwrap the
+  # seat cannot replace it; without bwrap it could, if it guessed the name.
   KIMI_FINAL_FILE="$(mktemp -t clavain-kimi-final.XXXXXX)" || return 1
   # Settle the copy's index (stat data refreshed, racily clean entries
   # re-verified) so a later read-only git command in the seat leaves it alone.
@@ -3309,7 +3364,8 @@ _kimi_seat_prepare() {
 #   - anything but blank lines and "meta" records follows the final record
 #     (more output, stray text, another record), or
 #   - the last non-meta record is not an assistant message with text and no
-#     tool calls.
+#     tool calls (the tool_calls key absent, null or an empty list; any other
+#     value, including an empty object, is not a clean final message).
 # Stray plain-text lines (tool output kimi lets through) before the final
 # record are ignored.
 _kimi_seat_final_message() {
@@ -3328,7 +3384,7 @@ _kimi_seat_final_message() {
       elif ([$l[$i + 1:][] | select(.k != "rec")] | length) > 0 then empty
       else $l[$i].r
         | if .role == "assistant" and (.content | type) == "string"
-             and ((.tool_calls // []) | length) == 0
+             and (.tool_calls == null or .tool_calls == [])
           then .content else empty end
       end'
 }
@@ -3340,7 +3396,9 @@ _kimi_verdict_problem() {
   awk '
     {
       u = toupper($0)
-      if (u ~ /^[[:space:]*_`]*VERDICT[[:space:]]*:/) leads++
+      # A verdict line may carry list, quote or heading markers ("- ", "1. ",
+      # "> ", "## ") before the word.
+      if (u ~ /^[[:space:]]*(([-*+>#]+|[0-9]+[.)])[[:space:]]*)*[[:space:]*_`]*VERDICT[[:space:]]*:/) leads++
       while (match(u, /VERDICT[[:space:]]*:[[:space:]*_`]*[A-Z-]+/)) {
         tok = substr(u, RSTART, RLENGTH)
         u = substr(u, RSTART + RLENGTH)
@@ -4711,12 +4769,20 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
       fi
     fi
     # The ruling is the final message of a clean stream (see
-    # _kimi_seat_final_message), it opens with a VERDICT line, and it carries
-    # no second or conflicting verdict. Any other shape is an error, never a
-    # pass.
+    # _kimi_seat_final_message). It must open with a VERDICT line whose value is
+    # PASS, FAIL or UNRUN, hold no other line that starts with VERDICT: (a list,
+    # quote or heading marker before it still counts), and name no different
+    # verdict word anywhere after a "VERDICT:". Any other shape is an error,
+    # never a pass. This does not detect a forged record (see the canon doc).
     _kfirst="$(grep -m1 -v '^[[:space:]]*$' "$KIMI_FINAL_FILE" 2>/dev/null || true)"
     if ! [[ "$_kfirst" =~ ^[\*_\`[:space:]]*[Vv][Ee][Rr][Dd][Ii][Cc][Tt][[:space:]]*: ]]; then
       SEAT_NO_RULING="kimi seat produced no usable ruling (no clean final assistant message opening with a VERDICT line)"
+    elif _kv="$(sed -E 's/^[*_`[:space:]]*[Vv][Ee][Rr][Dd][Ii][Cc][Tt][[:space:]]*:[*_`[:space:]]*//' <<< "$_kfirst" | grep -oE '^[A-Za-z-]+' | tr 'a-z' 'A-Z' || true)"
+         case "$_kv" in PASS|FAIL|UNRUN) false ;; *) true ;; esac; then
+      # The seat's declared vocabulary is PASS, FAIL and UNRUN (see its agent
+      # file); the generic extractor knows other words, which the seat must
+      # not be able to use to get a pass.
+      SEAT_NO_RULING="kimi seat's VERDICT value is outside PASS, FAIL and UNRUN"
     elif _kvp="$(_kimi_verdict_problem "$KIMI_FINAL_FILE")" && [[ -n "$_kvp" ]]; then
       SEAT_NO_RULING="kimi seat's final message is ambiguous: $_kvp"
     fi

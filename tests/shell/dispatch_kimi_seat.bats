@@ -389,6 +389,69 @@ agent_file_of() {
     ! grep -q 'VERDICT: PASS' "$T/out.md"
 }
 
+@test "kimi seat: a VERDICT value outside PASS, FAIL and UNRUN is an error, never a ruling" {
+    for body in $'VERDICT: CLEAN\nCRITERION: none' $'VERDICT: GARBAGE\nCRITERION: none' $'VERDICT: PASSED\nCRITERION: none' $'VERDICT: PASS-ISH\nCRITERION: none' $'VERDICT:\nCRITERION: none'; do
+        fake_kimi "$body"
+        run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+        [ "$status" -ne 0 ] || { echo "not caught: $body"; return 1; }
+        run cat "$T/out.md.verdict"
+        [[ "$output" == *"STATUS: error"* ]] || { echo "no error verdict: $body"; return 1; }
+        [[ "$output" != *"STATUS: pass"* ]]
+    done
+}
+
+@test "kimi seat: UNRUN is accepted as a vocabulary word" {
+    fake_kimi $'VERDICT: UNRUN\nCRITERION: could not run it'
+    run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    [ "$(head -1 "$T/out.md")" = "VERDICT: UNRUN" ]
+    run cat "$T/out.md.verdict"
+    [[ "$output" != *"STATUS: error"* ]]
+}
+
+@test "kimi seat: a VERDICT line behind a list, quote or heading marker still counts toward ambiguity" {
+    for body in $'VERDICT: PASS\n- VERDICT: PASS' $'VERDICT: PASS\n* VERDICT: PASS' $'VERDICT: PASS\n1. VERDICT: PASS' $'VERDICT: PASS\n> VERDICT: PASS' $'VERDICT: PASS\n## VERDICT: PASS' $'VERDICT: PASS\n  - **VERDICT: PASS**'; do
+        fake_kimi "$body"
+        run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+        [ "$status" -ne 0 ] || { echo "not caught: $body"; return 1; }
+        run cat "$T/out.md.verdict"
+        [[ "$output" == *"STATUS: error"* ]] || { echo "no error verdict: $body"; return 1; }
+    done
+}
+
+@test "kimi seat: a final message is clean only with tool_calls absent, null or an empty list" {
+    for tc in 'null' '[]'; do
+        fake_kimi "" "" "" "jq -cn --argjson tc '$tc' '{role:\"assistant\",content:\"VERDICT: PASS\nCRITERION: none\",tool_calls:\$tc}'"
+        run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+        [ "$status" -eq 0 ] || { echo "rejected tool_calls=$tc: $output"; return 1; }
+    done
+    for tc in '{}' '{"a":1}' '[{"type":"function"}]' '"x"' '0' 'false'; do
+        fake_kimi "" "" "" "jq -cn --argjson tc '$tc' '{role:\"assistant\",content:\"VERDICT: PASS\nCRITERION: none\",tool_calls:\$tc}'"
+        run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+        [ "$status" -ne 0 ] || { echo "accepted tool_calls=$tc"; return 1; }
+        run cat "$T/out.md.verdict"
+        [[ "$output" != *"STATUS: pass"* ]] || { echo "pass verdict for tool_calls=$tc"; return 1; }
+    done
+}
+
+@test "kimi seat: with bwrap, writes to kimi's state dirs never reach the real path" {
+    command -v bwrap >/dev/null || skip "bwrap not installed"
+    bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid true 2>/dev/null || skip "bwrap cannot create a sandbox here"
+    mkdir -p "$T/home/.kimi-code/credentials" "$T/home/.kimi-code/oauth" "$T/home/.kimi-code/sessions" "$T/home/.kimi-code/bin"
+    printf 'harmless-config\n' > "$T/home/.kimi-code/config.toml"
+    printf 'harmless-fixture\n' > "$T/home/.kimi-code/credentials/login.json"
+    printf 'harmless-token\n' > "$T/home/.kimi-code/token-cache"
+    printf 'x\n' > "$T/home/.kimi-code/bin/tool"
+    : > "$T/home/.kimi-code/oauth/lock"
+    before="$(cd "$T/home" && find .kimi-code -type f -exec sha256sum {} + | sort; find .kimi-code | sort)"
+    hook="H=$T/home/.kimi-code; echo seen > \$H/config.toml; echo new > \$H/newfile; echo new > \$H/sessions/new; echo bad > \$H/credentials/login.json; echo bad > \$H/credentials/extra; echo bad > \$H/token-cache; echo bad > \$H/bin/tool; echo bad > \$H/bin/extra; rm -f \$H/credentials/login.json \$H/oauth/lock; true"
+    fake_kimi $'VERDICT: PASS\nCRITERION: none' "$hook"
+    HOME="$T/home" CLAVAIN_SEAT_BWRAP=auto run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    after="$(cd "$T/home" && find .kimi-code -type f -exec sha256sum {} + | sort; find .kimi-code | sort)"
+    [ "$before" = "$after" ]
+    # the seat saw a working state dir: the copy took the write
+    [ "$(head -1 "$T/out.md")" = "VERDICT: PASS" ]
+}
+
 @test "canon doc states the conditions under which the kimi seat guarantees hold" {
     doc="$BATS_TEST_DIRNAME/../../docs/canon/reasoning-routing-operations.md"
     grep -q 'Change detection, copies only' "$doc"

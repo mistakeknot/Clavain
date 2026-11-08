@@ -83,24 +83,37 @@ adds the following, each with the condition under which it holds:
   path. A seat can also change a file and change it back; nothing records
   that.
 - **Filesystem boundary, only with `bwrap`.** Where `bwrap` can create a
-  sandbox, the run gets a read-only root with the copy, its temp dir and
+  sandbox, the run gets a read-only root with only the copy and its temp dir
+  writable, in its own process namespace so nothing it starts outlives it.
   kimi's own state directories (`~/.kimi-code`, `~/.kimi`,
-  `~/.config/kimi-code`, whichever exist) writable, in its own process
-  namespace so nothing it starts outlives it. Those state directories can hold
-  kimi's login material: the seat can read and change it, and the fingerprint
-  does not cover it. Where `bwrap` is unusable (or `CLAVAIN_SEAT_BWRAP=0`),
-  dispatch says so and nothing stops the seat writing outside the copy.
-- **Not restricted either way.** Reads of any file the user can read, and
-  network access.
+  `~/.config/kimi-code`, whichever exist) are replaced inside the sandbox by
+  scratch copies that are discarded after the run: small entries are copied
+  (large ones such as sessions and caches start empty), kimi's `credentials`
+  entry is a copy because kimi rewrites it on start, and entries named like
+  login or token material, plus the binaries, are mounted read-only. So a
+  write by the seat does not reach the real state directory, and a token
+  refreshed inside the seat is lost with the copy. The ruling file is outside
+  the writable mounts. Where `bwrap` is unusable (or `CLAVAIN_SEAT_BWRAP=0`),
+  dispatch says so and nothing stops the seat writing outside the copy,
+  including to kimi's real state directories and login material.
+- **Not restricted either way.** Reads of any file the user can read, login
+  material included (the seat has a copy of it under `bwrap`), and network
+  access.
 - **Reading the ruling.** The ruling is kimi's final assistant message
   (`--output-format stream-json`), taken from a stream with no malformed
   record (a line starting with `{` that is not a JSON object) and nothing but
-  blank lines and `meta` records after that message. The message must open
-  with a `VERDICT:` line, must hold one such line, and must not name a
-  different verdict elsewhere. Narration, quoted output and tool results are
-  never read. Any other shape is an error verdict, not a pass. It cannot
-  tell kimi's own last record from a forged one that a process the seat started
-  wrote to the stream after it, while kimi was still running.
+  blank lines and `meta` records after that message. That message must have no
+  `tool_calls`, or a null or empty list (any other value, an empty object
+  included, makes it not a final message). It must open with a `VERDICT:`
+  line whose value is `PASS`, `FAIL` or `UNRUN`; any other value is an error.
+  It must hold no other line that starts with `VERDICT:` (a list, quote or
+  heading marker before it still counts) and must not name a different verdict
+  word after a `VERDICT:` elsewhere. Narration, quoted output and tool results
+  are never read. Any other shape is an error verdict, not a pass. Not
+  detected: a record forged into the stream by a process the seat started,
+  while kimi was still running, that looks like kimi's own last record. Under
+  `bwrap` the process namespace stops such a process surviving kimi; without
+  it nothing does.
 
 A direct `--to kimi` dispatch stays toolless because it may carry untrusted
 input.
