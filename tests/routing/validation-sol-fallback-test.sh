@@ -4,10 +4,10 @@
 # already claim: validation-sol -> [validation-opus, validation-sonnet].
 # Resolved through the *real* ic binary (not a fake), because `ic route
 # dispatch --tier=` never returns .fallback_chain (see tier-fallback-test.sh)
-# and --role=validation under --policy-profile=ci-campaign-pilot is the one
+# and --role=validation under --policy-profile=devbox-campaign is the one
 # path that resolves validation-sol as the PRIMARY (not just a fallback
 # position) — this is exactly the reachable path a real quota-exhausted
-# ci-campaign-pilot validation seat hits.
+# devbox-campaign validation seat hits.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -23,11 +23,20 @@ fail() {
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 CONTEXT_FILE="$TMP_ROOT/context.json"
-printf '%s\n' '{"reasons":[],"rationale":"validation-sol fallback coverage","scope":"mk-ag2s"}' > "$CONTEXT_FILE"
+printf '%s\n' '{"reasons":[],"rationale":"validation-sol fallback coverage","scope":"alex-campaign"}' > "$CONTEXT_FILE"
+
+python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT/policy.yaml" <<'FIXTURE'
+import sys, yaml
+cfg = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
+cfg["reasoning"]["profiles"]["devbox-campaign"] = {
+    "scope": "alex-campaign", "roles": {
+        "main-integrator": "pilot-opus", "routine-execution": "pilot-sonnet", "validation": "validation-sol"}}
+yaml.safe_dump(cfg, open(sys.argv[2], "w"))
+FIXTURE
 
 resolved="$(ic --json route dispatch --role=validation \
-  --policy="$ROOT/config/routing.yaml" \
-  --policy-profile=ci-campaign-pilot \
+  --policy="$TMP_ROOT/policy.yaml" \
+  --policy-profile=devbox-campaign \
   --producer-identity=gpt-6-astra \
   --context-file="$CONTEXT_FILE" 2>&1)" || fail "ic route dispatch failed: $resolved"
 

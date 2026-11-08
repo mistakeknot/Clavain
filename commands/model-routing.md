@@ -79,8 +79,8 @@ bash "${CLAUDE_PLUGIN_ROOT:-.}/scripts/routing-mode.sh" quality
 The authoritative policy is [reasoning-routing.md](../docs/canon/reasoning-routing.md)
 and `config/routing.yaml`. Use planning, plan-review, execution, validation and
 escalation roles with decision context and explicit policy source. No historical
-model table below overrides frontier requirements or independence. The CI pilot
-mix applies only to `ci-campaign-pilot` with scope `mk-ag2s`.
+model table below overrides frontier requirements or independence. A policy profile applies
+only to the scope its policy declares.
 
 ## Capability-routing doctrine (historical Claude-pool evidence)
 

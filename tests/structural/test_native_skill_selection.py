@@ -14,21 +14,38 @@ contract = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(contract)
 
 
+INVALID_POLICY = '/dev/null/clavain-invalid-routing-overlay'
+
+
+@pytest.fixture(autouse=True)
+def no_ambient_overlay(monkeypatch):
+    monkeypatch.setenv('CLAVAIN_ROUTING_OVERLAY', '')
+
+
 def policy_argument(body, env):
     argument = re.search(r'--policy=(.*?) --role=', body).group(1)
     return subprocess.run(['bash', '-c', 'printf "%s" '+argument],
                           env=env, capture_output=True, text=True)
 
 
+def install(target):
+    (target/'config').mkdir(parents=True, exist_ok=True)
+    (target/'scripts').mkdir(exist_ok=True)
+    shutil.copy(ROOT/'config/routing.yaml', target/'config/routing.yaml')
+    shutil.copy(ROOT/'scripts/routing_overlay.py', target/'scripts/routing_overlay.py')
+    return target.resolve()
+
+
 def test_portable_claude_uses_native_selected_root_and_fails_without_it(tmp_path):
     body, meta = contract.render(ROOT, 'claude', portable_policy=True)
     env = {k: v for k, v in os.environ.items()
            if k not in ('CLAVAIN_ROUTING_POLICY', 'CLAVAIN_SELECTED_ROOT')}
+    env['CLAVAIN_ROUTING_OVERLAY'] = ''
     missing = policy_argument(body, env)
-    assert missing.returncode != 0
-    assert not missing.stdout
+    assert missing.stdout == INVALID_POLICY
+    assert 'CLAVAIN_SELECTED_ROOT' in missing.stderr
     for name in ('selected one', 'selected-two'):
-        selected = tmp_path/name
+        selected = install(tmp_path/name)
         result = policy_argument(body, dict(env, CLAVAIN_SELECTED_ROOT=str(selected)))
         assert result.returncode == 0
         assert result.stdout == str(selected/'config/routing.yaml')
@@ -54,5 +71,39 @@ def test_relocated_sources_keep_portable_hash_and_explicit_policy(tmp_path):
         with pytest.raises(ValueError, match='policy changed'):
             contract.render(source, 'claude', expected_policy_hash='0'*64)
     codex, codex_meta = contract.render(ROOT, 'codex', portable_policy=True)
-    assert '$HOME/.agents/skills/clavain/../config/routing.yaml' in codex
+    assert '$HOME/.agents/skills/clavain/../scripts/routing_overlay.py" policy' in codex
     assert codex_meta['policy_hash'] == meta['policy_hash']
+
+
+def portable_env(tmp_path, **extra):
+    env = {k: v for k, v in os.environ.items()
+           if k not in ('CLAVAIN_ROUTING_POLICY', 'CLAVAIN_SELECTED_ROOT', 'CLAVAIN_ROUTING_OVERLAY')}
+    env['CLAVAIN_ROUTING_CACHE_DIR'] = str(tmp_path/'cache')
+    env['CLAVAIN_SELECTED_ROOT'] = str(install(tmp_path/'installed'))
+    env.update(extra)
+    return env
+
+
+def test_portable_policy_resolves_the_overlaid_policy(tmp_path):
+    body, _ = contract.render(ROOT, 'claude', portable_policy=True)
+    overlay = tmp_path/'overlay.yaml'
+    overlay.write_text('reasoning:\n  profiles:\n    alex-devbox:\n      scope: alex-devbox\n')
+    result = policy_argument(body, portable_env(tmp_path, CLAVAIN_ROUTING_OVERLAY=str(overlay)))
+    assert result.returncode == 0
+    resolved = Path(result.stdout)
+    assert resolved.parent == tmp_path/'cache'
+    assert 'alex-devbox' in resolved.read_text()
+
+
+def test_portable_policy_with_invalid_overlay_never_falls_back_to_neutral(tmp_path):
+    body, _ = contract.render(ROOT, 'claude', portable_policy=True)
+    neutral = str(tmp_path/'installed'/'config'/'routing.yaml')
+    for content in ('reasoning: [', 'reasoning:\n  bogus_key: 1\n', '', 'null\n'):
+        overlay = tmp_path/'bad.yaml'
+        overlay.write_text(content)
+        result = policy_argument(body, portable_env(tmp_path, CLAVAIN_ROUTING_OVERLAY=str(overlay)))
+        assert result.stdout != neutral, content
+        assert result.stdout == INVALID_POLICY, content
+        assert 'routing overlay:' in result.stderr
+    missing = policy_argument(body, portable_env(tmp_path, CLAVAIN_ROUTING_OVERLAY=str(tmp_path/'absent.yaml')))
+    assert missing.stdout == INVALID_POLICY

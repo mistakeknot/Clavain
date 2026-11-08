@@ -26,6 +26,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ -z "${CLAVAIN_ROUTING_POLICY:-}" ]]; then
+  CLAVAIN_ROUTING_POLICY="$(python3 "$ROOT/scripts/routing_overlay.py" path)" || exit 1
+fi
 POLICY="${CLAVAIN_ROUTING_POLICY:-$ROOT/config/routing.yaml}"
 CONTEXT=""
 EVIDENCE=""

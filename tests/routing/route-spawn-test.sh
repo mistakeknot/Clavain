@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# route-spawn.sh acceptance suite (Phase 2a Task 2; project-profile
-# resolution updated for mk-h73i, which emptied reasoning.project_profiles).
-# Real Intercore resolver against the packaged policy, fake `bb` for the pool
+# route-spawn.sh acceptance suite. Real Intercore resolver against a synthetic
+# project and alias table over the packaged policy, fake `bb` for the pool
 # probe. No model calls and no thread spawns.
 set -euo pipefail
 
@@ -91,6 +90,20 @@ export PATH="$TMP_ROOT/bin:$PATH"
 export ROUTE_SPAWN_RECEIPT_DIR="$TMP_ROOT/receipts"
 unset CLAVAIN_POLICY_PROFILE CLAVAIN_DECISION_CONTEXT CLAVAIN_ROUTING_POLICY
 
+FIXTURE_BASE="$TMP_ROOT/devbox-base.yaml"
+python3 - "$ROOT/config/routing.yaml" "$FIXTURE_BASE" <<'DEVBOXBASE'
+import sys, yaml
+cfg = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
+cfg["reasoning"]["projects"] = ["alpha", "clavain", "bravo", "charlie", "delta", "echo", "foxtrot", "golf",
+                                "hotel", "india", "juliet", "kilo", "lima", "mike", "november"]
+cfg["reasoning"]["project_aliases"] = {
+    "proj_synth1": "bravo", "proj_synth2": "charlie", "proj_synth3": "charlie", "proj_synth4": "echo",
+    "proj_synth5": "hotel", "proj_synth6": "india", "proj_synth7": "juliet", "proj_synth8": "kilo",
+    "proj_synth9": "lima", "proj_synth10": "mike", "proj_synth11": "november"}
+yaml.safe_dump(cfg, open(sys.argv[2], "w"))
+DEVBOXBASE
+export CLAVAIN_ROUTING_POLICY="$FIXTURE_BASE"
+
 RC=0
 OUT=""
 run() {
@@ -113,19 +126,16 @@ OPUS="claude-code claude-opus-5-5 medium"
 SONNET="claude-code claude-sonnet-5-5 medium"
 ASTRA="codex gpt-6-astra medium"
 
-# --- mk-h73i: all 15 table slugs resolve coordinator-seat to the fleet
-# Sonnet default. No project carries a coordinator-seat override any more —
-# this reverses the mk-42j9.25/mk-42j9.5 nine-Opus/six-Sonnet split that used
-# to live here.
-for slug in aleph clavain autarch after-them bbops shadow-work quilan sylvesteops nartopo \
-            autosigil rakes uncrancher cujgel agmodb linsenkasten; do
+# --- every table slug resolves coordinator-seat to the fleet Sonnet default.
+for slug in alpha clavain bravo charlie delta echo foxtrot golf hotel \
+            india juliet kilo lima mike november; do
   run --role coordinator-seat --project "$slug"
   expect 0 "$SONNET" "coordinator-seat --project $slug"
 done
-for pair in proj_dnrqkvnf5x:autarch proj_fsrj27djw2:after-them proj_2apc9fag87:after-them \
-            proj_eh66ikerj2:shadow-work proj_ewcj55ndy5:nartopo \
-            proj_3ktdvx76vj:autosigil proj_sy6myvvmq2:rakes proj_94669ff46u:uncrancher \
-            proj_qdsjncqfd4:cujgel proj_5wt5mmgska:agmodb proj_g4vgbq6jst:linsenkasten; do
+for pair in proj_synth1:bravo proj_synth2:charlie proj_synth3:charlie \
+            proj_synth4:echo proj_synth5:hotel \
+            proj_synth6:india proj_synth7:juliet proj_synth8:kilo \
+            proj_synth9:lima proj_synth10:mike proj_synth11:november; do
   run --role coordinator-seat --project "${pair%%:*}"
   expect 0 "$SONNET" "coordinator-seat alias ${pair%%:*} (${pair#*:})"
   jq -e --arg s "${pair#*:}" '.project == $s' <<< "$(latest_receipt)" >/dev/null \
@@ -167,7 +177,7 @@ jq -e '.role == "lane" and .arm == "control" and .lineage == "coord-123" and .ro
 
 # --- Finding 1: only role lane consults the arm. Coordination and governed
 # roles ignore --lineage and are never re-routed.
-run --role coordinator-seat --project autosigil --lineage coord-123
+run --role coordinator-seat --project india --lineage coord-123
 expect 0 "$SONNET" "coordination ignores --lineage"
 jq -e '.arm == null and .route.requested_role == "coordinator-seat"' <<< "$(latest_receipt)" >/dev/null \
   || fail "coordinator-seat receipt must not carry an arm"
@@ -185,28 +195,31 @@ jq -e '.arm == null and .route.requested_role == "validation" and .producer_iden
 # only, so the campaign/context-scope-conflict paths that depend on a live
 # project profile stay covered even though the packaged policy's
 # project_profiles is now empty.
-python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT/clavainprofile.yaml" <<'CLAVAINPROFILE'
+python3 - "$FIXTURE_BASE" "$TMP_ROOT/clavainprofile.yaml" <<'CLAVAINPROFILE'
 import sys, yaml
 cfg = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
 cfg["reasoning"]["project_profiles"]["clavain"] = "project-clavain"
 cfg["reasoning"]["profiles"]["project-clavain"] = {
     "scope": "project:clavain", "roles": {"coordinator-seat": "coordinator-seat-opus"}}
+cfg["reasoning"]["profiles"]["devbox-campaign"] = {
+    "scope": "alex-campaign", "roles": {
+        "main-integrator": "pilot-opus", "routine-execution": "pilot-sonnet", "validation": "validation-sol"}}
 yaml.safe_dump(cfg, open(sys.argv[2], "w"))
 CLAVAINPROFILE
 CLAVAINPOLICY="$TMP_ROOT/clavainprofile.yaml"
 
 # --- Finding 8 and campaign precedence.
-printf '%s\n' '{"reasons":[],"rationale":"campaign","scope":"mk-ag2s"}' > "$TMP_ROOT/campaign.json"
+printf '%s\n' '{"reasons":[],"rationale":"campaign","scope":"alex-campaign"}' > "$TMP_ROOT/campaign.json"
 cp "$TMP_ROOT/campaign.json" "$TMP_ROOT/campaign.orig.json"
-RC=0; OUT="$(CLAVAIN_POLICY_PROFILE=ci-campaign-pilot CLAVAIN_ROUTING_POLICY="$CLAVAINPOLICY" bash "$SCRIPT" --role coordinator-seat --project clavain --context-file "$TMP_ROOT/campaign.json" 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(CLAVAIN_POLICY_PROFILE=devbox-campaign CLAVAIN_ROUTING_POLICY="$CLAVAINPOLICY" bash "$SCRIPT" --role coordinator-seat --project clavain --context-file "$TMP_ROOT/campaign.json" 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 3 "" "campaign profile over a project coordination profile fails closed"
-RC=0; OUT="$(CLAVAIN_POLICY_PROFILE=ci-campaign-pilot bash "$SCRIPT" --role coordinator-seat --project autosigil --context-file "$TMP_ROOT/campaign.json" 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(CLAVAIN_POLICY_PROFILE=devbox-campaign CLAVAIN_ROUTING_POLICY="$CLAVAINPOLICY" bash "$SCRIPT" --role coordinator-seat --project india --context-file "$TMP_ROOT/campaign.json" 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$SONNET" "campaign profile with a project that has no profile"
-jq -e '.project == "autosigil" and .policy_profile == "ci-campaign-pilot" and .route.policy_profile == "ci-campaign-pilot"' <<< "$(latest_receipt)" >/dev/null \
+jq -e '.project == "india" and .policy_profile == "devbox-campaign" and .route.policy_profile == "devbox-campaign"' <<< "$(latest_receipt)" >/dev/null \
   || fail "campaign receipt must record the project and the campaign profile"
-RC=0; OUT="$(CLAVAIN_POLICY_PROFILE=ci-campaign-pilot bash "$SCRIPT" --role routine-execution --project clavain --context-file "$TMP_ROOT/campaign.json" 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(CLAVAIN_POLICY_PROFILE=devbox-campaign CLAVAIN_ROUTING_POLICY="$CLAVAINPOLICY" bash "$SCRIPT" --role routine-execution --project clavain --context-file "$TMP_ROOT/campaign.json" 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "claude-code claude-sonnet-5-5 high" "campaign keeps precedence for other roles"
-jq -e '.project == "clavain" and .route.decision_context.scope == "mk-ag2s"' <<< "$(latest_receipt)" >/dev/null \
+jq -e '.project == "clavain" and .route.decision_context.scope == "alex-campaign"' <<< "$(latest_receipt)" >/dev/null \
   || fail "campaign scope must be preserved for non-coordination roles"
 cmp -s "$TMP_ROOT/campaign.json" "$TMP_ROOT/campaign.orig.json" || fail "the caller's context file must never be modified"
 
@@ -321,7 +334,7 @@ expect 0 "$OPUS" "lane on an unknown project"
 grep -qi "unknown project" "$TMP_ROOT/stderr" || fail "an unknown lane project must warn on stderr"
 
 # The policy must declare its project table explicitly.
-python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT/noprojects.yaml" <<'NOPROJ'
+python3 - "$FIXTURE_BASE" "$TMP_ROOT/noprojects.yaml" <<'NOPROJ'
 import sys, yaml
 cfg = yaml.safe_load(open(sys.argv[1]))
 cfg["reasoning"].pop("projects", None)
@@ -331,9 +344,9 @@ RC=0; OUT="$(CLAVAIN_ROUTING_POLICY="$TMP_ROOT/noprojects.yaml" bash "$SCRIPT" -
 expect 3 "" "policy without reasoning.projects"
 
 # --- Rule-6 round (coordinator ruling 2026-09-27).
-# mk ruling: never gpt-5.6-sol. With Claude exhausted every spawn role lands
+# Never gpt-5.6-sol. With Claude exhausted every spawn role lands
 # on gpt-6-astra medium; with no eligible seat it fails closed.
-for args in "--role lane --lineage L1" "--role main-session" "--role coordinator-seat --project autosigil" "--role coordinator-seat --project clavain"; do
+for args in "--role lane --lineage L1" "--role main-session" "--role coordinator-seat --project india" "--role coordinator-seat --project clavain"; do
   # shellcheck disable=SC2086
   RC=0; OUT="$(FAKE_POOL=claude-down bash "$SCRIPT" $args 2>"$TMP_ROOT/stderr")" || RC=$?
   expect 0 "$ASTRA" "Claude exhausted: $args"
@@ -343,18 +356,17 @@ for args in "--role lane --lineage L1" "--role main-session" "--role coordinator
 done
 run --role main-session
 expect 0 "$SONNET" "main-session default"
-run --role coordinator-seat --project autosigil
+run --role coordinator-seat --project india
 jq -e '.route.profile_ref == "coordinator-seat-sonnet" and .profile_source == "none"' <<< "$(latest_receipt)" >/dev/null \
   || fail "an unprofiled coordinator seat resolves coordinator-seat-sonnet"
-# mk-h73i: project_profiles is now empty, so every project resolves
-# coordinator-seat unprofiled, including the former Opus slugs like clavain.
+# project_profiles is empty, so every project resolves coordinator-seat unprofiled.
 run --role coordinator-seat --project clavain
 jq -e '.route.profile_ref == "coordinator-seat-sonnet" and .profile_source == "none"' <<< "$(latest_receipt)" >/dev/null \
   || fail "clavain has no project_profiles entry any more; coordinator-seat resolves coordinator-seat-sonnet"
 
 # Defense in depth: even a policy whose spawn chain reaches Sol fails closed
 # rather than spawning it.
-python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT/solchain.yaml" <<'SOLCHAIN'
+python3 - "$FIXTURE_BASE" "$TMP_ROOT/solchain.yaml" <<'SOLCHAIN'
 import sys, yaml
 cfg = yaml.safe_load(open(sys.argv[1]))
 tiers = cfg["dispatch"]["tiers"]
@@ -364,14 +376,14 @@ tiers["main-sonnet"]["fallbacks"] = ["spawn-sol-test"]
 tiers["coordinator-seat-sonnet"]["fallbacks"] = ["spawn-sol-test"]
 yaml.safe_dump(cfg, open(sys.argv[2], "w"))
 SOLCHAIN
-for args in "main-session" "lane --lineage L1" "coordinator-seat --project autosigil" "coordinator-seat --project clavain"; do
+for args in "main-session" "lane --lineage L1" "coordinator-seat --project india" "coordinator-seat --project clavain"; do
   # shellcheck disable=SC2086
   RC=0; OUT="$(FAKE_POOL=claude-down CLAVAIN_ROUTING_POLICY="$TMP_ROOT/solchain.yaml" bash "$SCRIPT" --role $args 2>"$TMP_ROOT/stderr")" || RC=$?
   expect 3 "" "spawn role $args resolving gpt-5.6-sol fails closed"
   grep -q "gpt-5.6-sol" "$TMP_ROOT/stderr" || fail "the Sol refusal for $args must name the model"
 done
 
-# mk ruling 2026-09-27 covers every role route-spawn prints: governed roles
+# The rule covers every role route-spawn prints: governed roles
 # never print gpt-5.6-sol under the packaged policy (GPT-6 Sol is allowed)...
 for args in "validation --producer-identity claude-opus-5-5" "cross-lab-review --producer-identity claude-opus-5-5" \
     routine-execution planning scout release-preparation; do
@@ -381,7 +393,7 @@ for args in "validation --producer-identity claude-opus-5-5" "cross-lab-review -
   [[ -n "$OUT" && "$OUT" != *gpt-5.6* ]] || fail "governed role $args must not print gpt-5.6-sol: '$OUT'"
 done
 # ...and a policy that would give one gpt-5.6-sol, by any spelling, fails closed.
-python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT" <<'GOVSOL'
+python3 - "$FIXTURE_BASE" "$TMP_ROOT" <<'GOVSOL'
 import sys, yaml, copy
 base = yaml.safe_load(open(sys.argv[1]))
 for name, model, aliases in (("gov-sol", "gpt-5.6-sol", {}), ("gov-alias", "gpt-5.6", {}),
@@ -409,7 +421,7 @@ printf '{"profile":{"backend":"codex","model":"%s","model_identity":"%s","reason
   "$FAKE_MODEL" "${FAKE_IDENTITY:-$FAKE_MODEL}" 0
 FAKE_IC
 chmod +x "$TMP_ROOT/cannedic/ic"
-python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT/aliases.yaml" <<'ALIASES'
+python3 - "$FIXTURE_BASE" "$TMP_ROOT/aliases.yaml" <<'ALIASES'
 import sys, yaml
 cfg = yaml.safe_load(open(sys.argv[1]))
 cfg["dispatch"].setdefault("model_aliases", {}).update({
@@ -494,25 +506,24 @@ RC=0; ALL="$(PATH="$TMP_ROOT/setsidic:$PATH" ROUTE_SPAWN_IC_TIMEOUT=3 timeout 60
 (( SECONDS - start < 10 )) || fail "a setsid descendant must not hold route-spawn or the caller's stderr past the timeout ($((SECONDS - start)) s)"
 
 # N4: project-table cross-validation fails closed.
-python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT" <<'BADTABLE'
+python3 - "$FIXTURE_BASE" "$TMP_ROOT" <<'BADTABLE'
 import sys, yaml, copy
 base = yaml.safe_load(open(sys.argv[1]))
-# mk-h73i emptied project_profiles; inject a synthetic project-aleph profile
-# so cross-validation of profile scope/role shape stays covered even though
-# the packaged policy no longer ships one.
-base["reasoning"]["project_profiles"]["aleph"] = "project-aleph"
-base["reasoning"]["profiles"]["project-aleph"] = {
-    "scope": "project:aleph", "roles": {"coordinator-seat": "coordinator-seat-opus"}}
+# Inject a synthetic project-alpha profile so cross-validation of profile
+# scope/role shape stays covered.
+base["reasoning"]["project_profiles"]["alpha"] = "project-alpha"
+base["reasoning"]["profiles"]["project-alpha"] = {
+    "scope": "project:alpha", "roles": {"coordinator-seat": "coordinator-seat-opus"}}
 def emit(name, mutate):
     cfg = copy.deepcopy(base); mutate(cfg["reasoning"])
     yaml.safe_dump(cfg, open(f"{sys.argv[2]}/{name}.yaml", "w"))
-emit("typo-profile", lambda r: r["project_profiles"].__setitem__("aleph", "project-alpeh"))
-emit("slug-alias", lambda r: r["project_aliases"].__setitem__("clavain", "autosigil"))
-emit("lane-override", lambda r: r["profiles"]["project-aleph"]["roles"].__setitem__("lane", "coordinator-seat-opus"))
-emit("wrong-scope", lambda r: r["profiles"]["project-aleph"].__setitem__("scope", "project:clavain"))
+emit("typo-profile", lambda r: r["project_profiles"].__setitem__("alpha", "project-alpeh"))
+emit("slug-alias", lambda r: r["project_aliases"].__setitem__("clavain", "india"))
+emit("lane-override", lambda r: r["profiles"]["project-alpha"]["roles"].__setitem__("lane", "coordinator-seat-opus"))
+emit("wrong-scope", lambda r: r["profiles"]["project-alpha"].__setitem__("scope", "project:clavain"))
 BADTABLE
 for bad in typo-profile slug-alias lane-override wrong-scope; do
-  RC=0; OUT="$(CLAVAIN_ROUTING_POLICY="$TMP_ROOT/$bad.yaml" bash "$SCRIPT" --role coordinator-seat --project autosigil 2>"$TMP_ROOT/stderr")" || RC=$?
+  RC=0; OUT="$(CLAVAIN_ROUTING_POLICY="$TMP_ROOT/$bad.yaml" bash "$SCRIPT" --role coordinator-seat --project india 2>"$TMP_ROOT/stderr")" || RC=$?
   expect 3 "" "invalid project table: $bad"
 done
 

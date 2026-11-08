@@ -147,10 +147,10 @@ Personas live in `docs/canon/` because they are durable canonical knowledge that
 ## Phase 4: Observability
 
 **Independent automation:** For active mistakeknot/gensysven repositories,
-inspect `zklw-ci status --repo OWNER/REPO --json` on zklw and claim the existing
-repository migration task from campaign `mk-ag2s` before changing CI. For new
+inspect (with `<fleet-ci>` standing for the operator's fleet CI command) `<fleet-ci> status --repo OWNER/REPO --json` on the CI host and claim the existing
+repository migration task before changing CI. For new
 code projects, derive reproducible baseline checks from Q5 and manifests;
-register using `zklw-ci onboard --repo OWNER/REPO --json`. Onboard creates a
+register using `<fleet-ci> onboard --repo OWNER/REPO --json`. Onboard creates a
 review proposal, not execution authority: complete the registry review and
 fresh-guest verification before reporting CI ready. Do not create Linux GitHub
 Actions workflows or Actions-controlled self-hosted runners. Keep required

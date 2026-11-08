@@ -1304,7 +1304,7 @@ _dispatch_tier_profile() {
   # CLAUDE_PLUGIN_ROOT search the rest of the routing stack uses.
   policy="${CLAVAIN_ROUTING_POLICY:-}"
   if [[ -z "$policy" ]] && declare -f _routing_find_config >/dev/null 2>&1; then
-    policy="$(_routing_find_config 2>/dev/null)" || policy=""
+    policy="$(_routing_find_config 2>/dev/null)" || { [[ $? -ne 2 ]] || return 1; policy=""; }
   fi
   policy="${policy:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
 
@@ -1674,6 +1674,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -z "${CLAVAIN_ROUTING_POLICY:-}" ]]; then
+  overlay_policy="$(python3 "$DISPATCH_SCRIPT_DIR/routing_overlay.py" path)" || exit 1
+  if [[ -n "$overlay_policy" ]]; then
+    export CLAVAIN_ROUTING_POLICY="$overlay_policy"
+  fi
+  unset overlay_policy
+fi
+
 # Replayed resolved decisions are a separate governed entry point. Derive the
 # role from the decision, never from a caller's --role alone. Keep all parsing
 # and evidence work inside the opt-in boundary so unset dispatch is unchanged.
@@ -1719,7 +1727,7 @@ fi
 if [[ -n "$TIER" && "$ENGINE" != kimi && "${CLAVAIN_ROUTING_PRECHECK:-}" != "" && "${CLAVAIN_ROUTING_PRECHECK:-}" != 0 ]]; then
   precheck_policy="${CLAVAIN_ROUTING_POLICY:-}"
   if [[ -z "$precheck_policy" ]] && declare -f _routing_find_config >/dev/null 2>&1; then
-    precheck_policy="$(_routing_find_config 2>/dev/null)" || precheck_policy=""
+    precheck_policy="$(_routing_find_config 2>/dev/null)" || { [[ $? -ne 2 ]] || exit 1; precheck_policy=""; }
   fi
   _dispatch_routing_precheck "" "${precheck_policy:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}" || exit 1
 fi
@@ -2440,7 +2448,7 @@ if [[ "$VIA" == "zaka" ]]; then
 
   # Backend preflight: fail fast with a clear message when zaka/tmux are missing
   if ! command -v zaka >/dev/null 2>&1; then
-    echo "Error: zaka CLI not found on PATH (required for --via zaka). See /Users/sma/projects/Sylveste/os/Zaka" >&2
+    echo "Error: zaka CLI not found on PATH (required for --via zaka). Install it and put it on PATH." >&2
     exit 1
   fi
   if [[ "$ZAKA_AGENT" != codex ]] && ! command -v tmux >/dev/null 2>&1; then

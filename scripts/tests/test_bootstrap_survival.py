@@ -4,6 +4,8 @@ These guard source and rendering regressions; native session canaries still deci
 whether an agent loads and follows the contract.
 """
 import importlib.util
+import os
+from unittest import mock
 from pathlib import Path
 import unittest
 
@@ -28,7 +30,6 @@ CLAUSES = {
         "role_resolution": "ic --json route dispatch --policy={{POLICY_PATH}} --role=<role> --context-file=<json>",
         "governed_execution": "scripts/dispatch.sh --role <role>` with the same `CLAVAIN_ROUTING_POLICY` and `CLAVAIN_DECISION_CONTEXT",
         "unsupported_role": "Unsupported `--role` resolution remains an open gate; legacy `--type` or `--tier` output cannot satisfy it",
-        "overlay_scope": "`CLAVAIN_POLICY_PROFILE=ci-campaign-pilot` requires `scope: mk-ag2s` and applies only there",
         "independent_review": "Foundational or especially consequential plans need an independent other-frontier reviewer; pass `--producer-identity` from the actual producer receipt",
         "no_downgrade": "Never self-review, downgrade frontier work, or evade blocked review",
         "escalation": "Two demonstrated capability failures request escalation; a disproven premise escalates immediately",
@@ -72,7 +73,7 @@ CLAUSES = {
         "resolution": "ic --json route dispatch --policy=<selected-policy> --role=planning --context-file=<decision.json>",
         "packaged_dispatch": "Execute through packaged `scripts/dispatch.sh --role <role>`",
         "routine_example": '{"reasons": [], "rationale": "Settled routine change; tests define acceptance", "investigation_active": false}',
-        "routine_example_policy": 'export CLAVAIN_ROUTING_POLICY="${CLAVAIN_ROUTING_POLICY:-${CLAVAIN_SELECTED_ROOT:?set from native Clavain skill location}/config/routing.yaml}"',
+        "routine_example_policy": 'export CLAVAIN_ROUTING_POLICY="${CLAVAIN_ROUTING_POLICY:-$( (python3 "${CLAVAIN_SELECTED_ROOT:?set from native Clavain skill location}/scripts/routing_overlay.py" policy) || echo /dev/null/clavain-invalid-routing-overlay)}"',
         "routine_example_resolve": 'ic --json route dispatch --policy="${CLAVAIN_ROUTING_POLICY:?}" --role=routine-execution --context-file=/tmp/decision.json',
         "routine_example_dispatch": 'bash "${CLAVAIN_SELECTED_ROOT:?}/scripts/dispatch.sh" --policy "${CLAVAIN_ROUTING_POLICY:?}" --role routine-execution --prompt-file /tmp/brief.md',
         "producer_identity_roles": "`plan-review`, `validation` and `cross-lab-review` add `--producer-identity=<author receipt identity>`",
@@ -83,7 +84,7 @@ CLAUSES = {
         "frontier_review": "Foundational or especially consequential plans require independent other-frontier plan review",
         "review_identity": "Aliases and dated/provider-decorated identities cannot evade reviewer separation",
         "no_frontier_downgrade": "No fallback may review its producer, route frontier-required work to a non-frontier seat",
-        "campaign_scope": "`ci-campaign-pilot` requires `scope: mk-ag2s`",
+        "profile_scope": "A policy profile selected with `CLAVAIN_POLICY_PROFILE` requires the scope its policy declares",
         "operational": "Quota, authentication, permission, timeout, and infrastructure failures are operational, not capability strikes",
         "capacity_roles": "`main-integrator` and `release-authority` have no capacity substitute",
         "headroom_scope": "planning, plan-review, validation, escalation and cross-lab-review receive no headroom input",
@@ -103,6 +104,11 @@ CLAUSES = {
 
 
 class BootstrapSurvivalTests(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.dict(os.environ, {"CLAVAIN_ROUTING_OVERLAY": ""})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_enumerated_clauses_survive_at_required_sources(self):
         for relative, clauses in CLAUSES.items():
             body = normalized((ROOT / relative).read_text())
@@ -129,7 +135,7 @@ class BootstrapSurvivalTests(unittest.TestCase):
         template = (ROOT / "config/agent-instructions.md").read_text()
         self.assertEqual(template.count("<!-- BEGIN CLAVAIN CODEX TOOL MAP -->"), 1)
         self.assertEqual(template.count("<!-- END CLAVAIN CODEX TOOL MAP -->"), 1)
-        for placeholder in ("{{INSTALLATION_RECEIPT}}", "{{HOST_ADAPTER}}", "{{POLICY_PATH}}"):
+        for placeholder in ("{{INSTALLATION_RECEIPT}}", "{{HOST_ADAPTER}}", "{{POLICY_PATH}}", "{{POLICY_PROFILES}}"):
             self.assertIn(placeholder, template)
         router = (ROOT / "skills/using-clavain/SKILL.md").read_text()
         self.assertTrue(router.startswith("---\nname: using-clavain\n"))

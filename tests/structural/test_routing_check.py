@@ -257,6 +257,7 @@ def test_real_policy_with_scoped_project_clavain_profile(inputs):
     tiers = policy["dispatch"]["tiers"]
     policy["reasoning"]["profiles"]["project-clavain"] = {
         "scope": "project:clavain", "roles": {"coordinator-seat": "coordinator-seat-opus"}}
+    policy["reasoning"]["projects"] = ["clavain"]
     policy["reasoning"]["project_profiles"] = {"clavain": "project-clavain"}
     released = {"models": [{"id": model} for model in sorted({
         aliases.get(t["model"], t["model"]) for t in tiers.values()})]}

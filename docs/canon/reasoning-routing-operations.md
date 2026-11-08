@@ -34,12 +34,12 @@ fallback, and that stays unchanged — commit/push/deploy/publication approval
 stays with the main integrator regardless of Codex availability.
 
 `main-integrator` previously had no capacity substitute for the same reason
-(resolving it elsewhere would not change the running parent model). mk ruled
-2026-09-25 that Codex exhaustion must never block development on any project,
+(resolving it elsewhere would not change the running parent model). The
+operator decided that Codex exhaustion must never block development on any project,
 so `main-sol` now falls back to `pilot-opus`. That fallback is informational,
 not delegated: it tells the running session which model it should itself claim
-when both Astra and Sol are out, the same way the `ci-campaign-pilot` profile
-already used `pilot-opus` for this role in its scoped campaign. `pilot-opus`
+when both Astra and Sol are out, the same way an operator profile may
+already use `pilot-opus` for this role in a scoped campaign. `pilot-opus`
 declares `backend: main`, and `_dispatch_role_profile` (`scripts/dispatch.sh`)
 still refuses to spawn any `backend: main` candidate as a delegated subprocess
 — a `main-integrator` fallback_chain entry is read by the running session
@@ -113,7 +113,7 @@ outperforms Fable 5.1 and takes every Fable and Opus 5 seat. Fable is removed fr
 routing entirely. `plan-review` now has two frontier seats, Opus 5.5 then Astra,
 so each reviews the other's plans. An Opus-authored plan with Astra out therefore
 has no distinct routed reviewer, and routing fails closed rather than admitting a
-same-model review. The agent then applies mk's adversarial orthogonal same-model
+same-model review. The agent then applies an adversarial orthogonal same-model
 Opus review by hand and declares it as such in the receipt and evidence; a routable
 seat for that review is still to be added. The same-lab degradation still
 applies where a distinct same-lab seat exists. Two plan-review paths qualify: a
@@ -126,8 +126,8 @@ A pooled Codex lane whose own retries ran out (`exceeded retry limit, last
 status: 429`) now classifies as `rate_limited` rather than `terminal_error`. An
 exhausted-retries 429 is capacity, not a reason to keep hammering the same
 model: it gets the identical single account-pool retry `quota_exhausted` gets,
-then walks to the profile's declared fallback (owner ruling 2026-09-25;
-`tests/routing/role-dispatch-test.sh`).
+then walks to the profile's declared fallback
+(`tests/routing/role-dispatch-test.sh`).
 
 Reviewer separation is not part of that degradation. It is enforced structurally,
 below the policy layer: a candidate whose canonical identity matches the producer
@@ -144,7 +144,7 @@ supplies eligibility and `dispatch.roles.<role>` plus the tier's ordered
 
 ### Code review goes to another lab first
 
-Mk ruling 2026-09-24. A static chain
+A static chain
 cannot prefer "the other lab" for every producer, so `dispatch.cross_lab_first`
 names the review roles (`validation`, `cross-lab-review`) where the resolver,
 after removing the producer, stably moves seats from a frontier lab other than
@@ -159,7 +159,7 @@ order, with Opus first. `cross-lab-review` keeps its Claude first-pass seat, now
 `crosslab-opus` (it was `crosslab-fable`); for a Claude producer it resolves Sol
 first, then the Astra seat `crosslab-astra` (GPT-6 Astra at xhigh, Codex >= 0.153.1)
 when Sol is unavailable, and never the producer's own model. The chain is
-`crosslab-sol -> crosslab-astra -> crosslab-opus` (mk-xlio); an Astra-produced
+`crosslab-sol -> crosslab-astra -> crosslab-opus`; an Astra-produced
 review drops `crosslab-astra` by `producer_model_conflict`. Requires Intercore `ic` at or
 after commit 2caa435; an older `ic` ignores `cross_lab_first` and keeps the
 policy order.
@@ -427,17 +427,15 @@ is a stub returning `control`, so landing this guidance keeps every lineage on
 the status quo. Coordinator-seat and governed roles ignore `--lineage` for routing
 and record a null arm.
 
-Known slugs come from `reasoning.projects`. Project profiles come from
+Known slugs come from `reasoning.projects`, which the neutral default leaves empty for an operator overlay to fill. Project profiles come from
 `reasoning.project_profiles`; dedicated bb project
 ids resolve through `reasoning.project_aliases` before slug lookup. A project
 profile applies only to roles in its `roles` map. `--project` is mandatory for
-coordinator-seat and must resolve to a known slug. Shared projects `proj_personal`
-and `proj_bnq4zi2wiv` ("projects/Sylveste") deliberately have no alias: pass the
-logical slug. `project_profiles` is currently empty: mk ruled 2026-09-27
- that every coordinator seat resolves the fleet default,
-coordinator-seat-sonnet, reversing the nine-project Opus coordinator-seat
-table that an earlier ruling had established. All fifteen known slugs
-keep fleet routing unless a future project profile overrides a role again.
+coordinator-seat and must resolve to a known slug. Shared projects deliberately have no alias: pass the
+logical slug. The neutral default for `project_profiles` is empty, so every
+coordinator seat resolves the fleet default, coordinator-seat-sonnet, and every
+known slug keeps fleet routing unless an operator overlay supplies a project
+profile.
 Unknown projects on other roles warn and resolve with `project: null`.
 
 Select the profile before changing context scope. A project profile requires
@@ -456,7 +454,7 @@ unavailable, non-accepting or timed-out status probes and child hosts record
 A family counts as exhausted by bb's own rule (the pool `switchThreshold`,
 default 0.98) only when every up Claude account has an active family window.
 With Claude exhausted, spawn roles fall back to gpt-6-astra medium. route-spawn
-refuses gpt-5.6-sol for every role, by any alias or case (mk 2026-09-27);
+refuses gpt-5.6-sol for every role, by any alias or case;
 GPT-6.1 Sol is allowed (legacy GPT-6 Sol still is). With no eligible seat, exit 3: do not spawn.
 The probe timeout is `ROUTE_SPAWN_POOL_TIMEOUT` seconds (default 20); the resolver
 timeout is `ROUTE_SPAWN_IC_TIMEOUT` seconds (default 30, exit 3 on timeout).
@@ -584,4 +582,4 @@ fresh-session model/effort receipts. Compare identical contexts from nested repo
 outside Git roots, standalone installs and alternate profiles. Upgrade only the
 selected instruction block or adapter. Roll back by selecting the previous
 version's policy and rerendering its block; preserve receipts and local content.
-Build/release/deployment automation remains independently scheduled on zklw.
+Build/release/deployment automation remains independently scheduled on the CI host.

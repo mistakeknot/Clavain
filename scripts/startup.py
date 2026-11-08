@@ -104,7 +104,7 @@ def installation(source, manifest, repository=None):
 def identity(args):
     source = args.source.resolve(strict=True)
     paths = ['.claude-plugin/plugin.json','hooks/hooks.json','hooks/session-start.sh',
-             'scripts/startup.py','scripts/sync-agent-instructions.py','config/routing.yaml',
+             'scripts/startup.py','scripts/sync-agent-instructions.py','scripts/routing_overlay.py','config/routing.yaml',
              'config/agent-instructions.md','config/host-adapters.json','config/codex-instructions.md']
     hashes = {p:digest(source/p) for p in paths}
     hashes.update({str(p.relative_to(source)):digest(p) for p in (source/'hooks').glob('*.sh')})
