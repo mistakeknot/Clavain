@@ -57,6 +57,7 @@ The most important section. A direct instruction to the next agent.
 - If a run resolved in Step 0, lead with: `> Resume run <RUN_ID> at phase '<PHASE>' (N/M). Your job is to [X]. Start by [Y]. Verify with [Z].`
 - Otherwise lead with: `> Your job is to [X]. Start by [Y]. Verify with [Z].`
 - Name files to edit, tests to run, commands to verify
+- Write every PR as `owner/repo#N` (never a bare "PR 12"), so the resume step can look it up
 - If multiple possible next steps, pick the highest-priority one as primary; list alternatives as `Fallback:` items
 - Include blockers or open decisions the next session must resolve
 - If beads are in progress, list IDs and status (e.g., `Sylveste-abc1 — in_progress, claimed`); align the prefix with the run's `scope_id` from Step 0
@@ -142,6 +143,33 @@ If the `canongraph` MCP tools are available (`mcp__canongraph__*`), make session
 3. Do not duplicate: `resolve` first; if a decision already exists (`is_new=false`), skip its entity event and add only missing edges.
 
 This makes "what did we decide about X, and in which run?" answerable via the `decisions_for_project` / `decisions_in_run` graph queries.
+
+## Resuming from a handoff: list the live state (by hand, fail-open)
+
+The next session runs this when it picks the handoff up, before trusting any
+"open", "waiting" or "next" line. It is a manual step, never a hook. It lists
+each PR, bead, card, thread, wait and hashed file the note names with its state
+today and makes no judgement about what the note says. A note that says
+"PR 12 is open" is read next to "merged", and the reader decides.
+
+```bash
+# NOTE = the handoff file; run from any directory. Skip silently if intermem
+# has no live-state subcommand (older install) or a lookup tool is missing.
+intermem_dir="$(ls -d ~/.claude/plugins/cache/*/intermem/*/ 2>/dev/null | sort -V | tail -1)"
+[[ -n "$intermem_dir" ]] && uv run --project "$intermem_dir" python -m intermem live-state "$NOTE" \
+  --bd-dir "${BD_DIR:-$HOME/hub}" ${WAITS_JSON:+--waits "$WAITS_JSON"} 2>/dev/null || true
+```
+
+Set `WAITS_JSON` to the thread's `waits.json` (its storage directory) so `--waits` is passed whenever the note names waits;
+without it wait ids are not looked up. Read the table first: `merged`, `done`,
+`closed`, `archived` or `unresolved` next to an item the note calls open means
+check that item before acting. A PR written without its repo (a bare "PR 12")
+shows as `unqualified` and is not looked up, so write PRs as `owner/repo#N` in
+the handoff (the writer should; see the Directive section).
+
+Paths (note, waits file, hashed files) resolve against the directory you run from; `--project` keeps it, so relative paths work as written.
+
+Evidence: in a fresh-agent test (3 old handoffs, 24 stale open items, one grader, successors barred from looking anything up themselves) a successor with the list marked 13 to 14 of them no longer open and made no confident-wrong marks; without it, every item was "can't tell" (bead mk-6mehy). It measures what the files allow, not free-running resume behaviour.
 
 ## Rules
 
