@@ -629,9 +629,10 @@ dispatch:
       model: claude-opus-5-5
       reasoning_effort: medium
       service_tier: standard
-      # sonnet before sol before kimi: the kimi seat runs with a toolless agent
-      # file and can only answer UNRUN for a plan whose Verification must run
-      # (goal 60771535, run 120d9aa1).
+      # sonnet before sol before kimi: kimi stays the third provider. Its
+      # role-resolved seat now gets Bash and read tools, snapshot-guarded like
+      # the claude seat (bead mk-1rbg), so it can run a plan's Verification; it
+      # is last because the earlier seats are the better-measured ones.
       # token-efficiency cut (bead mk-42j9.20): review/planning seat,
       # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same
       # mandatory escalation/48h-revert terms as planning-astra above.

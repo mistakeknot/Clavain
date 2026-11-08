@@ -64,6 +64,13 @@ to in that reordered position. `producer_model_conflict` and the existing
 `validation-opus -> validation-sonnet -> validation-sol -> validation-kimi`
 chain are unaffected: Intercore dedupes an already-visited profile_ref, so the
 new edge cannot reintroduce a seat the walk already excluded or already used.
+
+The role-resolved kimi seat (`validation`, `cross-lab-review`, `plan-review`)
+runs with Bash, Read, Glob and Grep and without Write or Edit, so it can run a
+plan's Verification the way the claude seat does. Like the claude seat, the
+checkout is snapshotted around the run, and a run that changed it is an error
+verdict. A direct `--to kimi` dispatch stays toolless because it may carry
+untrusted input.
 Distinct profile_refs can still name one seat (`crosslab-opus` and
 `validation-opus` are both Opus 5.5), so the dispatch walk also skips a
 candidate whose backend and model already failed on capacity in the same walk.
@@ -247,7 +254,7 @@ prints a loud stderr warning naming the sidecar and
 ### Execution headroom forecasts
 
 Before role resolution, dispatch may read `bb pool status --json` for
-`routine-execution`, `deep-execution`, and `scout`. A forecast excludes a
+`routine-execution`, `deep-execution`, `scout`, and `coordination`. A forecast excludes a
 candidate only when every enabled account for its provider/family is below the
 floor: less than 10% weekly headroom, or five-hour utilization at or above the
 pool's `switchThreshold` (0.98 when absent). Provider and family limits both
