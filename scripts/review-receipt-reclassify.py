@@ -13,7 +13,10 @@ should not be trusted at face value:
                                        apart from an unrecognised word that an
                                        older parser mapped to BLOCK)
 
-PASS and PASS WITH NOTES receipts get no note. Idempotent: a note whose content
+PASS and PASS WITH NOTES receipts get no note. Neither does an UNKNOWN receipt
+(the writer already records an unrecognised word as UNKNOWN), nor a BLOCK
+receipt that carries a "verdict_raw" FAIL or BLOCK word: the writer stored the
+word it read, so that BLOCK is verified (mk-0qjva). Idempotent: a note whose content
 already matches is left alone. --check writes nothing and prints the counts.
 """
 
@@ -22,6 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 from collections import Counter
@@ -36,6 +40,11 @@ REASONS = {
 }
 
 
+# The stored word of a BLOCK the writer read itself: FAIL or BLOCK, alone or with
+# an explanation after a separator (the shared classifier's FAIL class).
+VERIFIED_BLOCK_RAW = re.compile(r"^(fail|block)($|[\s:;.,(])", re.IGNORECASE)
+
+
 def classify(doc: object) -> str | None:
     if not isinstance(doc, dict):
         return "null-verdict"
@@ -48,6 +57,9 @@ def classify(doc: object) -> str | None:
     if word == "approve":
         return "approve-unrecognised"
     if word == "block":
+        raw = doc.get("verdict_raw")
+        if isinstance(raw, str) and VERIFIED_BLOCK_RAW.match(raw.strip()):
+            return None
         return "block-unverified"
     return None
 

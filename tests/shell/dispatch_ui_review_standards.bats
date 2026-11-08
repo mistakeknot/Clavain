@@ -162,8 +162,9 @@ brief() { cat "$T/codex.argv" "$T/codex.stdin" 2>/dev/null; }
     [[ "$b" == *'exactly one'* ]]
     [[ "$b" == *'"VERDICT: PASS WITH NOTES"'* ]]
     [[ "$b" == *'"VERDICT: FAIL"'* ]]
-    [[ "$b" == *"fails the dispatch without a receipt."* ]]
-    tail_text="${b##*"fails the dispatch without a receipt."}"
+    # mk-0qjva: any other word is recorded as UNKNOWN and the review is rerun.
+    [[ "$b" == *"so the review has to be"* ]]
+    tail_text="${b##*"so the review has to be"}"
     [[ "$tail_text" != *"STANDARDS-SENTINEL"* ]]
 }
 

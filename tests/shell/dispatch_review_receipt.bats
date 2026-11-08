@@ -1,6 +1,8 @@
 #!/usr/bin/env bats
 # mk-zek32: cross-lab-review writes a self-contained JSON receipt per PR head.
 
+bats_require_minimum_version 1.5.0
+
 setup() {
     load test_helper
     T="$(mktemp -d)"
@@ -59,15 +61,20 @@ teardown() { rm -rf "$T"; }
     [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.2.json")" = BLOCK ]
 }
 
-@test "verdict mapping: notes pass, FAIL blocks, unknown words and none write nothing" {
+@test "verdict mapping: notes pass, FAIL blocks, unknown words are UNKNOWN, no verdict line fails" {
     _review_receipt_prepare "$R"
     printf 'x\n\n**VERDICT: PASS WITH NOTES**\n' > "$OUT"
     [ "$(_review_receipt_verdict "$OUT")" = "PASS WITH NOTES" ]
     printf 'VERDICT: FAIL\n' > "$OUT"
     [ "$(_review_receipt_verdict "$OUT")" = BLOCK ]
+    # mk-0qjva: an unlisted word is UNKNOWN (rc 0, warning on stderr), never
+    # a pass and never a block.
     for w in APPROVE approve "changes requested" question CLEAN; do
         printf 'VERDICT: %s\n' "$w" > "$OUT"
-        run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+        run --separate-stderr _review_receipt_verdict "$OUT"
+        [ "$status" -eq 0 ]
+        [ "$output" = UNKNOWN ]
+        [[ "$stderr" == *"unrecognised verdict word"* ]]
     done
     printf 'no verdict here\n' > "$OUT"
     run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
@@ -88,10 +95,12 @@ teardown() { rm -rf "$T"; }
         [ "$(_review_receipt_verdict "$OUT")" = PASS ]
     done
     printf 'x\n\nVERDICT: BLOCKED\n' > "$OUT"
-    run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
+    run --separate-stderr _review_receipt_verdict "$OUT"
+    [ "$status" -eq 0 ]; [ "$output" = UNKNOWN ]
     printf 'x\n\nVERDICT: approve\n' > "$OUT"
-    run _review_receipt_verdict "$OUT"; [ "$status" -ne 0 ]
-    [[ "$output" == *"accepted: PASS, PASS WITH NOTES, FAIL"* ]]
+    run --separate-stderr _review_receipt_verdict "$OUT"
+    [ "$status" -eq 0 ]; [ "$output" = UNKNOWN ]
+    [[ "$stderr" == *"accepted: PASS, PASS WITH NOTES, FAIL"* ]]
 }
 
 @test "write stores a BLOCK verdict word as BLOCK" {
@@ -127,60 +136,66 @@ teardown() { rm -rf "$T"; }
         done
         for suffix in ' (explanation)' ' - explanation' ': explanation' '. Explanation' '..' ' because checks completed'; do
             printf 'Findings\n\nVERDICT: %s%s\n' "$verdict" "$suffix" > "$OUT"
-            run _review_receipt_verdict "$OUT"
-            [ "$status" -ne 0 ]
+            run --separate-stderr _review_receipt_verdict "$OUT"
+            [ "$output" = UNKNOWN ]
         done
     done
 }
 
+# A pass word with a qualifying suffix is never recorded as a pass. It is
+# recorded as UNKNOWN (mk-0qjva): the receipt is written for the audit trail but
+# the write returns 3, so the dispatch fails and the review is run again.
 _reject_passing_suffix() {
     _review_receipt_prepare "$R"
+    rm -rf "$T/reviews"
     for verdict in PASS 'PASS WITH NOTES'; do
         printf 'Findings\n\nVERDICT: %s%s\n' "$verdict" "$1" > "$OUT"
-        run _review_receipt_verdict "$OUT"
-        [ "$status" -ne 0 ]
-        run _review_receipt_write "$OUT" 0
-        [ "$status" -ne 0 ]
-        [ ! -e "$T/reviews/o__r/7-$HEAD_SHA.json" ]
+        run --separate-stderr _review_receipt_verdict "$OUT"
+        [ "$status" -eq 0 ]
+        [ "$output" = UNKNOWN ]
+        rm -rf "$T/reviews"
+        run --separate-stderr _review_receipt_write "$OUT" 0
+        [ "$status" -eq 3 ]
+        [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.json")" = UNKNOWN ]
     done
 }
 
-@test "PASS with blocking findings writes no receipt" {
+@test "PASS with blocking findings is recorded as UNKNOWN, never PASS" {
     _reject_passing_suffix ' (two blocking findings)'
 }
 
-@test "PASS contradicted by blocked writes no receipt" {
+@test "PASS contradicted by blocked is recorded as UNKNOWN, never PASS" {
     _reject_passing_suffix ' - no, blocked'
 }
 
-@test "PASS contradicted by failed tests writes no receipt" {
+@test "PASS contradicted by failed tests is recorded as UNKNOWN, never PASS" {
     _reject_passing_suffix ' (tests failed)'
 }
 
-@test "PASS with a merge prohibition writes no receipt" {
+@test "PASS with a merge prohibition is recorded as UNKNOWN, never PASS" {
     _reject_passing_suffix " (don't merge)"
 }
 
-@test "PASS conditional on fixes writes no receipt" {
+@test "PASS conditional on fixes is recorded as UNKNOWN, never PASS" {
     _reject_passing_suffix ' (conditional on fixes)'
 }
 
-@test "PASS followed by rejection after a period writes no receipt" {
+@test "PASS followed by rejection after a period is recorded as UNKNOWN, never PASS" {
     _reject_passing_suffix '. No — REJECTED.'
 }
 
 @test "ambiguous or malformed suffixes never yield a passing verdict" {
-    for line in 'PASSING' 'PASS-WITH-NOTES' 'PASS WITH' 'PASS WITH CAVEATS' \
+    for line in 'PASSING' 'PASS WITH' 'PASS WITH CAVEATS' \
         'PASS WITH NOTES OR BLOCK' 'PASS / FAIL' 'PASS (VERDICT: BLOCK)' \
         'PASS if checks succeed' 'PASS unless tests fail' 'PASS, pending checks' \
         'PASS but changes required' 'PASS (not approved)' 'PASS or BLOCK'; do
         printf 'Findings\n\nVERDICT: %s\n' "$line" > "$OUT"
-        run _review_receipt_verdict "$OUT"
-        [ "$status" -ne 0 ]
+        run --separate-stderr _review_receipt_verdict "$OUT"
+        [ "$output" = UNKNOWN ]
     done
 }
 
-@test "write records suffixed rulings and refuses ambiguous ones" {
+@test "write records suffixed rulings and records ambiguous ones as UNKNOWN" {
     _review_receipt_prepare "$R"
     sequence=1
     for verdict in BLOCK FAIL; do
@@ -193,9 +208,10 @@ _reject_passing_suffix() {
         sequence=$((sequence + 1))
     done
     printf 'Findings\n\nVERDICT: PASS / BLOCK\n' > "$OUT"
-    run _review_receipt_write "$OUT" 0
-    [ "$status" -ne 0 ]
-    [ "$(find "$T/reviews" -name '*.json' | wc -l)" -eq 2 ]
+    run --separate-stderr _review_receipt_write "$OUT" 0
+    [ "$status" -eq 3 ]
+    [ "$(find "$T/reviews" -name '*.json' | wc -l)" -eq 3 ]
+    [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.3.json")" = UNKNOWN ]
 }
 
 @test "cleanup preserves successful process status when a suffixed BLOCK receipt is written" {
@@ -219,7 +235,7 @@ _reject_passing_suffix() {
     true
     _dispatch_cleanup_state
     [ "$DISPATCH_FINAL_RC" -eq 1 ]
-    [ ! -e "$T/reviews/o__r/7-$HEAD_SHA.json" ]
+    [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.json")" = UNKNOWN ]
 }
 
 @test "no receipt for same-lab, substitute, failed or hashless runs" {
@@ -320,10 +336,22 @@ _reject_passing_suffix() {
     run _review_receipt_verdict "$OUT"; [ "$status" -eq 0 ]
 }
 
-@test "unrecognised verdict word writes no receipt" {
+@test "unrecognised verdict word writes an UNKNOWN receipt and fails the write" {
     _review_receipt_prepare "$R"
     printf 'x\n\nVERDICT: APPROVE\n' > "$OUT"
-    run _review_receipt_write "$OUT" 0; [ "$status" -ne 0 ]
+    run --separate-stderr _review_receipt_write "$OUT" 0
+    [ "$status" -eq 3 ]
+    [[ "$stderr" == *"unrecognised verdict word 'APPROVE'"* ]]
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ "$(jq -r .verdict "$f")" = UNKNOWN ]
+    [ "$(jq -r .verdict_raw "$f")" = APPROVE ]
+}
+
+@test "a missing VERDICT line still writes no receipt" {
+    _review_receipt_prepare "$R"
+    printf 'no verdict here\n' > "$OUT"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -ne 0 ]; [ "$status" -ne 3 ]
     [[ "$output" == *"VERDICT"* ]]
     [ -z "$(ls -A "$T/reviews/o__r" 2>/dev/null)" ]
 }
@@ -471,8 +499,8 @@ _reject_passing_suffix() {
     run _review_receipt_write "$OUT" 0
     [ "$status" -eq 0 ]
     n2="$T/reviews/o__r/7-$HEAD_SHA.2.json"
-    [ "$(jq -S 'del(.created_at,.sequence,.findings,.findings_source,.findings_total,.changed_paths,.changed_paths_truncated)' "$n2")" = \
-      "$(jq -S 'del(.created_at,.sequence)' "$old")" ]
+    [ "$(jq -S 'del(.created_at,.sequence,.supersedes,.supersedes_verdict,.verdict_raw,.findings,.findings_source,.findings_total,.changed_paths,.changed_paths_truncated)' "$n2")" = \
+      "$(jq -S 'del(.created_at,.sequence,.verdict_raw)' "$old")" ]
     for f in "$new" "$n2"; do
         [ "$(jq -r '.schema_version' "$f")" = 1 ]
         [ "$(jq -r '.verdict' "$f")" = PASS ]
@@ -522,4 +550,135 @@ _reject_passing_suffix() {
     [ "$(jq -r .findings_source "$f")" = conflict ]
     [ "$(jq -r .findings_total "$f")" = 1 ]
     [ "$(jq -r .findings_block_total "$f")" = 3 ]
+}
+
+# --- mk-0qjva, mk-4c909, mk-8m912, mk-0ud4q, mk-n37ml: shared verdict words,
+# --- UNKNOWN recording, append-only supersession ---------------------------
+
+@test "PASS-WITH-NOTES and PASS_WITH_NOTES are recorded as PASS WITH NOTES" {
+    _review_receipt_prepare "$R"
+    for w in PASS-WITH-NOTES PASS_WITH_NOTES pass-with-notes; do
+        printf 'x\n\nVERDICT: %s\n' "$w" > "$OUT"
+        [ "$(_review_receipt_verdict "$OUT")" = "PASS WITH NOTES" ]
+    done
+    printf 'x\n\n**VERDICT: PASS-WITH-NOTES**\n' > "$OUT"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.json")" = "PASS WITH NOTES" ]
+}
+
+@test "an unknown word is UNKNOWN with verdict_raw and a warning, not BLOCK" {
+    _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: APPROVE\n' > "$OUT"
+    run --separate-stderr _review_receipt_write "$OUT" 0
+    [ "$status" -eq 3 ]
+    [[ "$stderr" == *"Recorded as UNKNOWN, not as a pass or a block"* ]]
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ "$(jq -r .verdict "$f")" = UNKNOWN ]
+    [ "$(jq -r .verdict_raw "$f")" = APPROVE ]
+    [ "$(jq -r .verdict "$f")" != BLOCK ]
+}
+
+@test "verdict_raw is the cleaned verdict word for every verdict" {
+    _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    [ "$(jq -r .verdict_raw "$T/reviews/o__r/7-$HEAD_SHA.json")" = PASS ]
+    printf 'x\n\nVERDICT: BLOCK (data loss)\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    [ "$(jq -r .verdict_raw "$T/reviews/o__r/7-$HEAD_SHA.2.json")" = "BLOCK (data loss)" ]
+}
+
+@test "verdict_raw drops control characters and is capped at 120 characters" {
+    _review_receipt_prepare "$R"
+    long="$(printf 'z%.0s' $(seq 1 300))"
+    printf 'x\n\nVERDICT: %s\n' "$long" > "$OUT"
+    run --separate-stderr _review_receipt_write "$OUT" 0
+    [ "$status" -eq 3 ]
+    raw="$(jq -r .verdict_raw "$T/reviews/o__r/7-$HEAD_SHA.json")"
+    [ "${#raw}" -le 120 ]
+    [[ "$raw" =~ ^z+$ ]]
+}
+
+@test "a later receipt at the same head supersedes the earlier one and keeps it" {
+    _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: APPROVE\n' > "$OUT"
+    run --separate-stderr _review_receipt_write "$OUT" 0
+    [ "$status" -eq 3 ]
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    d="$T/reviews/o__r"
+    # The first record is untouched.
+    [ "$(jq -r .verdict "$d/7-$HEAD_SHA.json")" = UNKNOWN ]
+    [ "$(jq -r '.supersedes // "none"' "$d/7-$HEAD_SHA.json")" = none ]
+    # The second names the record it supersedes and what that said.
+    [ "$(jq -r .verdict "$d/7-$HEAD_SHA.2.json")" = PASS ]
+    [ "$(jq -r .sequence "$d/7-$HEAD_SHA.2.json")" = 2 ]
+    [ "$(jq -r .supersedes "$d/7-$HEAD_SHA.2.json")" = "7-$HEAD_SHA.json" ]
+    [ "$(jq -r .supersedes_verdict "$d/7-$HEAD_SHA.2.json")" = UNKNOWN ]
+    # The third chains to the second.
+    printf 'x\n\nVERDICT: PASS WITH NOTES\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    [ "$(jq -r .supersedes "$d/7-$HEAD_SHA.3.json")" = "7-$HEAD_SHA.2.json" ]
+    [ "$(jq -r .supersedes_verdict "$d/7-$HEAD_SHA.3.json")" = PASS ]
+}
+
+@test "the current receipt for a head is the highest sequence" {
+    _review_receipt_prepare "$R"
+    d="$T/reviews/o__r"
+    run _review_receipt_current "$d" 7 "$HEAD_SHA"
+    [ -z "$output" ]
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    [ "$(_review_receipt_current "$d" 7 "$HEAD_SHA")" = "$d/7-$HEAD_SHA.json" ]
+    printf 'x\n\nVERDICT: FAIL\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    [ "$(_review_receipt_current "$d" 7 "$HEAD_SHA")" = "$d/7-$HEAD_SHA.2.json" ]
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    [ "$(_review_receipt_current "$d" 7 "$HEAD_SHA")" = "$d/7-$HEAD_SHA.3.json" ]
+    [ "$(jq -r .verdict "$(_review_receipt_current "$d" 7 "$HEAD_SHA")")" = PASS ]
+}
+
+@test "a real BLOCK stays on disk and is never rewritten by a later PASS" {
+    _review_receipt_prepare "$R"
+    d="$T/reviews/o__r"
+    printf 'x\n\nVERDICT: BLOCK\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    before="$(sha256sum "$d/7-$HEAD_SHA.json" | cut -d' ' -f1)"
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    [ "$(sha256sum "$d/7-$HEAD_SHA.json" | cut -d' ' -f1)" = "$before" ]
+    [ "$(jq -r .verdict "$d/7-$HEAD_SHA.json")" = BLOCK ]
+    # The supersession is visible to an auditor: the PASS says it replaced a BLOCK.
+    [ "$(jq -r .supersedes_verdict "$d/7-$HEAD_SHA.2.json")" = BLOCK ]
+}
+
+@test "a BLOCK that is the latest receipt is the current one" {
+    _review_receipt_prepare "$R"
+    d="$T/reviews/o__r"
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    printf 'x\n\nVERDICT: BLOCK\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    [ "$(jq -r .verdict "$(_review_receipt_current "$d" 7 "$HEAD_SHA")")" = BLOCK ]
+}
+
+@test "cleanup fails a successful process on an UNKNOWN verdict, never as BLOCK" {
+    _review_receipt_prepare "$R"
+    source <(awk '/^_dispatch_cleanup_state\(\)/ { emit=1 } emit { print; if ($0 == "}") exit }' "$DISPATCH")
+    _review_scratch_cleanup() { :; }
+    ROLE_RESOLVED=true ROLE=cross-lab-review OUTPUT="$OUT" STATE_FILE="$T/state"
+    printf 'Findings\n\nVERDICT: APPROVE\n' > "$OUT"
+    true
+    _dispatch_cleanup_state 2>/dev/null
+    [ "$DISPATCH_FINAL_RC" -eq 1 ]
+    [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.json")" = UNKNOWN ]
+}
+
+@test "cross-lab prompt says an unknown word is recorded as UNKNOWN and the review rerun" {
+    grep -q 'any other word is recorded' "$DISPATCH"
+    grep -q 'as UNKNOWN, which is neither a pass nor a block' "$DISPATCH"
+    ! grep -q 'fails the dispatch without a receipt' "$DISPATCH"
 }

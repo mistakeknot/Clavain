@@ -109,6 +109,7 @@ DISPATCH_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INTERBAND_DISPATCH_FILE=""
 DISPATCH_SESSION_ID="${DISPATCH_SESSION_ID:-${CLAUDE_SESSION_ID:-${CODEX_THREAD_ID:-}}}"
 source "${DISPATCH_SCRIPT_DIR}/lib-dispatch-audit.sh"
+source "${DISPATCH_SCRIPT_DIR}/lib-verdict.sh"
 source "${DISPATCH_SCRIPT_DIR}/lib-review-receipt.sh"
 source "${DISPATCH_SCRIPT_DIR}/lib-ui-review-standards.sh"
 source "${DISPATCH_SCRIPT_DIR}/lib-bb.sh"
@@ -2293,9 +2294,13 @@ not guess. Keep the summary to one line and name the file and line when known.
 
 End your output with a blank line and then, as the very last line, exactly one
 of: \"VERDICT: PASS\", \"VERDICT: PASS WITH NOTES\" or \"VERDICT: FAIL\". No other
-verdict word (not APPROVE or CLEAN) is accepted, and any other word
-fails the dispatch without a receipt."
+verdict word (not APPROVE or CLEAN) is accepted: any other word is recorded
+as UNKNOWN, which is neither a pass nor a block, so the review has to be
+run again."
       fi
+      # Role verdict-block instruction (mk-z770): never for cross-lab-review,
+      # and not when the prompt already carries the interflux findings contract.
+      PROMPT="$PROMPT$(verdict_role_suffix "$ROLE" "${VALIDATOR_RELATIONSHIP:-}" "$PROMPT")"
       # A capacity substitute: the walk that reached this candidate
       # landed on a model from the producer's own lab, so the review needs
       # its own provisional framing and a re-check hook for the other lab.
@@ -3278,6 +3283,21 @@ _extract_verdict() {
         done < <(grep -i '^status:[[:space:]]' <<< "$verdict_block")
     fi
 
+    # REVIEW field (mk-z770, parser contract section 3): review roles declare
+    # REVIEW: approve|approve-with-changes|revise|reject next to STATUS. It is a
+    # parsed, logged field only: every REVIEW value, valid or not, caps the
+    # block at warn, so a REVIEW line can never create a pass. A block that
+    # says STATUS: pass with a REVIEW line is read as warn; fail and error stay
+    # as declared. This keeps orchestrate.py approval counts as they were.
+    local block_review_present=0
+    if [[ "$has_valid_block" == 1 ]] && grep -qi '^review:[[:space:]]' <<< "$verdict_block"; then
+        block_review_present=1
+        if [[ "$block_status_lower" == pass ]]; then
+            block_status_lower="warn"
+            block_status_raw="warn"
+        fi
+    fi
+
     # Sidecar FINDINGS line from the observed review body (receipt-findings.py).
     # Prints "FINDINGS: N (P0: a, P1: b, P2: c, P3: d)" when the body yields a
     # count, else "FINDINGS: unknown". Never prints a number it did not observe.
@@ -3438,6 +3458,12 @@ _extract_verdict() {
         status="pass"
         summary="Validator replay PASS."
         first_line_recognized=1
+    elif [[ "$(verdict_word_class "$verdict_word")" == PASS_WITH_NOTES ]]; then
+        # PASS-WITH-NOTES and PASS_WITH_NOTES read as PASS WITH NOTES, the same
+        # as in the review receipt (shared classifier, mk-0qjva/mk-4c909).
+        status="pass"
+        summary="Validator replay PASS."
+        first_line_recognized=1
     elif [[ "$verdict_word_upper" =~ ^FAIL($|[^A-Z0-9_-]) ]]; then
         status="warn"
         summary="Validator replay FAIL: $(grep -m1 "^CRITERION:" "$output_file" 2>/dev/null || echo "criterion not stated")"
@@ -3527,7 +3553,11 @@ _extract_verdict() {
                 last_line="$(sed -E 's/^(\*\*|__)([A-Za-z]+[[:space:]]*:)\1[[:space:]]*(\*\*|__)([^*_]*)\3$/\2 \4/; s/^(\*\*|__)([A-Za-z]+)\1[[:space:]]*:[[:space:]]*(\*\*|__)([^*_]*)\3$/\2: \4/; s/^\*\*([^*]*)\*\*$/\1/; s/^__(.*)__$/\1/; s/^`(.*)`$/\1/; s/^(\*\*|__|`)([A-Za-z]+[[:space:]]*:)\1([[:space:]]*)/\2 /' <<< "$last_line")"
                 last_line="${last_line%"${last_line##*[![:space:]]}"}"
             done
-            if [[ "${last_line^^}" =~ ^VERDICT[[:space:]]*:[[:space:]]*PASS([[:space:]]+WITH[[:space:]]+NOTES)?[[:space:]]*$ ]]; then
+            local _last_word="" _last_class=UNKNOWN
+            if _last_word="$(verdict_label_word "$last_line")"; then
+                _last_class="$(verdict_word_class "$_last_word")"
+            fi
+            if [[ "$_last_class" == PASS || "$_last_class" == PASS_WITH_NOTES ]]; then
                 status="pass"
                 summary="Validator replay PASS."
             elif [[ "${last_line^^}" =~ ^VERDICT[[:space:]]*:[[:space:]]*CLEAN[[:space:]]*$ ]]; then
