@@ -87,6 +87,22 @@ A new session will run `git log`, `git status`, and read CLAUDE.md. Do not repea
 - Architecture or conventions already in CLAUDE.md
 - Raw intercore JSON — distill it into the prose above; the run is registered separately in Step 5
 
+## Facts block: record state at write time (fail-open)
+
+Before writing prose, look up the live state of every bead and PR the note will name, and the open waits, and write them as a `### Facts (as of <UTC time>)` section after Context. Values come from the tools, never from memory; a lookup that fails is written as `unresolved`, never guessed. Facts are dated so a reader knows they age: the resume step re-lists them later.
+
+```bash
+# BEADS = bead ids the note names; PRS = owner/repo#N for each PR it names.
+for b in $BEADS; do (cd "${BD_DIR:-$HOME/hub}" && bd show "$b" --json) 2>/dev/null | jq -r '.[0] // . | "\(.id) \(.status)"' || echo "$b unresolved"; done
+for p in $PRS; do gh pr view "${p#*#}" --repo "${p%#*}" --json state,mergedAt,headRefOid \
+  --jq '"'"$p"' \(.state) head \(.headRefOid[:12])"' 2>/dev/null || echo "$p unresolved"; done
+# WAITS_JSON = the thread's waits.json, STATUS_JSON = its status.json, when they exist.
+[[ -r "${WAITS_JSON:-}" ]] && jq -r '.waits[]? | select(.resolved_at == null) | "wait \(.id) open \(.kind) \(.ref)"' "$WAITS_JSON"
+[[ -r "${STATUS_JSON:-}" ]] && jq -c . "$STATUS_JSON"
+```
+
+Write PRs as `owner/repo#N`. List only what the note names or what is open; do not dump every bead. Do not write a conclusion from the facts (no "all done"); the Directive says what to do. Facts at write time fix errors made at write time; they do not stop later staleness, which the resume step covers.
+
 ## Write the file
 
 Create `docs/handoffs/YYYY-MM-DD-<topic-slug>.md` with frontmatter. Create the directory if missing. Add the intercore fields ONLY when they resolved in Step 0 (omit the keys entirely otherwise — never write `run: none`).
@@ -115,6 +131,9 @@ scope: <SCOPE, only if resolved>
 ### Context
 - [non-obvious decision or gotcha]
 - [key file paths]
+
+### Facts (as of <UTC time>)
+- [tool output from the Facts step, one line per item]
 ```
 
 Do NOT prune old handoffs — they serve as long-term session history.
