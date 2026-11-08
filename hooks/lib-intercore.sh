@@ -352,6 +352,9 @@ intercore_gate_override() {
 # Lock commands are filesystem-only — they work even when the DB is broken.
 # This avoids the intercore_available() DB health check that would silently
 # force all lock operations into the dumber bash fallback.
+# INTERCORE_LOCK_FALLBACK_DIR overrides the base directory of the bash fallback
+# only (tests use it to stay out of the shared production namespace); ic keeps
+# its own default.
 INTERCORE_LOCK_BIN=""
 
 intercore_lock_available() {
@@ -375,20 +378,35 @@ intercore_lock() {
         if [[ $rc -eq 1 ]]; then return 1; fi   # contention
         # Exit 2+ = binary error — fall through to legacy
     fi
-    # Fallback: direct mkdir with minimal owner.json for ic lock clean visibility
-    local lock_dir="/tmp/intercore/locks/${name}/${scope}"
+    # Fallback: directory + owner.json, the same layout ic uses, so `ic lock
+    # clean` and `ic lock list` see these locks. mkdir alone is NOT trusted for
+    # exclusion: uutils mkdir 0.8.0 can report success for a directory that
+    # already exists (uutils/coreutils#13970), so two callers could both
+    # believe they hold the lock. Ownership is decided by exclusive-creating
+    # owner.json inside the directory (noclobber, i.e. open(O_CREAT|O_EXCL),
+    # a shell builtin that does not depend on the installed coreutils). Only
+    # the caller that creates owner.json holds the lock.
+    local lock_dir="${INTERCORE_LOCK_FALLBACK_DIR:-/tmp/intercore/locks}/${name}/${scope}"
     mkdir -p "$(dirname "$lock_dir")" 2>/dev/null || true
     local retries=0 max_retries=10
-    while ! mkdir "$lock_dir" 2>/dev/null; do
+    local _meta
+    _meta=$(printf '{"pid":%d,"host":"%s","owner":"%s","created":%d}\n' \
+        "$$" "$(hostname -s 2>/dev/null || echo unknown)" "$_owner" "$(date +%s)")
+    while true; do
+        if mkdir "$lock_dir" 2>/dev/null; then
+            # The directory exists, but another caller may hold it (non-exclusive
+            # mkdir). Whoever exclusive-creates owner.json holds the lock.
+            if ( set -C; printf '%s\n' "$_meta" > "$lock_dir/owner.json" ) 2>/dev/null; then
+                return 0
+            fi
+            # Lost the claim. Never remove a held lock: rmdir only succeeds on
+            # an empty directory, which is a leftover from a failed claim.
+            [[ -e "$lock_dir/owner.json" ]] || rmdir "$lock_dir" 2>/dev/null || true
+        fi
         retries=$((retries + 1))
         [[ $retries -gt $max_retries ]] && return 1
         sleep 0.1
     done
-    # Write owner.json so ic lock clean can detect and remove stale fallback locks
-    printf '{"pid":%d,"host":"%s","owner":"%s","created":%d}\n' \
-        "$$" "$(hostname -s 2>/dev/null || echo unknown)" "$_owner" "$(date +%s)" \
-        > "$lock_dir/owner.json" 2>/dev/null || true
-    return 0
 }
 
 # intercore_unlock — Release a named lock.
@@ -402,8 +420,8 @@ intercore_unlock() {
         return 0
     fi
     # Fallback: rm owner.json + rmdir (no owner check in fallback)
-    rm -f "/tmp/intercore/locks/${name}/${scope}/owner.json" 2>/dev/null || true
-    rmdir "/tmp/intercore/locks/${name}/${scope}" 2>/dev/null || true
+    rm -f "${INTERCORE_LOCK_FALLBACK_DIR:-/tmp/intercore/locks}/${name}/${scope}/owner.json" 2>/dev/null || true
+    rmdir "${INTERCORE_LOCK_FALLBACK_DIR:-/tmp/intercore/locks}/${name}/${scope}" 2>/dev/null || true
     return 0
 }
 
@@ -420,7 +438,7 @@ intercore_lock_clean() {
     local _secs
     _secs=$(echo "$max_age" | sed -E 's/([0-9]+)s$/\1/; s/([0-9]+)m$/\1*60/; s/([0-9]+)h$/\1*3600/' | bc 2>/dev/null) || _secs=5
     [[ -z "$_secs" || "$_secs" -eq 0 ]] && _secs=5
-    find /tmp/intercore/locks -mindepth 2 -maxdepth 2 -type d -not -newermt "${_secs} seconds ago" \
+    find "${INTERCORE_LOCK_FALLBACK_DIR:-/tmp/intercore/locks}" -mindepth 2 -maxdepth 2 -type d -not -newermt "${_secs} seconds ago" \
         -exec sh -c 'rm -f "$1/owner.json" && rmdir "$1"' _ {} \; 2>/dev/null || true
     return 0
 }

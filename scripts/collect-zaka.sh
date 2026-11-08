@@ -21,10 +21,15 @@ turn="$(jq -r '.turn_id' <<< "$status")"
 [[ -r "$events" ]] || { echo 'Error: async event log is unavailable' >&2; exit 1; }
 # Serialize collectors for this session. A stale lock fails closed and must be
 # inspected by the integrator; never steal it using a PID from disk.
+# The lock is an exclusive file create (noclobber is open(O_CREAT|O_EXCL), a
+# shell builtin), not mkdir: uutils mkdir 0.8.0 can report success for a path
+# that already exists (uutils/coreutils#13970), which would admit two
+# collectors. A lock left by an older mkdir-based collector is a directory at
+# the same path, so it still blocks us, and our file blocks theirs.
 lock="$(dirname "$events")/.collect.lock"
-mkdir "$lock" 2>/dev/null || { echo 'Error: another collector or stale collection lock exists' >&2; exit 1; }
+( set -C; printf '%s\n' "$$" > "$lock" ) 2>/dev/null || { echo 'Error: another collector or stale collection lock exists' >&2; exit 1; }
 error_file=""
-trap '[[ -z "$error_file" ]] || rm -f "$error_file"; rmdir "$lock"' EXIT
+trap '[[ -z "$error_file" ]] || rm -f "$error_file"; rm -f "$lock"' EXIT
 log="$(jq -sc '.' "$events")"
 if jq -e --arg turn "$turn" 'any(.[]; .direction == "receive" and .message.method == "turn/completed" and .message.params.turn.id == $turn and .message.params.turn.status == "completed")' <<< "$log" >/dev/null \
   && jq -e '.turn_status == "completed" and (.pending_requests | length == 0)' <<< "$status" >/dev/null; then
