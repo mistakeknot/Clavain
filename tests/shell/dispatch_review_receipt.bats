@@ -743,6 +743,27 @@ _reject_passing_suffix() {
     [ "$(_review_receipt_effective "$d/7-$NEW_HEAD.json")" = "$d/7-$NEW_HEAD.json" ]
 }
 
+@test "effective receipt: a gapped chain (no .2) returns .3 when called from the original" {
+    d="$T/reviews/o__r"
+    _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"; _review_receipt_write "$OUT" 0
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"; _review_receipt_write "$OUT" 0
+    printf 'x\n\nVERDICT: BLOCK\n' > "$OUT"; _review_receipt_write "$OUT" 0
+    rm "$d/7-$HEAD_SHA.2.json"
+    [ "$(jq -r .verdict "$d/7-$HEAD_SHA.3.json")" = BLOCK ]
+    [ "$(_review_receipt_effective "$d/7-$HEAD_SHA.json")" = "$d/7-$HEAD_SHA.3.json" ]
+}
+
+@test "effective receipt: a gapped chain (no .2) returns .3 when called from .3" {
+    d="$T/reviews/o__r"
+    _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"; _review_receipt_write "$OUT" 0
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"; _review_receipt_write "$OUT" 0
+    printf 'x\n\nVERDICT: BLOCK\n' > "$OUT"; _review_receipt_write "$OUT" 0
+    rm "$d/7-$HEAD_SHA.2.json"
+    [ "$(_review_receipt_effective "$d/7-$HEAD_SHA.3.json")" = "$d/7-$HEAD_SHA.3.json" ]
+}
+
 @test "effective receipt: refuses a missing file, a symlink and a non-receipt" {
     d="$T/reviews/o__r"; mkdir -p "$d"
     run _review_receipt_effective "$d/none.json"; [ "$status" -ne 0 ]

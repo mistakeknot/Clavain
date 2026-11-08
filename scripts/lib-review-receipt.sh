@@ -183,7 +183,7 @@ _review_receipt_lab() {
 # Effective receipt for the change reviewed by a receipt. Arg: the path of any
 # receipt in the chain (normally the first, <pr>-<head>.json). Prints the path
 # of the highest-numbered regular receipt with the same base_sha and
-# diff_sha256 as that receipt; prints that receipt's own path when nothing
+# diff_sha256 as that receipt, across gaps in the numbering; prints that receipt's own path when nothing
 # later matches. Returns 1 when the argument is not a readable receipt with a
 # base_sha and diff_sha256. Symlinks and non-regular entries are ignored.
 _review_receipt_effective() {
@@ -194,19 +194,14 @@ _review_receipt_effective() {
   scope="$(jq -r '[.base_sha, .diff_sha256] | join(" ")' "$given" 2>/dev/null)" || return 1
   [[ -n "$scope" && "$scope" != " " && "$scope" != null* ]] || return 1
   best="$given"
-  n=1
-  while :; do
+  # Scan every possible numbered path, highest first, across gaps. Only
+  # existing regular files are read; the first one in the same scope wins.
+  for (( n = 999; n >= 1; n-- )); do
     if (( n == 1 )); then pf="$first"; else pf="${first%.json}.$n.json"; fi
-    if [[ ! -e "$pf" && ! -L "$pf" ]]; then
-      (( n > 1 )) || { n=$((n + 1)); continue; }
-      break
+    [[ -f "$pf" && ! -L "$pf" ]] || continue
+    if [[ "$(jq -r '[.base_sha, .diff_sha256] | join(" ")' "$pf" 2>/dev/null)" == "$scope" ]]; then
+      best="$pf"; break
     fi
-    if [[ -f "$pf" && ! -L "$pf" ]] \
-      && [[ "$(jq -r '[.base_sha, .diff_sha256] | join(" ")' "$pf" 2>/dev/null)" == "$scope" ]]; then
-      best="$pf"
-    fi
-    n=$((n + 1))
-    (( n <= 999 )) || break
   done
   printf '%s\n' "$best"
 }
