@@ -571,6 +571,10 @@ def test_hook_gives_up_when_stdin_stays_silent(env):
     '{"systemMessage": "x"} trailing',
     '{"systemMessage": "one"}\n{"systemMessage": "two"}',
     '{"systemMessage": "bad \\q}',
+    '{"systemMessage": "bad \\q"}',
+    '{"systemMessage": "bad \\u12G4"}',
+    '{"systemMessage": "short \\u12"}',
+    '{"systemMessage": "ends with a lone backslash \\"}',
     '{"systemMessage": 1}',
     '[{"systemMessage": "x"}]',
 ])
@@ -622,6 +626,32 @@ def test_verifier_invocations_that_verify_nothing_do_not_count(env, tmp_path, cm
     'golangci-lint run',
 ])
 def test_verifier_invocations_that_do_verify_still_count(env, tmp_path, cmd):
+    hook('post', env, 'Edit', file_path=str(tmp_path / 'a.py'))
+    hook('post', env, 'Bash', command=cmd)
+    assert 'verify-after-edit' not in warning(hook('stop', env, ''))
+
+
+@pytest.mark.parametrize('cmd', [
+    'python3 -m pytest --version', 'python -m pytest -V', 'python3 -m pytest --help', 'python3 -m pytest -h',
+    'python3 -m pytest --collect-only', 'python3.12 -m pytest --co -q', 'uv run python -m pytest --fixtures',
+    'nice python3 -m pytest --markers', 'python3 -m unittest -h',
+    'go test -h', 'go test -help', 'go test --help ./...', 'go vet -h', 'go vet -help',
+    'cargo test --help', 'cargo test -h', 'cargo check --help', 'cargo clippy -h', 'cargo --version test',
+    'npm test --help', 'npm run lint -h', 'yarn test --help', 'make test --help', 'make lint -h',
+])
+def test_module_form_and_help_only_invocations_do_not_count(env, tmp_path, cmd):
+    hook('post', env, 'Edit', file_path=str(tmp_path / 'a.py'))
+    hook('post', env, 'Bash', command=cmd)
+    assert 'verify-after-edit' in warning(hook('stop', env, ''))
+    assert 'verify' not in {r['kind'] for r in ledger(env)}
+
+
+@pytest.mark.parametrize('cmd', [
+    'python3 -m pytest -q', 'python3 -m pytest tests/', 'python -m pytest -x --tb=short', 'uv run python -m pytest',
+    'python3 -m unittest discover', 'python3 -m py_compile a.py', 'go test ./...', 'go vet ./...',
+    'cargo test', 'cargo check', 'cargo clippy -- -D warnings', 'npm test', 'npm run lint', 'make test',
+])
+def test_module_form_and_other_real_runs_still_count(env, tmp_path, cmd):
     hook('post', env, 'Edit', file_path=str(tmp_path / 'a.py'))
     hook('post', env, 'Bash', command=cmd)
     assert 'verify-after-edit' not in warning(hook('stop', env, ''))

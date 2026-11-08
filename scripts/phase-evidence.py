@@ -319,6 +319,9 @@ def is_code(path):
     return Path(path).suffix.lower() not in DOC_SUFFIXES
 
 
+HELP_FLAGS = {'-h', '-help', '--help', '--version', '-V'}
+
+
 def verifies(head, args):
     """False when a bare verifier invocation only prints, lists or rewrites (see NO_VERIFY_*)."""
     if NO_VERIFY_FLAGS.get(head, set()) & set(args):
@@ -372,6 +375,8 @@ def verification_kind(cmd):
             if verifies(head, args):
                 return head
             continue
+        if HELP_FLAGS & set(args):
+            continue  # help or version output runs nothing, whatever the invocation form
         if head == 'go' and first in ('test', 'vet'):
             return f'go-{first}'
         if head == 'cargo' and first in ('test', 'check', 'clippy'):
@@ -384,6 +389,8 @@ def verification_kind(cmd):
             return f'make-{first}'
         if re.fullmatch(r'python[\d.]*', head) and first == '-m' and args[1:2] \
                 and args[1] in ('pytest', 'py_compile', 'unittest'):
+            if args[1] == 'pytest' and not verifies('pytest', args[2:]):
+                continue  # python -m pytest --version / --collect-only verifies nothing
             return f'python-{args[1]}'
         if head == 'bash' and first == '-n':
             return 'bash-n'

@@ -42,9 +42,11 @@ wait "$dog" 2>/dev/null
 [[ "$status" == 0 ]] || exit 0  # crashed, killed by the watchdog or failed: relay nothing
 out="$(<"$tmp")" 2>/dev/null || exit 0
 
-# Relay exactly one key, systemMessage, holding a JSON string. Anything else
-# (extra keys such as hookSpecificOutput or decision, several lines) is dropped.
-relay='^\{"systemMessage": "([^"\\]|\\.)*"\}$'
+# Relay exactly one key, systemMessage, holding a valid JSON string (JSON string
+# grammar: no raw control characters, only the JSON escapes). Anything else
+# (extra keys such as hookSpecificOutput or decision, several lines, a bad
+# escape) is dropped.
+relay='^\{"systemMessage": "([^"\\[:cntrl:]]|\\["\\/bfnrt]|\\u[0-9a-fA-F]{4})*"\}$'
 if [[ "$out" =~ $relay && "$out" != *$'\n'* ]]; then
     printf '%s\n' "$out"
 fi
