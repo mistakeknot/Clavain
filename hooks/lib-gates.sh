@@ -31,7 +31,11 @@ else
     # leg the target phase maps to, but never block (always returns 0).
     check_phase_gate() {
         local _pe="${_GATES_SHIM_DIR}/../scripts/phase-evidence.py"
-        [[ -f "$_pe" ]] && python3 "$_pe" check --phase "${2:-}" || true
+        if [[ -f "$_pe" ]] && command -v python3 >/dev/null 2>&1; then
+            local _pe_guard=()
+            command -v timeout >/dev/null 2>&1 && _pe_guard=(timeout 5)
+            "${_pe_guard[@]+"${_pe_guard[@]}"}" python3 "$_pe" check --phase "${2:-}" </dev/null || true
+        fi
         return 0
     }
     advance_phase() { return 0; }

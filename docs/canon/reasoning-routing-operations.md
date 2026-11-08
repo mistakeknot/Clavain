@@ -590,9 +590,14 @@ Build/release/deployment automation remains independently scheduled on zklw.
 
 `hooks/phase-evidence.sh` records tool use per session under `$XDG_STATE_HOME/clavain/phase-evidence/` (override with `CLAVAIN_PHASE_EVIDENCE_DIR`) and warns, without blocking, when a phase left no evidence:
 
-- `read-before-edit`: an existing file was edited with no earlier Read, Edit or Write of it.
-- `verify-after-edit`: code was edited and no test, lint or check command ran afterwards. Documentation-only edits are exempt.
-- `decision-context`: code was edited and no valid decision context (`reasons` plus a nonempty `rationale`) was set through `CLAVAIN_DECISION_CONTEXT` or used by `dispatch.sh --role`.
+- `read-before-edit`: an existing code file was edited with no earlier Read, Edit or Write of it.
+- `verify-after-edit`: code was edited and no test, lint or check command ran afterwards.
+- `decision-context`: code was edited and no valid decision context (`reasons` plus a nonempty `rationale`) was set through a readable `CLAVAIN_DECISION_CONTEXT` file or used by `dispatch.sh --role`. Mentioning the variable, `--context-file` or `route dispatch` in a command line is not evidence.
+
+Documentation files (`.md`, `.txt`, `.rst`) are exempt from all three rules. A command counts as verification only when a test, lint or check tool is the command it runs (after env assignments and wrappers such as `nice`, `timeout` or `uv run`); `echo pytest` does not count.
+
+Privacy and bounds. The state directory is mode 0700 and every file 0600, whatever the umask. Rows hold a short kind and a sha256 prefix of the path or command, never the text itself. Each session has a JSONL audit ledger (capped at 256 KiB, then it stops growing) and a small summary file that the pre-edit and Stop hooks read, so their cost does not grow with the ledger. Sessions older than 14 days, and all but the newest 200, are pruned when a new session starts. Events with no session id are not recorded, so no shared bucket exists. Only a regular file is ever read, with a size limit, and standard input is capped at 4 MiB.
+
+Fail open. The hook wrapper never `exec`s python: with no `python3`, a crash, a timeout (4 s) or unexpected output it exits 0 and prints nothing, and it relays only a one-line `systemMessage`, never a `decision`. Bash tool calls whose payload cannot contain a verifier skip python entirely, which keeps the hook narrow in practice (a hook matcher cannot see the command). Every failure inside the helper, including an unusable state directory, is silent. The `dispatch.sh` and `lib-gates.sh` calls run under a 5 s deadline.
 
 Rows carry `oodarc_role`, the same vocabulary as intercore `PhaseToOODARCRole`. `scripts/phase-evidence.py check --phase <lifecycle phase> --json` reports what a phase's leg expects, and the `lib-gates.sh` `check_phase_gate` fallback calls it. Set `CLAVAIN_PHASE_EVIDENCE_MODE=off` to disable. A rule becomes a gate only by a separate change made from ledger data.
-

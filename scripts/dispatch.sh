@@ -941,8 +941,13 @@ _dispatch_role_profile() {
   fi
   # Observe mode (mk-4xzwm.1): record the dispatch and warn when its decision
   # context is missing or unusable. Never changes the dispatch outcome.
-  python3 "$DISPATCH_SCRIPT_DIR/phase-evidence.py" dispatch --role "$role" \
-    --context "${CLAVAIN_DECISION_CONTEXT:-}" || true
+  # Bounded by a deadline and silent on any failure (missing python3, timeout).
+  if command -v python3 >/dev/null 2>&1; then
+    local _pe_guard=()
+    command -v timeout >/dev/null 2>&1 && _pe_guard=(timeout 5)
+    "${_pe_guard[@]+"${_pe_guard[@]}"}" python3 "$DISPATCH_SCRIPT_DIR/phase-evidence.py" dispatch \
+      --role "$role" --context "${CLAVAIN_DECISION_CONTEXT:-}" </dev/null >/dev/null || true
+  fi
   local policy_source="${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
   _dispatch_routing_precheck "$role" "$policy_source" || return 1
   local headroom='{"status":"unknown"}' advice exclusions='[]' evidence derived base_context
