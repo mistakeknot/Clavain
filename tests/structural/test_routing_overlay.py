@@ -689,3 +689,32 @@ def test_shell_callers_resolve_neutral_policy_without_pyyaml(box, no_yaml, scrip
     result = subprocess.run(["bash", str(ROOT / "scripts" / script), "--help"], capture_output=True, text=True,
                             timeout=60, env={**clean, **env, **no_yaml, "HOME": str(home)})
     assert "ModuleNotFoundError" not in result.stderr and "PyYAML" not in result.stderr, result.stderr
+
+
+def test_packaged_neutral_policy_declares_no_scoped_profiles():
+    """The generator relies on this when PyYAML is missing (see profile_sentences)."""
+    assert generator_module().profile_sentences(BASE) == ""
+    assert yaml.safe_load(BASE.read_text())["reasoning"].get("profiles") in (None, {})
+
+
+def render_without_yaml(box, no_yaml, *extra):
+    home, env, _ = box
+    clean = {k: v for k, v in os.environ.items() if not k.startswith(("CLAVAIN_ROUTING", "CLAVAIN_ORCH", "ALEPH_ORCH"))}
+    return subprocess.run([sys.executable, str(GENERATOR), "--source", str(ROOT), "--host", "claude", "--render", *extra],
+                          capture_output=True, text=True, timeout=60,
+                          env={**clean, **env, **no_yaml, "HOME": str(home)})
+
+
+def test_contract_render_of_the_neutral_policy_needs_no_pyyaml(box, no_yaml):
+    result = render_without_yaml(box, no_yaml)
+    assert result.returncode == 0, result.stderr
+    assert "Sylveste operating contract" in result.stdout
+
+
+def test_contract_render_of_another_policy_fails_closed_without_pyyaml(box, no_yaml):
+    _, _, tmp = box
+    other = write(tmp / "other.yaml", {"reasoning": {"profiles": {"p": {"scope": "s"}}}})
+    result = render_without_yaml(box, no_yaml, "--policy", str(other))
+    assert result.returncode != 0
+    assert "PyYAML is required" in result.stderr
+    assert "Traceback" not in result.stderr

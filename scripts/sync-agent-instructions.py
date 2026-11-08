@@ -10,10 +10,20 @@ import subprocess
 import sys
 import tempfile
 
-import yaml
 
+def profile_sentences(policy, packaged_base=None):
+    """Sentences naming each scoped profile the policy declares.
 
-def profile_sentences(policy):
+    PyYAML is imported only here. Without it, the packaged neutral policy is
+    known to declare no profiles (a structural test holds that), so it yields
+    nothing; any other policy needs PyYAML to be read and fails closed.
+    """
+    try:
+        import yaml
+    except ImportError as exc:
+        if packaged_base is not None and Path(policy).resolve() == Path(packaged_base).resolve():
+            return ''
+        raise ValueError(f'PyYAML is required to read the profiles of {policy}: {exc}') from exc
     try:
         data = yaml.safe_load(policy.read_text())
     except (yaml.YAMLError, UnicodeError):
@@ -59,7 +69,7 @@ def render(source, host, portable_policy=False, policy_source=None, expected_pol
         hash_input += '\0'+selection+'\0'+policy_arg
     content_hash = hashlib.sha256(hash_input.encode()).hexdigest()
     receipt = f'Host: {host}; package: {version}; policy selection: {selection}; policy SHA256: {policy_hash}; contract SHA256: {content_hash}.'
-    body = body.replace('{{INSTALLATION_RECEIPT}}', receipt).replace('{{POLICY_PATH}}', policy_arg).replace('{{HOST_ADAPTER}}', host_text.strip()).replace('{{POLICY_PROFILES}}', profile_sentences(policy))
+    body = body.replace('{{INSTALLATION_RECEIPT}}', receipt).replace('{{POLICY_PATH}}', policy_arg).replace('{{HOST_ADAPTER}}', host_text.strip()).replace('{{POLICY_PROFILES}}', profile_sentences(policy, source/'config/routing.yaml'))
     metadata = dict(host=host, source=str(source), version=version, policy_hash=policy_hash,
                     contract_hash=content_hash, policy_selection=selection,
                     surface=adapter['surface'], routing='instructional',
