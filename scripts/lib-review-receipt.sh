@@ -129,8 +129,8 @@ json.dump({"total": len(names), "paths": names[:200]}, sys.stdout)
 # FAIL and BLOCK may carry an explanation; a passing ruling allows at most a
 # trailing period. A word outside the vocabulary (APPROVE, a misspelling, PASS
 # followed by prose) is recorded as UNKNOWN with a warning on stderr: it is
-# neither a pass nor a block, and a later review at the same head can supersede
-# it (mk-0qjva, mk-4c909). Both return 1, printing nothing, when there is no
+# neither a pass nor a block, and a later review of the same change (same base
+# and diff hash) can supersede it (mk-0qjva, mk-4c909). Both return 1, printing nothing, when there is no
 # acceptable VERDICT line at all, so no receipt is written and the dispatch
 # fails. No Markdown is parsed: the output must contain no code fence (three
 # backticks or tildes) and no HTML comment delimiter anywhere, and NUL bytes are
@@ -138,21 +138,7 @@ json.dump({"total": len(names), "paths": names[:200]}, sys.stdout)
 # follow a blank line (or begin the file). Reviews that quote fences or comments
 # get no receipt rather than a guess at what they render as.
 _review_receipt_verdict_word() {
-  local out="$1" last
-  [[ -f "$out" ]] || return 1
-  # Continue only on grep status 1 (no delimiter found); a match or any scan
-  # error rejects. NUL bytes are rejected first: shell capture would drop them.
-  local rc
-  LC_ALL=C tr -d '\000' <"$out" | cmp -s - "$out"
-  [[ "${PIPESTATUS[0]}" -eq 0 && "${PIPESTATUS[1]}" -eq 0 ]] || return 1
-  LC_ALL=C grep -qE '```|~~~|<!--|-->' "$out"; rc=$?
-  [[ $rc -eq 1 ]] || return 1
-  last="$(awk '
-    { sub(/\r$/, "") }
-    $0 ~ /[^[:space:]]/ { last = $0; lastok = (blank || NR == 1); blank = 0; next }
-    { blank = 1 }
-    END { if (lastok) print last }' "$out")" || return 1
-  verdict_label_word "$last"
+  verdict_strict_word "$1"
 }
 
 _review_receipt_verdict() {
@@ -174,22 +160,6 @@ _review_receipt_clean_word() {
   local w
   w="$(printf '%s' "$1" | LC_ALL=C tr -d '[:cntrl:]')"
   printf '%s' "${w:0:120}"
-}
-
-# The receipt that currently stands for a head: the highest-sequence file
-# <pr>-<head>[.N].json in a repo's receipt directory. Older records stay on disk
-# unchanged; each newer record names the one it supersedes. Prints the path, or
-# nothing (rc 1) when there is none.
-_review_receipt_current() {
-  local dir="$1" pr="$2" head="$3" f best="" bestn=0 n
-  for f in "$dir/$pr-$head.json" "$dir/$pr-$head".*.json; do
-    [[ -f "$f" && ! -L "$f" ]] || continue
-    n="$(jq -r '.sequence // 0' "$f" 2>/dev/null)" || continue
-    [[ "$n" =~ ^[0-9]+$ ]] || continue
-    if (( n >= bestn )); then best="$f"; bestn=$n; fi
-  done
-  [[ -n "$best" ]] || return 1
-  printf '%s\n' "$best"
 }
 
 _review_receipt_lab() {
@@ -276,22 +246,36 @@ _review_receipt_write() {
     + (if $fx.source == "conflict" then {findings_block_total: $fx.block_total} else {} end)')" || return 1
   # Append-only: the first receipt for a head is <pr>-<head>.json; a later run
   # on the same head is recorded as <pr>-<head>.2.json, .3.json, ... and nothing
-  # is overwritten or deleted. Each receipt carries its sequence number; readers order by created_at, then sequence. A path that
+  # is overwritten or deleted, so a reader that only reads <pr>-<head>.json sees
+  # exactly what it always saw. The number is the order of successful insertion,
+  # not of review start; created_at is each receipt's own clock. A path that
   # is not a regular file (directory, symlink) is refused, never skipped.
   # Exclusive create: write a private temp file, then hard-link it into place.
   # link(2) fails on any existing entry, symlinks included, and the receipt
   # appears complete or not at all.
+  #
+  # Supersession is scoped (design choice, mk-0qjva): a later receipt names an
+  # earlier one in supersedes/supersedes_verdict only when both reviewed the same
+  # change, meaning equal base_sha and equal diff_sha256. The nearest earlier
+  # receipt with that scope is named. A receipt for a different base or diff (for
+  # example an empty diff with base equal to head) is written as its own receipt
+  # and supersedes nothing, so it cannot clear a block it did not review.
   local tmpf n=1 cand="$file"
   tmpf="$(umask 077; mktemp "$dir/.new.XXXXXX")" || { echo "review receipt: cannot create temp file in $dir" >&2; return 1; }
   while :; do
-    # A later receipt at the same head names the one directly before it and the
-    # verdict that one held, so a reader can see what was superseded without
-    # opening it. The earlier file is never touched (mk-0qjva).
-    local prev_name="" prev_file="" prev_verdict=""
+    local prev_name="" prev_file="" prev_verdict="" k pf
     if (( n > 1 )); then
-      if (( n == 2 )); then prev_file="$file"; else prev_file="${file%.json}.$((n - 1)).json"; fi
-      prev_name="${prev_file##*/}"
-      prev_verdict="$(jq -r '.verdict // empty' "$prev_file" 2>/dev/null)" || prev_verdict=""
+      for (( k = n - 1; k >= 1; k-- )); do
+        if (( k == 1 )); then pf="$file"; else pf="${file%.json}.$k.json"; fi
+        [[ -f "$pf" && ! -L "$pf" ]] || continue
+        if [[ "$(jq -r '[.base_sha, .diff_sha256] | join(" ")' "$pf" 2>/dev/null)" == "$RR_BASE $RR_DIFF_SHA256" ]]; then
+          prev_file="$pf"; break
+        fi
+      done
+      if [[ -n "$prev_file" ]]; then
+        prev_name="${prev_file##*/}"
+        prev_verdict="$(jq -r '.verdict // empty' "$prev_file" 2>/dev/null)" || prev_verdict=""
+      fi
     fi
     jq --argjson seq "$n" --arg prev "$prev_name" --arg pv "$prev_verdict" \
       '.sequence = $seq | if $prev != "" then .supersedes = $prev | .supersedes_verdict = (if $pv == "" then null else $pv end) else . end' \

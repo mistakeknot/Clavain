@@ -3454,13 +3454,14 @@ _extract_verdict() {
     # P2)" could be overridden by a stray `STATUS: pass` block elsewhere in
     # the output). It is its own case: always warn, and a trailing block
     # cannot upgrade it to pass — see first_line_recognized==2 below.
-    if [[ "$verdict_word_upper" =~ ^PASS($|[^A-Z0-9_-]) ]]; then
-        status="pass"
-        summary="Validator replay PASS."
-        first_line_recognized=1
-    elif [[ "$(verdict_word_class "$verdict_word")" == PASS_WITH_NOTES ]]; then
-        # PASS-WITH-NOTES and PASS_WITH_NOTES read as PASS WITH NOTES, the same
-        # as in the review receipt (shared classifier, mk-0qjva/mk-4c909).
+    local _first_class
+    _first_class="$(verdict_word_class "$verdict_word")"
+    if [[ "$_first_class" == PASS || "$_first_class" == PASS_WITH_NOTES ]]; then
+        # The shared classifier decides, so the first line reads exactly as the
+        # review receipt reads it (mk-0qjva, mk-4c909): PASS, or PASS WITH NOTES
+        # spelled with spaces, hyphens or underscores. PASS followed by prose
+        # ("PASS (tests failed)") is not a pass here either; it falls through to
+        # the unrecognised case below and stays warn.
         status="pass"
         summary="Validator replay PASS."
         first_line_recognized=1
@@ -3515,44 +3516,7 @@ _extract_verdict() {
         # Anything else stays warn.
         if [[ "$has_valid_block" != 1 ]]; then
             local last_line
-            # A final line inside an unclosed code fence is quoted example
-            # text, not the agent's ruling. Track fence char and opening length: a
-            # closer must repeat the char, be at least as long, and carry no
-            # trailing text.
-            last_line="$(awk '
-                { sub(/\r$/, "") }
-                {
-                    line = $0
-                    # tolerate the same blockquote / list-item prefixes the
-                    # sed below strips, so a prefixed fence is still a fence
-                    if (match(line, /^ ? ? ?(>[ ]*|[-+*][ ]+|•[ ]+)*(```+|~~~+)/)) {
-                        rest = substr(line, RSTART + RLENGTH)
-                        run = substr(line, RSTART, RLENGTH)
-                        match(run, /(```+|~~~+)$/)
-                        run = substr(run, RSTART)
-                        ch = substr(run, 1, 1)
-                        if (open == "") {
-                            # a backtick fence info string may not contain a
-                            # backtick; such a line is not an opener
-                            if (!(ch == "`" && index(rest, "`"))) { open = ch; olen = length(run) }
-                        }
-                        else if (ch == open && length(run) >= olen && rest ~ /^[ \t]*$/) { open = "" }
-                    }
-                }
-                $0 ~ /[^[:space:]]/ { last = $0 }
-                END { if (open == "") print last }
-            ' "$output_file" 2>/dev/null)" || last_line=""
-            # Strip only balanced outer decoration: list/quote/heading markers,
-            # then matching ** / __ / ` wrappers (also around just the label,
-            # as in **Verdict:** PASS). Unbalanced or interior asterisks stay,
-            # so "CLEAN*" and "P*ASS" never become a pass.
-            last_line="$(sed -E 's/\r$//; s/^[[:space:]]*([>#+•-]+[[:space:]]*)+//; s/^[[:space:]]*\*[[:space:]]+//; s/[[:space:]]+$//' <<< "$last_line")"
-            local _prev=""
-            while [[ "$last_line" != "$_prev" ]]; do
-                _prev="$last_line"
-                last_line="$(sed -E 's/^(\*\*|__)([A-Za-z]+[[:space:]]*:)\1[[:space:]]*(\*\*|__)([^*_]*)\3$/\2 \4/; s/^(\*\*|__)([A-Za-z]+)\1[[:space:]]*:[[:space:]]*(\*\*|__)([^*_]*)\3$/\2: \4/; s/^\*\*([^*]*)\*\*$/\1/; s/^__(.*)__$/\1/; s/^`(.*)`$/\1/; s/^(\*\*|__|`)([A-Za-z]+[[:space:]]*:)\1([[:space:]]*)/\2 /' <<< "$last_line")"
-                last_line="${last_line%"${last_line##*[![:space:]]}"}"
-            done
+            last_line="$(verdict_last_line "$output_file")"
             local _last_word="" _last_class=UNKNOWN
             if _last_word="$(verdict_label_word "$last_line")"; then
                 _last_class="$(verdict_word_class "$_last_word")"
@@ -3599,6 +3563,27 @@ _extract_verdict() {
             status="warn"
             summary="$summary (trailing verdict block disagreed: STATUS: $block_status_lower)"
         fi
+        # Same rule for a closing VERDICT line: a first-line pass followed by a
+        # closing line that rules FAIL, BLOCK or an unrecognised word is a
+        # disagreement, never a pass (mk-0qjva). The closing line is read with
+        # the shared classifier, as the receipt reads it.
+        if [[ "$status" == "pass" ]]; then
+            local _final_class
+            _final_class="$(verdict_final_class "$output_file")"
+            # A legacy CLEAN first line agrees with a CLEAN closing line (the
+            # classifier calls CLEAN UNKNOWN; any other closing word disagrees).
+            if [[ "$_final_class" == UNKNOWN && "$verdict_word_upper" =~ ^CLEAN$ ]]; then
+                local _final_word
+                _final_word="$(verdict_label_word "$(verdict_last_line "$output_file")")" || _final_word=""
+                _final_word="${_final_word//$'\xC2\xA0'/ }"
+                _final_word="${_final_word#"${_final_word%%[![:space:]]*}"}"
+                [[ "${_final_word^^}" =~ ^CLEAN$ ]] && _final_class=NONE
+            fi
+            if [[ "$_final_class" == FAIL || "$_final_class" == UNKNOWN ]]; then
+                status="warn"
+                summary="$summary (closing VERDICT line disagreed: $_final_class)"
+            fi
+        fi
     elif [[ "$first_line_recognized" == 2 ]]; then
         # A verdict label is present but unrecognized (or only prefix-
         # matched NEEDS-FIXES/NOT CLEAN, or mentioned in prose with no
@@ -3618,6 +3603,19 @@ _extract_verdict() {
         # trailing structured block alone.
         _write_verdict_block "$verdict_block"
         return 0
+    fi
+
+    # A cross-lab review is also read by the receipt writer. When the receipt
+    # would not record a pass for this output (BLOCK, UNKNOWN such as CLEAN or
+    # PASS followed by prose, or no usable VERDICT line), the sidecar is not a
+    # pass either: the two must never disagree toward approval (mk-0qjva).
+    if [[ "${ROLE:-}" == cross-lab-review && "$status" == "pass" ]]; then
+        local _strict_class
+        _strict_class="$(verdict_strict_class "$output_file")"
+        if [[ "$_strict_class" != PASS && "$_strict_class" != PASS_WITH_NOTES ]]; then
+            status="warn"
+            summary="$summary (review receipt reads this as $_strict_class, not a pass)"
+        fi
     fi
 
     # The FINDINGS line is counted from the output body, not a constant.

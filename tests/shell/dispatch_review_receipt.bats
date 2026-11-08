@@ -137,6 +137,7 @@ teardown() { rm -rf "$T"; }
         for suffix in ' (explanation)' ' - explanation' ': explanation' '. Explanation' '..' ' because checks completed'; do
             printf 'Findings\n\nVERDICT: %s%s\n' "$verdict" "$suffix" > "$OUT"
             run --separate-stderr _review_receipt_verdict "$OUT"
+            [ "$status" -eq 0 ]
             [ "$output" = UNKNOWN ]
         done
     done
@@ -191,6 +192,7 @@ _reject_passing_suffix() {
         'PASS but changes required' 'PASS (not approved)' 'PASS or BLOCK'; do
         printf 'Findings\n\nVERDICT: %s\n' "$line" > "$OUT"
         run --separate-stderr _review_receipt_verdict "$OUT"
+        [ "$status" -eq 0 ]
         [ "$output" = UNKNOWN ]
     done
 }
@@ -624,21 +626,21 @@ _reject_passing_suffix() {
     [ "$(jq -r .supersedes_verdict "$d/7-$HEAD_SHA.3.json")" = PASS ]
 }
 
-@test "the current receipt for a head is the highest sequence" {
+@test "sequences count insertion order and each same-scope receipt chains to the last" {
     _review_receipt_prepare "$R"
     d="$T/reviews/o__r"
-    run _review_receipt_current "$d" 7 "$HEAD_SHA"
-    [ -z "$output" ]
     printf 'x\n\nVERDICT: PASS\n' > "$OUT"
     _review_receipt_write "$OUT" 0
-    [ "$(_review_receipt_current "$d" 7 "$HEAD_SHA")" = "$d/7-$HEAD_SHA.json" ]
     printf 'x\n\nVERDICT: FAIL\n' > "$OUT"
     _review_receipt_write "$OUT" 0
-    [ "$(_review_receipt_current "$d" 7 "$HEAD_SHA")" = "$d/7-$HEAD_SHA.2.json" ]
     printf 'x\n\nVERDICT: PASS\n' > "$OUT"
     _review_receipt_write "$OUT" 0
-    [ "$(_review_receipt_current "$d" 7 "$HEAD_SHA")" = "$d/7-$HEAD_SHA.3.json" ]
-    [ "$(jq -r .verdict "$(_review_receipt_current "$d" 7 "$HEAD_SHA")")" = PASS ]
+    [ "$(jq -r .sequence "$d/7-$HEAD_SHA.json")" = 1 ]
+    [ "$(jq -r .sequence "$d/7-$HEAD_SHA.2.json")" = 2 ]
+    [ "$(jq -r .sequence "$d/7-$HEAD_SHA.3.json")" = 3 ]
+    [ "$(jq -r .supersedes "$d/7-$HEAD_SHA.3.json")" = "7-$HEAD_SHA.2.json" ]
+    [ "$(jq -r .supersedes_verdict "$d/7-$HEAD_SHA.3.json")" = BLOCK ]
+    [ "$(jq -r .verdict "$d/7-$HEAD_SHA.3.json")" = PASS ]
 }
 
 @test "a real BLOCK stays on disk and is never rewritten by a later PASS" {
@@ -655,14 +657,68 @@ _reject_passing_suffix() {
     [ "$(jq -r .supersedes_verdict "$d/7-$HEAD_SHA.2.json")" = BLOCK ]
 }
 
-@test "a BLOCK that is the latest receipt is the current one" {
+@test "a BLOCK written after a PASS is recorded as BLOCK and names the PASS it follows" {
     _review_receipt_prepare "$R"
     d="$T/reviews/o__r"
     printf 'x\n\nVERDICT: PASS\n' > "$OUT"
     _review_receipt_write "$OUT" 0
     printf 'x\n\nVERDICT: BLOCK\n' > "$OUT"
     _review_receipt_write "$OUT" 0
-    [ "$(jq -r .verdict "$(_review_receipt_current "$d" 7 "$HEAD_SHA")")" = BLOCK ]
+    [ "$(jq -r .verdict "$d/7-$HEAD_SHA.2.json")" = BLOCK ]
+    [ "$(jq -r .supersedes_verdict "$d/7-$HEAD_SHA.2.json")" = PASS ]
+}
+
+# Design choice (mk-0qjva): a receipt supersedes an earlier one only when it
+# reviewed the same base and the same diff. A review of different content is a
+# receipt in its own right and clears nothing.
+@test "a receipt for a different base and diff supersedes nothing and leaves a BLOCK in force" {
+    _review_receipt_prepare "$R"
+    d="$T/reviews/o__r"
+    printf 'x\n\nVERDICT: BLOCK\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    before="$(sha256sum "$d/7-$HEAD_SHA.json" | cut -d' ' -f1)"
+    # base == head: an empty reviewed diff, the case the round-1 review reproduced.
+    RR_BASE="$HEAD_SHA"
+    _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    f="$d/7-$HEAD_SHA.2.json"
+    [ "$(jq -r .verdict "$f")" = PASS ]
+    [ "$(jq -r .sequence "$f")" = 2 ]
+    [ "$(jq -r '.supersedes // "none"' "$f")" = none ]
+    [ "$(jq -r '.supersedes_verdict // "none"' "$f")" = none ]
+    [ "$(jq -r .base_sha "$f")" = "$HEAD_SHA" ]
+    # The original BLOCK is byte-identical and still names no predecessor.
+    [ "$(sha256sum "$d/7-$HEAD_SHA.json" | cut -d' ' -f1)" = "$before" ]
+    [ "$(jq -r .verdict "$d/7-$HEAD_SHA.json")" = BLOCK ]
+}
+
+@test "same base but a different diff does not supersede; the nearest same-scope receipt does" {
+    d="$T/reviews/o__r"
+    echo c > "$R/c"; git -C "$R" add c; git -C "$R" commit -qm c
+    NEW_HEAD="$(git -C "$R" rev-parse HEAD)"
+    RR_HEAD="$NEW_HEAD"
+    # Scope A (base = BASE): BLOCK.
+    RR_BASE="$BASE"; _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: BLOCK\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    # Scope B (base = the previous head, a different diff): PASS.
+    RR_BASE="$HEAD_SHA"; _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: PASS\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    [ "$(jq -r '.supersedes // "none"' "$d/7-$NEW_HEAD.2.json")" = none ]
+    # Scope A again: PASS. It supersedes the scope A BLOCK, skipping the scope B PASS.
+    RR_BASE="$BASE"; _review_receipt_prepare "$R"
+    printf 'x\n\nVERDICT: PASS WITH NOTES\n' > "$OUT"
+    _review_receipt_write "$OUT" 0
+    [ "$(jq -r .sequence "$d/7-$NEW_HEAD.3.json")" = 3 ]
+    [ "$(jq -r .supersedes "$d/7-$NEW_HEAD.3.json")" = "7-$NEW_HEAD.json" ]
+    [ "$(jq -r .supersedes_verdict "$d/7-$NEW_HEAD.3.json")" = BLOCK ]
+}
+
+@test "the receipt library no longer defines an effective-receipt selector" {
+    ! grep -q '_review_receipt_current' "$BATS_TEST_DIRNAME/../../scripts/lib-review-receipt.sh"
 }
 
 @test "cleanup fails a successful process on an UNKNOWN verdict, never as BLOCK" {

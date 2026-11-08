@@ -50,13 +50,12 @@ teardown() { rm -rf "$T"; }
     run verdict_label_word 'STATUS: pass'; [ "$status" -eq 1 ]
 }
 
-# CLEAN is the one deliberate difference: a legacy completion word the sidecar
-# still reads for non-review roles, which the cross-lab receipt never accepts.
-# Parity: the receipt and the sidecar must classify the same final-line word the
-# same way. A receipt pass must be a sidecar pass, a receipt UNKNOWN must not be
-# a sidecar pass, and a receipt BLOCK must not be a sidecar pass.
-@test "parity: receipt verdict and sidecar status agree for every word" {
+# Parity: the receipt and the sidecar classify the same closing verdict the same
+# way (mk-0qjva). Rule: when the receipt is not a pass, the sidecar is not a pass.
+# The cross-lab-review sidecar is held to that rule exactly, CLEAN included.
+@test "parity: receipt verdict and cross-lab sidecar status agree for every word" {
     source "$HELPERS"
+    ROLE=cross-lab-review
     while IFS='|' read -r word want_receipt want_status; do
         printf 'Reviewed the change.\n\nVERDICT: %s\n' "$word" > "$OUTPUT"
         rm -f "$VERDICT_FILE"
@@ -65,6 +64,9 @@ teardown() { rm -rf "$T"; }
         got_status="$(sed -n 's/^STATUS: //p' "$VERDICT_FILE" | head -1)"
         [ "$got_receipt" = "$want_receipt" ] || { echo "receipt for '$word': $got_receipt != $want_receipt"; false; }
         [ "$got_status" = "$want_status" ] || { echo "sidecar for '$word': $got_status != $want_status"; false; }
+        if [ "$got_receipt" != PASS ] && [ "$got_receipt" != "PASS WITH NOTES" ]; then
+            [ "$got_status" != pass ] || { echo "non-pass receipt '$word' gave a sidecar pass"; false; }
+        fi
     done <<'TABLE'
 PASS|PASS|pass
 PASS WITH NOTES|PASS WITH NOTES|pass
@@ -73,9 +75,82 @@ PASS_WITH_NOTES|PASS WITH NOTES|pass
 FAIL|BLOCK|warn
 BLOCK|BLOCK|warn
 APPROVE|UNKNOWN|warn
-CLEAN|UNKNOWN|pass
+CLEAN|UNKNOWN|warn
 PASS (but not really)|UNKNOWN|warn
+PASS (tests failed)|UNKNOWN|warn
 TABLE
+}
+
+# CLEAN stays a legacy completion word for roles that are not cross-lab-review:
+# it is the one case the sidecar reads that the receipt never accepts, and the
+# receipt only exists for cross-lab-review.
+@test "CLEAN is still a completion pass for a role that has no receipt" {
+    source "$HELPERS"
+    ROLE=implementation
+    printf 'Done.\n\nVERDICT: CLEAN\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT" 2>/dev/null
+    [ "$(sed -n 's/^STATUS: //p' "$VERDICT_FILE" | head -1)" = pass ]
+}
+
+# The round-1 regression: a first-line pass followed by a different closing
+# verdict was a sidecar pass, which orchestrate.py counts as approval.
+@test "sidecar: a first-line pass contradicted by a closing FAIL is never a pass" {
+    source "$HELPERS"
+    for ROLE in cross-lab-review implementation; do
+        for first in 'VERDICT: PASS-WITH-NOTES' '> VERDICT: PASS-WITH-NOTES' 'VERDICT: PASS' 'VERDICT: PASS WITH NOTES'; do
+            for last in 'VERDICT: FAIL' 'VERDICT: BLOCK' 'VERDICT: APPROVE'; do
+                printf '%s\n\nLater review text.\n\n%s\n' "$first" "$last" > "$OUTPUT"
+                rm -f "$VERDICT_FILE"; _extract_verdict "$OUTPUT" 2>/dev/null
+                got="$(sed -n 's/^STATUS: //p' "$VERDICT_FILE" | head -1)"
+                [ "$got" != pass ] || { echo "$ROLE: '$first' then '$last' gave $got"; false; }
+                receipt="$(_review_receipt_verdict "$OUTPUT" 2>/dev/null)" || receipt=NONE
+                [ "$receipt" != PASS ] && [ "$receipt" != "PASS WITH NOTES" ]
+            done
+        done
+    done
+}
+
+@test "sidecar: a legacy CLEAN first line agrees with a CLEAN close and not with another word" {
+    source "$HELPERS"
+    ROLE=implementation
+    printf 'VERDICT: CLEAN\n\nBody.\n\nVERDICT: CLEAN\n' > "$OUTPUT"
+    rm -f "$VERDICT_FILE"; _extract_verdict "$OUTPUT" 2>/dev/null
+    [ "$(sed -n 's/^STATUS: //p' "$VERDICT_FILE" | head -1)" = pass ]
+    for last in 'VERDICT: FAIL' 'VERDICT: APPROVE'; do
+        printf 'VERDICT: CLEAN\n\nBody.\n\n%s\n' "$last" > "$OUTPUT"
+        rm -f "$VERDICT_FILE"; _extract_verdict "$OUTPUT" 2>/dev/null
+        [ "$(sed -n 's/^STATUS: //p' "$VERDICT_FILE" | head -1)" != pass ]
+    done
+}
+
+@test "sidecar: a first-line pass and a matching closing pass is still a pass" {
+    source "$HELPERS"
+    ROLE=cross-lab-review
+    printf 'VERDICT: PASS-WITH-NOTES\n\nBody.\n\nVERDICT: PASS WITH NOTES\n' > "$OUTPUT"
+    rm -f "$VERDICT_FILE"; _extract_verdict "$OUTPUT" 2>/dev/null
+    [ "$(sed -n 's/^STATUS: //p' "$VERDICT_FILE" | head -1)" = pass ]
+}
+
+@test "sidecar: a first line that is PASS with an explanation is not a pass" {
+    source "$HELPERS"
+    for ROLE in cross-lab-review implementation; do
+        for first in 'VERDICT: PASS (tests failed)' 'VERDICT: PASS - no, blocked' 'VERDICT: PASS (conditional on fixes)'; do
+            printf '%s\n\nNotes below.\n' "$first" > "$OUTPUT"
+            rm -f "$VERDICT_FILE"; _extract_verdict "$OUTPUT" 2>/dev/null
+            got="$(sed -n 's/^STATUS: //p' "$VERDICT_FILE" | head -1)"
+            [ "$got" != pass ] || { echo "$ROLE: '$first' gave $got"; false; }
+        done
+    done
+}
+
+@test "cross-lab sidecar: a closing pass the receipt would not record is not a pass" {
+    source "$HELPERS"
+    ROLE=cross-lab-review
+    # A code fence makes the receipt reject the file; the sidecar must not pass it.
+    printf 'Findings\n\n```\nexample\n```\n\nVERDICT: PASS\n' > "$OUTPUT"
+    run -1 _review_receipt_verdict "$OUTPUT"
+    rm -f "$VERDICT_FILE"; _extract_verdict "$OUTPUT" 2>/dev/null
+    [ "$(sed -n 's/^STATUS: //p' "$VERDICT_FILE" | head -1)" != pass ]
 }
 
 # --- mk-z770: role verdict-block suffix and the REVIEW field ----------------
