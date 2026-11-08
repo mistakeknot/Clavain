@@ -15,6 +15,33 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/startup.py'
 
 
+ALLOWED_ENV = ('PATH', 'LANG', 'LC_ALL')
+
+
+def scrub_environ(environ, home):
+    """The only environment a test or its subprocesses may see.
+
+    Built from an allow-list so an inherited credential can neither reach a
+    subprocess nor be printed in a failure message (pytest shows env dicts).
+    Tests add anything else they need explicitly.
+    """
+    kept = {k: environ[k] for k in ALLOWED_ENV if k in environ}
+    kept.setdefault('LANG', 'C.UTF-8'); kept.setdefault('LC_ALL', 'C.UTF-8')
+    kept['HOME'] = str(home); kept['TMPDIR'] = str(home)
+    return kept
+
+
+@pytest.fixture(autouse=True)
+def _minimal_environment(tmp_path, monkeypatch):
+    home = tmp_path / 'envhome'; home.mkdir()
+    wanted = scrub_environ(os.environ, home)
+    for key in list(os.environ):
+        if key not in wanted:
+            monkeypatch.delenv(key)
+    for key, value in wanted.items():
+        monkeypatch.setenv(key, value)
+
+
 @pytest.fixture(autouse=True)
 def _no_ambient_git_above_tmp(tmp_path):
     # startup.py refuses state dirs under ANY git worktree (real behavior, kept).
@@ -666,3 +693,18 @@ def test_current_block_with_non_utf8_bytes_around_stays_current(tmp_path):
     path.write_bytes(b'\xff\xfe leading\n\n' + _rendered_block().rstrip('\n').encode() + b'\n\x80 trailing\n')
     result = _check(tmp_path, path)
     assert result.returncode == 0 and json.loads(result.stdout)['status'] == 'current'
+
+
+def test_scrub_environ_drops_inherited_secrets(tmp_path):
+    parent = {'PATH': '/usr/bin', 'FAKE_SECRET_TOKEN': 'sentinel-do-not-leak', 'HOME': '/elsewhere', 'AWS_X': 'y'}
+    got = scrub_environ(parent, tmp_path)
+    assert 'FAKE_SECRET_TOKEN' not in got and 'sentinel-do-not-leak' not in repr(got)
+    assert set(got) == {'PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR'} and got['HOME'] == str(tmp_path)
+
+
+def test_tests_and_their_subprocesses_run_with_the_minimal_environment(tmp_path, monkeypatch):
+    # The fixture ran before this body, so anything the parent exported is already gone.
+    assert set(os.environ) <= {'PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR', 'PYTEST_CURRENT_TEST'}  # the last is pytest's own
+    seen = subprocess.run([sys.executable, '-c', 'import os,json; print(json.dumps(sorted(os.environ)))'],
+                          capture_output=True, text=True, check=True).stdout
+    assert set(json.loads(seen)) <= {'PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR', 'PYTEST_CURRENT_TEST', 'LC_CTYPE', 'PYTHONUTF8', 'PYTHONCOERCECLOCALE'}
