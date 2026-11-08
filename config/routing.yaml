@@ -632,10 +632,12 @@ dispatch:
       # sonnet before sol before kimi: kimi stays the third provider. Its
       # role-resolved seat now gets Bash and read tools (bead mk-1rbg), so it
       # can run a plan's Verification. It runs in a disposable copy of the
-      # checkout at HEAD with a copy of the plan directory, inside a bwrap
-      # sandbox where bwrap works; any change to either copy is an error
-      # verdict, and only kimi's final message is read for the ruling. It is
-      # last because the earlier seats are the better-measured ones.
+      # checkout at HEAD with a copy of the plan directory; a change to either
+      # copy, or a copy that goes missing, is an error verdict, and only
+      # kimi's final message of a clean stream is read for the ruling. Only
+      # where bwrap works is the rest of the filesystem read-only (kimi's own
+      # state dirs stay writable); reads and network are open either way. It
+      # is last because the earlier seats are the better-measured ones.
       # token-efficiency cut (bead mk-42j9.20): review/planning seat,
       # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same
       # mandatory escalation/48h-revert terms as planning-astra above.

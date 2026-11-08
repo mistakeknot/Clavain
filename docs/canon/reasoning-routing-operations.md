@@ -68,24 +68,39 @@ new edge cannot reintroduce a seat the walk already excluded or already used.
 The role-resolved kimi seat (`validation`, `cross-lab-review`, `plan-review`)
 is asked to use Bash, Read, Glob and Grep and not Write or Edit, so it can run
 a plan's Verification the way the claude seat does. That tool list is a request
-to kimi, not a barrier: a shell can write anywhere the process can. What
-dispatch enforces is containment and a strict reading of the result:
+to kimi, not a barrier: a shell can write anywhere the process can. Dispatch
+adds the following, each with the condition under which it holds:
 
-- The seat runs in a disposable copy of the checkout detached at HEAD (a
-  plain copy when the directory is not a git work tree), with a copy of the
-  plan directory, never the originals. Uncommitted changes are not in the copy;
-  a warning says so.
-- Where `bwrap` can create a sandbox, the run also gets a read-only root with
-  only the copy and kimi's own state directory writable. Where it cannot (or
-  `CLAVAIN_SEAT_BWRAP=0`), dispatch says so, and nothing stops the seat writing
-  outside the copy. The seat is not read-only in that case.
-- Both copies are fingerprinted (content, mode, ignored files, `.git`) before
-  and after. Any difference is an error verdict and a failed dispatch. This
-  detects changes inside the copies only.
-- The ruling is read only from kimi's final assistant message
-  (`--output-format stream-json`) and must open that message with a `VERDICT:`
-  line. Narration, quoted output and tool results are never read. A missing,
-  late or ambiguous verdict is an error verdict, never a pass.
+- **Copies.** The seat runs in a disposable copy of the checkout detached at
+  HEAD (a plain copy when the directory is not a git work tree), with a copy
+  of the plan directory, not the originals. Uncommitted changes are not in
+  the copy; a warning says so.
+- **Change detection, copies only.** Both copies are fingerprinted (file
+  content, modes, symlinks, ignored files, everything under `.git`, and `.git/index` by mode, raw
+  bytes and staged contents) before and after the run. A difference, a
+  copy that was removed, or a copy that cannot be read completely is an error
+  verdict and a failed dispatch. The fingerprint says nothing about any other
+  path. A seat can also change a file and change it back; nothing records
+  that.
+- **Filesystem boundary, only with `bwrap`.** Where `bwrap` can create a
+  sandbox, the run gets a read-only root with the copy, its temp dir and
+  kimi's own state directories (`~/.kimi-code`, `~/.kimi`,
+  `~/.config/kimi-code`, whichever exist) writable, in its own process
+  namespace so nothing it starts outlives it. Those state directories can hold
+  kimi's login material: the seat can read and change it, and the fingerprint
+  does not cover it. Where `bwrap` is unusable (or `CLAVAIN_SEAT_BWRAP=0`),
+  dispatch says so and nothing stops the seat writing outside the copy.
+- **Not restricted either way.** Reads of any file the user can read, and
+  network access.
+- **Reading the ruling.** The ruling is kimi's final assistant message
+  (`--output-format stream-json`), taken from a stream with no malformed
+  record (a line starting with `{` that is not a JSON object) and nothing but
+  blank lines and `meta` records after that message. The message must open
+  with a `VERDICT:` line, must hold one such line, and must not name a
+  different verdict elsewhere. Narration, quoted output and tool results are
+  never read. Any other shape is an error verdict, not a pass. It cannot
+  tell kimi's own last record from a forged one that a process the seat started
+  wrote to the stream after it, while kimi was still running.
 
 A direct `--to kimi` dispatch stays toolless because it may carry untrusted
 input.
