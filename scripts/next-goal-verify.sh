@@ -122,7 +122,8 @@ while [[ $# -gt 0 ]]; do
         --out-of=*) OUT_OF+=("${1#--out-of=}"); shift ;;
         --out-override) OUT_OVERRIDE="${2:-}"; shift 2 || shift ;;
         --out-override=*) OUT_OVERRIDE="${1#--out-override=}"; shift ;;
-        -h|--help) sed -n '2,60p' "$0"; exit 0 ;;
+        # Print the whole header comment: the Usage block is at its end.
+        -h|--help) awk -v first=2 'NR < first {next} !/^#/ {exit} {print}' "$0"; exit 0 ;;
         *) IDS+=("$1"); shift ;;
     esac
 done

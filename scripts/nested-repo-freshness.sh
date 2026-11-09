@@ -34,8 +34,11 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --fetch) FETCH=1; shift ;;
     --quiet) QUIET=1; shift ;;
-    --root) ROOT_OVERRIDE="${2:-}"; shift 2 ;;
-    -h|--help) sed -n '3,30p' "$0"; exit 0 ;;
+    --root)
+      [[ $# -ge 2 ]] || { echo "--root needs a directory" >&2; exit 2; }
+      ROOT_OVERRIDE="$2"; shift 2 ;;
+    # Print the header comment, however long it is.
+    -h|--help) awk -v first=4 'NR < first {next} !/^#/ {exit} {print}' "$0"; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
