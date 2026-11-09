@@ -23,12 +23,59 @@ when the result is verified free of every value; otherwise a fixed-width marker
 of characters absent from every value is used; if no marker verifies, the file
 or text is left alone and the run fails closed.
 
+Every message this scanner prints (stdout or stderr, including usage and
+errors) goes through one checked printer: it is printed only when no token
+value occurs in it, otherwise nothing is printed (the exit status still tells
+the outcome). Silence cannot echo a value, whatever the value is.
+
 Exit status of `scan`: 0 clean or nothing to scan, 3 a hit was found and
 redacted, 4 a file could not be scanned or the scanner failed, 5 both.
 """
 import sys
 
 FIXED_ERROR = "token-leak-scan: internal error (details withheld)"
+
+
+def _emit(message, stream=None):
+    """Print message only if no token value occurs in it; else print nothing.
+
+    Self-contained (lazy imports, no module state) so it works when the module
+    imports failed (if json is missing and a value needs escaping, nothing is
+    printed). The values come from the default variables plus every
+    --token-env named in argv. If they cannot be determined, nothing is
+    printed. Raw, surrogate-escaped and JSON-escaped forms are all checked.
+    """
+    try:
+        import os as _os
+
+        try:
+            import json as _json
+        except BaseException:
+            _json = None
+
+        names = ["ANTHROPIC_AUTH_TOKEN", "CODEX_POOL_AUTH_TOKEN"]
+        argv = sys.argv[1:]
+        for i, arg in enumerate(argv):
+            if arg == "--token-env" and i + 1 < len(argv):
+                names.append(argv[i + 1])
+            elif arg.startswith("--token-env="):
+                names.append(arg[len("--token-env="):])
+        text = message.encode("utf-8", "surrogateescape")
+        for name in names:
+            value = _os.environ.get(name, "")
+            if not value:
+                continue
+            forms = [value.encode("utf-8", "surrogateescape")]
+            if _json is not None:
+                forms.append(_json.dumps(value)[1:-1].encode("utf-8"))
+            elif not all(0x20 <= ord(c) < 0x7F and c not in '"\\' for c in value):
+                return  # escaped form cannot be computed: print nothing
+            if any(form in text for form in forms):
+                return
+        print(message, file=stream or sys.stderr)
+    except BaseException:
+        return
+
 
 # Anything that can fail at import time sits inside this boundary, so no
 # traceback can print a path or a value.
@@ -45,7 +92,7 @@ try:
     except ImportError:  # pragma: no cover - non-POSIX
         fcntl = None
 except BaseException:
-    print(FIXED_ERROR, file=sys.stderr)
+    _emit(FIXED_ERROR)
     sys.exit(4)
 
 REDACTION = b"[REDACTED:anthropic-token]"
@@ -257,7 +304,7 @@ def cmd_scan(args):
                 message = "token-leak-scan: could not scan %s; failing closed" % safe
                 if any(f and f in message.encode("utf-8", "surrogateescape") for f in forms):
                     message = "token-leak-scan: could not scan a file; failing closed"
-                print(message, file=sys.stderr)
+                _emit(message)
             elif count:
                 found = True
                 # A record that would carry a value is replaced by a fixed
@@ -325,10 +372,15 @@ def cmd_report(args):
 
 
 class _QuietParser(argparse.ArgumentParser):
+    def _print_message(self, message, file=None):
+        # usage and --help text go through the checked printer too
+        if message:
+            _emit(message.rstrip("\n"), file or sys.stdout)
+
     def error(self, message):
         # argparse echoes argument values; print a fixed text instead.
         del message
-        print("token-leak-scan: invalid arguments", file=sys.stderr)
+        _emit("token-leak-scan: invalid arguments")
         raise SystemExit(2)
 
 
@@ -360,7 +412,7 @@ def main(argv=None):
         raise
     except BaseException:
         # Exception text can carry a file name, which can carry a value.
-        print(FIXED_ERROR, file=sys.stderr)
+        _emit(FIXED_ERROR)
         return ERROR_EXIT
 
 

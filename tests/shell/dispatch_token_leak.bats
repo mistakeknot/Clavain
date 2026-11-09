@@ -720,3 +720,72 @@ runpy.run_path(sys.argv[1], run_name="__main__")' "$ROOT/scripts/token-leak-scan
     [ "$status" -eq 4 ]
     [ "$output" = "token-leak-scan: internal error (details withheld)" ]
 }
+
+# mk-47vtm.4: every scanner message goes through one checked printer, so a
+# token that occurs in a fixed message (here a single ':' or a word of it) is
+# never echoed. Dummy values only.
+_scan_no_echo() {
+    # $1 dummy value; remaining args: scanner arguments. Sets $status, $output.
+    local value="$1"; shift
+    ANTHROPIC_AUTH_TOKEN="$value" run python3 -I "$ROOT/scripts/token-leak-scan.py" "$@"
+}
+
+@test "scanner: the internal-error message is never printed when a value occurs in it" {
+    local v
+    for v in ':' 'internal' 'withheld' 'e'; do
+        _scan_no_echo "$v" scan --hits "$T/missing-dir/hits" "$T/a.txt"
+        [ "$status" -eq 4 ]
+        [[ "$output" != *"$v"* ]]
+    done
+}
+
+@test "scanner: the invalid-arguments message is never printed when a value occurs in it" {
+    local v
+    for v in ':' 'invalid' 'arguments'; do
+        _scan_no_echo "$v" scan --hits "$T/h" --bogus
+        [ "$status" -eq 2 ]
+        [[ "$output" != *"$v"* ]]
+    done
+}
+
+@test "scanner: the could-not-scan message is never printed when a value occurs in it" {
+    local v
+    ln -s "$T/nowhere" "$T/dangling"
+    for v in ':' 'closed' 'failing'; do
+        _scan_no_echo "$v" scan --hits "$T/hits" "$T/dangling"
+        [ "$status" -eq 4 ]
+        [[ "$output" != *"$v"* ]]
+    done
+}
+
+@test "scanner: usage and --help text never contain a value" {
+    local v
+    for v in ':' 'Post-run' 'usage'; do
+        _scan_no_echo "$v" --help
+        [ "$status" -eq 0 ]
+        [[ "$output" != *"$v"* ]]
+    done
+}
+
+@test "scanner: an import-time failure prints nothing when a value occurs in the message" {
+    local v
+    for v in ':' 'internal'; do
+        ANTHROPIC_AUTH_TOKEN="$v" run python3 -I -c 'import sys, runpy
+sys.modules["json"] = None
+runpy.run_path(sys.argv[1], run_name="__main__")' "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/h"
+        [ "$status" -eq 4 ]
+        [[ "$output" != *"$v"* ]]
+    done
+}
+
+@test "scanner: a value from a --token-env variable is checked too" {
+    CUSTOM_TOK=':' run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --token-env CUSTOM_TOK --hits "$T/missing-dir/hits" "$T/a.txt"
+    [ "$status" -eq 4 ]
+    [[ "$output" != *:* ]]
+}
+
+@test "scanner: a message with no value in it is still printed" {
+    _scan_no_echo 'zzzz' scan --hits "$T/missing-dir/hits" "$T/a.txt"
+    [ "$status" -eq 4 ]
+    [ "$output" = "token-leak-scan: internal error (details withheld)" ]
+}
