@@ -152,6 +152,106 @@ the child drops that stale route and uses its own provider login.
   stops with `terminal_configuration` instead of trying an unrelated login.
 - Raw provider captures are tracked separately.
 
+**Bearer tokens in the child environment, and the post-run leak scan.**
+Scope: this covers the main engine launches and the artifacts listed below. It
+is not a guarantee that no child or file ever sees a token; the known limits
+at the end of this section say where it stops.
+`scripts/dispatch.sh` unsets `BB_ACCOUNT_POOL_PARENT_TOKEN` and
+`CLAUDE_CODE_MESSAGING_TOKEN` at startup, so no child of any backend sees
+either. `ANTHROPIC_AUTH_TOKEN` is kept for a Claude-backed dispatch and for a
+zaka agent named `claude` or `claude-code`; every other backend (codex, kimi,
+flere, other zaka agents) has it unset in its own child, after the pooled-Codex
+alias has been built. The `codex --version` preflight runs without it; the
+`codex sandbox` preflight does not (see the known limits below). A pooled
+Codex child still receives `CODEX_POOL_AUTH_TOKEN`, which carries the same
+bearer. A declined or unavailable pool route still drops it as before.
+
+Before any unset, dispatch captures the values of `ANTHROPIC_AUTH_TOKEN` and
+`CODEX_POOL_AUTH_TOKEN` in a shell array that is never exported and never
+printed. After a run, the artifacts listed below are scanned for those values
+(Claude, Codex pooled and direct, Kimi, Flere and the BB seat).
+`scripts/token-leak-scan.py` receives the values through its own environment,
+never a command line, and scans any nonempty value, raw and JSON-escaped, as
+bytes. It scans the captured stderr, the provider events files, the prompt
+capture, the output file and its sidecars (`.summary`, `.verdict`,
+`.verdict.pre-error`, `.recheck.md`, `.receipt.json`), the failure and
+intercept evidence, the dispatch state and interband files, the external review
+receipt written under `CLAVAIN_REVIEW_RECEIPT_DIR` (or its default), the run
+receipt file and, for Flere, every file under `<output>.attempt` (prompt, RPC
+events, stderr, start record, home and session files, recursively). Scans run
+before stderr is mirrored, again after the last artifact is written, and from
+the EXIT trap. Flere has its own EXIT trap, installed before its worker
+starts, so a normal return, an early exit and INT or TERM all scan; the shell
+runs it once the foreground worker has returned.
+
+The full real path of every artifact is resolved, parent directories
+included. An artifact whose real path differs from its given path (a symlinked
+file or a symlinked parent directory) is followed only when the resolved
+regular file lies under the run's own roots: the output directory, the review
+receipt directory, the run receipt directory and the interband directory.
+Otherwise it is never opened or rewritten; it is reported by a sanitized name,
+and the run fails closed. An artifact path with no symlink in it is scanned
+wherever it is. When neither token is set, the scan is skipped with a note that omits
+any value.
+
+On a hit the run fails: nonzero exit and an error verdict. Every occurrence is
+redacted in place in a single pass. The marker is `[REDACTED:anthropic-token]`
+unless the result would still contain a value (for example a value of `token`
+or `e`); the scanner then uses a fixed-width marker of one character that
+occurs in no value, and if no marker leaves the data free of every value the
+file is left unmodified, reported as unscanned and the run fails. File names,
+paths and metadata in the hits record, the hook argument and error text pass
+through the same redaction, except the scanner's own fixed diagnostic
+messages, which are printed as they are (see the known limits below). A leak report (bead, role, run id, files, counts,
+unscanned files, timestamp) is written to `<output>.token-leak.json`, or to a
+temporary file when there is no `-o` or the path itself would carry the value;
+if the temporary path would also carry a value, no report is written, the hook
+does not run and dispatch prints a fixed message. Each hit record is checked
+before it is written; one that would carry a value is replaced by a fixed
+value-free record (without the count), and if even that would carry a value
+nothing is written. The run fails in every such case. The report keys and fixed text are not redacted: if a value occurs anywhere in
+the finished report (a single common letter does), no report is written, the
+run still fails and the verdict does not point at a report. The scanner prints
+one fixed message on any internal error, including an import failure. If
+`CLAVAIN_TOKEN_LEAK_HOOK` names an executable, it is run with the report path
+as its only argument and without `ANTHROPIC_AUTH_TOKEN`,
+`CODEX_POOL_AUTH_TOKEN`, `BB_ACCOUNT_POOL_PARENT_TOKEN` or
+`CLAUDE_CODE_MESSAGING_TOKEN` in its environment, so a host can file a
+rotation task; a failing hook only warns, and no hook runs without a report.
+
+Remaining limits, stated plainly:
+
+- stdout already mirrored to the terminal before the scan cannot be retracted;
+- a receipt written before a later hit is found keeps its earlier status for
+  that write, although the artifact is redacted and the run exits nonzero;
+- the Flere worker records SHA-256 hashes of its attempt files in its receipt
+  before the scan, so a redacted attempt file no longer matches its recorded
+  hash;
+- Flere `--dry-run` is not scanned, and a Flere signal exit scans only after
+  the worker has returned;
+- the shared `CLAVAIN_REVIEW_EVENTS` log and the Intercore routing database
+  (`ic route record`) are not scanned;
+- zaka runs submit a session and exit, so dispatch does not scan zaka artifacts
+  at all;
+- paths not named above are not scanned. Two files a run writes are known to
+  be missed: the kimi seat's final-message capture (`KIMI_FINAL_FILE`, removed
+  before the closing scan) and the routing and headroom evidence files written
+  while a fallback is forecast. Follow-up: bead mk-47vtm.3;
+- the `codex sandbox` preflight runs before `ANTHROPIC_AUTH_TOKEN` is removed,
+  so that child inherits the token. Helper children that run before the
+  removal, such as the `sed` and `tail` beside `codex --version`, inherit it
+  too. Follow-up for the preflight: bead mk-47vtm.2;
+- the scanner's own fixed diagnostic messages are printed without being
+  checked against the token values, so any token that occurs anywhere in one
+  of those messages, even a single character such as `:`, is echoed when that
+  message is printed. Follow-up: bead mk-47vtm.4;
+- a child that renders the token in a form other than the raw or JSON-escaped
+  string (encoded, split or truncated) is not matched, and a fragment of one
+  value that overlaps a different value is not matched separately;
+- the scan is verified only by the dummy-value tests in
+  `tests/shell/dispatch_token_leak.bats`; it does not prove that no value
+  reached any other sink.
+
 Quota classification consumes structured provider errors, never quoted task
 text. Permission, configuration, policy or unclear acceptance is terminal and
 dominates earlier quota evidence. One retry group spans the account/model axes;
