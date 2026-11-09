@@ -122,7 +122,8 @@ run_claude() {
     local shape
     for shape in 'Invalid API key' 'Please run /login' 'OAuth token has expired' \
         'OAuth token has been revoked' 'API Error: 401 unauthorized' \
-        'authentication_error' 'Error: Invalid API key' "$(printf 'noise\nPlease run /login\n\n')"; do
+        'authentication_error' 'Error: Invalid API key' \
+        'Failed to authenticate. API Error: 401 {"type":"authentication_error"}' "$(printf 'noise\nPlease run /login\n\n')"; do
         rm -f "$T/failure.class"
         FAKE_ERR="$shape" run_claude
         [ "$status" -ne 0 ]

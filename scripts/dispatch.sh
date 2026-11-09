@@ -4300,7 +4300,8 @@ _emit_provider_stderr() {
 # place an authentication failure shows. claude prints its error and exits, so
 # only the last non-empty line of the capture is checked, and only claude- and
 # API-specific shapes (invalid api key, please run /login, oauth token has
-# expired|been revoked, api error: 401, authentication_error). Used for the
+# expired|been revoked, api error: 401 with or without claude's own
+# "Failed to authenticate." prefix, authentication_error). Used for the
 # claude engine only.
 _claude_auth_failure() {
     local f="${1:-}" last
@@ -4308,7 +4309,7 @@ _claude_auth_failure() {
     last="$(grep -v '^[[:space:]]*$' "$f" 2>/dev/null | tail -n 1)" || return 1
     [[ -n "$last" ]] || return 1
     # Line-anchored, optionally behind an "Error:" or "API Error:" prefix.
-    printf '%s\n' "$last" | grep -qiE '^[[:space:]]*((api )?error:?[[:space:]]*)?(invalid api key|please run /login|oauth token has (expired|been revoked)|authentication_error)|^[[:space:]]*api error:?[[:space:]]*401'
+    printf '%s\n' "$last" | grep -qiE '^[[:space:]]*((api )?error:?[[:space:]]*)?(invalid api key|please run /login|oauth token has (expired|been revoked)|authentication_error)|^[[:space:]]*(failed to authenticate\.?[[:space:]]*)?api error:?[[:space:]]*401'
 }
 
 _provider_error_text() {
