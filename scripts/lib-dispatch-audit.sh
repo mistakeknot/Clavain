@@ -289,10 +289,31 @@ _record_role_routing_decision() {
     record_cmd+=("--db=$task_db" "--project=$project_dir")
     audit_workdir="$(dirname "$task_db")"
   fi
-  if ! (cd "$audit_workdir" && "${record_cmd[@]}") >/dev/null 2>&1; then
-    echo "Error: cannot persist $state routing decision for '$ROLE/$RESOLVED_PROFILE_REF'" >&2
+  local ic_err ic_excerpt
+  if ! ic_err="$( (cd "$audit_workdir" && "${record_cmd[@]}") 2>&1 >/dev/null )"; then
+    ic_excerpt="$(_ic_stderr_excerpt "$ic_err")"
+    echo "Error: cannot persist $state routing decision for '$ROLE/$RESOLVED_PROFILE_REF'${ic_excerpt:+: ic: $ic_excerpt}" >&2
     return 1
   fi
+}
+
+# Single-line, bounded excerpt of ic's stderr for the terminal_recording
+# message, so the reason a decision was not recorded (for example no database
+# from a temporary workdir) is visible. ic stderr should hold no secrets, but it
+# goes through the dispatch provider-text redactor (an allowlist that keeps
+# diagnostic words and replaces other words, paths and credentials) before it
+# is shown; if that redactor is unavailable the excerpt is a placeholder.
+_ic_stderr_excerpt() {
+  local raw="$1" line
+  [[ -n "$raw" ]] || return 0
+  line="$(printf '%s' "$raw" | head -c 1000 | tr '\r\n\t' '   ' | tr -d '\000-\037' | tr -s ' ')"
+  if declare -F _redact_provider_text >/dev/null 2>&1; then
+    line="$(printf '%s' "$line" | _redact_provider_text)"
+  else
+    line='<redacted>'
+  fi
+  line="$(printf '%s' "$line" | tr '\r\n\t' '   ' | head -c 200)"
+  printf '%s' "$line"
 }
 
 # Per-run attribution receipt: one JSON object per line appended to a single
