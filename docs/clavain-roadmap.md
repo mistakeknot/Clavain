@@ -30,7 +30,9 @@ not establish that cross-client locking is correct.
 The epic description initially proposed trustworthy gates. Its scope comment
 records the selected expansion to include routing and skill quality. Membership
 is tracked with `clavain-0.7`, rather than relying only on epic child links.
-The labelled set also includes review-sandbox isolation and the lock redesign.
+The labelled set also includes review-sandbox isolation, the lock redesign, and
+work added after the scope decision: Claude-backed dispatch failures, a waymap
+wire-in, and a structural-test failure under a restricted sandbox.
 
 The recorded exit criteria are: close the milestone work, observe two weeks
 without a false BLOCK receipt, and obtain maintainer approval to publish 0.7.0.
@@ -39,19 +41,36 @@ This document does not authorize publication.
 
 ### Review receipts and sandbox isolation
 
-The receipt cluster addresses inconsistent parsers, verdict spelling, and
-same-head reruns (`mk-0qjva`, `mk-8m912`, `mk-0ud4q`, `mk-4c909`,
-`mk-n37ml`). Unknown verdict words must not silently become BLOCK receipts;
-recovery must preserve history and must not turn a genuine blocking review into
-a passing receipt. The beads contain different proposed parser/recovery shapes;
-they do not establish a completed unified implementation.
+The receipt cluster addressed inconsistent parsers, verdict spelling, and
+same-head reruns (`mk-0qjva`, `mk-8m912`, `mk-0ud4q`, `mk-4c909`, `mk-n37ml`).
+All five are now closed in the tracker. Unknown verdict words must not silently
+become BLOCK receipts; recovery must preserve history and must not turn a genuine
+blocking review into a passing receipt. Closure of the beads is the only
+completion signal used here; later receipt work (`mk-z770`, `mk-vsqgd`) is still
+outstanding.
 
-`mk-z770` covers role verdict instructions, advisory REVIEW vocabulary, and a
-fresh repair dispatch; it records sequencing after `mk-yjki`. `mk-vsqgd`
+`mk-z770` (in progress) covers role verdict instructions, advisory REVIEW
+vocabulary, and a fresh repair dispatch; it records sequencing after `mk-yjki`.
+`mk-vsqgd` (open, assigned to the instruction-files steward)
 requires checking saved review output and resolving the mismatch between prompt
 and parser handling of code fences/comments. Its choice of fix remains open.
-`mk-1w54d` calls for an allowlisted review environment without inherited secrets;
-`mk-nkprr` calls for a private temporary root outside any ancestor Git tree.
+`mk-1w54d` (open, P1) calls for an allowlisted review and dispatch environment
+without inherited secrets; `mk-nkprr` (in progress) calls for a private temporary
+root outside any ancestor Git tree.
+
+### Claude-backed dispatch
+
+Found while attempting the skill-evaluation spike: Claude-backed roles run through
+packaged dispatch exited with an error from coordinator-launched runs
+(`mk-ouz83`, open). Related open beads record that the backend discards the
+Claude process's own stderr and treats an authentication failure as terminal with
+no fallback (`mk-bi91j`), and that a per-call pool credential should eventually
+replace the shared token passed to children (`mk-ouz83.1`, open, P3; the earlier
+investigation `mk-t02et` is closed). The routing-decision recording failure seen
+in the same spike (`mk-a3z65`) is closed; its follow-ups are the paired-runner
+database setting and surfaced recorder stderr (`mk-8m26b`, open) and excluding a
+diagnostic row from routing calibration (`mk-91ws3`, open, P3). Whether the
+token-handling workaround is adequate is not established by these beads.
 
 ### Review history
 
@@ -69,8 +88,12 @@ choice between a kernel lock and an atomic owner record with fencing is still
 open. A plan and independent packaged plan review precede implementation.
 `mk-u3bu2` separately tracks generation-fenced claim/sprint leases.
 
-`mk-4xzwm.1` adds transcript/tool-call checks for phase evidence, beginning
-advisory before gating. `mk-4ma3` remains blocked: bead-first enforcement is off
+`mk-4xzwm.1` (transcript/tool-call checks for phase evidence, advisory before
+gating) is now deferred and no longer carries the `clavain-0.7` label; it is
+listed under other work below and is not a 0.7 exit item. The tracker records a
+pull request for it that went through repeated failed reviews, with a maintainer
+decision that a further failed review closes that pull request and 0.7 ships
+without the ledger. `mk-4ma3` remains blocked: bead-first enforcement is off
 while awaiting the broader task-first plan; its bounded follow-up evidence is
 unconfirmed. It is not an active enforcement capability.
 
@@ -83,13 +106,23 @@ a live exact-plan demonstration. The bead remains in progress.
 
 The skill-quality epic `mk-2i46` measures held-out outcome lift and loaded
 context cost. Clavain owns cases, the paired runner, and the cross-lab judge;
-Interlab owns the campaign loop. Hygiene (`mk-2i46.1`), a paired runner and
-judge-noise spike (`mk-2i46.2`), and advisory record-only/same-run baselines
-(`mk-2i46.3`) remain outstanding. Gates stay advisory until the noise spike
-reports. The epic is a recorded blocker of `mk-47vtm`; the runner has a related,
+Interlab owns the campaign loop. Hygiene (`mk-2i46.1`) and advisory
+record-only/same-run baselines (`mk-2i46.3`) are closed. The paired runner and
+judge-noise spike (`mk-2i46.2`) is in progress; its live spike is recorded as
+blocked by the Claude-dispatch failure above. Gates stay advisory until the noise
+spike reports. The epic is a recorded blocker of `mk-47vtm`; the runner has a related,
 not blocking, link to the Interlab baseline task.
 
-Regenerating this roadmap is itself milestone work (`mk-48dhw`).
+### Other milestone-labelled work
+
+`mk-47vtm.1` (open, child of the epic) records three structural tests that fail
+identically on base and merged code in a restricted test sandbox; the goal is to
+make them pass there or mark them with a justified environment skip. `mk-54glx.1`
+(open) wires the waymap roadmap flow into a weekly re-check and stale-map lint and
+drops its one-ticket-per-session rule; the question bead for that rule
+(`mk-ayyyd`) is closed as moot.
+
+Regenerating this roadmap is itself milestone work (`mk-48dhw`, in progress).
 
 ## Milestone bead inventory
 
@@ -97,18 +130,17 @@ Regenerating this roadmap is itself milestone work (`mk-48dhw`).
 |---|---|---|---|
 | `mk-aban2` | Shared cross-client lock redesign | P1 | open |
 | `mk-1w54d` | Remove inherited secrets from review sandboxes | P1 | open |
-| `mk-0qjva` | Unknown verdicts and safe same-head recovery | P1 | in_progress |
+| `mk-0qjva` | Unknown verdicts and safe same-head recovery | P1 | closed |
 | `mk-nkprr` | Review temporary roots outside Git trees | P2 | in_progress |
 | `mk-8gaoq` | Exclusive Intercore owner-record creation; redesign follows | P2 | closed |
 | `mk-48dhw` | Regenerate the roadmap from beads | P2 | in_progress |
 | `mk-htpmr` | Collector mutex exclusivity; redesign follows | P2 | closed |
 | `mk-bxfvc` | Bash/Intercore lock compatibility; redesign follows | P2 | closed |
-| `mk-4xzwm.1` | Deterministic phase-evidence checks | P2 | in_progress |
 | `mk-4xzwm.2` | Startup instruction-contract drift check | P2 | closed |
-| `mk-8m912` | Reconcile dispatch and receipt verdict parsers | P2 | in_progress |
-| `mk-0ud4q` | Unknown verdict errors and append-only receipt history | P2 | in_progress |
-| `mk-4c909` | PASS-WITH-NOTES parsing and receipt reruns | P2 | in_progress |
-| `mk-n37ml` | Verdict warnings and append-only supersession | P2 | in_progress |
+| `mk-8m912` | Reconcile dispatch and receipt verdict parsers | P2 | closed |
+| `mk-0ud4q` | Unknown verdict errors and append-only receipt history | P2 | closed |
+| `mk-4c909` | PASS-WITH-NOTES parsing and receipt reruns | P2 | closed |
+| `mk-n37ml` | Verdict warnings and append-only supersession | P2 | closed |
 | `mk-u3bu2` | Generation-fenced claim/sprint leases | P2 | open |
 | `mk-0o5wm` | Bead IDs on dispatch rows | P2 | in_progress |
 | `mk-629bo` | Verdict and blocking-finding count in review events | P2 | in_progress |
@@ -116,22 +148,33 @@ Regenerating this roadmap is itself milestone work (`mk-48dhw`).
 | `mk-8wgql` | Forward-fix provenance and classification | P2 | in_progress |
 | `mk-ji9m` | Quota-aware execution/review routing | P2 | in_progress |
 | `mk-4ma3` | Bead-first enforcement; activation held | P2 | blocked |
-| `mk-2i46.1` | Skill hygiene and structural coverage | P2 | in_progress |
-| `mk-2i46.2` | Paired skill evaluation and judge-noise spike | P2 | open |
-| `mk-2i46.3` | Interlab advisory mode and same-run baseline | P2 | open |
+| `mk-2i46.1` | Skill hygiene and structural coverage | P2 | closed |
+| `mk-2i46.2` | Paired skill evaluation and judge-noise spike | P2 | in_progress |
+| `mk-2i46.3` | Interlab advisory mode and same-run baseline | P2 | closed |
 | `mk-2i46` | Skill-quality evaluation epic | P2 | open |
 | `mk-z770` | Role verdict contract and repair dispatch | P2 | in_progress |
 | `mk-1rbg` | Executable, snapshot-guarded Kimi validation | P2 | in_progress |
+| `mk-ouz83` | Claude-backed dispatch roles fail from coordinator-launched runs | P2 | open |
+| `mk-bi91j` | Preserve Claude stderr; reconsider terminal auth-failure handling | P2 | open |
+| `mk-8m26b` | Paired-runner database setting; surface routing-recorder stderr | P2 | open |
+| `mk-47vtm.1` | Structural tests failing in a restricted sandbox | P2 | open |
+| `mk-54glx.1` | Waymap wire-in and stale-map lint | P2 | open |
+| `mk-t02et` | Per-call pool credential investigation for Claude-backed runs | P2 | closed |
+| `mk-a3z65` | Routing-decision persistence failure in dispatch | P2 | closed |
+| `mk-ouz83.1` | Per-call pool tokens for Claude-backed dispatch | P3 | open |
+| `mk-91ws3` | Exclude a diagnostic row from routing calibration | P3 | open |
 | `mk-vsqgd` | Review code-fence/comment parsing contract | P3 | open |
 
 ## Other outstanding Clavain work
 
 These beads carry `clavain` but are not in the milestone-labelled set. Inclusion
-here does not add them to 0.7. The milestone epic itself is in progress at P2.
+here does not add them to 0.7. The milestone epic itself is in progress at P2. `mk-4xzwm.1` was labelled
+0.7 at the last regeneration and is now deferred.
 
 | Bead | Recorded work | Priority | Status |
 |---|---|---|---|
 | `mk-4xzwm` | Deterministic phases and orchestration-tool evaluation epic | P2 | open |
+| `mk-4xzwm.1` | Phase-evidence checks; deferred out of 0.7 | P2 | deferred |
 | `mk-4xzwm.3` | Survey orchestration/decision tools and assess project fit | P2 | open |
 | `mk-g74wu` | Flag instruction rewrites and detect gate retries | P2 | open |
 | `mk-j25yy` | Reserved continuation slot and daemon observe mode; fit unverified | P2 | open |
@@ -143,6 +186,7 @@ here does not add them to 0.7. The milestone epic itself is in progress at P2.
 | `mk-km4a` | Incorporate recorded upstream deltas | P2 | open |
 | `mk-km4a.7` | Longitudinal PR watch; residual follow-up wording remains | P2 | in_progress |
 | `mk-wxlk` | Terminate stalled tmux executor process groups before resume | P2 | open |
+| `mk-bwzqy` | Historical-replay harness for the old lock defects; split from `mk-aban2`, outside 0.7 | P3 | open |
 | `mk-cmcrf` | Verification evidence and certainty levels | P3 | open |
 | `mk-9ahvl` | Choose and prove an enforcer after repeated mistakes | P3 | open |
 | `mk-80zm3` | Derive producer identity from producing evidence | P3 | open |
