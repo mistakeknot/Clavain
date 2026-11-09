@@ -306,13 +306,15 @@ _record_role_routing_decision() {
 _ic_stderr_excerpt() {
   local raw="$1" line
   [[ -n "$raw" ]] || return 0
-  line="$(printf '%s' "$raw" | head -c 1000 | tr '\r\n\t' '   ' | tr -d '\000-\037' | tr -s ' ')"
+  # Redact whole lines first: the input is bounded only by a line count, never
+  # by a byte cut that could split a token, and the 200-character cap comes
+  # after redaction.
   if declare -F _redact_provider_text >/dev/null 2>&1; then
-    line="$(printf '%s' "$line" | _redact_provider_text)"
+    line="$(printf '%s\n' "$raw" | head -n 200 | _redact_provider_text)"
   else
     line='<redacted>'
   fi
-  line="$(printf '%s' "$line" | tr '\r\n\t' '   ' | head -c 200)"
+  line="$(printf '%s' "$line" | tr '\r\n\t' '   ' | tr -d '\000-\037' | tr -s ' ' | head -c 200)"
   printf '%s' "$line"
 }
 

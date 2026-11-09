@@ -54,3 +54,11 @@ teardown() { rm -rf "$T"; }
     [ "$status" -eq 1 ]
     [[ "$output" == *"cannot persist terminal routing decision for 'r/p'"* ]]
 }
+
+@test "redaction runs before truncation: a long token past the old cut is not left as a 40-hex prefix" {
+    HEX=$(printf 'abcdef0123%.0s' 1 2 3 4 5 6 7 8)
+    export FAKE_IC_STDERR="$(printf '%960s' '')$HEX"
+    run env PATH="$T/bin:$PATH" bash "$T/run.sh"
+    [ "$status" -eq 1 ]
+    ! [[ "$output" =~ [0-9a-f]{40} ]]
+}
