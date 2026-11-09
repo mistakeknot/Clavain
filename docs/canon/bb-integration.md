@@ -196,8 +196,9 @@ regular file lies under the run's own roots: the output directory, the review
 receipt directory, the run receipt directory and the interband directory.
 Otherwise it is never opened or rewritten; it is reported by a sanitized name,
 and the run fails closed. An artifact path with no symlink in it is scanned
-wherever it is. When neither token is set, the scan is skipped with a note that omits
-any value.
+wherever it is. When neither token is set, the scan is skipped; only a
+Claude-engine dispatch prints a note saying so (the note omits any value), and
+other engines skip silently.
 
 On a hit the run fails: nonzero exit and an error verdict. Every occurrence is
 redacted in place in a single pass. The marker is `[REDACTED:anthropic-token]`
@@ -206,8 +207,8 @@ or `e`); the scanner then uses a fixed-width marker of one character that
 occurs in no value, and if no marker leaves the data free of every value the
 file is left unmodified, reported as unscanned and the run fails. File names,
 paths and metadata in the hits record, the hook argument and error text pass
-through the same redaction, except the scanner's own fixed diagnostic
-messages, which are printed as they are (see the known limits below). A leak report (bead, role, run id, files, counts,
+through the same redaction. The scanner's own fixed diagnostic messages are
+checked before they are printed (see the known limits below). A leak report (bead, role, run id, files, counts,
 unscanned files, timestamp) is written to `<output>.token-leak.json`, or to a
 temporary file when there is no `-o` or the path itself would carry the value;
 if the temporary path would also carry a value, no report is written, the hook
@@ -242,10 +243,30 @@ Remaining limits, stated plainly:
   be missed: the kimi seat's final-message capture (`KIMI_FINAL_FILE`, removed
   before the closing scan) and the routing and headroom evidence files written
   while a fallback is forecast. Follow-up: bead mk-47vtm.3;
-- the scanner's own fixed diagnostic messages are printed without being
-  checked against the token values, so any token that occurs anywhere in one
-  of those messages, even a single character such as `:`, is echoed when that
-  message is printed. Follow-up: bead mk-47vtm.4;
+- every message the scanner itself prints (stdout or stderr, including usage,
+  `--help` and its fixed error messages) is queued in memory per stream and
+  written once, at exit, by one output point. That point encodes the whole
+  buffer exactly as the stream will write it (the stream's own encoding and
+  error handler), and checks those bytes, message boundaries and newline
+  terminators included, against the values of the default variables and of
+  every `--token-env` named in argv (any prefix of `--token-env` of three or
+  more characters is treated as that option, and the parser itself rejects
+  abbreviations). Raw and JSON-escaped forms are checked, encoded as the stream
+  encodes them and as UTF-8. If none occurs, those bytes are written in one
+  write. If one occurs, the fixed line `token-leak-scan: diagnostics
+  suppressed` is written instead when that line contains no value, and
+  nothing is written otherwise; the exit status is the same in both cases. If
+  the check cannot be decided, nothing is written. A failed write or flush
+  points the stream at `/dev/null`, and the scanner ends with the status of
+  the outcome (for `--help`, 0). `SIGINT` is set to its default action at the
+  top of the script, so an interrupt ends the process by that signal (shell
+  status 130, which `dispatch.sh` treats as a scan error and fails the run
+  closed) with no Python traceback. Limits: diagnostics appear when the
+  scanner exits, not as they occur; output the Python interpreter writes
+  itself before the script installs its handlers (a startup failure, or a
+  signal that arrives before the handler is installed) is not covered;
+  messages printed by `dispatch.sh` itself are outside this check (bead
+  mk-47vtm.4);
 - a child that renders the token in a form other than the raw or JSON-escaped
   string (encoded, split or truncated) is not matched, and a fragment of one
   value that overlaps a different value is not matched separately;

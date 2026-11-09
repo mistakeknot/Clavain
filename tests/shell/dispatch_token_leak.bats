@@ -720,3 +720,163 @@ runpy.run_path(sys.argv[1], run_name="__main__")' "$ROOT/scripts/token-leak-scan
     [ "$status" -eq 4 ]
     [ "$output" = "token-leak-scan: internal error (details withheld)" ]
 }
+
+# mk-47vtm.4: every scanner message goes through one checked printer, so a
+# token that occurs in a fixed message (here a single ':' or a word of it) is
+# never echoed. Dummy values only.
+_scan_no_echo() {
+    # $1 dummy value; remaining args: scanner arguments. Sets $status, $output.
+    local value="$1"; shift
+    ANTHROPIC_AUTH_TOKEN="$value" run python3 -I "$ROOT/scripts/token-leak-scan.py" "$@"
+}
+
+@test "scanner: the internal-error message is never printed when a value occurs in it" {
+    local v
+    for v in ':' 'internal' 'withheld' 'e'; do
+        _scan_no_echo "$v" scan --hits "$T/missing-dir/hits" "$T/a.txt"
+        [ "$status" -eq 4 ]
+        [[ "$output" != *"$v"* ]]
+    done
+}
+
+@test "scanner: the invalid-arguments message is never printed when a value occurs in it" {
+    local v
+    for v in ':' 'invalid' 'arguments'; do
+        _scan_no_echo "$v" scan --hits "$T/h" --bogus
+        [ "$status" -eq 2 ]
+        [[ "$output" != *"$v"* ]]
+    done
+}
+
+@test "scanner: the could-not-scan message is never printed when a value occurs in it" {
+    local v
+    ln -s "$T/nowhere" "$T/dangling"
+    for v in ':' 'closed' 'failing'; do
+        _scan_no_echo "$v" scan --hits "$T/hits" "$T/dangling"
+        [ "$status" -eq 4 ]
+        [[ "$output" != *"$v"* ]]
+    done
+}
+
+@test "scanner: usage and --help text never contain a value" {
+    local v
+    for v in ':' 'Post-run' 'usage'; do
+        _scan_no_echo "$v" --help
+        [ "$status" -eq 0 ]
+        [[ "$output" != *"$v"* ]]
+    done
+}
+
+@test "scanner: an import-time failure prints nothing when a value occurs in the message" {
+    local v
+    for v in ':' 'internal'; do
+        ANTHROPIC_AUTH_TOKEN="$v" run python3 -I -c 'import sys, runpy
+sys.modules["json"] = None
+runpy.run_path(sys.argv[1], run_name="__main__")' "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/h"
+        [ "$status" -eq 4 ]
+        [[ "$output" != *"$v"* ]]
+    done
+}
+
+@test "scanner: a value from a --token-env variable is checked too" {
+    CUSTOM_TOK=':' run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --token-env CUSTOM_TOK --hits "$T/missing-dir/hits" "$T/a.txt"
+    [ "$status" -eq 4 ]
+    [[ "$output" != *:* ]]
+}
+
+@test "scanner: a message with no value in it is still printed" {
+    _scan_no_echo 'zzzz' scan --hits "$T/missing-dir/hits" "$T/a.txt"
+    [ "$status" -eq 4 ]
+    [ "$output" = "token-leak-scan: internal error (details withheld)" ]
+}
+
+# mk-47vtm.4 round 2: abbreviated option, the appended newline, and failed
+# writes at interpreter shutdown. Dummy values only.
+@test "scanner: an abbreviated --token-env (space and equals forms) never echoes its value" {
+    CUSTOM_TOK=':' run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --token-e CUSTOM_TOK --hits "$T/missing-dir/hits" "$T/a.txt"
+    [[ "$output" != *:* ]]
+    CUSTOM_TOK=':' run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --token-e=CUSTOM_TOK --hits "$T/missing-dir/hits" "$T/a.txt"
+    [[ "$output" != *:* ]]
+}
+
+@test "scanner: a value that is a newline silences the message including its terminator" {
+    ANTHROPIC_AUTH_TOKEN=$'\n' run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/missing-dir/hits" "$T/a.txt"
+    [ "$status" -eq 4 ]
+    [ -z "$output" ]
+    # a value that ends in a newline, passed through a variable that holds it
+    # (command substitution would strip the newline, so build it with printf -v)
+    local nlval
+    printf -v nlval 'x\n'
+    [ "${#nlval}" -eq 2 ]
+    ANTHROPIC_AUTH_TOKEN="$nlval" run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/missing-dir/hits" "$T/a.txt"
+    [ "$status" -eq 4 ]
+    [[ "$output" != *x* ]]
+}
+
+@test "scanner: a failed write to a full device ends silently with no interpreter shutdown output" {
+    ANTHROPIC_AUTH_TOKEN=OSError python3 -I "$ROOT/scripts/token-leak-scan.py" --help >/dev/full 2>"$T/err" && rc=0 || rc=$?
+    [ "$rc" -eq 0 ]
+    [ ! -s "$T/err" ]
+    ANTHROPIC_AUTH_TOKEN=OSError python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/missing-dir/hits" "$T/a.txt" >/dev/full 2>/dev/full && rc=0 || rc=$?
+    [ "$rc" -eq 4 ]
+}
+
+# mk-47vtm.4 round 3: one buffered, byte-exact output point; SIGINT. Dummy
+# values only.
+@test "scanner: a file name with byte 0xff cannot emit a value spelled as its escape" {
+    # stderr writes the surrogate with backslashreplace: the checked bytes
+    # must be those bytes, so the literal text \udcff is caught
+    python3 - "$T" <<'PY'
+import os, sys
+os.symlink(b"/nowhere", os.path.join(os.fsencode(sys.argv[1]), b"bad\xff"))
+PY
+    ANTHROPIC_AUTH_TOKEN='\udcff' run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/hits" "$T/bad"$'\xff'
+    [ "$status" -eq 4 ]
+    [[ "$output" != *'\udcff'* ]]
+}
+
+@test "scanner: a value that spans the boundary of two messages is not emitted" {
+    ln -s "$T/nowhere" "$T/d1"
+    ln -s "$T/nowhere" "$T/d2"
+    local v
+    printf -v v '\ntoken-leak-scan:'
+    ANTHROPIC_AUTH_TOKEN="$v" run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/hits" "$T/d1" "$T/d2"
+    [ "$status" -eq 4 ]
+    [[ "$output" != *$'\ntoken-leak-scan:'* ]]
+    [ "$output" = "token-leak-scan: diagnostics suppressed" ]
+}
+
+@test "scanner: diagnostics are written once, at exit, when no value occurs" {
+    ln -s "$T/nowhere" "$T/d1"
+    ln -s "$T/nowhere" "$T/d2"
+    ANTHROPIC_AUTH_TOKEN=zzzz run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/hits" "$T/d1" "$T/d2"
+    [ "$status" -eq 4 ]
+    [ "${#lines[@]}" -eq 2 ]
+}
+
+@test "scanner: SIGINT ends the process by the signal, with no traceback" {
+    # --hits is a FIFO with no reader, so the scanner blocks opening it
+    mkfifo "$T/fifo"
+    run python3 - "$ROOT/scripts/token-leak-scan.py" "$T" <<'PY'
+import os, signal, subprocess, sys, time
+script, tmp = sys.argv[1], sys.argv[2]
+env = {"PATH": os.environ.get("PATH", ""), "ANTHROPIC_AUTH_TOKEN": "KeyboardInterrupt"}
+p = subprocess.Popen([sys.executable, "-I", script, "scan", "--hits",
+                      os.path.join(tmp, "fifo"), os.path.join(tmp, "a.txt")],
+                     env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+for _ in range(200):  # wait until it is blocked in the open
+    try:
+        state = open("/proc/%d/stat" % p.pid).read().rsplit(")", 1)[1].split()[0]
+    except OSError:
+        break
+    if state == "S":
+        time.sleep(0.2)
+        break
+    time.sleep(0.05)
+p.send_signal(signal.SIGINT)
+out, err = p.communicate(timeout=20)
+assert p.returncode == -signal.SIGINT, p.returncode
+assert b"KeyboardInterrupt" not in out + err and b"Traceback" not in out + err, (out, err)
+PY
+    [ "$status" -eq 0 ]
+}

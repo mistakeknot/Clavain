@@ -23,12 +23,175 @@ when the result is verified free of every value; otherwise a fixed-width marker
 of characters absent from every value is used; if no marker verifies, the file
 or text is left alone and the run fails closed.
 
+Every message this scanner prints (stdout or stderr, including usage and
+errors) is queued in memory per stream and written once, at exit, through one
+checked output point: the whole buffer is encoded exactly as the stream will
+write it (its own encoding and error handler) and checked, message boundaries
+and terminators included, against the raw and JSON-escaped forms of every
+value. If none occurs, those bytes are written in one write. If one occurs, a
+fixed line replaces them, and only when that line contains no value; else
+nothing is written. The exit status is the same either way. Trade-off:
+diagnostics appear at exit, not as they occur. Not covered: output the
+interpreter writes before this script installs its handlers.
+
 Exit status of `scan`: 0 clean or nothing to scan, 3 a hit was found and
 redacted, 4 a file could not be scanned or the scanner failed, 5 both.
 """
 import sys
 
+# Interrupt handling comes first: an interrupt ends the process by the signal
+# itself (shell status 130), so Python never builds a KeyboardInterrupt
+# traceback. SIGPIPE keeps Python's own disposition (ignored): a broken pipe
+# surfaces as a write error, which the checked output point absorbs silently.
+try:
+    import signal as _signal
+
+    _signal.signal(_signal.SIGINT, _signal.SIG_DFL)
+except BaseException:
+    pass
+
 FIXED_ERROR = "token-leak-scan: internal error (details withheld)"
+FIXED_SUPPRESSED = "token-leak-scan: diagnostics suppressed"
+
+# One in-memory buffer per stream. Nothing is written while the scanner runs;
+# _flush_output() writes each buffer once, at exit (trade-off: diagnostics
+# appear when the scanner ends, not as they occur).
+_BUFFER = {"stdout": [], "stderr": []}
+
+
+def _emit(message, stream=None):
+    """Queue message (plus newline) for the checked output point."""
+    try:
+        name = "stdout" if stream is not None and stream is sys.stdout else "stderr"
+        _BUFFER[name].append(message + "\n")
+    except BaseException:
+        return
+
+
+def _token_values():
+    """Values of the default variables plus every --token-env named in argv
+    (any prefix of --token-env of three or more characters, either form).
+    Returns None when they cannot be determined."""
+    try:
+        import os as _os
+
+        names = ["ANTHROPIC_AUTH_TOKEN", "CODEX_POOL_AUTH_TOKEN"]
+        argv = sys.argv[1:]
+        for i, arg in enumerate(argv):
+            if arg == "--":
+                break
+            head, eq, rest = arg.partition("=")
+            if len(head) >= 3 and "--token-env".startswith(head):
+                if eq:
+                    names.append(rest)
+                elif i + 1 < len(argv):
+                    names.append(argv[i + 1])
+        return [v for v in (_os.environ.get(n, "") for n in names) if v]
+    except BaseException:
+        return None
+
+
+def _contains_token(data, values, encoding, errors):
+    """True/False whether any value (raw or JSON-escaped; encoded as the
+    stream encodes, and also as UTF-8 with surrogateescape) occurs in the
+    complete byte string data. None when that cannot be decided."""
+    try:
+        try:
+            import json as _json
+        except BaseException:
+            _json = None
+        for value in values:
+            texts = [value]
+            if _json is not None:
+                texts.append(_json.dumps(value)[1:-1])
+            elif not all(0x20 <= ord(c) < 0x7F and c not in '"\\' for c in value):
+                return None
+            for text in texts:
+                forms = [text.encode("utf-8", "surrogateescape")]
+                try:
+                    forms.append(text.encode(encoding, errors))
+                except BaseException:
+                    pass
+                if any(form in data for form in forms):
+                    return True
+        return False
+    except BaseException:
+        return None
+
+
+def _flush_output():
+    """The one output point: write each stream's buffer, checked as the exact
+    bytes that will be written, in one write; then keep shutdown quiet."""
+    try:
+        values = _token_values()
+        for name in ("stdout", "stderr"):
+            chunks = _BUFFER[name]
+            _BUFFER[name] = []
+            if not chunks:
+                continue
+            stream = getattr(sys, name, None)
+            data = None
+            try:
+                encoding = getattr(stream, "encoding", None) or "utf-8"
+                errors = getattr(stream, "errors", None) or "strict"
+                raw = "".join(chunks)
+                if values is not None:
+                    data = raw.encode(encoding, errors)
+                    verdict = _contains_token(data, values, encoding, errors)
+                    if verdict is None:
+                        data = None
+                    elif verdict:
+                        data = (FIXED_SUPPRESSED + "\n").encode(encoding, errors)
+                        if _contains_token(data, values, encoding, errors) is not False:
+                            data = None
+            except BaseException:
+                data = None
+            if not data:
+                continue
+            try:
+                binary = stream.buffer
+                binary.write(data)
+                binary.flush()
+            except BaseException:
+                _silence(stream)
+    except BaseException:
+        pass
+    _final_flush()
+
+
+def _silence(stream):
+    """After a failed write or flush, point the stream at /dev/null so that
+    nothing buffered can fail (and print a diagnostic) at interpreter exit."""
+    try:
+        import os as _os
+
+        null = _os.open(_os.devnull, _os.O_WRONLY)
+        try:
+            _os.dup2(null, stream.fileno())
+        finally:
+            _os.close(null)
+    except BaseException:
+        pass
+    try:
+        stream.flush()
+    except BaseException:
+        try:
+            import io as _io
+
+            name = "stdout" if stream is sys.stdout else "stderr"
+            setattr(sys, name, _io.StringIO())
+        except BaseException:
+            pass
+
+
+def _final_flush():
+    """Flush both streams inside the checked path; a failure ends silently."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except BaseException:
+            _silence(stream)
+
 
 # Anything that can fail at import time sits inside this boundary, so no
 # traceback can print a path or a value.
@@ -45,7 +208,8 @@ try:
     except ImportError:  # pragma: no cover - non-POSIX
         fcntl = None
 except BaseException:
-    print(FIXED_ERROR, file=sys.stderr)
+    _emit(FIXED_ERROR)
+    _flush_output()
     sys.exit(4)
 
 REDACTION = b"[REDACTED:anthropic-token]"
@@ -257,7 +421,7 @@ def cmd_scan(args):
                 message = "token-leak-scan: could not scan %s; failing closed" % safe
                 if any(f and f in message.encode("utf-8", "surrogateescape") for f in forms):
                     message = "token-leak-scan: could not scan a file; failing closed"
-                print(message, file=sys.stderr)
+                _emit(message)
             elif count:
                 found = True
                 # A record that would carry a value is replaced by a fixed
@@ -325,23 +489,28 @@ def cmd_report(args):
 
 
 class _QuietParser(argparse.ArgumentParser):
+    def _print_message(self, message, file=None):
+        # usage and --help text go through the checked printer too
+        if message:
+            _emit(message.rstrip("\n"), file or sys.stdout)
+
     def error(self, message):
         # argparse echoes argument values; print a fixed text instead.
         del message
-        print("token-leak-scan: invalid arguments", file=sys.stderr)
+        _emit("token-leak-scan: invalid arguments")
         raise SystemExit(2)
 
 
 def build_parser():
-    parser = _QuietParser(description=DESCRIPTION)
+    parser = _QuietParser(description=DESCRIPTION, allow_abbrev=False)
     sub = parser.add_subparsers(dest="command", required=True, parser_class=_QuietParser)
-    scan = sub.add_parser("scan")
+    scan = sub.add_parser("scan", allow_abbrev=False)
     scan.add_argument("--hits", required=True)
     scan.add_argument("--token-env", action="append")
     scan.add_argument("--root", action="append")
     scan.add_argument("files", nargs="*")
     scan.set_defaults(func=cmd_scan)
-    report = sub.add_parser("report")
+    report = sub.add_parser("report", allow_abbrev=False)
     report.add_argument("--hits", required=True)
     report.add_argument("--report", required=True)
     report.add_argument("--token-env", action="append")
@@ -360,9 +529,19 @@ def main(argv=None):
         raise
     except BaseException:
         # Exception text can carry a file name, which can carry a value.
-        print(FIXED_ERROR, file=sys.stderr)
+        _emit(FIXED_ERROR)
         return ERROR_EXIT
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        _code = main()
+    except SystemExit as _exc:
+        _code = _exc.code
+    except BaseException:
+        _emit(FIXED_ERROR)
+        _code = ERROR_EXIT
+    if _code is not None and not isinstance(_code, int):
+        _code = ERROR_EXIT
+    _flush_output()
+    sys.exit(_code)
