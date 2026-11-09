@@ -214,7 +214,14 @@ temporary file when there is no `-o` or the path itself would carry the value;
 if the temporary path would also carry a value, no report is written, the hook
 does not run and dispatch prints a fixed message. The whole hit output of one scan is
 joined and checked as one document before it is written (so a value that
-spans a record boundary is caught), against every value (the default variables plus each
+spans a record boundary is caught). For a regular file opened for append the
+check also covers the last bytes already in the file (so a value spanning two
+scans is caught); for a path that is the same open file as stdout or stderr
+the records join that stream's buffer and are checked with the diagnostics as
+one document. Not covered: a hits path that is neither a regular file nor
+stdout or stderr (for example another pipe) is checked per scan only, and a
+stdout or stderr that is a regular file has no earlier content checked. The
+check is against every value (the default variables plus each
 `--token-env`: a named variable adds to the defaults and never replaces them);
 if the document would carry a value it is replaced by a fixed value-free record
 (without the count), and if even that would carry a value nothing is written. This

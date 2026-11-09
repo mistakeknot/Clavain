@@ -94,3 +94,28 @@ assert_clean() {
         done
     done
 }
+
+@test "hits sharing stderr with a diagnostic: a value spanning the two never reaches stderr" {
+    export SPAN_TOK=$'\ntoken-leak-scan: could'
+    ln -s "$T/nowhere" "$T/dangling"
+    run bash -c 'python3 -I "$0" scan --hits /dev/stderr --token-env SPAN_TOK -- "$1" >"$2" 2>>"$2.err"' \
+        "$SCAN" "$T/dangling" "$T/out"
+    [ "$status" -eq 4 ]
+    for f in "$T/out" "$T/out.err"; do
+        n="$(python3 -I -c 'import sys; print(open(sys.argv[1], "rb").read().count(b"\ntoken-leak-scan: could"))' "$f")"
+        [ "$n" -eq 0 ]
+    done
+}
+
+@test "two scans appending to one hits file: a value spanning the invocations is never written" {
+    export SPAN_TOK=$'\n{'
+    : > "$T/hits"
+    printf 'one\n{two\n' > "$T/a.txt"
+    run python3 -I "$SCAN" scan --hits "$T/hits" --token-env SPAN_TOK -- "$T/a.txt"
+    [ "$status" -eq 3 ]
+    printf 'three\n{four\n' > "$T/b.txt"
+    run python3 -I "$SCAN" scan --hits "$T/hits" --token-env SPAN_TOK -- "$T/b.txt"
+    [ "$status" -eq 3 ]
+    n="$(python3 -I -c 'import sys; print(open(sys.argv[1], "rb").read().count(b"\n{"))' "$T/hits")"
+    [ "$n" -eq 0 ]
+}

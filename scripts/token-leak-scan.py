@@ -402,20 +402,63 @@ def _safe_line(record, forms):
     return None
 
 
+def _std_stream_for(path):
+    """"stdout" or "stderr" when path is the same open file as that stream
+    (a terminal, file or pipe; /dev/stdout and /dev/stderr included), else
+    None."""
+    try:
+        target = os.stat(path)
+        for name in ("stdout", "stderr"):
+            st = os.fstat(getattr(sys, name).fileno())
+            if (st.st_dev, st.st_ino) == (target.st_dev, target.st_ino):
+                return name
+    except BaseException:
+        pass
+    return None
+
+
+def _existing_tail(path, size):
+    """The last size bytes already in a regular file (b"" otherwise)."""
+    try:
+        if size <= 0 or not os.path.isfile(path):
+            return b""
+        with open(path, "rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            handle.seek(max(0, handle.tell() - size))
+            return handle.read()
+    except BaseException:
+        return b""
+
+
 def _write_hits(hits, lines, forms):
-    """The one write to the hits path. The whole output of this invocation is
-    joined and checked as one document against every form (a value can span
-    a record boundary); if it carries a value it is replaced by the fixed
-    value-free record, or nothing if even that would carry one. Memory: one
-    short line per scanned file is held until the end."""
+    """The one output of hit records, checked as the whole destination.
+    The joined records of this scan are checked against every form together
+    with what they will be joined to: for a regular file opened for append,
+    the last (longest form - 1) bytes already in it; for a path that is the
+    same open file as stdout or stderr, the records go into that stream's
+    buffer, so the checked output point checks them together with the
+    diagnostics as one document. If the joined bytes would carry a value the
+    records are replaced by the fixed value-free record, or nothing if even
+    that would. Memory: one short line per scanned file."""
     if not lines:
         return
+    std = _std_stream_for(hits.name)
+    tail = b"" if std else _existing_tail(
+        hits.name, max((len(f) for f in forms if f), default=1) - 1)
+
+    def carries(text):
+        data = tail + text.encode("utf-8", "surrogateescape")
+        return any(form in data for form in forms if form)
+
     document = "".join(lines)
-    if any(form in document.encode("utf-8", "surrogateescape") for form in forms if form):
+    if carries(document):
         document = _safe_line({"file": "<withheld>", "unscanned": True}, forms)
-        if not document:
+        if not document or carries(document):
             return
-    hits.write(document)
+    if std:
+        _BUFFER[std].append(document)
+    else:
+        hits.write(document)
 
 
 def cmd_scan(args):
