@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import random
 import re
 import secrets
@@ -44,12 +45,13 @@ from typing import Callable, Optional, Sequence
 ARMS = ("injected", "baseline")
 DEFAULT_EXECUTOR_ROLE = "routine-execution"
 DEFAULT_JUDGE_ROLE = "cross-lab-review"
-DEFAULT_EXECUTOR_IDENTITY = "claude-sonnet-5-5"
+FAKE_EXECUTOR_IDENTITY = "fake-executor"
 
-# executor(arm, case, skill_body_or_None) -> response text
-Executor = Callable[[str, dict, Optional[str]], str]
-# judge(case, response) -> score in [0, 1]
-Judge = Callable[[dict, str], float]
+# executor(arm, case, skill_body_or_None) -> (response text, identity of the
+# model that actually produced it)
+Executor = Callable[[str, dict, Optional[str]], tuple]
+# judge(case, response, producer_identity) -> score in [0, 1]
+Judge = Callable[[dict, str, str], float]
 
 
 @dataclass
@@ -58,6 +60,7 @@ class Run:
     repeat: int
     arm: str
     response: str = ""
+    identity: str = ""  # model that actually produced the response
     blind_id: str = ""
     scores: list = field(default_factory=list)  # one entry per judge pass
 
@@ -102,16 +105,28 @@ def judge_prompt(case: dict, response: str) -> str:
     )
 
 
-_SCORE_RE = re.compile(r"SCORE:\s*([0-9]*\.?[0-9]+)")
+_SCORE_LINE_RE = re.compile(r"SCORE: ([0-9]+(?:\.[0-9]+)?|\.[0-9]+)")
 
 
 def parse_score(text: str) -> float:
-    matches = _SCORE_RE.findall(text)
-    if not matches:
-        raise ValueError("judge reply has no SCORE line")
-    value = float(matches[-1])
-    if not 0.0 <= value <= 1.0:
-        raise ValueError(f"judge score out of range: {value}")
+    """Parse the judge's verdict: the last non-blank line must be exactly
+    ``SCORE: <decimal in [0, 1]>`` and no other line may start a score.
+
+    Anything else (trailing text, exponents, nan/inf, out of range, a score
+    quoted in the reasoning) raises ValueError; callers treat that as a judge
+    failure, never as a measurement.
+    """
+    lines = [line.rstrip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        raise ValueError("judge reply is empty")
+    match = _SCORE_LINE_RE.fullmatch(lines[-1])
+    if not match:
+        raise ValueError("judge reply does not end with a complete `SCORE: <number>` line")
+    if any(re.search(r"SCORE\s*:", line) for line in lines[:-1]):
+        raise ValueError("judge reply mentions SCORE before the final line")
+    value = float(match.group(1))
+    if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+        raise ValueError(f"judge score out of range: {match.group(1)}")
     return value
 
 
@@ -178,32 +193,65 @@ def run_eval(
     judge: Judge,
     seed: Optional[int] = None,
 ) -> tuple[dict, list[Run]]:
-    runs = build_pairs(cases, repeats)
+    if judge_passes < 1:
+        raise ValueError("judge passes must be at least 1")
+    runs = build_pairs(cases, repeats)  # validates repeats before any run
     by_id = {c["id"]: c for c in cases}
     for run in runs:
         body = skill_body if run.arm == "injected" else None
-        run.response = executor(run.arm, by_id[run.case_id], body)
+        run.response, run.identity = executor(run.arm, by_id[run.case_id], body)
+        if not isinstance(run.identity, str) or not run.identity.strip():
+            raise ValueError("executor did not report the identity it ran on")
     for run in assign_blind_ids(runs, seed):
         for _ in range(judge_passes):
-            run.scores.append(judge(by_id[run.case_id], run.response))
+            run.scores.append(judge(by_id[run.case_id], run.response, run.identity))
     return compute_metrics(runs, len(skill_body.encode("utf-8"))), runs
 
 
 # ---- fakes (no model calls) ------------------------------------------------
 
-def fake_executor(arm: str, case: dict, skill_body: Optional[str]) -> str:
-    return f"answer to {case['id']}" + (" [follows-skill]" if skill_body else "")
+def fake_executor(arm: str, case: dict, skill_body: Optional[str]) -> tuple:
+    text = f"answer to {case['id']}" + (" [follows-skill]" if skill_body else "")
+    return text, FAKE_EXECUTOR_IDENTITY
 
 
-def fake_judge(case: dict, response: str) -> float:
+def fake_judge(case: dict, response: str, identity: str) -> float:
     return 1.0 if "[follows-skill]" in response else 0.25
 
 
 # ---- real dispatch -----------------------------------------------------------
 
-def _dispatch(dispatch: Path, role: str, identity: str, prompt: str,
-              timeout: float) -> str:
-    """Run one prompt through packaged dispatch.sh --role; return the reply."""
+def read_receipt_identity(receipt_file: Path, role: str) -> str:
+    """Model that actually served a dispatch, from its run receipts.
+
+    Considers only completed, exit-0 receipts for ``role``. Fails closed when
+    there is none, the model is blank, or receipts disagree.
+    """
+    models: set[str] = set()
+    if receipt_file.is_file():
+        for line in receipt_file.read_text().splitlines():
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if (isinstance(rec, dict) and rec.get("role") == role
+                    and rec.get("outcome") == "completed" and rec.get("exit_code") == 0
+                    and isinstance(rec.get("model"), str) and rec["model"].strip()):
+                models.add(rec["model"].strip())
+    if len(models) != 1:
+        raise RuntimeError(
+            f"cannot determine the executor identity from the dispatch receipt "
+            f"({len(models)} distinct completed models)")
+    return models.pop()
+
+
+def _dispatch(dispatch: Path, role: str, identity: Optional[str], prompt: str,
+              timeout: float) -> tuple:
+    """Run one prompt through packaged dispatch.sh --role.
+
+    Returns (reply text, actual model identity from the run receipt). The
+    receipt goes to a private per-call file so only this call's records count.
+    """
     with tempfile.TemporaryDirectory(prefix="skill-eval-") as tmp:
         root = Path(tmp)
         ctx = root / "context.json"
@@ -213,18 +261,20 @@ def _dispatch(dispatch: Path, role: str, identity: str, prompt: str,
         out = root / "out.md"
         work = root / "work"
         work.mkdir()
-        cmd = [
-            str(dispatch), "--role", role, "--context-file", str(ctx),
-            "--producer-identity", identity, "-s", "read-only", "-C", str(work),
-            "--prompt-file", str(pf), "-o", str(out),
-        ]
-        done = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=timeout)
+        receipts = root / "receipts.jsonl"
+        cmd = [str(dispatch), "--role", role, "--context-file", str(ctx)]
+        if identity is not None:
+            cmd += ["--producer-identity", identity]
+        cmd += ["-s", "read-only", "-C", str(work), "--prompt-file", str(pf), "-o", str(out)]
+        env = {**os.environ, "CLAVAIN_DISPATCH_RECEIPT_FILE": str(receipts)}
+        done = subprocess.run(cmd, check=False, capture_output=True, text=True,
+                              timeout=timeout, env=env)
         if done.returncode != 0:
             raise RuntimeError(f"dispatch failed (exit {done.returncode}): {done.stderr.strip()[-300:]}")
         text = out.read_text() if out.is_file() else done.stdout
         if not text.strip():
             raise RuntimeError("dispatch returned an empty reply")
-        return text
+        return text, read_receipt_identity(receipts, role)
 
 
 def executor_prompt(case: dict, skill_body: Optional[str]) -> str:
@@ -238,12 +288,13 @@ def executor_prompt(case: dict, skill_body: Optional[str]) -> str:
 
 
 def make_dispatch_callables(dispatch: Path, executor_role: str, judge_role: str,
-                            identity: str, timeout: float) -> tuple[Executor, Judge]:
-    def executor(arm: str, case: dict, body: Optional[str]) -> str:
-        return _dispatch(dispatch, executor_role, identity, executor_prompt(case, body), timeout)
+                            timeout: float) -> tuple[Executor, Judge]:
+    def executor(arm: str, case: dict, body: Optional[str]) -> tuple:
+        return _dispatch(dispatch, executor_role, None, executor_prompt(case, body), timeout)
 
-    def judge(case: dict, response: str) -> float:
-        return parse_score(_dispatch(dispatch, judge_role, identity, judge_prompt(case, response), timeout))
+    def judge(case: dict, response: str, identity: str) -> float:
+        text, _ = _dispatch(dispatch, judge_role, identity, judge_prompt(case, response), timeout)
+        return parse_score(text)
 
     return executor, judge
 
@@ -252,15 +303,22 @@ def load_cases(path: Path) -> list[dict]:
     cases = json.loads(path.read_text())
     if not isinstance(cases, list) or not cases:
         raise ValueError("case file must be a non-empty JSON list")
+    seen: set[str] = set()
     for case in cases:
+        if not isinstance(case, dict):
+            raise ValueError("each case must be a JSON object")
         for key in ("id", "prompt", "rubric"):
             if not isinstance(case.get(key), str) or not case[key]:
                 raise ValueError(f"case missing {key}: {case!r:.80}")
+        if case["id"] in seen:
+            raise ValueError(f"duplicate case id: {case['id']}")
+        seen.add(case["id"])
     return cases
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    doc = (__doc__ or "Paired skill eval runner.").strip()
+    p = argparse.ArgumentParser(description=doc.split("\n\n")[0])
     p.add_argument("--skill", type=Path, required=True, help="SKILL.md whose body is injected")
     p.add_argument("--cases", type=Path, required=True, help="JSON case file")
     p.add_argument("--repeats", type=int, default=3, help="repeats per arm (max 3 for the spike)")
@@ -268,8 +326,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dispatch", type=Path, help="dispatch.sh path (default: alongside this script)")
     p.add_argument("--executor-role", default=DEFAULT_EXECUTOR_ROLE)
     p.add_argument("--judge-role", default=DEFAULT_JUDGE_ROLE)
-    p.add_argument("--executor-identity", default=DEFAULT_EXECUTOR_IDENTITY,
-                   help="producer identity passed to the judge's role resolution")
     p.add_argument("--timeout", type=float, default=600.0)
     p.add_argument("--seed", type=int, help="seed for blind order (tests)")
     p.add_argument("--fake-executor", action="store_true", help="no model call for the executor")
@@ -281,6 +337,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if args.repeats < 1 or args.judge_passes < 1:
+            raise ValueError("--repeats and --judge-passes must each be at least 1")
         cases = load_cases(args.cases)
         body = args.skill.read_text()
         executor: Executor = fake_executor
@@ -290,7 +348,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             if not dispatch.is_file():
                 raise ValueError(f"dispatch script not found: {dispatch}")
             real_exec, real_judge = make_dispatch_callables(
-                dispatch, args.executor_role, args.judge_role, args.executor_identity, args.timeout)
+                dispatch, args.executor_role, args.judge_role, args.timeout)
             executor = fake_executor if args.fake_executor else real_exec
             judge = fake_judge if args.fake_judge else real_judge
         metrics, runs = run_eval(cases, body, args.repeats, args.judge_passes, executor, judge, args.seed)
