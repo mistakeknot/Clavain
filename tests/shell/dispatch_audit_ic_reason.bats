@@ -62,3 +62,29 @@ teardown() { rm -rf "$T"; }
     [ "$status" -eq 1 ]
     ! [[ "$output" =~ [0-9a-f]{40} ]]
 }
+
+@test "long token-like runs (bare hex, base64-like) are replaced, alone and in a sentence" {
+    H40=$(printf 'a1b2c3d4e5%.0s' 1 2 3 4)
+    H64=$(printf '0f1e2d3c%.0s' 1 2 3 4 5 6 7 8)
+    B32=$(printf 'Zm9vYmFy+/Zm9vYmFy%.0s' 1 2)
+    B32="${B32:0:32}"
+    for V in "$H40" "$H64" "$B32"; do
+        for MSG in "$V" "token was $V here, retry"; do
+            export FAKE_IC_STDERR="unable to open database
+$MSG"
+            run env PATH="$T/bin:$PATH" bash "$T/run.sh"
+            [ "$status" -eq 1 ]
+            [[ "$output" != *"$V"* ]]
+            for ((i = 0; i + 20 <= ${#V}; i++)); do
+                [[ "$output" != *"${V:i:20}"* ]]
+            done
+        done
+    done
+}
+
+@test "control: ordinary diagnostic words still appear after the long-run pass" {
+    export FAKE_IC_STDERR="route record failed: unable to open database file (14)"
+    run env PATH="$T/bin:$PATH" bash "$T/run.sh"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"ic: "*"unable to open"*"file (14)"* ]]
+}

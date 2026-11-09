@@ -314,6 +314,10 @@ _ic_stderr_excerpt() {
   else
     line='<redacted>'
   fi
+  # The redactor keeps bare 40- and 64-character hex as possible SHAs, so for
+  # this excerpt only, replace any run of 20 or more token-like characters
+  # (hex, base64, JWT-like) with a fixed marker. Ordinary words stay.
+  line="$(printf '%s' "$line" | LC_ALL=C sed -E 's#[A-Za-z0-9_+/=.-]{20,}#<redacted>#g')"
   line="$(printf '%s' "$line" | tr '\r\n\t' '   ' | tr -d '\000-\037' | tr -s ' ' | head -c 200)"
   printf '%s' "$line"
 }
