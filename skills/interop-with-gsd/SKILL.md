@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Interop with GSD (Get Stuff Done)
 
-[GSD](https://github.com/gsd-build/get-shit-done) (also packaged as [gsd-plugin](https://github.com/jnuyens/gsd-plugin)) is a spec-driven development framework for Claude Code. It splits complex tasks into plan/execute/review phases, each with its own clean context. Clavain's sprint orchestrator follows a similar pattern with additional review gates.
+[GSD](https://github.com/open-gsd/gsd-core) (the former `gsd-build/get-shit-done` repository is archived and redirects there; also packaged as [Buildomator](https://github.com/buildomator/buildomator), formerly `jnuyens/gsd-plugin`, whose marketplace is still named `gsd-plugin`) is a spec-driven development framework for Claude Code. It splits complex tasks into plan/execute/review phases, each with its own clean context. Clavain's sprint orchestrator follows a similar pattern with additional review gates.
 
 ## Vocabulary mapping
 

@@ -162,8 +162,11 @@ brief() { cat "$T/codex.argv" "$T/codex.stdin" 2>/dev/null; }
     [[ "$b" == *'exactly one'* ]]
     [[ "$b" == *'"VERDICT: PASS WITH NOTES"'* ]]
     [[ "$b" == *'"VERDICT: FAIL"'* ]]
-    [[ "$b" == *"fails the dispatch without a receipt."* ]]
-    tail_text="${b##*"fails the dispatch without a receipt."}"
+    # mk-0qjva: the complete failure-contract sentence (an unlisted word is
+    # recorded as UNKNOWN and the review is rerun), line breaks included.
+    contract=$'No other\nverdict word (not APPROVE or CLEAN) is accepted: any other word is recorded\nas UNKNOWN, which is neither a pass nor a block, so the review has to be\nrun again.'
+    [[ "$b" == *"$contract"* ]]
+    tail_text="${b##*"$contract"}"
     [[ "$tail_text" != *"STANDARDS-SENTINEL"* ]]
 }
 
