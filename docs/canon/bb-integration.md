@@ -213,12 +213,17 @@ unscanned files, timestamp) is written to `<output>.token-leak.json`, or to a
 temporary file when there is no `-o` or the path itself would carry the value;
 if the temporary path would also carry a value, no report is written, the hook
 does not run and dispatch prints a fixed message. Each hit record is checked
-before it is written; one that would carry a value is replaced by a fixed
-value-free record (without the count), and if even that would carry a value
-nothing is written. The run fails in every such case. The report keys and fixed text are not redacted: if a value occurs anywhere in
+before it is written, against every value (the default variables plus each
+`--token-env`: a named variable adds to the defaults and never replaces them);
+one that would carry a value is replaced by a fixed value-free record (without
+the count), and if even that would carry a value nothing is written. This
+holds wherever `--hits` points, including `/dev/stdout`, `/dev/stderr` and a
+pipe (bead mk-47vtm.5). `report` uses the same set of values. The run fails in
+every such case. The report keys and fixed text are not redacted: if a value occurs anywhere in
 the finished report (a single common letter does), no report is written, the
-run still fails and the verdict does not point at a report. The scanner prints
-one fixed message on any internal error, including an import failure. If
+run still fails and the verdict does not point at a report. On an internal
+error, including an import failure, the scanner prints one fixed line, or a
+fixed suppression line when its output would carry a value, or nothing. If
 `CLAVAIN_TOKEN_LEAK_HOOK` names an executable, it is run with the report path
 as its only argument and without `ANTHROPIC_AUTH_TOKEN`,
 `CODEX_POOL_AUTH_TOKEN`, `BB_ACCOUNT_POOL_PARENT_TOKEN` or

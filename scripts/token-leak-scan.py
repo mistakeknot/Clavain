@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Post-run bearer-token leak scan for dispatch (bead mk-ouz83).
 
-Token values are read from the environment of this process (the variables
-named by --token-env, repeatable; default ANTHROPIC_AUTH_TOKEN and
-CODEX_POOL_AUTH_TOKEN), never from argv, so they are not visible in `ps`.
+Token values are read from the environment of this process (ANTHROPIC_AUTH_TOKEN and
+CODEX_POOL_AUTH_TOKEN always, plus the variables named by --token-env,
+repeatable; a named variable adds to the defaults), never from argv, so they are not visible in `ps`.
 Matching is fixed-string over raw bytes. Any nonempty value is scanned. A value
 is never printed, logged or written to a report: file names and metadata are
 redacted too, and every failure prints one fixed message.
@@ -230,6 +230,12 @@ def load_tokens(envs):
     return values
 
 
+def _all_envs(args):
+    """The default variables plus every --token-env: an explicit name adds to
+    the defaults, never replaces them (as _token_values already treats them)."""
+    return tuple(DEFAULT_ENVS) + tuple(args.token_env or ())
+
+
 def needles(token):
     """The raw value plus its JSON-escaped form (stream-json event files)."""
     forms = [token.encode("utf-8", "surrogateescape")]
@@ -396,8 +402,15 @@ def _safe_line(record, forms):
     return None
 
 
+def _write_hit(hits, line):
+    """The one write to the hits path: line comes from _safe_line, which has
+    checked it against every value (defaults and named); None writes nothing."""
+    if line:
+        hits.write(line)
+
+
 def cmd_scan(args):
-    tokens = load_tokens(args.token_env or DEFAULT_ENVS)
+    tokens = load_tokens(_all_envs(args))
     if not tokens:
         return 0
     forms = all_forms(tokens)
@@ -416,8 +429,7 @@ def cmd_scan(args):
             if status == "unscannable":
                 failed = True
                 line = _safe_line({"file": safe, "unscanned": True}, forms)
-                if line:
-                    hits.write(line)
+                _write_hit(hits, line)
                 message = "token-leak-scan: could not scan %s; failing closed" % safe
                 if any(f and f in message.encode("utf-8", "surrogateescape") for f in forms):
                     message = "token-leak-scan: could not scan a file; failing closed"
@@ -427,8 +439,7 @@ def cmd_scan(args):
                 # A record that would carry a value is replaced by a fixed
                 # value-free one (the file is still redacted and the run fails).
                 line = _safe_line({"file": safe, "count": count}, forms)
-                if line:
-                    hits.write(line)
+                _write_hit(hits, line)
     if found and failed:
         return BOTH_EXIT
     if failed:
@@ -437,7 +448,7 @@ def cmd_scan(args):
 
 
 def cmd_report(args):
-    tokens = load_tokens(args.token_env or DEFAULT_ENVS)
+    tokens = load_tokens(_all_envs(args))
     merged = {}
     unscanned = set()
     if os.path.exists(args.hits):
