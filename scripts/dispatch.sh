@@ -4328,6 +4328,11 @@ _claude_stderr_excerpt() {
         cleaned="$(cat "$f")"
     fi
     redacted="$(printf '%s\n' "$cleaned" | sed -E 's/\x1b\[[0-9;]*m//g' | tr -d '\000-\010\013-\037' | _redact_provider_text)" || return 1
+    # Stricter pass for this excerpt only: the shared redactor keeps bare 40- and
+    # 64-character hex as possible SHAs, so an unlabeled credential of that shape
+    # would pass. Replace every run of 20 or more token-class characters (bare
+    # hex, base64, JWT-like values) before the line and size bounds.
+    redacted="$(printf '%s\n' "$redacted" | sed -E 's/[A-Za-z0-9_+\/=.-]{20,}/<redacted>/g')" || return 1
     text="$(printf '%s\n' "$redacted" | tail -n 20 | tail -c 2048)" || return 1
     [[ -n "$text" ]] || return 1
     _token_leak_safe_text "$text"

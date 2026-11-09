@@ -128,3 +128,40 @@ run_claude() {
     [ "$(cat "$T/failure.class")" = terminal_error ]
     [[ "$output" != *"authentication failure"* ]]
 }
+
+# Bare hex and base64-like values are not labeled, so the shared allowlist keeps
+# 40- and 64-character hex as possible SHAs. The excerpt replaces any run of 20
+# or more token-class characters. Dummy values only.
+@test "long token-like runs are replaced, alone on a line and inside a sentence" {
+    H40=0123456789abcdef0123456789abcdef01234567
+    H64=fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210
+    B32=QUJDREVGR0hJSktMTU5PUFFSU1RVVldY+/==
+    export FAKE_ERR="$(printf 'Failed to authenticate\n%s\n%s\n%s\nrejected value %s here\nrejected value %s here\nrejected value %s here\n' \
+        "$H40" "$H64" "$B32" "$H40" "$H64" "$B32")"
+    run_claude
+    [ "$status" -ne 0 ]
+    # Only the excerpt section is checked: the earlier raw-stderr mirror is a
+    # different path (_emit_provider_stderr) that this change does not alter.
+    local excerpt
+    excerpt="$(printf '%s\n' "$output" | sed -n '/claude stderr (last lines, redacted):/,$p')"
+    [[ "$excerpt" == *"<redacted>"* ]]
+    local v i
+    for v in "$H40" "$H64" "$B32"; do
+        for ((i = 0; i + 20 <= ${#v}; i++)); do
+            [[ "$excerpt" != *"${v:i:20}"* ]]
+        done
+    done
+}
+
+@test "ordinary diagnostic words survive the long-run redaction" {
+    export FAKE_ERR='Failed to authenticate with <provider> for model m1 (retry 3); see docs'
+    run_claude
+    [ "$status" -ne 0 ]
+    local excerpt
+    # The shared allowlist redactor rewrites some words (<word>, <id>); the
+    # long-run pass must leave its output as it was.
+    excerpt="$(printf '%s\n' "$output" | sed -n '/claude stderr (last lines, redacted):/,$p')"
+    [[ "$excerpt" == *"| Failed to <word> with <provider> for model <id> (retry 3); <word> <word>"* ]]
+    [[ "$excerpt" != *"<redacted>"* ]]
+    [[ "$output" == *"claude reported an authentication failure"* ]]
+}
