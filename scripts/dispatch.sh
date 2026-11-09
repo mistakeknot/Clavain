@@ -25,6 +25,8 @@ OUTPUT=""
 MODEL=""
 TIER=""
 ROLE=""
+# Informational receipt field; set only by the Codex branch, never inherited.
+REVIEW_CODEX_TMPDIR=""
 ROLE_RESOLVED=false
 DISPATCH_RESULT_READY=false
 RESOLVED_PROFILE_REF=""
@@ -517,7 +519,7 @@ Options:
                                   needs the receipt flags and -C). Clones -C at --head into
                                   a private 0700 directory (tree must match --head, or the
                                   run fails closed) and runs codex workspace-write there
-                                  with TMPDIR inside it, no other writable root, /tmp
+                                  with sandbox-private TMPDIR on Linux, no other writable root, /tmp
                                   excluded and network off, so test suites that call
                                   mktemp can run. The real checkout is untouched (HEAD and
                                   status are checked after the run) and the directory is
@@ -2882,7 +2884,8 @@ else
     fi
   fi
   # Review scratch mode: codex writes only to the private clone (cwd) and its
-  # sibling tmp (TMPDIR). No extra roots, /tmp excluded, network off. A dry run
+  # sibling host tmp (sandbox tools use private shared memory on Linux).
+  # No extra roots, /tmp excluded, network off. A dry run
   # prints the same flags over a placeholder and creates nothing.
   SCRATCH_CODEX_ARGS=()
   SCRATCH_CODEX_CD=""
@@ -2960,6 +2963,50 @@ else
     CMD+=("${EXTRA_ARGS[@]}")
   fi
 
+  # Linux bwrap synthesizes a read-only .git in each writable root, including
+  # TMPDIR. A host-clean directory therefore still breaks no-ancestor-.git
+  # test guards. Its minimal /dev supplies private, executable shared memory
+  # per sandbox command. Exclude TMPDIR from writable roots so it stays private
+  # (no host bind and no synthetic metadata). Temp files do not span tool calls.
+  REVIEW_CODEX_TMPDIR=""
+  REVIEW_CODEX_TMP_ARGS=()
+  if [[ "${ROLE:-}" == cross-lab-review && "$(uname -s)" == Linux && "$SANDBOX" != danger-full-access ]]; then
+    REVIEW_CODEX_TMPDIR=/dev/shm
+    REVIEW_CODEX_TMP_ARGS=(-c sandbox_workspace_write.exclude_tmpdir_env_var=true
+      -c sandbox_workspace_write.exclude_slash_tmp=true
+      -c 'shell_environment_policy.set.TMPDIR="/dev/shm"')
+    CMD+=("${REVIEW_CODEX_TMP_ARGS[@]}")
+    if [[ "$DRY_RUN" != true ]]; then
+      _review_probe_args=()
+      for ((_pi=0; _pi<${#CMD[@]}; _pi++)); do
+        case "${CMD[$_pi]}" in
+          -c|--config|-p|--profile|--enable|--disable)
+            _review_probe_args+=("${CMD[$_pi]}" "${CMD[$((_pi+1))]}")
+            _pi=$((_pi+1)) ;;
+          --config=*|-c?*|--profile=*|-p?*|--enable=*|--disable=*)
+            _review_probe_args+=("${CMD[$_pi]}") ;;
+        esac
+      done
+      # Verify inside the actual sandbox before launching a model. Fail closed
+      # on implementations without private, writable, executable shared memory.
+      (cd "${SCRATCH_CODEX_CD:-${WORKDIR:-.}}" && codex sandbox -c "sandbox_mode=$SANDBOX" \
+        "${_review_probe_args[@]}" -- env TMPDIR=/dev/shm python3 -c '
+import os, pathlib, subprocess, tempfile
+p = pathlib.Path("/dev/shm")
+assert os.stat(p).st_dev == os.stat("/dev").st_dev, "shared memory is not sandbox-private"
+assert not any((a / ".git").exists() for a in [p, *p.parents]), "ambient git metadata"
+with tempfile.TemporaryDirectory(dir=p) as d:
+    script = pathlib.Path(d) / "probe"
+    script.write_text("#!/bin/sh\nexit 0\n")
+    script.chmod(0o700)
+    subprocess.run([str(script)], check=True)
+') || { echo 'Error: review temp isolation preflight failed; reviewer not launched' >&2;
+        _dispatch_write_failure_class unsupported_adapter; exit 1; }
+    fi
+    # Keep the host Codex process on its original TMPDIR. Only sandboxed
+    # tools use shared memory; host mount bookkeeping stays in the host temp root.
+  fi
+
   CMD+=("$PROMPT")
   if [[ -n "$SCRATCH_CODEX_TMPDIR" && "$DRY_RUN" != true ]]; then
     # TMPDIR only for the codex process, not for dispatch's own temp files.
@@ -3025,6 +3072,10 @@ if [[ "$DRY_RUN" == true ]]; then
     if [[ -n "${SCRATCH_CODEX_TMPDIR:-}" ]]; then
       echo "# Env: TMPDIR=$SCRATCH_CODEX_TMPDIR (review scratch)" >&2
       DISPLAY_CMD+=("${SCRATCH_CODEX_ARGS[@]}")
+    fi
+    if [[ -n "${REVIEW_CODEX_TMPDIR:-}" ]]; then
+      echo '# Review temp: sandbox-private /dev/shm (verified before launch)' >&2
+      DISPLAY_CMD+=("${REVIEW_CODEX_TMP_ARGS[@]}")
     fi
     if [[ -n "${CODEX_WRITABLE_ROOTS_TOML:-}" ]]; then
       DISPLAY_CMD+=(-c "sandbox_workspace_write.writable_roots=[${CODEX_WRITABLE_ROOTS_TOML}]")

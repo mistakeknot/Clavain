@@ -50,10 +50,10 @@ fake_codex_probe() {
 [[ "\$1" == exec ]] || { echo "codex-cli 0.166.0"; exit 0; }
 printf '%s\n' "\$@" > "$T/codex.argv"
 cat > /dev/null
-cfg=(); cd_dir=""; outfile=""
+cfg=(); cd_dir=""; outfile=""; tool_tmp="\$TMPDIR"
 while [[ \$# -gt 0 ]]; do
   case "\$1" in
-    -c) cfg+=(-c "\$2"); shift 2 ;;
+    -c) cfg+=(-c "\$2"); [[ "\$2" == shell_environment_policy.set.TMPDIR=* ]] && tool_tmp=/dev/shm; shift 2 ;;
     -C) cd_dir="\$2"; shift 2 ;;
     -o) outfile="\$2"; shift 2 ;;
     *) shift ;;
@@ -62,7 +62,7 @@ done
 echo "\$cd_dir" > "$T/codex.cwd"
 echo "\$TMPDIR" > "$T/codex.tmpdir"
 cd "\$cd_dir"
-"$REAL_CODEX" sandbox -c sandbox_mode=workspace-write "\${cfg[@]}" -- bash "$T/probe.sh" > "$T/probe.out" 2>&1
+"$REAL_CODEX" sandbox -c sandbox_mode=workspace-write "\${cfg[@]}" -- env "TMPDIR=\$tool_tmp" bash "$T/probe.sh" > "$T/probe.out" 2>&1
 printf 'Findings: none\n\nVERDICT: PASS\n' > "\$outfile"
 exit 0
 EOF
@@ -197,12 +197,34 @@ scratch_dirs() { find "$T/scratchroot" -maxdepth 1 -name 'clavain-review-scratch
     [ -f "$f" ]
     [ "$(jq -r .sandbox "$f")" = scratch-write ]
     [ "$(jq -r .scratch_tree "$f")" = "$(git -C "$R" rev-parse "$HEAD_SHA^{tree}")" ]
+    if [[ "$(uname -s)" == Linux ]]; then
+        [ "$(grep 'sandbox_workspace_write.exclude_tmpdir_env_var=' "$T/codex.argv" | tail -1)" = sandbox_workspace_write.exclude_tmpdir_env_var=true ]
+        [ "$(jq -r .temp_root "$f")" = /dev/shm ]
+    fi
     [ "$(jq -r .head_sha "$f")" = "$HEAD_SHA" ]
     [ "$(jq -r .verdict "$f")" = PASS ]
     # codex ran inside the scratch clone, which is gone afterwards.
     [[ "$(cat "$T/codex.cwd")" == "$T/scratchroot/clavain-review-scratch."*"/repo" ]]
     [ "$(cat "$T/codex.clone_head")" = "$HEAD_SHA" ]
     [ -z "$(scratch_dirs)" ]
+}
+
+@test "a non-codex receipt has no temp_root even when REVIEW_CODEX_TMPDIR is exported" {
+    cat > "$T/bin/claude" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '{"type":"assistant","message":{"content":[{"type":"text","text":"Findings: none\\n\\nVERDICT: PASS"}]}}\n{"type":"result","result":"Findings: none\\n\\nVERDICT: PASS"}\n'
+SH
+    chmod +x "$T/bin/claude"
+    local claude_route
+    claude_route="$(jq -n --arg h "$POLICY_HASH" \
+        '{policy_hash:$h, profile_ref:"primary", profile:{backend:"claude",model:"gpt-6-astra",model_identity:"gpt-6.1-sol"}}')"
+    REVIEW_CODEX_TMPDIR=/dev/shm PATH="$T/bin:$PATH" run bash "$DISPATCH" --role-resolved --role cross-lab-review \
+        --to claude --model gpt-6-astra --resolved-route-json "$claude_route" \
+        --producer-identity claude-sonnet-5-5 "${RECEIPT_FLAGS[@]}" -C "$R" --prompt-file "$T/prompt.md" -o "$OUT"
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ -f "$f" ]
+    [ "$(jq 'has("temp_root") and .temp_root != null' "$f")" = false ]
 }
 
 @test "a read-only receipt carries no scratch fields" {

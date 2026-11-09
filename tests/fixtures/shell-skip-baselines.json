@@ -331,10 +331,11 @@
     },
     "codex is not installed": {
       "cases": [
-        "in scratch mode mktemp and scratch writes succeed; real repo, HOME and /tmp are denied"
+        "in scratch mode mktemp and scratch writes succeed; real repo, HOME and /tmp are denied",
+        "dispatch temp root passes the real sandbox ancestor guard"
       ],
-      "why": "tests/shell/dispatch_review_scratch.bats runs the --review-scratch sandbox against a real codex CLI to prove writes outside scratch are denied, so it needs codex installed and skips on a hosted runner by design. The live probe was run on a host with codex at the head of PR 128 before it merged, and its output is attached to PR 128 as a comment. Its stub-backed siblings in the same file run in CI and pass. No assertion that used to run here stopped running.",
-      "source": "bead mk-7bb3q; skip added with the probe in PR 128 (bead mk-fdj7h)",
+      "why": "tests/shell/dispatch_review_scratch.bats runs the --review-scratch sandbox against a real codex CLI to prove writes outside scratch are denied, so it needs codex installed and skips on a hosted runner by design. The live probe was run on a host with codex at the head of PR 128 before it merged, and its output is attached to PR 128 as a comment. Its stub-backed siblings in the same file run in CI and pass. No assertion that used to run here stopped running. tests/shell/dispatch_review_tmp.bats likewise runs the review temp-root preflight against a real codex sandbox and skips on a hosted runner for the same reason; it passed on a host with codex at the head of PR 147 (b984c3ab), and its two stub-backed siblings in that file run in CI.",
+      "source": "bead mk-7bb3q; skip added with the probe in PR 128 (bead mk-fdj7h); second case added with the temp-root probe in PR 147 (bead mk-nkprr)",
       "first_observed_in_run": "42182253658",
       "accepted_on": "2026-11-06"
     }
