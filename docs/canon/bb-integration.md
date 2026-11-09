@@ -201,7 +201,8 @@ or `e`); the scanner then uses a fixed-width marker of one character that
 occurs in no value, and if no marker leaves the data free of every value the
 file is left unmodified, reported as unscanned and the run fails. File names,
 paths and metadata in the hits record, the hook argument and error text pass
-through the same redaction. A leak report (bead, role, run id, files, counts,
+through the same redaction, except the scanner's own fixed diagnostic
+messages, which are printed as they are (see the known limits below). A leak report (bead, role, run id, files, counts,
 unscanned files, timestamp) is written to `<output>.token-leak.json`, or to a
 temporary file when there is no `-o` or the path itself would carry the value;
 if the temporary path would also carry a value, no report is written, the hook
@@ -240,10 +241,10 @@ Remaining limits, stated plainly:
   so that child inherits the token. Helper children that run before the
   removal, such as the `sed` and `tail` beside `codex --version`, inherit it
   too. Follow-up for the preflight: bead mk-47vtm.2;
-- the scanner's own fixed error messages are printed without being checked
-  against the token values, so a token that equals a word in one of those
-  messages would be echoed on an internal error. Only a token that is an
-  ordinary English word can trigger this. Follow-up: bead mk-47vtm.4;
+- the scanner's own fixed diagnostic messages are printed without being
+  checked against the token values, so any token that occurs anywhere in one
+  of those messages, even a single character such as `:`, is echoed when that
+  message is printed. Follow-up: bead mk-47vtm.4;
 - a child that renders the token in a form other than the raw or JSON-escaped
   string (encoded, split or truncated) is not matched, and a fragment of one
   value that overlaps a different value is not matched separately;
