@@ -28,10 +28,11 @@ cat > /dev/null
   echo "bbparent:${BB_ACCOUNT_POOL_PARENT_TOKEN+set}"
   echo "message:${CLAUDE_CODE_MESSAGING_TOKEN+set}"
 } > "$FAKE_ENV_LOG"
-body="clean answer"
+body="${BODY:-clean answer}"
 [[ "${LEAK:-}" != *out* ]] || body="answer with ${ANTHROPIC_AUTH_TOKEN} inside"
 [[ "${LEAK:-}" != *err* ]] || echo "auth detail ${ANTHROPIC_AUTH_TOKEN}" >&2
 [[ "${LEAK:-}" != *event* ]] || jq -cn --arg t "${ANTHROPIC_AUTH_TOKEN}" '{type:"system",note:$t}'
+if [[ -n "${SLOW:-}" ]]; then : > "$SLOW"; sleep 3; fi
 jq -cn --arg body "$body" '{type:"result",subtype:"success",is_error:false,result:$body}'
 FAKE
     cat > "$T/bin/kimi" <<'FAKE'
@@ -41,7 +42,8 @@ FAKE
   echo "bbparent:${BB_ACCOUNT_POOL_PARENT_TOKEN+set}"
   echo "message:${CLAUDE_CODE_MESSAGING_TOKEN+set}"
 } > "$FAKE_ENV_LOG"
-echo "kimi answer"
+[[ "${LEAK:-}" != *err* ]] || echo "auth detail ${LEAKVAL}" >&2
+echo "kimi answer ${LEAKVAL:-}"
 FAKE
     cat > "$T/bin/codex" <<'FAKE'
 #!/usr/bin/env bash
@@ -51,12 +53,16 @@ if [[ "${1:-}" == --version ]]; then echo "codex-cli 9.9.9"; exit 0; fi
   echo "bbparent:${BB_ACCOUNT_POOL_PARENT_TOKEN+set}"
   echo "message:${CLAUDE_CODE_MESSAGING_TOKEN+set}"
 } > "$FAKE_ENV_LOG"
+[[ "${LEAK:-}" != *err* ]] || echo "auth detail ${LEAKVAL}" >&2
+[[ "${LEAK:-}" != *event* ]] || jq -cn --arg t "${LEAKVAL:-}" '{type:"note",note:$t}'
 echo '{"type":"turn.completed"}'
 FAKE
     # Leak hook: records its arguments and never sees the token.
     cat > "$T/bin/hook" <<'FAKE'
 #!/usr/bin/env bash
-{ echo "argc=$#"; echo "arg1=$1"; echo "token=${ANTHROPIC_AUTH_TOKEN+set}"; } > "$HOOK_LOG"
+{ echo "argc=$#"; echo "arg1=$1"; echo "token=${ANTHROPIC_AUTH_TOKEN+set}"
+  echo "codex=${CODEX_POOL_AUTH_TOKEN+set}"; echo "parent=${BB_ACCOUNT_POOL_PARENT_TOKEN+set}"
+  echo "message=${CLAUDE_CODE_MESSAGING_TOKEN+set}"; } > "$HOOK_LOG"
 FAKE
     chmod +x "$T"/bin/*
     export PATH="$T/bin:$PATH"
@@ -71,12 +77,14 @@ FAKE
 
 teardown() { rm -rf "$T"; }
 
-governed() {
-    bash "$DISPATCH" --role validation --role-resolved --resolved-profile-ref p1 \
+governed() { _governed bash "$@"; }
+governed_exec() { _governed exec "$@"; }
+_governed() {
+    "$1" "$DISPATCH" --role validation --role-resolved --resolved-profile-ref p1 \
         --resolved-route-json "{\"policy_hash\":\"$POLICY_HASH\"}" \
         --resolved-profile-json '{"profile_ref":"p1"}' --producer-identity prod-model \
         --to claude --model m1 --reasoning-effort high -C "$T/repo" \
-        --prompt-file "$T/prompt.md" -o "$T/out.md" "$@"
+        --prompt-file "$T/prompt.md" -o "$T/out.md" "${@:2}"
 }
 
 # ---- environment handling ---------------------------------------------------
@@ -169,6 +177,9 @@ governed() {
     grep -qx 'argc=1' "$T/hook.log"
     grep -qx "arg1=$T/out.md.token-leak.json" "$T/hook.log"
     grep -qx 'token=' "$T/hook.log"
+    grep -qx 'codex=' "$T/hook.log"
+    grep -qx 'parent=' "$T/hook.log"
+    grep -qx 'message=' "$T/hook.log"
 }
 
 @test "a hook that is not executable is ignored" {
@@ -178,12 +189,21 @@ governed() {
     [ ! -e "$T/hook.log" ]
 }
 
-@test "the token value never reaches a command line" {
+@test "the token value never reaches any child command line" {
+    export PATH="$T/spy:$PATH"
+    mkdir -p "$T/spy"
+    real_py="$(command -v python3)"
+    cat > "$T/spy/python3" <<SPY
+#!/usr/bin/env bash
+printf '%s\\0' "\$@" >> "$T/argv.log"
+exec "$real_py" "\$@"
+SPY
+    chmod +x "$T/spy/python3"
     LEAK=out run governed
     [ "$status" -ne 0 ]
-    # the helper takes the value from its environment, not from argv
-    ! grep -n 'ANTHROPIC_AUTH_TOKEN' "$ROOT/scripts/token-leak-scan.py" | grep -q 'argv'
-    ! grep -nE 'token-leak-scan\.py.*\$\{?ANTHROPIC_AUTH_TOKEN' "$DISPATCH"
+    [ -s "$T/argv.log" ]
+    grep -aq 'token-leak-scan.py' "$T/argv.log"
+    ! grep -aqF "$DUMMY" "$T/argv.log"
 }
 
 @test "unset token: scan skipped with a logged note, run unaffected" {
@@ -194,23 +214,13 @@ governed() {
     [ ! -e "$T/out.md.token-leak.json" ]
 }
 
-@test "token shorter than 16 characters: scan skipped, value not logged" {
-    export ANTHROPIC_AUTH_TOKEN=short-tok-123
+@test "a short token is scanned and redacted" {
+    export ANTHROPIC_AUTH_TOKEN=abc12
     LEAK=out run governed
-    [ "$status" -eq 0 ]
-    note="$(printf '%s\n' "$output" | grep 'token leak scan skipped')"
-    [ -n "$note" ]
-    [[ "$note" != *short-tok-123* ]]
-    # skipped means untouched: the fake's body still carries the short value
-    grep -qF short-tok-123 "$T/out.md"
-    [ ! -e "$T/out.md.token-leak.json" ]
-}
-
-@test "non-claude backends are not scanned" {
-    printf '[models."k"]\nmodel = "k"\n' > "$T/kimi.toml"
-    KIMI_CONFIG="$T/kimi.toml" run bash "$DISPATCH" --to kimi -C "$T/repo" --prompt-file "$T/prompt.md" -o "$T/out.md"
-    [ "$status" -eq 0 ]
-    [[ "$output" != *"token leak scan"* ]]
+    [ "$status" -ne 0 ]
+    ! grep -qF abc12 "$T/out.md"
+    grep -qF '[REDACTED:anthropic-token]' "$T/out.md"
+    [ -f "$T/out.md.token-leak.json" ]
 }
 
 # ---- helper -----------------------------------------------------------------
@@ -224,4 +234,259 @@ governed() {
     grep -qF '[REDACTED:anthropic-token]' "$T/ev.jsonl"
     ! grep -qF 'quoted' "$T/ev.jsonl"
     [ "$(stat -c %a "$T/ev.jsonl")" = 640 ]
+}
+
+# ---- every engine is scanned -----------------------------------------------
+
+codex_run() { bash "$DISPATCH" --to codex -C "$T/repo" --prompt-file "$T/prompt.md" -o "$T/out.md" "$@"; }
+
+@test "codex (direct): a leak in stderr or events fails the run and is redacted" {
+    export LEAKVAL="$DUMMY"
+    LEAK=err,event run codex_run
+    [ "$status" -ne 0 ]
+    [[ "$output" != *"$DUMMY"* ]]
+    [ -f "$T/out.md.token-leak.json" ]
+    ! grep -rqF "$DUMMY" "$T" --exclude=env.log --exclude=hook.log --exclude-dir=bin
+}
+
+@test "codex (pooled alias): the pool token value is scanned when only it is set" {
+    unset ANTHROPIC_AUTH_TOKEN
+    export CODEX_POOL_AUTH_TOKEN="$DUMMY" LEAKVAL="$DUMMY"
+    LEAK=err run codex_run
+    [ "$status" -ne 0 ]
+    [[ "$output" != *"$DUMMY"* ]]
+    [ -f "$T/out.md.token-leak.json" ]
+}
+
+@test "kimi: a leak in the output fails the run and is redacted" {
+    printf '[models."k"]\nmodel = "k"\n' > "$T/kimi.toml"
+    export LEAKVAL="$DUMMY"
+    KIMI_CONFIG="$T/kimi.toml" run bash "$DISPATCH" --to kimi -C "$T/repo" --prompt-file "$T/prompt.md" -o "$T/out.md"
+    [ "$status" -ne 0 ]
+    ! grep -qF "$DUMMY" "$T/out.md"
+    [ -f "$T/out.md.token-leak.json" ]
+}
+
+mock_scripts() {
+    # a private copy of scripts/ whose flere worker and bb seat worker are stubs
+    mkdir -p "$T/mock"
+    cp -r "$ROOT/scripts" "$T/mock/scripts"
+    local d
+    for d in config .claude-plugin docs hooks; do
+        [[ ! -e "$ROOT/$d" ]] || ln -s "$ROOT/$d" "$T/mock/$d"
+    done
+    cat > "$T/mock/scripts/flere-worker.py" <<'W'
+import sys
+out = sys.argv[sys.argv.index("--output") + 1]
+open(out, "w").write("worker wrote " + __import__("os").environ["LEAKVAL"] + "\n")
+W
+    MOCK_DISPATCH="$T/mock/scripts/dispatch.sh"
+}
+
+@test "flere: the output is scanned after the worker and a hit fails the run" {
+    mock_scripts
+    mkdir -p "$T/project" "$T/profile"
+    printf '{}\n' > "$T/profile/models.json"
+    export CLAVAIN_FLERE_BIN=/usr/bin/true CLAVAIN_FLERE_PROFILE="$T/profile"
+    export IC_DISPATCH_ID=d IC_RUN_ID=r IC_PROMPT_HASH=h LEAKVAL="$DUMMY"
+    run bash "$MOCK_DISPATCH" --to flere -C "$T/project" -o "$T/out.md" -m provider/model "inspect"
+    [ "$status" -ne 0 ]
+    ! grep -qF "$DUMMY" "$T/out.md"
+    grep -qF '[REDACTED:anthropic-token]' "$T/out.md"
+    [ -f "$T/out.md.token-leak.json" ]
+}
+
+@test "bb seat: the output and its receipt are scanned and a hit fails the run" {
+    mock_scripts
+    printf 'import sys\nsys.exit(0)\n' > "$T/mock/scripts/bb-host.py"
+    cat > "$T/mock/scripts/bb-seat.py" <<'W'
+import os, sys
+out = sys.argv[sys.argv.index("--output") + 1]
+open(out, "w").write("seat wrote " + os.environ["LEAKVAL"] + "\n")
+open(out + ".receipt.json", "w").write('{"note":"' + os.environ["LEAKVAL"] + '"}\n')
+W
+    export LEAKVAL="$DUMMY"
+    run bash "$MOCK_DISPATCH" --role validation --role-resolved --resolved-profile-ref p1 \
+        --resolved-route-json "{\"policy_hash\":\"$POLICY_HASH\"}" \
+        --resolved-profile-json '{"profile_ref":"p1"}' --producer-identity prod-model \
+        --to claude --via bb --model m1 --reasoning-effort high -C "$T/repo" \
+        --prompt-file "$T/prompt.md" -o "$T/out.md"
+    [ "$status" -ne 0 ]
+    ! grep -qF "$DUMMY" "$T/out.md" "$T/out.md.receipt.json"
+    [ -f "$T/out.md.token-leak.json" ]
+}
+
+# ---- scan after the last write ---------------------------------------------
+
+review() {
+    bash "$DISPATCH" --role cross-lab-review --role-resolved --resolved-profile-ref p1 \
+        --resolved-route-json "{\"policy_hash\":\"$POLICY_HASH\"}" \
+        --resolved-profile-json '{"profile_ref":"p1"}' --producer-identity gpt-6.1-sol \
+        --to claude --model claude-opus-5-5 --reasoning-effort high -C "$T/repo" \
+        --prompt-file "$T/prompt.md" -o "$T/out.md" \
+        --repo o/r --repo-id R_x --pr 7 --head "$HEADSHA" --base "$BASESHA" "$@"
+}
+
+review_setup() {
+    BASESHA="$(git -C "$T/repo" rev-parse HEAD)"
+    printf 'y\n' > "$T/repo/f-$DUMMY.txt"
+    git -C "$T/repo" -c user.name=t -c user.email=t@t add .
+    git -C "$T/repo" -c user.name=t -c user.email=t@t commit -q -m two
+    HEADSHA="$(git -C "$T/repo" rev-parse HEAD)"
+    export CLAVAIN_REVIEW_RECEIPT_DIR="$T/reviews"
+    export BODY=$'Findings: none\n\nVERDICT: PASS'
+}
+
+@test "the review receipt directory is scanned after the receipt is written" {
+    review_setup
+    run review
+    [ "$status" -ne 0 ]
+    rec="$(ls "$T"/reviews/o__r/7-*.json | head -1)"
+    ! grep -qF "$DUMMY" "$rec"
+    grep -qF '[REDACTED:anthropic-token]' "$rec"
+    [ -f "$T/out.md.token-leak.json" ]
+}
+
+@test "the run receipt is scanned after it is appended" {
+    review_setup
+    run review
+    [ "$status" -ne 0 ]
+    ! grep -qF "$DUMMY" "$T/state/receipts.jsonl"
+}
+
+@test "a token-bearing artifact path never reaches the report, hook argument, hits file or stderr" {
+    LEAK=event TMPDIR="$T" CLAVAIN_TOKEN_LEAK_HOOK="$T/bin/hook" run governed -o "$T/o-$DUMMY.md"
+    [ "$status" -ne 0 ]
+    [[ "$output" != *"$DUMMY"* ]]
+    ! grep -qF "$DUMMY" "$HOOK_LOG"
+    # the report fell back to a neutral path and carries no value
+    rep="$(ls "$T"/clavain-token-leak-*.json)"
+    [ -f "$rep" ]
+    ! grep -qF "$DUMMY" "$rep"
+    grep -qx "arg1=$rep" "$HOOK_LOG"
+    jq -e '.files | length >= 1' "$rep" >/dev/null
+}
+
+# ---- symlinks ---------------------------------------------------------------
+
+@test "a run that writes through a symlinked output has the target scanned" {
+    printf 'old\n' > "$T/real.md"
+    ln -s real.md "$T/out.md"
+    LEAK=out run governed
+    [ "$status" -ne 0 ]
+    [ -L "$T/out.md" ]
+    ! grep -qF "$DUMMY" "$T/real.md"
+    grep -qF '[REDACTED:anthropic-token]' "$T/real.md"
+}
+
+@test "a symlink that cannot be resolved to a file is reported and fails closed" {
+    ln -s "$T/does-not-exist" "$T/out.md.provider-events.zz.jsonl"
+    run governed
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"could not scan"* ]]
+    jq -e '.unscanned | length == 1' "$T/out.md.token-leak.json" >/dev/null
+    ! grep -qF "$DUMMY" "$T/out.md.token-leak.json"
+}
+
+# ---- signals ---------------------------------------------------------------
+
+@test "a signal still runs the scan from the exit trap" {
+    export SLOW="$T/slow.flag" LEAK=event
+    governed_exec > "$T/run.out" 2>&1 &
+    pid=$!
+    for _ in $(seq 1 100); do [ -e "$T/slow.flag" ] && break; sleep 0.1; done
+    [ -e "$T/slow.flag" ]
+    kill -TERM "$pid"
+    wait "$pid" || true
+    ev="$(ls "$T"/out.md.provider-events.*.jsonl)"
+    ! grep -qF "$DUMMY" "$ev"
+    grep -qF '[REDACTED:anthropic-token]' "$ev"
+    pkill -f "$T/bin/claude" || true
+}
+
+# ---- hook isolation ----------------------------------------------------------
+
+@test "the hook sees none of the four tokens, including the pooled alias" {
+    export CODEX_POOL_AUTH_TOKEN="$DUMMY"
+    CLAVAIN_TOKEN_LEAK_HOOK="$T/bin/hook" LEAK=out run governed
+    [ "$status" -ne 0 ]
+    grep -qx 'token=' "$T/hook.log"
+    grep -qx 'codex=' "$T/hook.log"
+    grep -qx 'parent=' "$T/hook.log"
+    grep -qx 'message=' "$T/hook.log"
+}
+
+# ---- zaka and preflight ------------------------------------------------------
+
+@test "zaka --to claude keeps the token for both claude names; other agents lose it" {
+    mkdir -p "$T/zbin"
+    cat > "$T/zbin/zaka" <<'Z'
+#!/usr/bin/env bash
+echo "agent=$3 token=${ANTHROPIC_AUTH_TOKEN+set}" >> "$ZAKA_LOG"
+echo session-1
+Z
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$T/zbin/tmux"
+    chmod +x "$T/zbin/zaka" "$T/zbin/tmux"
+    for to in claude claude-code kimi; do
+        export ZAKA_LOG="$T/zaka-$to.log"
+        PATH="$T/zbin:$PATH" run bash "$DISPATCH" --via zaka --to "$to" -C "$T/repo" "hello"
+        [ -s "$ZAKA_LOG" ]
+    done
+    grep -q 'token=set' "$T/zaka-claude.log"
+    grep -q 'token=set' "$T/zaka-claude-code.log"
+    ! grep -q 'token=set' "$T/zaka-kimi.log"
+}
+
+@test "the codex version preflight runs without the claude bearer token" {
+    cat > "$T/bin/codex" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "${1:-}" == --version ]]; then
+  echo "version:${ANTHROPIC_AUTH_TOKEN+set}" >> "$FAKE_ENV_LOG.version"
+  echo "codex-cli 9.9.9"; exit 0
+fi
+echo '{"type":"turn.completed"}'
+FAKE
+    # The direct codex path unsets the token first; the profile-fallback loops
+    # call the preflight while a Claude-backed run still holds it, so exercise
+    # the function itself with the token present.
+    export ANTHROPIC_AUTH_TOKEN="$DUMMY"
+    export FAKE_ENV_LOG="$T/env.log" PATH="$T/bin:$PATH"
+    sed -n '/^_codex_version_at_least() {/,/^}/p' "$DISPATCH" > "$T/fn.sh"
+    [ -s "$T/fn.sh" ]
+    run bash -c 'source "$1"; _codex_version_at_least 1.0.0' _ "$T/fn.sh"
+    [ "$status" -eq 0 ]
+    [ -s "$T/env.log.version" ]
+    ! grep -q 'set' "$T/env.log.version"
+}
+
+# ---- the scanner itself -------------------------------------------------------
+
+@test "scanner runs under python3 -OO" {
+    export ANTHROPIC_AUTH_TOKEN=abc12
+    printf 'x abc12 y\n' > "$T/a.txt"
+    run python3 -I -OO "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/hits" "$T/a.txt"
+    [ "$status" -eq 3 ]
+    ! grep -q abc12 "$T/a.txt"
+    run python3 -I -OO "$ROOT/scripts/token-leak-scan.py" --help
+    [ "$status" -eq 0 ]
+}
+
+@test "scanner: an internal error prints only a fixed message" {
+    export ANTHROPIC_AUTH_TOKEN=abc12
+    # a hits path whose directory is missing forces an exception that names the path
+    run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/abc12-missing-dir/hits" "$T/a.txt"
+    [ "$status" -eq 4 ]
+    [ "$output" = "token-leak-scan: internal error (details withheld)" ]
+    run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/h" --bogus-abc12
+    [ "$status" -eq 2 ]
+    [[ "$output" != *abc12* ]]
+}
+
+@test "scanner: a dangling symlink and a token-bearing name are handled without leaking" {
+    export ANTHROPIC_AUTH_TOKEN=abc12
+    ln -s "$T/nowhere" "$T/dangling-abc12"
+    run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/hits" "$T/dangling-abc12"
+    [ "$status" -eq 4 ]
+    [[ "$output" != *abc12* ]]
+    ! grep -q abc12 "$T/hits"
 }

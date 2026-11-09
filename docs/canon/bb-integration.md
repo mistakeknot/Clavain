@@ -155,33 +155,53 @@ the child drops that stale route and uses its own provider login.
 **Bearer tokens in the child environment, and the post-run leak scan.**
 `scripts/dispatch.sh` unsets `BB_ACCOUNT_POOL_PARENT_TOKEN` and
 `CLAUDE_CODE_MESSAGING_TOKEN` at startup, so no child of any backend sees
-either. `ANTHROPIC_AUTH_TOKEN` is kept only for a Claude-backed dispatch (and a
-zaka `claude-code` agent); every other backend (codex, kimi, flere, other zaka
-agents) has it unset in its own child, after the pooled-Codex alias has been
-built. A declined or unavailable pool route still drops it as before.
+either. `ANTHROPIC_AUTH_TOKEN` is kept for a Claude-backed dispatch and for a
+zaka agent named `claude` or `claude-code`; every other backend (codex, kimi,
+flere, other zaka agents) has it unset in its own child, after the pooled-Codex
+alias has been built. The `codex --version` preflight runs without it. A pooled
+Codex child still receives `CODEX_POOL_AUTH_TOKEN`, which carries the same
+bearer. A declined or unavailable pool route still drops it as before.
 
-After every Claude-backed run, and before any verdict or receipt is written,
-`scripts/token-leak-scan.py` scans the dispatch's captured stderr, the provider
-events file, the output file and its sidecars (`.summary`, `.verdict`,
-`.verdict.pre-error`, `.recheck.md`, `.receipt.json`, `provider-events*.jsonl`)
-for the exact token value, raw and JSON-escaped. The value is read from the
-helper's own environment, never from a command line. The scan is skipped, with a
-log note that omits the value, when the token is unset or shorter than 16
-characters.
+Before any unset, dispatch captures the values of `ANTHROPIC_AUTH_TOKEN` and
+`CODEX_POOL_AUTH_TOKEN` in a shell array that is never exported and never
+printed. Every engine is then scanned after it runs (Claude, Codex pooled and
+direct, Kimi, Flere and the BB seat). `scripts/token-leak-scan.py` receives the
+values through its own environment, never a command line, and any nonempty
+value is scanned, raw and JSON-escaped. It scans the captured stderr, the
+provider events files, the prompt capture, the output file and its sidecars
+(`.summary`, `.verdict`, `.verdict.pre-error`, `.recheck.md`, `.receipt.json`),
+the failure and intercept evidence, the dispatch state and interband files, the
+external review receipt written under `CLAVAIN_REVIEW_RECEIPT_DIR` (or its
+default), and the run receipt file. Scans run before stderr is mirrored, again
+after the last artifact is written, and from the exit trap, so a signal or an
+early exit is covered. A symlinked artifact is resolved and its regular-file
+target is scanned; a symlink that cannot be scanned is reported and fails
+closed. When neither token is set, the scan is skipped with a note that omits
+any value.
 
-On a hit the run fails: nonzero exit, an error verdict and no PASS receipt.
-Every occurrence is redacted in place to `[REDACTED:anthropic-token]`. A leak
-report (bead, role, run id, files, counts, timestamp, never the value) is
-written to `<output>.token-leak.json` (a temporary file when there is no `-o`),
-and the one-line error names its path. If `CLAVAIN_TOKEN_LEAK_HOOK` names an
-executable, it is run with the report path as its only argument and without the
-token in its environment, so a host can file a rotation task; a failing hook
-only warns.
+On a hit the run fails: nonzero exit and an error verdict. Every occurrence is
+redacted in place to `[REDACTED:anthropic-token]`. A leak report (bead, role,
+run id, files, counts, unscanned files, timestamp) is written to
+`<output>.token-leak.json`, or to a temporary file when there is no `-o` or the
+path itself would carry the value. File names, paths and metadata in the
+report, the hits record, the hook argument and error text are redacted too, and
+the scanner prints one fixed message on any internal error. If
+`CLAVAIN_TOKEN_LEAK_HOOK` names an executable, it is run with the report path as
+its only argument and without `ANTHROPIC_AUTH_TOKEN`, `CODEX_POOL_AUTH_TOKEN`,
+`BB_ACCOUNT_POOL_PARENT_TOKEN` or `CLAUDE_CODE_MESSAGING_TOKEN` in its
+environment, so a host can file a rotation task; a failing hook only warns.
 
-Limits: stdout already mirrored to the terminal before the scan cannot be
-retracted, the shared `CLAVAIN_REVIEW_EVENTS` log and asynchronous zaka runs are
-not scanned, and the pooled-Codex alias `CODEX_POOL_AUTH_TOKEN` still carries
-the same bearer for a pooled Codex child.
+Remaining limits, stated plainly:
+
+- stdout already mirrored to the terminal before the scan cannot be retracted;
+- a receipt written before a later hit is found keeps its earlier status for
+  that write, although the artifact is redacted and the run exits nonzero;
+- the shared `CLAVAIN_REVIEW_EVENTS` log and the Intercore routing database
+  (`ic route record`) are not scanned;
+- zaka runs submit a session and exit, so dispatch does not scan zaka artifacts
+  at all;
+- a child that renders the token in a form other than the raw or JSON-escaped
+  string (encoded, split or truncated) is not matched.
 
 Quota classification consumes structured provider errors, never quoted task
 text. Permission, configuration, policy or unclear acceptance is terminal and

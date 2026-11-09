@@ -16,6 +16,25 @@ set -euo pipefail
 # a Claude-backed run keeps it, every other backend loses it.
 unset BB_ACCOUNT_POOL_PARENT_TOKEN CLAUDE_CODE_MESSAGING_TOKEN
 
+# mk-ouz83: the literal value of ANTHROPIC_AUTH_TOKEN, and of
+# CODEX_POOL_AUTH_TOKEN (the same bearer under its Codex alias), is remembered
+# in an unexported shell array so the post-run scan can look for it after the
+# variables are removed for a backend that must not have them. The value is
+# never printed and never placed on a command line.
+TOKEN_LEAK_TOKENS=()
+_token_leak_capture() {
+  local name value known
+  for name in ANTHROPIC_AUTH_TOKEN CODEX_POOL_AUTH_TOKEN; do
+    value="${!name-}"
+    [[ -n "$value" ]] || continue
+    for known in ${TOKEN_LEAK_TOKENS[@]+"${TOKEN_LEAK_TOKENS[@]}"}; do
+      [[ "$known" != "$value" ]] || continue 2
+    done
+    TOKEN_LEAK_TOKENS+=("$value")
+  done
+}
+_token_leak_capture
+
 # Size threshold for --inject-docs warning (bytes)
 INJECT_DOCS_WARN_THRESHOLD=20000
 
@@ -401,6 +420,156 @@ _review_scratch_verify_source() {
   return 0
 }
 
+# mk-ouz83: after a run, every artifact it could have written is scanned for
+# the literal token values captured above (any engine). The values never appear
+# on a command line (the helper reads them from its own environment), in a log
+# line, in the leak report, in a file name that is reported, or in the hook's
+# argument or environment. A hit redacts every occurrence in place and fails the
+# run; the scan runs again from the EXIT trap, after the last write the run
+# makes, and the trap also covers signals and early exits.
+# Not scanned: stdout already mirrored to the caller's terminal, the shared
+# review events log, the Intercore routing database, and zaka sessions (zaka
+# submits and exits before any artifact exists).
+TOKEN_LEAK_FOUND=false
+TOKEN_LEAK_ERROR=false
+TOKEN_LEAK_DIRTY=false
+TOKEN_LEAK_HITS=""
+TOKEN_LEAK_SKIP_NOTED=false
+
+_token_leak_enabled() {
+  _token_leak_capture
+  if (( ${#TOKEN_LEAK_TOKENS[@]} == 0 )); then
+    if [[ "${ENGINE:-}" == claude && "$TOKEN_LEAK_SKIP_NOTED" != true ]]; then
+      TOKEN_LEAK_SKIP_NOTED=true
+      echo "dispatch: token leak scan skipped (no bearer token value is set)" >&2
+    fi
+    return 1
+  fi
+  return 0
+}
+
+# Runs the helper with the values exported inside a subshell. `export` is a
+# shell builtin, so no process ever has a value in its argument list.
+_token_leak_py() {
+  (
+    local i=0 value
+    local -a envs=()
+    for value in "${TOKEN_LEAK_TOKENS[@]}"; do
+      export "CLAVAIN_LEAK_TOKEN_$i=$value"
+      envs+=(--token-env "CLAVAIN_LEAK_TOKEN_$i")
+      i=$((i + 1))
+    done
+    value=""
+    exec python3 -I "$DISPATCH_SCRIPT_DIR/token-leak-scan.py" "$1" ${envs[@]+"${envs[@]}"} "${@:2}"
+  )
+}
+
+# Redacts every captured value from a text (a path that goes in a message).
+_token_leak_safe_text() {
+  local text="$1" value
+  for value in ${TOKEN_LEAK_TOKENS[@]+"${TOKEN_LEAK_TOKENS[@]}"}; do
+    text="${text//"$value"/[REDACTED]}"
+  done
+  printf '%s' "$text"
+}
+
+# Scan (and redact) the given files; later passes add to the same hit record.
+_token_leak_scan() {
+  _token_leak_enabled || return 0
+  local rc=0
+  if [[ -z "$TOKEN_LEAK_HITS" ]]; then
+    TOKEN_LEAK_HITS="$(mktemp "${TMPDIR:-/tmp}/clavain-token-leak-hits.XXXXXX")" || {
+      TOKEN_LEAK_ERROR=true; TOKEN_LEAK_DIRTY=true; return 0; }
+  fi
+  local -a files=()
+  local f
+  for f in "$@"; do [[ -z "$f" ]] || files+=("$f"); done
+  (( ${#files[@]} > 0 )) || return 0
+  _token_leak_py scan --hits "$TOKEN_LEAK_HITS" -- "${files[@]}" || rc=$?
+  case "$rc" in
+    0) ;;
+    3) TOKEN_LEAK_FOUND=true; TOKEN_LEAK_DIRTY=true ;;
+    5) TOKEN_LEAK_FOUND=true; TOKEN_LEAK_ERROR=true; TOKEN_LEAK_DIRTY=true ;;
+    *) TOKEN_LEAK_ERROR=true; TOKEN_LEAK_DIRTY=true ;;
+  esac
+}
+
+# Everything this run writes that could carry a value (missing files are
+# skipped by the helper; unscannable symlinks fail the run).
+_token_leak_scan_all() {
+  local -a files=("${STDERR_FILE:-}" "${PROVIDER_EVENTS:-}" "${PROMPT_STDIN_FILE:-}"
+                  "${SUMMARY_FILE:-}" "${CLAVAIN_DISPATCH_FAILURE_FILE:-}"
+                  "${DISPATCH_INTERCEPT_EVIDENCE_PATH:-}" "${REVIEW_RECEIPT_PATH:-}")
+  local f
+  if [[ -n "${STATE_FILE:-}" ]]; then
+    files+=("$STATE_FILE" "${STATE_FILE}.tmp")
+  fi
+  if [[ -n "${INTERBAND_DISPATCH_FILE:-}" ]]; then
+    files+=("$INTERBAND_DISPATCH_FILE" "${INTERBAND_DISPATCH_FILE}.tmp")
+  fi
+  if [[ -n "${OUTPUT:-}" ]]; then
+    files+=("$OUTPUT" "${OUTPUT}.summary" "${OUTPUT}.verdict" "${OUTPUT}.verdict.pre-error"
+            "${OUTPUT}.recheck.md" "${OUTPUT}.receipt.json")
+    for f in "${OUTPUT}".provider-events*.jsonl; do
+      [[ -e "$f" || -L "$f" ]] && files+=("$f")
+    done
+  fi
+  if [[ "${RUN_RECEIPT_WRITTEN:-false}" == true ]]; then
+    files+=("${CLAVAIN_DISPATCH_RECEIPT_FILE:-${XDG_STATE_HOME:-${HOME:-/nonexistent}/.local/state}/clavain/dispatch-receipts.jsonl}")
+  fi
+  _token_leak_scan "${files[@]}"
+}
+
+# Returns 1 when the run must fail (a hit, or a file that could not be
+# scanned). Reports once per new finding; the failure itself is sticky.
+_token_leak_conclude() {
+  _token_leak_enabled || return 0
+  [[ "$TOKEN_LEAK_FOUND" == true || "$TOKEN_LEAK_ERROR" == true ]] || return 0
+  if [[ "$TOKEN_LEAK_DIRTY" == true ]]; then
+    TOKEN_LEAK_DIRTY=false
+    local report="" safe_report run_id hook
+    run_id="${DISPATCH_ID:-$(_dispatch_audit_id)}"
+    if [[ -n "${TOKEN_LEAK_HITS:-}" && -s "$TOKEN_LEAK_HITS" ]]; then
+      if [[ -n "${OUTPUT:-}" ]]; then
+        report="${OUTPUT}.token-leak.json"
+        safe_report="$(_token_leak_safe_text "$report")"
+        # a path that carries a value is never used as the report path
+        [[ "$safe_report" == "$report" ]] || report="${TMPDIR:-/tmp}/clavain-token-leak-$$.json"
+      else
+        report="${TMPDIR:-/tmp}/clavain-token-leak-$$.json"
+      fi
+      _token_leak_py report --hits "$TOKEN_LEAK_HITS" --report "$report" \
+        --bead "${CLAVAIN_BEAD_ID:-}" --role "${ROLE:-}" --run-id "$run_id" || {
+        echo "Error: dispatch: could not write the token leak report" >&2; report=""; }
+    fi
+    if [[ -n "${OUTPUT:-}" ]]; then
+      local detail="token leak scan could not complete"
+      [[ "$TOKEN_LEAK_FOUND" != true ]] || detail="bearer token found in run artifacts; redacted${report:+; see leak report}"
+      if type _write_error_verdict >/dev/null 2>&1; then
+        _write_error_verdict "$OUTPUT" error "$detail"
+      else
+        # Flere returns before the general verdict helpers are defined.
+        printf -- '--- VERDICT ---\nSTATUS: error\nFILES: 0 changed\nFINDINGS: unknown\nSUMMARY: %s\n---\n' \
+          "$detail" > "${OUTPUT}.verdict" 2>/dev/null || true
+      fi
+    fi
+    hook="${CLAVAIN_TOKEN_LEAK_HOOK:-}"
+    if [[ "$TOKEN_LEAK_FOUND" == true && -n "$hook" && -x "$hook" && -n "$report" && -f "$report" ]]; then
+      # The hook never inherits a bearer token, under any of its names.
+      env -u ANTHROPIC_AUTH_TOKEN -u CODEX_POOL_AUTH_TOKEN \
+          -u BB_ACCOUNT_POOL_PARENT_TOKEN -u CLAUDE_CODE_MESSAGING_TOKEN \
+          "$hook" "$report" < /dev/null >&2 || \
+        echo "Warning: dispatch: CLAVAIN_TOKEN_LEAK_HOOK exited non-zero" >&2
+    fi
+    if [[ "$TOKEN_LEAK_FOUND" == true ]]; then
+      echo "Error: dispatch: bearer token found in run artifacts; files redacted in place, run failed${report:+; leak report: $report}" >&2
+    else
+      echo "Error: dispatch: token leak scan could not complete; treating the run as failed" >&2
+    fi
+  fi
+  return 1
+}
+
 _dispatch_cleanup_state() {
   local _rc=$?
   if [[ "${REVIEW_SCRATCH:-false}" == true && -n "${REVIEW_SCRATCH_SRC_HEAD:-}" ]]; then
@@ -408,6 +577,10 @@ _dispatch_cleanup_state() {
       [[ "$_rc" != 0 ]] || _rc=1
     fi
   fi
+  # mk-ouz83: scan before any receipt is written, so a leak fails the status
+  # the receipts record. This also covers signals and early exits.
+  _token_leak_scan_all
+  _token_leak_conclude || [[ "$_rc" != 0 ]] || _rc=1
   # Review receipt (mk-zek32): only the resolved child that ran the review
   # writes it. A requested receipt that cannot be written fails the run, so a
   # caller never mistakes "no file" for a clean review.
@@ -434,6 +607,12 @@ _dispatch_cleanup_state() {
     [[ -z "$_line" ]] || _append_dispatch_run_receipt "$_line" 2>/dev/null || true
     [[ -z "$_sig_rc" ]] || _rc="$_sig_rc"
   fi
+  # mk-ouz83: the receipts above were written after the scan; scan them (and
+  # anything else written since) once more. A hit is redacted and fails the run
+  # even though a receipt already on record cannot be reissued.
+  _token_leak_scan_all
+  _token_leak_conclude || [[ "$_rc" != 0 ]] || _rc=1
+  [[ -z "$TOKEN_LEAK_HITS" ]] || rm -f "$TOKEN_LEAK_HITS" 2>/dev/null || true
   # The EXIT trap exits with this, so the status matches the committed receipt.
   DISPATCH_FINAL_RC="$_rc"
   rm -f "$STATE_FILE" "${STATE_FILE}.tmp" 2>/dev/null || true
@@ -841,7 +1020,7 @@ _run_candidate_with_policy() {
 _codex_version_at_least() {
   local required="$1" current
   command -v codex >/dev/null 2>&1 || return 1
-  current="$(codex --version 2>/dev/null | sed -nE 's/.*[^0-9]([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | tail -1)"
+  current="$(env -u ANTHROPIC_AUTH_TOKEN codex --version 2>/dev/null | sed -nE 's/.*[^0-9]([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | tail -1)"
   [[ -n "$current" ]] || return 1
   awk -F. -v current="$current" -v required="$required" 'BEGIN {
     split(current, c, "."); split(required, r, ".");
@@ -2431,7 +2610,8 @@ if [[ "$VIA" == "zaka" ]]; then
   fi
 
   # mk-ouz83: only a Claude-backed agent keeps the pooled Anthropic token.
-  [[ "$ZAKA_AGENT" == claude-code ]] || unset ANTHROPIC_AUTH_TOKEN
+  # Zaka submits and exits: dispatch scans no zaka artifact.
+  case "$ZAKA_AGENT" in claude|claude-code) ;; *) unset ANTHROPIC_AUTH_TOKEN ;; esac
 
   # Dry run: print the zaka commands and exit (preflight skipped, like the
   # codex/kimi dry-run paths which don't require the backend binary either)
@@ -2604,11 +2784,23 @@ fi
 # The fixed worker supervises its own RPC lifecycle and writes its terminal
 # receipt last. Codex text/idle heuristics cannot establish Flere completion.
 if [[ "$ENGINE" == "flere" ]]; then
+  _token_leak_capture
   unset ANTHROPIC_AUTH_TOKEN  # mk-ouz83: non-Claude backend
   FLERE_ARGS=(--executable "$CLAVAIN_FLERE_BIN" --profile "$CLAVAIN_FLERE_PROFILE" --model "$MODEL" --project "${WORKDIR:-$PWD}" --output "$OUTPUT" --timeout "$FLERE_TIMEOUT")
   [[ -z "${CLAVAIN_FLERE_ENTRYPOINT:-}" ]] || FLERE_ARGS+=(--entrypoint "$CLAVAIN_FLERE_ENTRYPOINT")
   [[ "$DRY_RUN" != true ]] || FLERE_ARGS+=(--dry-run)
-  exec python3 "${DISPATCH_SCRIPT_DIR}/flere-worker.py" "${FLERE_ARGS[@]}" <<< "$PROMPT"
+  # mk-ouz83: not exec'd, so the artifacts the worker wrote can be scanned.
+  # The worker writes its terminal receipt last; scan every sidecar after it
+  # and fail the run on a hit. INT and TERM reach the worker through the
+  # process group; this shell then scans and exits with the signal status.
+  FLERE_RC=0
+  python3 "${DISPATCH_SCRIPT_DIR}/flere-worker.py" "${FLERE_ARGS[@]}" <<< "$PROMPT" || FLERE_RC=$?
+  if [[ "$DRY_RUN" != true ]]; then
+    _token_leak_scan_all
+    _token_leak_conclude || [[ "$FLERE_RC" != 0 ]] || FLERE_RC=1
+    [[ -z "$TOKEN_LEAK_HITS" ]] || rm -f "$TOKEN_LEAK_HITS" 2>/dev/null || true
+  fi
+  exit "$FLERE_RC"
 fi
 
 # Build backend command
@@ -2703,7 +2895,7 @@ elif [[ "$ENGINE" == "claude" ]]; then
       _dispatch_write_failure_class terminal_configuration
       exit 1
     fi
-    if _bb_claude_pooled; then unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL; fi
+    if _bb_claude_pooled; then _token_leak_capture; unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL; fi
   fi
   # Claude headless one-shot: claude -p "<prompt>". Added for the review
   # seat in orchestrated delegation (goal 7d610151): an independent
@@ -2817,7 +3009,7 @@ else
       _dispatch_write_failure_class terminal_configuration
       exit 1
     fi
-    if _bb_codex_pooled; then unset CODEX_POOL_AUTH_TOKEN CODEX_OPENAI_BASE_URL; fi
+    if _bb_codex_pooled; then _token_leak_capture; unset CODEX_POOL_AUTH_TOKEN CODEX_OPENAI_BASE_URL; fi
   fi
   if ! git -C "${WORKDIR:-.}" rev-parse --git-dir >/dev/null 2>&1; then
     if [[ "$SANDBOX" == read-only ]]; then
@@ -2999,6 +3191,7 @@ fi
 # mk-ouz83: the pooled Anthropic token stays in the child environment only for
 # a Claude-backed run (which is then leak-scanned after it finishes). Codex has
 # already copied it into its own pool variable above where it needs to.
+_token_leak_capture
 [[ "$ENGINE" == "claude" ]] || unset ANTHROPIC_AUTH_TOKEN
 
 # Backend preflight: fail fast with a clear message when the CLI is missing
@@ -3843,96 +4036,6 @@ SUMMARY: $detail
 VERDICT
 }
 
-# mk-ouz83: a Claude-backed run keeps ANTHROPIC_AUTH_TOKEN, so after the run
-# every artifact it could have written is scanned for the exact token value.
-# The value never appears on a command line (the helper reads it from its own
-# environment), in a log line or in the leak report. A hit redacts every
-# occurrence in place, fails the run before any verdict or receipt can pass,
-# writes a report next to the output and runs the optional host hook.
-TOKEN_LEAK_FOUND=false
-TOKEN_LEAK_ERROR=false
-TOKEN_LEAK_HITS=""
-TOKEN_LEAK_SKIP_NOTED=false
-
-_token_leak_active() {
-  [[ "$ENGINE" == claude ]] || return 1
-  local token_copy="${ANTHROPIC_AUTH_TOKEN:-}" token_len
-  token_len="${#token_copy}"
-  token_copy=""
-  if (( token_len < 16 )); then
-    if [[ "$TOKEN_LEAK_SKIP_NOTED" != true ]]; then
-      TOKEN_LEAK_SKIP_NOTED=true
-      echo "dispatch: token leak scan skipped (ANTHROPIC_AUTH_TOKEN unset or shorter than 16 characters)" >&2
-    fi
-    return 1
-  fi
-  return 0
-}
-
-# Scan (and redact) the given files; later passes add to the same hit record.
-_token_leak_scan() {
-  _token_leak_active || return 0
-  local rc=0
-  if [[ -z "$TOKEN_LEAK_HITS" ]]; then
-    TOKEN_LEAK_HITS="$(mktemp "${TMPDIR:-/tmp}/clavain-token-leak-hits.XXXXXX")"
-  fi
-  python3 "$DISPATCH_SCRIPT_DIR/token-leak-scan.py" scan --hits "$TOKEN_LEAK_HITS" -- "$@" || rc=$?
-  case "$rc" in
-    0) ;;
-    3) TOKEN_LEAK_FOUND=true ;;
-    *) TOKEN_LEAK_ERROR=true ;;
-  esac
-}
-
-# Everything this run wrote that could carry the value.
-_token_leak_scan_all() {
-  local -a files=("$STDERR_FILE" "$PROVIDER_EVENTS")
-  local f
-  if [[ -n "$OUTPUT" ]]; then
-    files+=("$OUTPUT" "${OUTPUT}.summary" "${OUTPUT}.verdict" "${OUTPUT}.verdict.pre-error"
-            "${OUTPUT}.recheck.md" "${OUTPUT}.receipt.json")
-    for f in "${OUTPUT}".provider-events*.jsonl; do
-      [[ -e "$f" ]] && files+=("$f")
-    done
-  fi
-  _token_leak_scan "${files[@]}"
-}
-
-# Returns 1 when the run must fail. Call after the last artifact is written and
-# before the routing, run or review receipt is finalized.
-_token_leak_conclude() {
-  local report run_id hook
-  if [[ "$TOKEN_LEAK_ERROR" == true ]]; then
-    [[ -z "$OUTPUT" ]] || _write_error_verdict "$OUTPUT" error "token leak scan could not complete"
-    echo "Error: dispatch: token leak scan failed to run; treating the run as failed" >&2
-    [[ -z "$TOKEN_LEAK_HITS" ]] || rm -f "$TOKEN_LEAK_HITS"
-    return 1
-  fi
-  if [[ "$TOKEN_LEAK_FOUND" != true ]]; then
-    [[ -z "$TOKEN_LEAK_HITS" ]] || rm -f "$TOKEN_LEAK_HITS"
-    return 0
-  fi
-  run_id="${DISPATCH_ID:-$(_dispatch_audit_id)}"
-  if [[ -n "$OUTPUT" ]]; then
-    report="${OUTPUT}.token-leak.json"
-  else
-    report="${TMPDIR:-/tmp}/clavain-token-leak-$$.json"
-  fi
-  python3 "$DISPATCH_SCRIPT_DIR/token-leak-scan.py" report --hits "$TOKEN_LEAK_HITS" --report "$report" \
-    --bead "${CLAVAIN_BEAD_ID:-}" --role "${ROLE:-}" --run-id "$run_id" || \
-    echo "Error: dispatch: could not write the token leak report" >&2
-  rm -f "$TOKEN_LEAK_HITS"
-  [[ -z "$OUTPUT" ]] || _write_error_verdict "$OUTPUT" error "Anthropic token found in run artifacts; redacted; see ${report}"
-  hook="${CLAVAIN_TOKEN_LEAK_HOOK:-}"
-  if [[ -n "$hook" && -x "$hook" && -f "$report" ]]; then
-    # The hook never inherits the token it is reporting on.
-    env -u ANTHROPIC_AUTH_TOKEN "$hook" "$report" < /dev/null >&2 || \
-      echo "Warning: dispatch: CLAVAIN_TOKEN_LEAK_HOOK exited non-zero" >&2
-  fi
-  echo "Error: dispatch: Anthropic token found in run output; files redacted in place, run failed; leak report: $report" >&2
-  return 1
-}
-
 # Cleanup: register stderr capture file with existing trap.
 STDERR_FILE="${STATE_FILE}.stderr"
 PROVIDER_EVENTS="${OUTPUT:+${OUTPUT}.}provider-events.$(_dispatch_audit_id).jsonl"
@@ -3982,6 +4085,7 @@ _persist_dispatch_failure_evidence() {
     --stderr "$STDERR_FILE" --write-evidence "$evidence_path"
     --receipt-path "$relative_path" --failure-class "$failure_class"
     --dispatch-id "${DISPATCH_ID:-$evidence_id}" --attempt-id "${ATTEMPT_ID:-$evidence_id}")
+  DISPATCH_INTERCEPT_EVIDENCE_PATH="$evidence_path"  # mk-ouz83: scanned for token values
   reference="$("${evidence_cmd[@]}")" || return 1
   jq -e 'type == "object" and (.path | type == "string") and (.sha256 | test("^[0-9a-f]{64}$"))' \
     <<< "$reference" >/dev/null || return 1
@@ -4503,14 +4607,14 @@ if [[ "$VIA" == bb ]]; then
   trap '_dispatch_on_signal 130' INT
   trap '_dispatch_on_signal 143' TERM
   set -e
-  _token_leak_scan "$STDERR_FILE" "$PROVIDER_EVENTS" "$OUTPUT"  # mk-ouz83
+  _token_leak_scan_all  # mk-ouz83: before stderr is mirrored
   _emit_provider_stderr "$STDERR_FILE"
   _extract_verdict "$OUTPUT"
   [[ "$BB_EXIT" == 0 ]] || _write_error_verdict "$OUTPUT" error 'BB execution evidence incomplete; inspect seat receipt'
   _post_dispatch_validate "$WORKDIR"
   _dispatch_sync_interband_from_legacy
   _token_leak_scan_all
-  if ! _token_leak_conclude; then BB_EXIT=1; fi
+  if ! _token_leak_conclude; then [[ "$BB_EXIT" != 0 ]] || BB_EXIT=1; fi
   if ! _finalize_dispatch_result "$BB_EXIT"; then BB_EXIT=1; fi
   exit "$BB_EXIT"
 elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
@@ -4549,7 +4653,7 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   KIMI_EXIT="${PIPESTATUS[0]}"
   # mk-ouz83: redact the token from stderr, events and output before any of
   # it is mirrored or turned into a verdict.
-  _token_leak_scan "$STDERR_FILE" "$PROVIDER_EVENTS" ${OUTPUT:+"$OUTPUT"}
+  _token_leak_scan_all
   _emit_provider_stderr "$STDERR_FILE"
   [[ -n "${PROMPT_STDIN_FILE:-}" ]] && rm -f "$PROMPT_STDIN_FILE"
   set -e
@@ -4597,7 +4701,7 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   # mk-ouz83: final token scan over every sidecar, before any receipt.
   _token_leak_scan_all
   if ! _token_leak_conclude; then
-    KIMI_EXIT=1
+    [[ "$KIMI_EXIT" != 0 ]] || KIMI_EXIT=1
   fi
 
   if ! _finalize_dispatch_result "$KIMI_EXIT"; then
@@ -4620,6 +4724,7 @@ elif [[ "$HAS_GAWK" == true ]]; then
     "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
     CODEX_EXIT="${PIPESTATUS[0]}"
   fi
+  _token_leak_scan_all  # mk-ouz83: before stderr is mirrored
   _emit_provider_stderr "$STDERR_FILE"
   set -e
 
@@ -4640,6 +4745,10 @@ elif [[ "$HAS_GAWK" == true ]]; then
 
   # Keep structured sideband in sync even when parser wrote only legacy state.
   _dispatch_sync_interband_from_legacy
+
+  # mk-ouz83: final scan before the routing receipt is recorded.
+  _token_leak_scan_all
+  if ! _token_leak_conclude; then [[ "$CODEX_EXIT" != 0 ]] || CODEX_EXIT=1; fi
 
   if ! _finalize_dispatch_result "$CODEX_EXIT"; then
     CODEX_EXIT=1
@@ -4664,6 +4773,7 @@ else
     "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS"
     CODEX_EXIT="${PIPESTATUS[0]}"
   fi
+  _token_leak_scan_all  # mk-ouz83: before stderr is mirrored
   _emit_provider_stderr "$STDERR_FILE"
   set -e
 
@@ -4675,6 +4785,10 @@ else
 
   # Post-dispatch validation: scope check + secret scan
   _post_dispatch_validate "$WORKDIR"
+
+  # mk-ouz83: final scan before the routing receipt is recorded.
+  _token_leak_scan_all
+  if ! _token_leak_conclude; then [[ "$CODEX_EXIT" != 0 ]] || CODEX_EXIT=1; fi
 
   if ! _finalize_dispatch_result "$CODEX_EXIT"; then
     CODEX_EXIT=1
