@@ -152,6 +152,37 @@ the child drops that stale route and uses its own provider login.
   stops with `terminal_configuration` instead of trying an unrelated login.
 - Raw provider captures are tracked separately.
 
+**Bearer tokens in the child environment, and the post-run leak scan.**
+`scripts/dispatch.sh` unsets `BB_ACCOUNT_POOL_PARENT_TOKEN` and
+`CLAUDE_CODE_MESSAGING_TOKEN` at startup, so no child of any backend sees
+either. `ANTHROPIC_AUTH_TOKEN` is kept only for a Claude-backed dispatch (and a
+zaka `claude-code` agent); every other backend (codex, kimi, flere, other zaka
+agents) has it unset in its own child, after the pooled-Codex alias has been
+built. A declined or unavailable pool route still drops it as before.
+
+After every Claude-backed run, and before any verdict or receipt is written,
+`scripts/token-leak-scan.py` scans the dispatch's captured stderr, the provider
+events file, the output file and its sidecars (`.summary`, `.verdict`,
+`.verdict.pre-error`, `.recheck.md`, `.receipt.json`, `provider-events*.jsonl`)
+for the exact token value, raw and JSON-escaped. The value is read from the
+helper's own environment, never from a command line. The scan is skipped, with a
+log note that omits the value, when the token is unset or shorter than 16
+characters.
+
+On a hit the run fails: nonzero exit, an error verdict and no PASS receipt.
+Every occurrence is redacted in place to `[REDACTED:anthropic-token]`. A leak
+report (bead, role, run id, files, counts, timestamp, never the value) is
+written to `<output>.token-leak.json` (a temporary file when there is no `-o`),
+and the one-line error names its path. If `CLAVAIN_TOKEN_LEAK_HOOK` names an
+executable, it is run with the report path as its only argument and without the
+token in its environment, so a host can file a rotation task; a failing hook
+only warns.
+
+Limits: stdout already mirrored to the terminal before the scan cannot be
+retracted, the shared `CLAVAIN_REVIEW_EVENTS` log and asynchronous zaka runs are
+not scanned, and the pooled-Codex alias `CODEX_POOL_AUTH_TOKEN` still carries
+the same bearer for a pooled Codex child.
+
 Quota classification consumes structured provider errors, never quoted task
 text. Permission, configuration, policy or unclear acceptance is terminal and
 dominates earlier quota evidence. One retry group spans the account/model axes;
