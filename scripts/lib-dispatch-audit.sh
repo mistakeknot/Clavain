@@ -291,35 +291,26 @@ _record_role_routing_decision() {
   fi
   local ic_err ic_excerpt
   if ! ic_err="$( (cd "$audit_workdir" && "${record_cmd[@]}") 2>&1 >/dev/null )"; then
-    ic_excerpt="$(_ic_stderr_excerpt "$ic_err")"
+    ic_excerpt="$(_ic_stderr_reason "$ic_err")"
     echo "Error: cannot persist $state routing decision for '$ROLE/$RESOLVED_PROFILE_REF'${ic_excerpt:+: ic: $ic_excerpt}" >&2
     return 1
   fi
 }
 
-# Single-line, bounded excerpt of ic's stderr for the terminal_recording
-# message, so the reason a decision was not recorded (for example no database
-# from a temporary workdir) is visible. ic stderr should hold no secrets, but it
-# goes through the dispatch provider-text redactor (an allowlist that keeps
-# diagnostic words and replaces other words, paths and credentials) before it
-# is shown; if that redactor is unavailable the excerpt is a placeholder.
-_ic_stderr_excerpt() {
-  local raw="$1" line
-  [[ -n "$raw" ]] || return 0
-  # Redact whole lines first: the input is bounded only by a line count, never
-  # by a byte cut that could split a token, and the 200-character cap comes
-  # after redaction.
-  if declare -F _redact_provider_text >/dev/null 2>&1; then
-    line="$(printf '%s\n' "$raw" | head -n 200 | _redact_provider_text)"
+# Fixed-vocabulary classification of ic's captured stderr for the recording
+# message. The result is exactly one of three constant strings; no byte of ic's
+# stderr is ever returned or printed, so nothing in it can reach the message.
+# The captured text is only matched (case-insensitively, quietly) from a
+# here-string, with no pipeline.
+_ic_stderr_reason() {
+  local raw="$1"
+  if grep -qiE 'unable to open|cannot open|could not open|failed to open' <<<"$raw" 2>/dev/null; then
+    printf '%s' 'database could not be opened'
+  elif grep -qiE 'database is locked|database is busy|sqlite_busy' <<<"$raw" 2>/dev/null; then
+    printf '%s' 'database locked'
   else
-    line='<redacted>'
+    printf '%s' 'ic failed; stderr withheld'
   fi
-  # The redactor keeps bare 40- and 64-character hex as possible SHAs, so for
-  # this excerpt only, replace any run of 20 or more token-like characters
-  # (hex, base64, JWT-like) with a fixed marker. Ordinary words stay.
-  line="$(printf '%s' "$line" | LC_ALL=C sed -E 's#[A-Za-z0-9_+/=.-]{20,}#<redacted>#g')"
-  line="$(printf '%s' "$line" | tr '\r\n\t' '   ' | tr -d '\000-\037' | tr -s ' ' | head -c 200)"
-  printf '%s' "$line"
 }
 
 # Per-run attribution receipt: one JSON object per line appended to a single
