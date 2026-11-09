@@ -25,6 +25,8 @@ OUTPUT=""
 MODEL=""
 TIER=""
 ROLE=""
+# Informational receipt field; set only by the Codex branch, never inherited.
+REVIEW_CODEX_TMPDIR=""
 ROLE_RESOLVED=false
 DISPATCH_RESULT_READY=false
 RESOLVED_PROFILE_REF=""

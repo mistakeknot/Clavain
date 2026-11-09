@@ -209,6 +209,24 @@ scratch_dirs() { find "$T/scratchroot" -maxdepth 1 -name 'clavain-review-scratch
     [ -z "$(scratch_dirs)" ]
 }
 
+@test "a non-codex receipt has no temp_root even when REVIEW_CODEX_TMPDIR is exported" {
+    cat > "$T/bin/claude" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '{"type":"assistant","message":{"content":[{"type":"text","text":"Findings: none\\n\\nVERDICT: PASS"}]}}\n{"type":"result","result":"Findings: none\\n\\nVERDICT: PASS"}\n'
+SH
+    chmod +x "$T/bin/claude"
+    local claude_route
+    claude_route="$(jq -n --arg h "$POLICY_HASH" \
+        '{policy_hash:$h, profile_ref:"primary", profile:{backend:"claude",model:"gpt-6-astra",model_identity:"gpt-6.1-sol"}}')"
+    REVIEW_CODEX_TMPDIR=/dev/shm PATH="$T/bin:$PATH" run bash "$DISPATCH" --role-resolved --role cross-lab-review \
+        --to claude --model gpt-6-astra --resolved-route-json "$claude_route" \
+        --producer-identity claude-sonnet-5-5 "${RECEIPT_FLAGS[@]}" -C "$R" --prompt-file "$T/prompt.md" -o "$OUT"
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ -f "$f" ]
+    [ "$(jq 'has("temp_root") and .temp_root != null' "$f")" = false ]
+}
+
 @test "a read-only receipt carries no scratch fields" {
     fake_codex_plain
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --role-resolved --role cross-lab-review \
