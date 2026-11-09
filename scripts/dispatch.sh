@@ -4296,6 +4296,22 @@ _emit_provider_stderr() {
     printf '\n' >&2
 }
 
+# mk-bi91j: claude -p exits 1 for every failure, so its own stderr is the only
+# place an authentication failure shows. claude prints its error and exits, so
+# only the last non-empty line of the capture is checked, and only claude- and
+# API-specific shapes (invalid api key, please run /login, oauth token has
+# expired|been revoked, api error: 401 with or without claude's own
+# "Failed to authenticate." prefix, authentication_error). Used for the
+# claude engine only.
+_claude_auth_failure() {
+    local f="${1:-}" last
+    [[ -n "$f" && -s "$f" ]] || return 1
+    last="$(grep -v '^[[:space:]]*$' "$f" 2>/dev/null | tail -n 1)" || return 1
+    [[ -n "$last" ]] || return 1
+    # Line-anchored, optionally behind an "Error:" or "API Error:" prefix.
+    printf '%s\n' "$last" | grep -qiE '^[[:space:]]*((api )?error:?[[:space:]]*)?(invalid api key|please run /login|oauth token has (expired|been revoked)|authentication_error)|^[[:space:]]*(failed to authenticate\.?[[:space:]]*)?api error:?[[:space:]]*401'
+}
+
 _provider_error_text() {
     local events_file="${1:-}" raw="${2:-}"
     [[ -n "$events_file" && -s "$events_file" ]] || return 1
@@ -4951,6 +4967,17 @@ _finalize_dispatch_result() {
   elif [[ -z "$failure_class" ]]; then
     failure_class="$(_classify_dispatch_failure "$STDERR_FILE" "$exit_code")"
   fi
+  # mk-bi91j: a claude authentication failure is an operational access failure
+  # (the same class a Codex account-access refusal gets), so the declared
+  # fallback or the auth diagnostic applies instead of the terminal stop. Only
+  # the two generic terminal classes are reclassified; a policy denial, a
+  # capacity class and an accounting failure keep theirs.
+  if [[ "$exit_code" != 0 && "${ENGINE:-}" == claude ]]; then
+    case "$failure_class" in
+      terminal_error|terminal_configuration)
+        if _claude_auth_failure "$STDERR_FILE"; then failure_class=account_access_absent; fi ;;
+    esac
+  fi
   if [[ "$exit_code" == "0" ]]; then
     : > "${CLAVAIN_DISPATCH_FAILURE_FILE:-/dev/null}" 2>/dev/null || true
   else
@@ -5162,8 +5189,12 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   # (HTTP status lines, zero-turn state) don't apply to kimi -p / claude -p,
   # which exit non-zero on failure.
   if [[ "$KIMI_EXIT" != "0" && -n "$OUTPUT" && -z "$SEAT_MUTATED" && -z "$SEAT_NO_RULING" ]]; then
-    _write_error_verdict "$OUTPUT" "error" "$ENGINE -p exited $KIMI_EXIT (see stderr above)"
-    echo "Warning: dispatch surfaced $ENGINE error — verdict overridden: $ENGINE -p exited $KIMI_EXIT" >&2
+    _auth_note=""
+    if [[ "$ENGINE" == claude ]] && _claude_auth_failure "$STDERR_FILE"; then
+      _auth_note="; claude reported an authentication failure"
+    fi
+    _write_error_verdict "$OUTPUT" "error" "$ENGINE -p exited $KIMI_EXIT$_auth_note (see stderr above)"
+    echo "Warning: dispatch surfaced $ENGINE error — verdict overridden: $ENGINE -p exited $KIMI_EXIT$_auth_note" >&2
   fi
 
   # Post-dispatch validation: scope check + secret scan
