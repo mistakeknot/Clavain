@@ -153,12 +153,16 @@ the child drops that stale route and uses its own provider login.
 - Raw provider captures are tracked separately.
 
 **Bearer tokens in the child environment, and the post-run leak scan.**
+Scope: this covers the main engine launches and the artifacts listed below. It
+is not a guarantee that no child or file ever sees a token; the known limits
+at the end of this section say where it stops.
 `scripts/dispatch.sh` unsets `BB_ACCOUNT_POOL_PARENT_TOKEN` and
 `CLAUDE_CODE_MESSAGING_TOKEN` at startup, so no child of any backend sees
 either. `ANTHROPIC_AUTH_TOKEN` is kept for a Claude-backed dispatch and for a
 zaka agent named `claude` or `claude-code`; every other backend (codex, kimi,
 flere, other zaka agents) has it unset in its own child, after the pooled-Codex
-alias has been built. The `codex --version` preflight runs without it. A pooled
+alias has been built. The `codex --version` preflight runs without it; the
+`codex sandbox` preflight does not (see the known limits below). A pooled
 Codex child still receives `CODEX_POOL_AUTH_TOKEN`, which carries the same
 bearer. A declined or unavailable pool route still drops it as before.
 
@@ -228,10 +232,18 @@ Remaining limits, stated plainly:
   (`ic route record`) are not scanned;
 - zaka runs submit a session and exit, so dispatch does not scan zaka artifacts
   at all;
-- paths not named above are not scanned;
-- helper children that run before the token is removed, such as the `sed` and
-  `tail` beside `codex --version`, inherit `ANTHROPIC_AUTH_TOKEN`; only the
-  provider launch paths are scoped;
+- paths not named above are not scanned. Two files a run writes are known to
+  be missed: the kimi seat's final-message capture (`KIMI_FINAL_FILE`, removed
+  before the closing scan) and the routing and headroom evidence files written
+  while a fallback is forecast. Follow-up: bead mk-47vtm.3;
+- the `codex sandbox` preflight runs before `ANTHROPIC_AUTH_TOKEN` is removed,
+  so that child inherits the token. Helper children that run before the
+  removal, such as the `sed` and `tail` beside `codex --version`, inherit it
+  too. Follow-up for the preflight: bead mk-47vtm.2;
+- the scanner's own fixed error messages are printed without being checked
+  against the token values, so a token that equals a word in one of those
+  messages would be echoed on an internal error. Only a token that is an
+  ordinary English word can trigger this. Follow-up: bead mk-47vtm.4;
 - a child that renders the token in a form other than the raw or JSON-escaped
   string (encoded, split or truncated) is not matched, and a fragment of one
   value that overlaps a different value is not matched separately;
