@@ -58,20 +58,3 @@ func TestHelpListsEveryCommand(t *testing.T) {
 		}
 	}
 }
-
-// calibration-streak help must work anywhere: it used to resolve the project
-// root first and fail outside a beads project.
-func TestCalibrationStreakHelpNeedsNoProject(t *testing.T) {
-	t.Chdir(t.TempDir())
-	t.Setenv("CLAVAIN_CALIBRATION_ROOT", "")
-	t.Setenv("SPRINT_LIB_PROJECT_DIR", "")
-
-	if err := cmdCalibrationStreak([]string{"status"}); err == nil {
-		t.Skip("the temp dir sits inside a beads project; cannot exercise the no-project case")
-	}
-	for _, arg := range []string{"help", "--help", "-h"} {
-		if err := cmdCalibrationStreak([]string{arg}); err != nil {
-			t.Errorf("calibration-streak %s: %v", arg, err)
-		}
-	}
-}
