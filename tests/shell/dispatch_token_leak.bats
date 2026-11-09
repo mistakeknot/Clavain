@@ -296,6 +296,86 @@ W
     [ -f "$T/out.md.token-leak.json" ]
 }
 
+flere_setup() {
+    mock_scripts
+    mkdir -p "$T/project" "$T/profile"
+    printf '{}\n' > "$T/profile/models.json"
+    export CLAVAIN_FLERE_BIN=/usr/bin/true CLAVAIN_FLERE_PROFILE="$T/profile"
+    export IC_DISPATCH_ID=d IC_RUN_ID=r IC_PROMPT_HASH=h LEAKVAL="$DUMMY"
+}
+
+# a stub worker that writes the dummy value only under <output>.attempt
+flere_attempt_worker() {
+    cat > "$T/mock/scripts/flere-worker.py" <<'W'
+import os, sys, time
+out = sys.argv[sys.argv.index("--output") + 1]
+att = out + ".attempt"
+os.makedirs(att + "/session/nested")
+open(att + "/prompt.txt", "w").write("prompt\n")
+open(att + "/rpc.jsonl", "w").write("event " + os.environ["LEAKVAL"] + "\n")
+open(att + "/session/nested/s.jsonl", "w").write("deep " + os.environ["LEAKVAL"] + "\n")
+open(out, "w").write("clean worker output\n")
+if os.environ.get("SLOW"):
+    open(os.environ["SLOW"], "w").close()
+    time.sleep(3)
+W
+}
+
+@test "flere: a value written only under the attempt directory fails the run and is redacted" {
+    flere_setup
+    flere_attempt_worker
+    run bash "$MOCK_DISPATCH" --to flere -C "$T/project" -o "$T/out.md" -m provider/model "inspect"
+    [ "$status" -ne 0 ]
+    ! grep -rqF "$DUMMY" "$T/out.md.attempt"
+    grep -qF '[REDACTED:anthropic-token]' "$T/out.md.attempt/rpc.jsonl"
+    grep -qF '[REDACTED:anthropic-token]' "$T/out.md.attempt/session/nested/s.jsonl"
+    ! grep -qF "$DUMMY" "$T/out.md.token-leak.json"
+    jq -e '.files | length == 2' "$T/out.md.token-leak.json" >/dev/null
+}
+
+@test "flere: a clean attempt directory passes" {
+    flere_setup
+    flere_attempt_worker
+    export LEAKVAL=clean-value-not-the-token
+    run bash "$MOCK_DISPATCH" --to flere -C "$T/project" -o "$T/out.md" -m provider/model "inspect"
+    [ "$status" -eq 0 ]
+    [ ! -e "$T/out.md.token-leak.json" ]
+}
+
+@test "flere: a signal still scans the output and the attempt directory from the exit trap" {
+    flere_setup
+    flere_attempt_worker
+    export SLOW="$T/slow.flag"
+    exec_flere() {
+        exec bash "$MOCK_DISPATCH" --to flere -C "$T/project" -o "$T/out.md" -m provider/model "inspect"
+    }
+    exec_flere > "$T/run.out" 2>&1 &
+    pid=$!
+    for _ in $(seq 1 100); do [ -e "$T/slow.flag" ] && break; sleep 0.1; done
+    [ -e "$T/slow.flag" ]
+    kill -TERM "$pid"
+    rc=0
+    wait "$pid" || rc=$?
+    [ "$rc" -ne 0 ]
+    ! grep -rqF "$DUMMY" "$T/out.md.attempt"
+    grep -qF '[REDACTED:anthropic-token]' "$T/out.md.attempt/rpc.jsonl"
+    pkill -f "$T/mock/scripts/flere-worker.py" || true
+}
+
+@test "flere: a symlink under the attempt directory pointing outside the roots is not followed" {
+    flere_setup
+    flere_attempt_worker
+    OUTSIDE_DIR="$(mktemp -d)"
+    printf 'outside %s\n' "$DUMMY" > "$OUTSIDE_DIR/other.txt"
+    cat >> "$T/mock/scripts/flere-worker.py" <<'W'
+os.symlink(os.environ["OUTSIDE"], att + "/link.txt")
+W
+    OUTSIDE="$OUTSIDE_DIR/other.txt" run bash "$MOCK_DISPATCH" --to flere -C "$T/project" -o "$T/out.md" -m provider/model "inspect"
+    [ "$status" -ne 0 ]
+    grep -qF "$DUMMY" "$OUTSIDE_DIR/other.txt"
+    rm -rf "$OUTSIDE_DIR"
+}
+
 @test "bb seat: the output and its receipt are scanned and a hit fails the run" {
     mock_scripts
     printf 'import sys\nsys.exit(0)\n' > "$T/mock/scripts/bb-host.py"
@@ -386,6 +466,38 @@ review_setup() {
     [[ "$output" == *"could not scan"* ]]
     jq -e '.unscanned | length == 1' "$T/out.md.token-leak.json" >/dev/null
     ! grep -qF "$DUMMY" "$T/out.md.token-leak.json"
+}
+
+@test "a symlinked artifact pointing outside the run roots is not opened or modified, and fails the run" {
+    OUTSIDE_DIR="$(mktemp -d)"
+    printf 'outside %s\n' "$DUMMY" > "$OUTSIDE_DIR/other.txt"
+    before="$(sha256sum "$OUTSIDE_DIR/other.txt")"
+    ln -s "$OUTSIDE_DIR/other.txt" "$T/out.md.provider-events.zz.jsonl"
+    run governed
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"could not scan"* ]]
+    [ "$(sha256sum "$OUTSIDE_DIR/other.txt")" = "$before" ]
+    rm -rf "$OUTSIDE_DIR"
+    jq -e '.unscanned | length == 1' "$T/out.md.token-leak.json" >/dev/null
+    ! grep -qF "$DUMMY" "$T/out.md.token-leak.json"
+}
+
+@test "scanner: a symlink is followed only into a given root" {
+    export ANTHROPIC_AUTH_TOKEN=abc12
+    mkdir "$T/in" "$T/out"
+    printf 'x abc12 y\n' > "$T/in/real.txt"
+    printf 'x abc12 y\n' > "$T/out/other.txt"
+    ln -s "$T/in/real.txt" "$T/in/ok-link"
+    ln -s "$T/out/other.txt" "$T/in/bad-link"
+    run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/hits" --root "$T/in" "$T/in/bad-link"
+    [ "$status" -eq 4 ]
+    grep -q abc12 "$T/out/other.txt"
+    run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/hits" "$T/in/ok-link"
+    [ "$status" -eq 4 ]
+    grep -q abc12 "$T/in/real.txt"
+    run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/hits" --root "$T/in" "$T/in/ok-link"
+    [ "$status" -eq 3 ]
+    ! grep -q abc12 "$T/in/real.txt"
 }
 
 # ---- signals ---------------------------------------------------------------
@@ -489,4 +601,78 @@ FAKE
     [ "$status" -eq 4 ]
     [[ "$output" != *abc12* ]]
     ! grep -q abc12 "$T/hits"
+}
+
+@test "scanner: a value that is part of the default marker is still fully redacted" {
+    for tok in token e '[' REDACTED anthropic ':'; do
+        export ANTHROPIC_AUTH_TOKEN="$tok"
+        printf 'x %s y\n' "$tok" > "$T/m.txt"
+        : > "$T/hits"
+        run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/hits" "$T/m.txt"
+        [ "$status" -eq 3 ]
+        run python3 -I -c 'import sys; sys.exit(0 if sys.argv[1].encode() in open(sys.argv[2], "rb").read() else 1)' "$tok" "$T/m.txt"
+        [ "$status" -eq 1 ]
+    done
+}
+
+@test "scanner: a marker-colliding value is absent from the hits file and the sanitized file names" {
+    for tok in token e '[' REDACTED; do
+        export ANTHROPIC_AUTH_TOKEN="$tok"
+        d="$T/d-$RANDOM"; mkdir -p "$d"
+        printf 'x %s y\n' "$tok" > "$d/$tok-name.txt"
+        : > "$T/hits"
+        run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/hits" "$d/$tok-name.txt"
+        [ "$status" -eq 3 ]
+        run python3 -I -c 'import json, sys
+tok = sys.argv[1]
+for line in open(sys.argv[2]):
+    rec = json.loads(line)
+    assert tok not in rec["file"], "value in sanitized name"' "$tok" "$T/hits"
+        [ "$status" -eq 0 ]
+    done
+}
+
+@test "scanner: the report never contains a colliding value; a report that cannot be made value-free is not written" {
+    export ANTHROPIC_AUTH_TOKEN=REDACTED
+    printf '{"file":"a/REDACTED/b","count":1}\n' > "$T/hits"
+    run python3 -I "$ROOT/scripts/token-leak-scan.py" report --hits "$T/hits" --report "$T/r.json" --bead REDACTED-1
+    [ "$status" -eq 0 ]
+    ! grep -q REDACTED "$T/r.json"
+    # a value that is also in the fixed report text cannot be removed from it
+    export ANTHROPIC_AUTH_TOKEN=files
+    rm -f "$T/r.json"
+    run python3 -I "$ROOT/scripts/token-leak-scan.py" report --hits "$T/hits" --report "$T/r.json"
+    [ "$status" -eq 4 ]
+    [ "$output" = "token-leak-scan: internal error (details withheld)" ]
+    [ ! -e "$T/r.json" ]
+}
+
+@test "scanner: when no marker can be verified the file is left alone and the run fails closed" {
+    python3 -I - "$ROOT/scripts/token-leak-scan.py" "$T" <<'PY'
+import os, subprocess, sys
+script, tmp = sys.argv[1], sys.argv[2]
+# every ASCII character is itself a value, so no character is free for a marker
+path = os.path.join(tmp, "all.txt")
+open(path, "wb").write(b"abc XYZ [REDACTED]")
+env = {b"PATH": os.environb.get(b"PATH", b"")}
+cmd = [sys.executable.encode(), b"-I", script.encode(), b"scan", b"--hits",
+       os.path.join(tmp, "h").encode()]
+for code in range(1, 128):
+    name = b"CLAVAIN_LEAK_TOKEN_%d" % code
+    env[name] = bytes([code])
+    cmd += [b"--token-env", name]
+cmd.append(path.encode())
+r = subprocess.run(cmd, env=env, capture_output=True)
+assert r.returncode == 4, r.returncode
+assert open(path, "rb").read() == b"abc XYZ [REDACTED]"
+PY
+}
+
+@test "scanner: an import-time failure prints only the fixed message" {
+    # make an import of json fail inside the interpreter before main runs
+    run python3 -I -c 'import sys, runpy
+sys.modules["json"] = None
+runpy.run_path(sys.argv[1], run_name="__main__")' "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/h"
+    [ "$status" -eq 4 ]
+    [ "$output" = "token-leak-scan: internal error (details withheld)" ]
 }

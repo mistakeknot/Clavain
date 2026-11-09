@@ -12,30 +12,46 @@ redacted too, and every failure prints one fixed message.
   report            write the leak report JSON from the recorded hits
 
 A symlinked artifact is resolved and its regular-file target is scanned (the
-run may have written through the link). A symlink that cannot be resolved to a
-regular file cannot be scanned: it is recorded as unscanned and fails closed.
+run may have written through the link) only when the target lies under one of
+the run's own roots (--root, repeatable). A symlink that cannot be resolved to
+a regular file, or that resolves outside every root, is never opened or
+rewritten: it is recorded as unscanned (by a sanitized name) and fails closed.
+
+The replacement marker never contains a value: the default marker is used only
+when the result is verified free of every value; otherwise a fixed-width marker
+of characters absent from every value is used; if no marker verifies, the file
+or text is left alone and the run fails closed.
 
 Exit status of `scan`: 0 clean or nothing to scan, 3 a hit was found and
 redacted, 4 a file could not be scanned or the scanner failed, 5 both.
 """
-import argparse
-import json
-import os
 import sys
-import tempfile
-from datetime import datetime, timezone
 
+FIXED_ERROR = "token-leak-scan: internal error (details withheld)"
+
+# Anything that can fail at import time sits inside this boundary, so no
+# traceback can print a path or a value.
 try:
-    import fcntl
-except ImportError:  # pragma: no cover - non-POSIX
-    fcntl = None
+    import argparse
+    import json
+    import os
+    import re
+    import tempfile
+    from datetime import datetime, timezone
+
+    try:
+        import fcntl
+    except ImportError:  # pragma: no cover - non-POSIX
+        fcntl = None
+except BaseException:
+    print(FIXED_ERROR, file=sys.stderr)
+    sys.exit(4)
 
 REDACTION = b"[REDACTED:anthropic-token]"
 DEFAULT_ENVS = ("ANTHROPIC_AUTH_TOKEN", "CODEX_POOL_AUTH_TOKEN")
 HIT_EXIT = 3
 ERROR_EXIT = 4
 BOTH_EXIT = 5
-FIXED_ERROR = "token-leak-scan: internal error (details withheld)"
 DESCRIPTION = "Post-run bearer-token leak scan for dispatch"
 
 
@@ -68,20 +84,71 @@ def all_forms(tokens):
     return sorted(forms, key=len, reverse=True)
 
 
+class Unredactable(Exception):
+    """No marker could be verified free of every value (fail closed)."""
+
+
+def marker_candidates(forms):
+    """Replacement markers to try, in order, as bytes.
+
+    The default marker first; then a fixed-width marker made of one character
+    that occurs in no form (so no form can overlap or span it).
+    """
+    yield REDACTION
+    used = set()
+    for form in forms:
+        used.update(form)
+    for code in list(range(0x21, 0x7F)) + list(range(0x01, 0x21)):
+        if code not in used:
+            yield bytes([code]) * 8
+            return
+
+
+def redact_bytes(data, forms):
+    """Return (count, redacted bytes, marker) with no form left in the result.
+
+    Raises Unredactable when no marker leaves the result free of every form.
+    """
+    ordered = sorted({f for f in forms if f}, key=len, reverse=True)
+    if not ordered:
+        return 0, data, REDACTION
+    # One pass over the original bytes (longest form first at each position),
+    # so text already replaced is never rescanned and cannot grow.
+    pattern = re.compile(b"|".join(re.escape(f) for f in ordered))
+    total = len(pattern.findall(data))
+    if not total:
+        return 0, data, REDACTION
+    for marker in marker_candidates(ordered):
+        out = pattern.sub(lambda _match, _m=marker: _m, data)
+        if not any(form in out for form in ordered):
+            return total, out, marker
+    raise Unredactable()
+
+
+def report_marker(tokens):
+    """The marker that redacts text for these values (verified on a probe)."""
+    forms = [f for f in all_forms(tokens) if f]
+    for marker in marker_candidates(forms):
+        if not any(form in marker for form in forms):
+            return marker.decode("ascii")
+    raise Unredactable()
+
+
 def sanitize(text, tokens):
-    """Redact every token form from a str (a file name, a path, metadata)."""
+    """Redact every token form from a str (a file name, a path, metadata).
+
+    Fails closed (Unredactable) when a form would still occur afterwards.
+    """
     if not isinstance(text, str):
         return text
-    marker = REDACTION.decode()
-    forms = sorted(
-        {f.decode("utf-8", "surrogateescape") for f in all_forms(tokens)},
-        key=len,
-        reverse=True,
-    )
-    for form in forms:
-        if form:
-            text = text.replace(form, marker)
-    return text
+    forms = [f for f in all_forms(tokens) if f]
+    if not forms:
+        return text
+    data = text.encode("utf-8", "surrogateescape")
+    if not any(form in data for form in forms):
+        return text
+    _count, out, _marker = redact_bytes(data, forms)
+    return out.decode("utf-8", "surrogateescape")
 
 
 class _Lock:
@@ -100,20 +167,33 @@ class _Lock:
                 self.handle = None
         return self
 
-    def __exit__(self, *exc):
+    def __exit__(self, *_exc_info):
         if self.handle is not None:
             self.handle.close()
         return False
 
 
-def redact_file(path, forms):
+def _under(target, roots):
+    for root in roots:
+        try:
+            if os.path.commonpath([target, root]) == root:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def redact_file(path, forms, roots=()):
     """Replace every occurrence in place through the resolved regular file.
 
-    Returns (count, status) where status is "ok", "absent" or "unscannable".
+    A symlink is followed only when its resolved regular-file target lies under
+    one of `roots`; any other symlink is never opened. Returns (count, status)
+    where status is "ok", "absent" or "unscannable".
     """
     if os.path.islink(path):
         target = os.path.realpath(path)
-        if not os.path.isfile(target):
+        real_roots = [os.path.realpath(r) for r in roots if r]
+        if not _under(target, real_roots) or not os.path.isfile(target):
             return 0, "unscannable"
         path = target
     elif not os.path.lexists(path):
@@ -124,12 +204,10 @@ def redact_file(path, forms):
     with _Lock(path):
         with open(path, "rb") as handle:
             data = handle.read()
-        total = 0
-        for form in forms:
-            count = data.count(form)
-            if count:
-                total += count
-                data = data.replace(form, REDACTION)
+        try:
+            total, data, _marker = redact_bytes(data, forms)
+        except Unredactable:
+            return 0, "unscannable"
         if total:
             # Rewrite through the same inode so mode and ownership are kept.
             with open(path, "r+b") as handle:
@@ -148,9 +226,12 @@ def cmd_scan(args):
     failed = False
     with open(args.hits, "a", encoding="utf-8") as hits:
         for path in args.files:
-            safe = sanitize(os.fsdecode(path), tokens)
             try:
-                count, status = redact_file(path, forms)
+                safe = sanitize(os.fsdecode(path), tokens)
+            except Unredactable:
+                safe = "<unprintable name>"
+            try:
+                count, status = redact_file(path, forms, args.root or ())
             except OSError:
                 count, status = 0, "unscannable"
             if status == "unscannable":
@@ -200,14 +281,19 @@ def cmd_report(args):
         "files": [{"path": p, "count": c} for p, c in sorted(merged.items())],
         "total_count": sum(merged.values()),
         "unscanned": sorted(unscanned),
-        "redaction": REDACTION.decode(),
+        "redaction": report_marker(tokens),
     }
+    text = json.dumps(report, indent=2) + "\n"
+    encoded = text.encode("utf-8", "surrogateescape")
+    # The fixed keys and text of the report are not redacted: when a value
+    # occurs anywhere in the finished report the report is not written.
+    if any(form and form in encoded for form in all_forms(tokens)):
+        raise Unredactable()
     directory = os.path.dirname(os.path.abspath(args.report))
     fd, tmp = tempfile.mkstemp(prefix=".token-leak.", dir=directory)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(report, handle, indent=2)
-            handle.write("\n")
+            handle.write(text)
         os.chmod(tmp, 0o600)
         os.replace(tmp, args.report)
     except BaseException:
@@ -220,6 +306,7 @@ def cmd_report(args):
 class _QuietParser(argparse.ArgumentParser):
     def error(self, message):
         # argparse echoes argument values; print a fixed text instead.
+        del message
         print("token-leak-scan: invalid arguments", file=sys.stderr)
         raise SystemExit(2)
 
@@ -230,6 +317,7 @@ def build_parser():
     scan = sub.add_parser("scan")
     scan.add_argument("--hits", required=True)
     scan.add_argument("--token-env", action="append")
+    scan.add_argument("--root", action="append")
     scan.add_argument("files", nargs="*")
     scan.set_defaults(func=cmd_scan)
     report = sub.add_parser("report")

@@ -485,7 +485,16 @@ _token_leak_scan() {
   local f
   for f in "$@"; do [[ -z "$f" ]] || files+=("$f"); done
   (( ${#files[@]} > 0 )) || return 0
-  _token_leak_py scan --hits "$TOKEN_LEAK_HITS" -- "${files[@]}" || rc=$?
+  # A symlinked artifact is followed only into the run's own roots: the output
+  # directory, the review receipt directory, the run receipt (state) directory
+  # and the interband directory. Anything else is unscannable and fails closed.
+  local -a roots=()
+  local r
+  for r in "${OUTPUT:-}" "${REVIEW_RECEIPT_PATH:-}" "${INTERBAND_DISPATCH_FILE:-}" \
+           "${CLAVAIN_DISPATCH_RECEIPT_FILE:-${XDG_STATE_HOME:-${HOME:-/nonexistent}/.local/state}/clavain/dispatch-receipts.jsonl}"; do
+    [[ -z "$r" ]] || roots+=(--root "$(dirname -- "$r")")
+  done
+  _token_leak_py scan --hits "$TOKEN_LEAK_HITS" ${roots[@]+"${roots[@]}"} -- "${files[@]}" || rc=$?
   case "$rc" in
     0) ;;
     3) TOKEN_LEAK_FOUND=true; TOKEN_LEAK_DIRTY=true ;;
@@ -513,6 +522,15 @@ _token_leak_scan_all() {
     for f in "${OUTPUT}".provider-events*.jsonl; do
       [[ -e "$f" || -L "$f" ]] && files+=("$f")
     done
+    # Flere attempt directory (prompt, rpc events, stderr, start record, home
+    # and session files): every regular file and every symlink under it. A
+    # symlink is handed to the scanner, which follows it only inside the roots.
+    if [[ -d "${OUTPUT}.attempt" && ! -L "${OUTPUT}.attempt" ]]; then
+      while IFS= read -r -d '' f; do files+=("$f"); done < <(
+        find "${OUTPUT}.attempt" \( -type f -o -type l \) -print0 2>/dev/null)
+    elif [[ -L "${OUTPUT}.attempt" ]]; then
+      files+=("${OUTPUT}.attempt")
+    fi
   fi
   if [[ "${RUN_RECEIPT_WRITTEN:-false}" == true ]]; then
     files+=("${CLAVAIN_DISPATCH_RECEIPT_FILE:-${XDG_STATE_HOME:-${HOME:-/nonexistent}/.local/state}/clavain/dispatch-receipts.jsonl}")
@@ -2790,16 +2808,27 @@ if [[ "$ENGINE" == "flere" ]]; then
   [[ -z "${CLAVAIN_FLERE_ENTRYPOINT:-}" ]] || FLERE_ARGS+=(--entrypoint "$CLAVAIN_FLERE_ENTRYPOINT")
   [[ "$DRY_RUN" != true ]] || FLERE_ARGS+=(--dry-run)
   # mk-ouz83: not exec'd, so the artifacts the worker wrote can be scanned.
-  # The worker writes its terminal receipt last; scan every sidecar after it
-  # and fail the run on a hit. INT and TERM reach the worker through the
-  # process group; this shell then scans and exits with the signal status.
+  # The worker writes its terminal receipt last. The scan runs from an EXIT
+  # trap installed before the worker starts, so a signal (INT/TERM reach the
+  # worker through the process group; this shell then exits with 128+n), an
+  # early exit or a normal return all scan the output and the attempt directory
+  # and fail the run on a hit.
+  _flere_cleanup() {
+    local _rc=$?
+    if [[ "$DRY_RUN" != true ]]; then
+      _token_leak_scan_all
+      _token_leak_conclude || [[ "$_rc" != 0 ]] || _rc=1
+      [[ -z "$TOKEN_LEAK_HITS" ]] || rm -f "$TOKEN_LEAK_HITS" 2>/dev/null || true
+    fi
+    # keeps the review-scratch cleanup the earlier EXIT trap ran
+    _review_scratch_cleanup
+    DISPATCH_FINAL_RC="$_rc"
+  }
+  trap '_flere_cleanup; exit "$DISPATCH_FINAL_RC"' EXIT
+  trap '_dispatch_on_signal 130' INT
+  trap '_dispatch_on_signal 143' TERM
   FLERE_RC=0
   python3 "${DISPATCH_SCRIPT_DIR}/flere-worker.py" "${FLERE_ARGS[@]}" <<< "$PROMPT" || FLERE_RC=$?
-  if [[ "$DRY_RUN" != true ]]; then
-    _token_leak_scan_all
-    _token_leak_conclude || [[ "$FLERE_RC" != 0 ]] || FLERE_RC=1
-    [[ -z "$TOKEN_LEAK_HITS" ]] || rm -f "$TOKEN_LEAK_HITS" 2>/dev/null || true
-  fi
   exit "$FLERE_RC"
 fi
 

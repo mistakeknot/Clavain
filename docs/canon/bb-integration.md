@@ -164,44 +164,73 @@ bearer. A declined or unavailable pool route still drops it as before.
 
 Before any unset, dispatch captures the values of `ANTHROPIC_AUTH_TOKEN` and
 `CODEX_POOL_AUTH_TOKEN` in a shell array that is never exported and never
-printed. Every engine is then scanned after it runs (Claude, Codex pooled and
-direct, Kimi, Flere and the BB seat). `scripts/token-leak-scan.py` receives the
-values through its own environment, never a command line, and any nonempty
-value is scanned, raw and JSON-escaped. It scans the captured stderr, the
-provider events files, the prompt capture, the output file and its sidecars
-(`.summary`, `.verdict`, `.verdict.pre-error`, `.recheck.md`, `.receipt.json`),
-the failure and intercept evidence, the dispatch state and interband files, the
-external review receipt written under `CLAVAIN_REVIEW_RECEIPT_DIR` (or its
-default), and the run receipt file. Scans run before stderr is mirrored, again
-after the last artifact is written, and from the exit trap, so a signal or an
-early exit is covered. A symlinked artifact is resolved and its regular-file
-target is scanned; a symlink that cannot be scanned is reported and fails
-closed. When neither token is set, the scan is skipped with a note that omits
+printed. After a run, the artifacts listed below are scanned for those values
+(Claude, Codex pooled and direct, Kimi, Flere and the BB seat).
+`scripts/token-leak-scan.py` receives the values through its own environment,
+never a command line, and scans any nonempty value, raw and JSON-escaped, as
+bytes. It scans the captured stderr, the provider events files, the prompt
+capture, the output file and its sidecars (`.summary`, `.verdict`,
+`.verdict.pre-error`, `.recheck.md`, `.receipt.json`), the failure and
+intercept evidence, the dispatch state and interband files, the external review
+receipt written under `CLAVAIN_REVIEW_RECEIPT_DIR` (or its default), the run
+receipt file and, for Flere, every file under `<output>.attempt` (prompt, RPC
+events, stderr, start record, home and session files, recursively). Scans run
+before stderr is mirrored, again after the last artifact is written, and from
+the EXIT trap. Flere has its own EXIT trap, installed before its worker
+starts, so a normal return, an early exit and INT or TERM all scan; the shell
+runs it once the foreground worker has returned.
+
+A symlinked artifact is followed only when its resolved regular-file target
+lies under the run's own roots: the output directory, the review receipt
+directory, the run receipt directory and the interband directory. A symlink
+that resolves anywhere else, or to something that is not a regular file, is
+never opened or rewritten; it is reported by a sanitized name, and the run
+fails closed. A symlinked parent directory of a non-symlink artifact is not
+checked. When neither token is set, the scan is skipped with a note that omits
 any value.
 
 On a hit the run fails: nonzero exit and an error verdict. Every occurrence is
-redacted in place to `[REDACTED:anthropic-token]`. A leak report (bead, role,
-run id, files, counts, unscanned files, timestamp) is written to
-`<output>.token-leak.json`, or to a temporary file when there is no `-o` or the
-path itself would carry the value. File names, paths and metadata in the
-report, the hits record, the hook argument and error text are redacted too, and
-the scanner prints one fixed message on any internal error. If
-`CLAVAIN_TOKEN_LEAK_HOOK` names an executable, it is run with the report path as
-its only argument and without `ANTHROPIC_AUTH_TOKEN`, `CODEX_POOL_AUTH_TOKEN`,
-`BB_ACCOUNT_POOL_PARENT_TOKEN` or `CLAUDE_CODE_MESSAGING_TOKEN` in its
-environment, so a host can file a rotation task; a failing hook only warns.
+redacted in place in a single pass. The marker is `[REDACTED:anthropic-token]`
+unless the result would still contain a value (for example a value of `token`
+or `e`); the scanner then uses a fixed-width marker of one character that
+occurs in no value, and if no marker leaves the data free of every value the
+file is left unmodified, reported as unscanned and the run fails. File names,
+paths and metadata in the hits record, the hook argument and error text pass
+through the same redaction. A leak report (bead, role, run id, files, counts,
+unscanned files, timestamp) is written to `<output>.token-leak.json`, or to a
+temporary file when there is no `-o` or the path itself would carry the value.
+The report keys and fixed text are not redacted: if a value occurs anywhere in
+the finished report (a single common letter does), no report is written, the
+run still fails and the verdict does not point at a report. The scanner prints
+one fixed message on any internal error, including an import failure. If
+`CLAVAIN_TOKEN_LEAK_HOOK` names an executable, it is run with the report path
+as its only argument and without `ANTHROPIC_AUTH_TOKEN`,
+`CODEX_POOL_AUTH_TOKEN`, `BB_ACCOUNT_POOL_PARENT_TOKEN` or
+`CLAUDE_CODE_MESSAGING_TOKEN` in its environment, so a host can file a
+rotation task; a failing hook only warns, and no hook runs without a report.
 
 Remaining limits, stated plainly:
 
 - stdout already mirrored to the terminal before the scan cannot be retracted;
 - a receipt written before a later hit is found keeps its earlier status for
   that write, although the artifact is redacted and the run exits nonzero;
+- the Flere worker records SHA-256 hashes of its attempt files in its receipt
+  before the scan, so a redacted attempt file no longer matches its recorded
+  hash;
+- Flere `--dry-run` is not scanned, and a Flere signal exit scans only after
+  the worker has returned;
 - the shared `CLAVAIN_REVIEW_EVENTS` log and the Intercore routing database
   (`ic route record`) are not scanned;
 - zaka runs submit a session and exit, so dispatch does not scan zaka artifacts
   at all;
+- paths not named above, and artifacts reached through a symlinked parent
+  directory, are not scanned;
 - a child that renders the token in a form other than the raw or JSON-escaped
-  string (encoded, split or truncated) is not matched.
+  string (encoded, split or truncated) is not matched, and a fragment of one
+  value that overlaps a different value is not matched separately;
+- the scan is verified only by the dummy-value tests in
+  `tests/shell/dispatch_token_leak.bats`; it does not prove that no value
+  reached any other sink.
 
 Quota classification consumes structured provider errors, never quoted task
 text. Permission, configuration, policy or unclear acceptance is terminal and
