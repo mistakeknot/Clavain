@@ -4297,45 +4297,18 @@ _emit_provider_stderr() {
 }
 
 # mk-bi91j: claude -p exits 1 for every failure, so its own stderr is the only
-# place an authentication failure shows. The phrases are claude's own messages
-# (present in the claude binary: "Failed to authenticate", "Invalid API key",
-# "Please run /login", "OAuth token has expired|been revoked", the API error
-# type authentication_error, "API Error: 401"). Used for the claude engine only.
+# place an authentication failure shows. claude prints its error and exits, so
+# only the last non-empty line of the capture is checked, and only claude- and
+# API-specific shapes (invalid api key, please run /login, oauth token has
+# expired|been revoked, api error: 401, authentication_error). Used for the
+# claude engine only.
 _claude_auth_failure() {
-    local f="${1:-}"
+    local f="${1:-}" last
     [[ -n "$f" && -s "$f" ]] || return 1
-    # Line-anchored: claude prints its diagnostics at the start of a line,
-    # optionally behind an "Error:" or "API Error:" prefix. A model or tool
-    # message that merely quotes these phrases mid-line does not match.
-    grep -qiE '^[[:space:]]*((api )?error:?[[:space:]]*)?(failed to authenticate|invalid api key|please run /login|oauth token has (expired|been revoked)|session expired\. please run /login|authentication_error)|^[[:space:]]*api error:?[[:space:]]*401' "$f" 2>/dev/null
-}
-
-# Bounded excerpt (last 20 lines, at most 2 KB) of the captured claude stderr.
-# The file was already redacted in place for every known token value by
-# _token_leak_scan_all; the excerpt goes through the same provider-text
-# redaction _emit_provider_stderr uses, then the known-value redaction again.
-# When the scan could not verify the file, nothing is printed.
-_claude_stderr_excerpt() {
-    local f="${1:-}" text
-    [[ -n "$f" && -s "$f" && "${TOKEN_LEAK_ERROR:-false}" != true ]] || return 1
-    # Redact whole lines first, then take the tail, so a bound can never cut a
-    # token in half. Very large captures are bounded to the last 1 MiB, with the
-    # possibly partial first line dropped.
-    local cleaned redacted
-    if [[ "$(wc -c < "$f")" -gt 1048576 ]]; then
-        cleaned="$(tail -c 1048576 "$f" | sed 1d)"
-    else
-        cleaned="$(cat "$f")"
-    fi
-    redacted="$(printf '%s\n' "$cleaned" | sed -E 's/\x1b\[[0-9;]*m//g' | tr -d '\000-\010\013-\037' | _redact_provider_text)" || return 1
-    # Stricter pass for this excerpt only: the shared redactor keeps bare 40- and
-    # 64-character hex as possible SHAs, so an unlabeled credential of that shape
-    # would pass. Replace every run of 20 or more token-class characters (bare
-    # hex, base64, JWT-like values) before the line and size bounds.
-    redacted="$(printf '%s\n' "$redacted" | sed -E 's/[A-Za-z0-9_+\/=.-]{20,}/<redacted>/g')" || return 1
-    text="$(printf '%s\n' "$redacted" | tail -n 20 | tail -c 2048)" || return 1
-    [[ -n "$text" ]] || return 1
-    _token_leak_safe_text "$text"
+    last="$(grep -v '^[[:space:]]*$' "$f" 2>/dev/null | tail -n 1)" || return 1
+    [[ -n "$last" ]] || return 1
+    # Line-anchored, optionally behind an "Error:" or "API Error:" prefix.
+    printf '%s\n' "$last" | grep -qiE '^[[:space:]]*((api )?error:?[[:space:]]*)?(invalid api key|please run /login|oauth token has (expired|been revoked)|authentication_error)|^[[:space:]]*api error:?[[:space:]]*401'
 }
 
 _provider_error_text() {
@@ -5221,10 +5194,6 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
     fi
     _write_error_verdict "$OUTPUT" "error" "$ENGINE -p exited $KIMI_EXIT$_auth_note (see stderr above)"
     echo "Warning: dispatch surfaced $ENGINE error — verdict overridden: $ENGINE -p exited $KIMI_EXIT$_auth_note" >&2
-    if [[ "$ENGINE" == claude ]] && _claude_excerpt="$(_claude_stderr_excerpt "$STDERR_FILE")"; then
-      echo "dispatch: claude stderr (last lines, redacted):" >&2
-      printf '%s\n' "$_claude_excerpt" | sed 's/^/  | /' >&2
-    fi
   fi
 
   # Post-dispatch validation: scope check + secret scan
