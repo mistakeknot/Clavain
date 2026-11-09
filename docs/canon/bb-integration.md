@@ -243,19 +243,29 @@ Remaining limits, stated plainly:
   removal, such as the `sed` and `tail` beside `codex --version`, inherit it
   too. Follow-up for the preflight: bead mk-47vtm.2;
 - every message the scanner itself prints (stdout or stderr, including usage,
-  `--help` and its fixed error messages) goes through one checked printer. It
-  checks the exact text to be written, newline terminator included, against
-  the values of the default variables and every `--token-env` named in argv
-  (any prefix of `--token-env` of three or more characters is treated as that
-  option, and the parser itself rejects abbreviations); raw and JSON-escaped
-  forms are checked. A message containing a value is not printed, and only the
-  exit status reports the outcome. A single-character value such as `:`
-  therefore silences a message that contains it, but is not echoed. If a write
-  or flush fails, the stream is pointed at `/dev/null` and the scanner ends
-  with the exit status of the outcome (for `--help`, 0), without shutdown
-  output. Limits: output the Python interpreter writes itself before the
-  script starts (for example a startup failure) is not covered, and messages
-  printed by `dispatch.sh` itself are outside this check (bead mk-47vtm.4);
+  `--help` and its fixed error messages) is queued in memory per stream and
+  written once, at exit, by one output point. That point encodes the whole
+  buffer exactly as the stream will write it (the stream's own encoding and
+  error handler), and checks those bytes, message boundaries and newline
+  terminators included, against the values of the default variables and of
+  every `--token-env` named in argv (any prefix of `--token-env` of three or
+  more characters is treated as that option, and the parser itself rejects
+  abbreviations). Raw and JSON-escaped forms are checked, encoded as the stream
+  encodes them and as UTF-8. If none occurs, those bytes are written in one
+  write. If one occurs, the fixed line `token-leak-scan: diagnostics
+  suppressed` is written instead when that line contains no value, and
+  nothing is written otherwise; the exit status is the same in both cases. If
+  the check cannot be decided, nothing is written. A failed write or flush
+  points the stream at `/dev/null`, and the scanner ends with the status of
+  the outcome (for `--help`, 0). `SIGINT` is set to its default action at the
+  top of the script, so an interrupt ends the process by that signal (shell
+  status 130, which `dispatch.sh` treats as a scan error and fails the run
+  closed) with no Python traceback. Limits: diagnostics appear when the
+  scanner exits, not as they occur; output the Python interpreter writes
+  itself before the script installs its handlers (a startup failure, or a
+  signal that arrives before the handler is installed) is not covered;
+  messages printed by `dispatch.sh` itself are outside this check (bead
+  mk-47vtm.4);
 - a child that renders the token in a form other than the raw or JSON-escaped
   string (encoded, split or truncated) is not matched, and a fragment of one
   value that overlaps a different value is not matched separately;

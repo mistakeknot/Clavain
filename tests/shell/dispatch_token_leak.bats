@@ -803,7 +803,13 @@ runpy.run_path(sys.argv[1], run_name="__main__")' "$ROOT/scripts/token-leak-scan
     ANTHROPIC_AUTH_TOKEN=$'\n' run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/missing-dir/hits" "$T/a.txt"
     [ "$status" -eq 4 ]
     [ -z "$output" ]
-    run bash -c 'ANTHROPIC_AUTH_TOKEN="$(printf "x\n")" python3 -I "$1" scan --hits "$2/missing-dir/hits" "$2/a.txt" 2>&1 | od -An -c' _ "$ROOT/scripts/token-leak-scan.py" "$T"
+    # a value that ends in a newline, passed through a variable that holds it
+    # (command substitution would strip the newline, so build it with printf -v)
+    local nlval
+    printf -v nlval 'x\n'
+    [ "${#nlval}" -eq 2 ]
+    ANTHROPIC_AUTH_TOKEN="$nlval" run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/missing-dir/hits" "$T/a.txt"
+    [ "$status" -eq 4 ]
     [[ "$output" != *x* ]]
 }
 
@@ -813,4 +819,64 @@ runpy.run_path(sys.argv[1], run_name="__main__")' "$ROOT/scripts/token-leak-scan
     [ ! -s "$T/err" ]
     ANTHROPIC_AUTH_TOKEN=OSError python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/missing-dir/hits" "$T/a.txt" >/dev/full 2>/dev/full && rc=0 || rc=$?
     [ "$rc" -eq 4 ]
+}
+
+# mk-47vtm.4 round 3: one buffered, byte-exact output point; SIGINT. Dummy
+# values only.
+@test "scanner: a file name with byte 0xff cannot emit a value spelled as its escape" {
+    # stderr writes the surrogate with backslashreplace: the checked bytes
+    # must be those bytes, so the literal text \udcff is caught
+    python3 - "$T" <<'PY'
+import os, sys
+os.symlink(b"/nowhere", os.path.join(os.fsencode(sys.argv[1]), b"bad\xff"))
+PY
+    ANTHROPIC_AUTH_TOKEN='\udcff' run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/hits" "$T/bad"$'\xff'
+    [ "$status" -eq 4 ]
+    [[ "$output" != *'\udcff'* ]]
+}
+
+@test "scanner: a value that spans the boundary of two messages is not emitted" {
+    ln -s "$T/nowhere" "$T/d1"
+    ln -s "$T/nowhere" "$T/d2"
+    local v
+    printf -v v '\ntoken-leak-scan:'
+    ANTHROPIC_AUTH_TOKEN="$v" run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/hits" "$T/d1" "$T/d2"
+    [ "$status" -eq 4 ]
+    [[ "$output" != *$'\ntoken-leak-scan:'* ]]
+    [ "$output" = "token-leak-scan: diagnostics suppressed" ]
+}
+
+@test "scanner: diagnostics are written once, at exit, when no value occurs" {
+    ln -s "$T/nowhere" "$T/d1"
+    ln -s "$T/nowhere" "$T/d2"
+    ANTHROPIC_AUTH_TOKEN=zzzz run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/hits" "$T/d1" "$T/d2"
+    [ "$status" -eq 4 ]
+    [ "${#lines[@]}" -eq 2 ]
+}
+
+@test "scanner: SIGINT ends the process by the signal, with no traceback" {
+    # --hits is a FIFO with no reader, so the scanner blocks opening it
+    mkfifo "$T/fifo"
+    run python3 - "$ROOT/scripts/token-leak-scan.py" "$T" <<'PY'
+import os, signal, subprocess, sys, time
+script, tmp = sys.argv[1], sys.argv[2]
+env = {"PATH": os.environ.get("PATH", ""), "ANTHROPIC_AUTH_TOKEN": "KeyboardInterrupt"}
+p = subprocess.Popen([sys.executable, "-I", script, "scan", "--hits",
+                      os.path.join(tmp, "fifo"), os.path.join(tmp, "a.txt")],
+                     env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+for _ in range(200):  # wait until it is blocked in the open
+    try:
+        state = open("/proc/%d/stat" % p.pid).read().rsplit(")", 1)[1].split()[0]
+    except OSError:
+        break
+    if state == "S":
+        time.sleep(0.2)
+        break
+    time.sleep(0.05)
+p.send_signal(signal.SIGINT)
+out, err = p.communicate(timeout=20)
+assert p.returncode == -signal.SIGINT, p.returncode
+assert b"KeyboardInterrupt" not in out + err and b"Traceback" not in out + err, (out, err)
+PY
+    [ "$status" -eq 0 ]
 }

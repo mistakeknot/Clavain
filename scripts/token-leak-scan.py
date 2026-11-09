@@ -24,69 +24,139 @@ of characters absent from every value is used; if no marker verifies, the file
 or text is left alone and the run fails closed.
 
 Every message this scanner prints (stdout or stderr, including usage and
-errors) goes through one checked printer: it is printed only when no token
-value occurs in it, otherwise nothing is printed (the exit status still tells
-the outcome). Silence cannot echo a value, whatever the value is.
+errors) is queued in memory per stream and written once, at exit, through one
+checked output point: the whole buffer is encoded exactly as the stream will
+write it (its own encoding and error handler) and checked, message boundaries
+and terminators included, against the raw and JSON-escaped forms of every
+value. If none occurs, those bytes are written in one write. If one occurs, a
+fixed line replaces them, and only when that line contains no value; else
+nothing is written. The exit status is the same either way. Trade-off:
+diagnostics appear at exit, not as they occur. Not covered: output the
+interpreter writes before this script installs its handlers.
 
 Exit status of `scan`: 0 clean or nothing to scan, 3 a hit was found and
 redacted, 4 a file could not be scanned or the scanner failed, 5 both.
 """
 import sys
 
+# Interrupt handling comes first: an interrupt ends the process by the signal
+# itself (shell status 130), so Python never builds a KeyboardInterrupt
+# traceback. SIGPIPE keeps Python's own disposition (ignored): a broken pipe
+# surfaces as a write error, which the checked output point absorbs silently.
+try:
+    import signal as _signal
+
+    _signal.signal(_signal.SIGINT, _signal.SIG_DFL)
+except BaseException:
+    pass
+
 FIXED_ERROR = "token-leak-scan: internal error (details withheld)"
+FIXED_SUPPRESSED = "token-leak-scan: diagnostics suppressed"
+
+# One in-memory buffer per stream. Nothing is written while the scanner runs;
+# _flush_output() writes each buffer once, at exit (trade-off: diagnostics
+# appear when the scanner ends, not as they occur).
+_BUFFER = {"stdout": [], "stderr": []}
 
 
 def _emit(message, stream=None):
-    """Print message only if no token value occurs in it; else print nothing.
+    """Queue message (plus newline) for the checked output point."""
+    try:
+        name = "stdout" if stream is not None and stream is sys.stdout else "stderr"
+        _BUFFER[name].append(message + "\n")
+    except BaseException:
+        return
 
-    Self-contained (lazy imports, no module state) so it works when the module
-    imports failed (if json is missing and a value needs escaping, nothing is
-    printed). The values come from the default variables plus every
-    --token-env named in argv. If they cannot be determined, nothing is
-    printed. Raw, surrogate-escaped and JSON-escaped forms are all checked.
-    """
+
+def _token_values():
+    """Values of the default variables plus every --token-env named in argv
+    (any prefix of --token-env of three or more characters, either form).
+    Returns None when they cannot be determined."""
     try:
         import os as _os
-
-        try:
-            import json as _json
-        except BaseException:
-            _json = None
 
         names = ["ANTHROPIC_AUTH_TOKEN", "CODEX_POOL_AUTH_TOKEN"]
         argv = sys.argv[1:]
         for i, arg in enumerate(argv):
             if arg == "--":
                 break
-            # any prefix of --token-env (at least "--t"), in either form, so the
-            # list never depends on how the parser abbreviates
             head, eq, rest = arg.partition("=")
             if len(head) >= 3 and "--token-env".startswith(head):
                 if eq:
                     names.append(rest)
                 elif i + 1 < len(argv):
                     names.append(argv[i + 1])
-        # the exact bytes that will be written, newline terminator included
-        text = (message + "\n").encode("utf-8", "surrogateescape")
-        for name in names:
-            value = _os.environ.get(name, "")
-            if not value:
-                continue
-            forms = [value.encode("utf-8", "surrogateescape")]
-            if _json is not None:
-                forms.append(_json.dumps(value)[1:-1].encode("utf-8"))
-            elif not all(0x20 <= ord(c) < 0x7F and c not in '"\\' for c in value):
-                return  # escaped form cannot be computed: print nothing
-            if any(form in text for form in forms):
-                return
-        stream = stream or sys.stderr
-        try:
-            stream.write(message + "\n")
-            stream.flush()
-        except BaseException:
-            _silence(stream)
+        return [v for v in (_os.environ.get(n, "") for n in names) if v]
     except BaseException:
-        return
+        return None
+
+
+def _contains_token(data, values, encoding, errors):
+    """True/False whether any value (raw or JSON-escaped; encoded as the
+    stream encodes, and also as UTF-8 with surrogateescape) occurs in the
+    complete byte string data. None when that cannot be decided."""
+    try:
+        try:
+            import json as _json
+        except BaseException:
+            _json = None
+        for value in values:
+            texts = [value]
+            if _json is not None:
+                texts.append(_json.dumps(value)[1:-1])
+            elif not all(0x20 <= ord(c) < 0x7F and c not in '"\\' for c in value):
+                return None
+            for text in texts:
+                forms = [text.encode("utf-8", "surrogateescape")]
+                try:
+                    forms.append(text.encode(encoding, errors))
+                except BaseException:
+                    pass
+                if any(form in data for form in forms):
+                    return True
+        return False
+    except BaseException:
+        return None
+
+
+def _flush_output():
+    """The one output point: write each stream's buffer, checked as the exact
+    bytes that will be written, in one write; then keep shutdown quiet."""
+    try:
+        values = _token_values()
+        for name in ("stdout", "stderr"):
+            chunks = _BUFFER[name]
+            _BUFFER[name] = []
+            if not chunks:
+                continue
+            stream = getattr(sys, name, None)
+            data = None
+            try:
+                encoding = getattr(stream, "encoding", None) or "utf-8"
+                errors = getattr(stream, "errors", None) or "strict"
+                raw = "".join(chunks)
+                if values is not None:
+                    data = raw.encode(encoding, errors)
+                    verdict = _contains_token(data, values, encoding, errors)
+                    if verdict is None:
+                        data = None
+                    elif verdict:
+                        data = (FIXED_SUPPRESSED + "\n").encode(encoding, errors)
+                        if _contains_token(data, values, encoding, errors) is not False:
+                            data = None
+            except BaseException:
+                data = None
+            if not data:
+                continue
+            try:
+                binary = stream.buffer
+                binary.write(data)
+                binary.flush()
+            except BaseException:
+                _silence(stream)
+    except BaseException:
+        pass
+    _final_flush()
 
 
 def _silence(stream):
@@ -139,6 +209,7 @@ try:
         fcntl = None
 except BaseException:
     _emit(FIXED_ERROR)
+    _flush_output()
     sys.exit(4)
 
 REDACTION = b"[REDACTED:anthropic-token]"
@@ -463,6 +534,14 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    _code = main()
-    _final_flush()
+    try:
+        _code = main()
+    except SystemExit as _exc:
+        _code = _exc.code
+    except BaseException:
+        _emit(FIXED_ERROR)
+        _code = ERROR_EXIT
+    if _code is not None and not isinstance(_code, int):
+        _code = ERROR_EXIT
+    _flush_output()
     sys.exit(_code)
