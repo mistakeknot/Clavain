@@ -296,6 +296,25 @@ def executor_prompt(case: dict, skill_body: Optional[str]) -> str:
     )
 
 
+def require_audit_db(env=None) -> str:
+    """Absolute path of the Intercore DB that dispatch must record routing in.
+
+    Each dispatch runs from a temporary workdir with no .clavain tree, so ic
+    cannot discover a DB there and the routing decision would go unrecorded
+    (terminal_recording). dispatch.sh records through CLAVAIN_INTERCORE_DB when
+    it is set, so a real run requires it up front rather than failing mid-run.
+    """
+    db = (os.environ if env is None else env).get("CLAVAIN_INTERCORE_DB", "")
+    if not db:
+        raise ValueError(
+            "CLAVAIN_INTERCORE_DB is not set: dispatch runs from a temporary workdir with no "
+            ".clavain tree, so its routing decisions could not be recorded; set it to the "
+            "absolute path of the Intercore database to record in")
+    if not os.path.isabs(db) or not os.path.isfile(db):
+        raise ValueError("CLAVAIN_INTERCORE_DB must be an absolute path to an existing database file")
+    return db
+
+
 def make_dispatch_callables(dispatch: Path, executor_role: str, judge_role: str,
                             timeout: float) -> tuple[Executor, Judge]:
     def executor(arm: str, case: dict, body: Optional[str]) -> tuple:
@@ -358,6 +377,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             dispatch = args.dispatch or Path(__file__).with_name("dispatch.sh")
             if not dispatch.is_file():
                 raise ValueError(f"dispatch script not found: {dispatch}")
+            require_audit_db()
             real_exec, real_judge = make_dispatch_callables(
                 dispatch, args.executor_role, args.judge_role, args.timeout)
             executor = fake_executor if args.fake_executor else real_exec

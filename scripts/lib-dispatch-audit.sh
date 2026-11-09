@@ -289,9 +289,27 @@ _record_role_routing_decision() {
     record_cmd+=("--db=$task_db" "--project=$project_dir")
     audit_workdir="$(dirname "$task_db")"
   fi
-  if ! (cd "$audit_workdir" && "${record_cmd[@]}") >/dev/null 2>&1; then
-    echo "Error: cannot persist $state routing decision for '$ROLE/$RESOLVED_PROFILE_REF'" >&2
+  local ic_err ic_excerpt
+  if ! ic_err="$( (cd "$audit_workdir" && "${record_cmd[@]}") 2>&1 >/dev/null )"; then
+    ic_excerpt="$(_ic_stderr_reason "$ic_err")"
+    echo "Error: cannot persist $state routing decision for '$ROLE/$RESOLVED_PROFILE_REF'${ic_excerpt:+: ic: $ic_excerpt}" >&2
     return 1
+  fi
+}
+
+# Fixed-vocabulary classification of ic's captured stderr for the recording
+# message. The result is exactly one of three constant strings; no byte of ic's
+# stderr is ever returned or printed, so nothing in it can reach the message.
+# The captured text is only matched (case-insensitively, quietly) from a
+# here-string, with no pipeline.
+_ic_stderr_reason() {
+  local raw="$1"
+  if grep -qiE 'unable to open|cannot open|could not open|failed to open' <<<"$raw" 2>/dev/null; then
+    printf '%s' 'database could not be opened'
+  elif grep -qiE 'database is locked|database is busy|sqlite_busy' <<<"$raw" 2>/dev/null; then
+    printf '%s' 'database locked'
+  else
+    printf '%s' 'ic failed; stderr withheld'
   fi
 }
 

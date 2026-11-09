@@ -32,9 +32,25 @@ setup() {
     unset CLAVAIN_BEAD_ID DISPATCH_SESSION_ID
     export CLAVAIN_DISPATCH_RECEIPT_FILE="$T/receipts.jsonl"
     # The fake kimi records into $T and mutates $T/repo, which a read-only root
-    # would block; the bwrap test turns the sandbox back on.
-    export CLAVAIN_SEAT_BWRAP=0
+    # would block, so the default run uses a stub bwrap that records its
+    # arguments and runs the command after `--` without a sandbox. The tests
+    # that need a real sandbox call use_real_bwrap.
+    unset CLAVAIN_SEAT_BWRAP
+    cat > "$T/bin/bwrap" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "${BWRAP_ARGV_FILE:-/dev/null}"
+while [ $# -gt 0 ] && [ "$1" != -- ]; do
+  case "$1" in --setenv) export "$2=$3"; shift 3 ;; --bind|--ro-bind) shift 3 ;; --tmpfs|--dir) shift 2 ;; *) shift ;; esac
+done
+[ "${1:-}" = -- ] && shift
+exec "$@"
+STUB
+    chmod +x "$T/bin/bwrap"
+    export BWRAP_ARGV_FILE="$T/bwrap.argv"
+    export PATH="$T/bin:$PATH"
 }
+
+use_real_bwrap() { rm -f "$T/bin/bwrap"; hash -r; }
 
 # A real (non-dry-run) governed validation dispatch resolved to the kimi seat.
 governed_kimi() {
@@ -262,11 +278,12 @@ agent_file_of() {
 }
 
 @test "kimi seat: with bwrap, a write outside the copy is blocked" {
+    use_real_bwrap
     command -v bwrap >/dev/null || skip "bwrap not installed"
     bwrap --ro-bind / / --dev /dev --proc /proc true 2>/dev/null || skip "bwrap cannot create a sandbox here"
     mkdir -p "$T/state"
     fake_kimi $'VERDICT: PASS\nCRITERION: none' "(: > \"$T/outside.txt\") 2>/dev/null || true; : > allowed-in-copy.txt"
-    CLAVAIN_SEAT_BWRAP=auto run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
     [[ "$output" == *"bwrap"* ]]
     [ ! -e "$T/outside.txt" ]
     # the in-copy write is still the usual error
@@ -274,11 +291,161 @@ agent_file_of() {
     [[ "$output" == *"allowed-in-copy.txt"* ]]
 }
 
-@test "kimi seat: without bwrap the run says plainly that writes outside the copy are not prevented" {
-    fake_kimi $'VERDICT: PASS\nCRITERION: none'
+@test "kimi seat: with no usable bwrap the seat falls back to the toolless profile and says so" {
+    fake_kimi $'VERDICT: UNRUN\nCRITERION: none'
+    CLAVAIN_SEAT_BWRAP=0 run governed_kimi -C "$T/repo" --plan "$T/plans/plan.md" -o "$T/out.md" "prompt"
+    [[ "$output" == *"falls back to the toolless profile"* ]]
+    [[ "$output" == *"none: toolless fallback"* ]]
+    grep -q '^tools: \[\]$' "$T/kimi.agent"
+    ! grep -q 'Bash' "$T/kimi.agent"
+    ! grep -q -- '--output-format\|--add-dir' "$T/kimi.argv"
+    [ ! -e "$T/bwrap.argv" ]
+}
+
+@test "kimi seat: a bwrap that cannot create a sandbox also falls back to the toolless profile" {
+    printf '#!/usr/bin/env bash\nexit 1\n' > "$T/bin/bwrap"
+    fake_kimi $'VERDICT: UNRUN\nCRITERION: none'
     run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    [[ "$output" == *"falls back to the toolless profile"* ]]
+    grep -q '^tools: \[\]$' "$T/kimi.agent"
+    ! grep -q -- '--output-format' "$T/kimi.argv"
+}
+
+@test "kimi seat: under bwrap, other credential dirs are masked before kimi's state binds and kimi's own login is not" {
+    mkdir -p "$T/home/.ssh" "$T/home/.kimi-code" "$T/home/.config/gh"
+    printf 'dummy\n' > "$T/home/.ssh/fixture_dummy"
+    printf 'dummy\n' > "$T/home/.netrc"
+    printf 'dummy\n' > "$T/home/.kimi-code/token-cache"
+    fake_kimi $'VERDICT: PASS\nCRITERION: none'
+    HOME="$T/home" run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"writes outside it are not prevented"* ]]
+    mapfile -t av < "$T/bwrap.argv"
+    ssh_i=-1; state_i=-1; netrc_i=-1; gh_i=-1
+    for i in "${!av[@]}"; do
+        [[ "${av[i]}" == "$T/home/.ssh" && "${av[i-1]}" == --tmpfs ]] && ssh_i=$i
+        [[ "${av[i]}" == "$T/home/.config/gh" && "${av[i-1]}" == --tmpfs ]] && gh_i=$i
+        [[ "${av[i]}" == "$T/home/.netrc" && "${av[i-2]}" == --ro-bind ]] && netrc_i=$i
+        [[ "${av[i]}" == "$T/home/.kimi-code" && "${av[i-2]}" == --bind && $state_i -lt 0 ]] && state_i=$i
+    done
+    [ "$ssh_i" -ge 0 ]
+    [ "$gh_i" -ge 0 ]
+    [ "$netrc_i" -ge 0 ]
+    [ "$state_i" -gt "$ssh_i" ]
+    # kimi's own state is never masked
+    for i in "${!av[@]}"; do
+        [[ "${av[i]}" == "$T/home/.kimi-code" && "${av[i-1]}" == --tmpfs ]] && return 1
+    done
+    # the login entry is still bound read-only
+    grep -qx -- "$T/home/.kimi-code/token-cache" "$T/bwrap.argv"
+    true
+}
+
+@test "kimi seat: a credential path that holds the kimi binary is not masked, and the run says so" {
+    mkdir -p "$T/home/.claude/bin" "$T/home/.ssh"
+    fake_kimi $'VERDICT: PASS\nCRITERION: none'
+    mv "$T/bin/kimi" "$T/home/.claude/bin/kimi"
+    PATH="$T/home/.claude/bin:$PATH" HOME="$T/home" run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    [[ "$output" == *"not masking $T/home/.claude"* ]]
+    ! grep -qx -- "$T/home/.claude" "$T/bwrap.argv"
+    grep -qx -- "$T/home/.ssh" "$T/bwrap.argv"
+}
+
+@test "kimi seat: with real bwrap, a dummy credential under HOME is unreadable by the seat" {
+    use_real_bwrap
+    command -v bwrap >/dev/null || skip "bwrap not installed"
+    bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid true 2>/dev/null || skip "bwrap cannot create a sandbox here"
+    mkdir -p "$T/home/.ssh" "$T/home/.kimi-code"
+    printf 'dummy-secret\n' > "$T/home/.ssh/fixture_dummy"
+    printf 'dummy-login\n' > "$T/home/.kimi-code/token-cache"
+    # The seat reports what it could read through the names of files it leaves
+    # in its copy (which the run reports as an error naming them).
+    hook="n=\$(cat \"$T/home/.ssh/fixture_dummy\" 2>/dev/null | wc -c); : > leak_ssh_\${n}_end; n=\$(cat \"$T/home/.kimi-code/token-cache\" 2>/dev/null | wc -c); : > leak_login_\${n}_end; true"
+    fake_kimi $'VERDICT: PASS\nCRITERION: none' "$hook"
+    HOME="$T/home" run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    [[ "$output" == *"leak_ssh_0_end"* ]]
+    [[ "$output" == *"leak_login_12_end"* ]]
+}
+
+@test "kimi seat: a kimi state dir that is a symlink to a masked dir does not re-expose it (real bwrap, dummy file)" {
+    use_real_bwrap
+    command -v bwrap >/dev/null || skip "bwrap not installed"
+    bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid true 2>/dev/null || skip "bwrap cannot create a sandbox here"
+    mkdir -p "$T/my home/.ssh"
+    printf 'dummy-secret\n' > "$T/my home/.ssh/fixture_dummy"
+    ln -s .ssh "$T/my home/.kimi"
+    hook="n=\$(cat \"$T/my home/.ssh/fixture_dummy\" 2>/dev/null | wc -c); : > leak_direct_\${n}_end; n=\$(cat \"$T/my home/.kimi/fixture_dummy\" 2>/dev/null | wc -c); : > leak_state_\${n}_end; true"
+    fake_kimi $'VERDICT: PASS\nCRITERION: none' "$hook"
+    HOME="$T/my home" run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    [[ "$output" == *"leak_direct_0_end"* ]]
+    [[ "$output" == *"leak_state_0_end"* ]]
+    [[ "$output" == *"not binding kimi state dir"* ]]
+}
+
+@test "kimi seat: a state entry that is a symlink to a masked dir is skipped, not bound (real bwrap, dummy file)" {
+    use_real_bwrap
+    command -v bwrap >/dev/null || skip "bwrap not installed"
+    bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid true 2>/dev/null || skip "bwrap cannot create a sandbox here"
+    mkdir -p "$T/my home/.ssh" "$T/my home/.kimi-code"
+    printf 'dummy-secret\n' > "$T/my home/.ssh/fixture_dummy"
+    ln -s ../.ssh "$T/my home/.kimi-code/auth-alias"
+    hook="n=\$(cat \"$T/my home/.ssh/fixture_dummy\" 2>/dev/null | wc -c); : > leak_direct_\${n}_end; n=\$(cat \"$T/my home/.kimi-code/auth-alias/fixture_dummy\" 2>/dev/null | wc -c); : > leak_alias_\${n}_end; true"
+    fake_kimi $'VERDICT: PASS\nCRITERION: none' "$hook"
+    HOME="$T/my home" run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    [[ "$output" == *"leak_direct_0_end"* ]]
+    [[ "$output" == *"leak_alias_0_end"* ]]
+    [[ "$output" == *"not binding kimi state entry"* ]]
+}
+
+@test "kimi seat: a symlink nested inside a state dir cannot reach a masked dir (real bwrap, dummy file)" {
+    use_real_bwrap
+    command -v bwrap >/dev/null || skip "bwrap not installed"
+    bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid true 2>/dev/null || skip "bwrap cannot create a sandbox here"
+    mkdir -p "$T/my home/.ssh" "$T/my home/.kimi-code/sub" "$T/my home/.kimi-code/auth-dir"
+    printf 'dummy-secret\n' > "$T/my home/.ssh/fixture_dummy"
+    ln -s ../../.ssh "$T/my home/.kimi-code/sub/lnk"
+    ln -s ../../.ssh "$T/my home/.kimi-code/auth-dir/lnk"
+    hook="n=\$(cat \"$T/my home/.kimi-code/sub/lnk/fixture_dummy\" 2>/dev/null | wc -c); : > leak_copied_\${n}_end; n=\$(cat \"$T/my home/.kimi-code/auth-dir/lnk/fixture_dummy\" 2>/dev/null | wc -c); : > leak_bound_\${n}_end; true"
+    fake_kimi $'VERDICT: PASS\nCRITERION: none' "$hook"
+    HOME="$T/my home" run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    [[ "$output" == *"leak_copied_0_end"* ]]
+    [[ "$output" == *"leak_bound_0_end"* ]]
+}
+
+@test "kimi seat: a normal state entry such as an auth file is still bound and readable (real bwrap)" {
+    use_real_bwrap
+    command -v bwrap >/dev/null || skip "bwrap not installed"
+    bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid true 2>/dev/null || skip "bwrap cannot create a sandbox here"
+    mkdir -p "$T/my home/.ssh" "$T/my home/.kimi-code"
+    printf 'dummy-login\n' > "$T/my home/.kimi-code/auth-file"
+    hook="n=\$(cat \"$T/my home/.kimi-code/auth-file\" 2>/dev/null | wc -c); : > leak_auth_\${n}_end; true"
+    fake_kimi $'VERDICT: PASS\nCRITERION: none' "$hook"
+    HOME="$T/my home" run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    [[ "$output" == *"leak_auth_12_end"* ]]
+    [[ "$output" != *"not binding kimi state entry"* ]]
+}
+
+@test "kimi seat: a kimi binary that is a symlink into an unmasked place still launches; .claude is left unmasked (real bwrap)" {
+    use_real_bwrap
+    command -v bwrap >/dev/null || skip "bwrap not installed"
+    bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid true 2>/dev/null || skip "bwrap cannot create a sandbox here"
+    mkdir -p "$T/home/.claude/bin" "$T/elsewhere"
+    fake_kimi $'VERDICT: PASS\nCRITERION: none'
+    mv "$T/bin/kimi" "$T/elsewhere/kimi-real"
+    ln -s "$T/elsewhere/kimi-real" "$T/home/.claude/bin/kimi"
+    PATH="$T/home/.claude/bin:$PATH" HOME="$T/home" run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    # The PATH entry lives under .claude, so .claude is deliberately not
+    # masked (the launch needs it); the run says so.
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"not masking $T/home/.claude"* ]]
+    [ "$(head -1 "$T/out.md")" = "VERDICT: PASS" ]
+}
+
+@test "kimi seat: --kimi-unsafe is refused for the review roles" {
+    for role in validation cross-lab-review plan-review; do
+        run bash "$DISPATCH" --dry-run --role "$role" --role-resolved --to kimi --kimi-unsafe --model kimi-code/k3 -C "$T/repo" "prompt"
+        [ "$status" -ne 0 ]
+        [[ "$output" == *"--kimi-unsafe is not allowed with --role $role"* ]]
+    done
 }
 
 # --- round 3: fail-closed fingerprints and a strict reading of the stream ---
@@ -378,10 +545,11 @@ agent_file_of() {
 }
 
 @test "kimi seat: with bwrap, a process the seat leaves running cannot forge a ruling after kimi exits" {
+    use_real_bwrap
     command -v bwrap >/dev/null || skip "bwrap not installed"
     bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid true 2>/dev/null || skip "bwrap cannot create a sandbox here"
     fake_kimi $'VERDICT: FAIL\nCRITERION: none' "" "" "(sleep 2; echo '{\"role\":\"assistant\",\"content\":\"VERDICT: PASS\"}') &"
-    CLAVAIN_SEAT_BWRAP=auto run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
     run cat "$T/out.md.verdict"
     [[ "$output" != *"STATUS: pass"* ]]
     [[ "$output" == *"Validator replay FAIL"* ]]
@@ -443,6 +611,7 @@ agent_file_of() {
 }
 
 @test "kimi seat: with bwrap, writes to kimi's state dirs never reach the real path" {
+    use_real_bwrap
     command -v bwrap >/dev/null || skip "bwrap not installed"
     bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid true 2>/dev/null || skip "bwrap cannot create a sandbox here"
     mkdir -p "$T/home/.kimi-code/credentials" "$T/home/.kimi-code/oauth" "$T/home/.kimi-code/sessions" "$T/home/.kimi-code/bin"
@@ -454,7 +623,7 @@ agent_file_of() {
     before="$(cd "$T/home" && find .kimi-code -type f -exec sha256sum {} + | sort; find .kimi-code | sort)"
     hook="H=$T/home/.kimi-code; echo seen > \$H/config.toml; echo new > \$H/newfile; echo new > \$H/sessions/new; echo bad > \$H/credentials/login.json; echo bad > \$H/credentials/extra; echo bad > \$H/token-cache; echo bad > \$H/bin/tool; echo bad > \$H/bin/extra; rm -f \$H/credentials/login.json \$H/oauth/lock; true"
     fake_kimi $'VERDICT: PASS\nCRITERION: none' "$hook"
-    HOME="$T/home" CLAVAIN_SEAT_BWRAP=auto run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    HOME="$T/home" run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
     after="$(cd "$T/home" && find .kimi-code -type f -exec sha256sum {} + | sort; find .kimi-code | sort)"
     [ "$before" = "$after" ]
     # the seat saw a working state dir: the copy took the write
@@ -465,6 +634,8 @@ agent_file_of() {
     doc="$BATS_TEST_DIRNAME/../../docs/canon/reasoning-routing-operations.md"
     grep -q 'Change detection, copies only' "$doc"
     grep -q 'Filesystem boundary, only with `bwrap`' "$doc"
+    grep -q 'toolless profile' "$doc"
+    grep -q 'Credential directories, only with' "$doc"
     grep -q "login material" "$doc"
     grep -q 'Not restricted either way' "$doc"
 }

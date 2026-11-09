@@ -161,8 +161,13 @@ at the end of this section say where it stops.
 either. `ANTHROPIC_AUTH_TOKEN` is kept for a Claude-backed dispatch and for a
 zaka agent named `claude` or `claude-code`; every other backend (codex, kimi,
 flere, other zaka agents) has it unset in its own child, after the pooled-Codex
-alias has been built. The `codex --version` preflight runs without it; the
-`codex sandbox` preflight does not (see the known limits below). A pooled
+alias has been built. The `codex --version` probe (including its `sed` and `tail`
+helpers) and the `codex sandbox` preflight run without it, and without
+`CODEX_POOL_AUTH_TOKEN`; the sandbox preflight is a probe and makes no model
+call. In a Codex run the unset happens right after the pooled alias is built,
+before the sandbox preflight. Children that start earlier in `dispatch.sh`
+(argument parsing, routing and other startup work) still inherit
+`ANTHROPIC_AUTH_TOKEN`. A pooled
 Codex child still receives `CODEX_POOL_AUTH_TOKEN`, which carries the same
 bearer. A declined or unavailable pool route still drops it as before.
 
@@ -238,10 +243,6 @@ Remaining limits, stated plainly:
   be missed: the kimi seat's final-message capture (`KIMI_FINAL_FILE`, removed
   before the closing scan) and the routing and headroom evidence files written
   while a fallback is forecast. Follow-up: bead mk-47vtm.3;
-- the `codex sandbox` preflight runs before `ANTHROPIC_AUTH_TOKEN` is removed,
-  so that child inherits the token. Helper children that run before the
-  removal, such as the `sed` and `tail` beside `codex --version`, inherit it
-  too. Follow-up for the preflight: bead mk-47vtm.2;
 - every message the scanner itself prints (stdout or stderr, including usage,
   `--help` and its fixed error messages) is queued in memory per stream and
   written once, at exit, by one output point. That point encodes the whole

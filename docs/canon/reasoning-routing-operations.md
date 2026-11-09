@@ -82,9 +82,16 @@ adds the following, each with the condition under which it holds:
   verdict and a failed dispatch. The fingerprint says nothing about any other
   path. A seat can also change a file and change it back; nothing records
   that.
-- **Filesystem boundary, only with `bwrap`.** Where `bwrap` can create a
-  sandbox, the run gets a read-only root with only the copy and its temp dir
-  writable, in its own process namespace so nothing it starts outlives it.
+- **Filesystem boundary, only with `bwrap`.** The seat runs with tools only
+  where `bwrap` can create a sandbox. Where it cannot (or
+  `CLAVAIN_SEAT_BWRAP=0`), dispatch prints a warning and gives the seat the
+  toolless profile, the same as a direct `--to kimi` dispatch (no Bash, no
+  `--add-dir`, no stream-json); it cannot run verification, so it is expected
+  to answer `UNRUN` (the verdict word is not enforced), and the
+  sandbox mode is reported as a toolless fallback. This choice is made before
+  the agent file and arguments are built. Where `bwrap` works, the run gets a
+  read-only root with only the copy and its temp dir writable, in its own
+  process namespace so nothing it starts outlives it.
   kimi's own state directories (`~/.kimi-code`, `~/.kimi`,
   `~/.config/kimi-code`, whichever exist) are replaced inside the sandbox by
   scratch copies that are discarded after the run: small entries are copied
@@ -93,12 +100,37 @@ adds the following, each with the condition under which it holds:
   login or token material, plus the binaries, are mounted read-only. So a
   write by the seat does not reach the real state directory, and a token
   refreshed inside the seat is lost with the copy. The ruling file is outside
-  the writable mounts. Where `bwrap` is unusable (or `CLAVAIN_SEAT_BWRAP=0`),
-  dispatch says so and nothing stops the seat writing outside the copy,
-  including to kimi's real state directories and login material.
-- **Not restricted either way.** Reads of any file the user can read, login
-  material included (the seat has a copy of it under `bwrap`), and network
-  access.
+  the writable mounts.
+- **Credential directories, only with `bwrap`.** Under `$HOME`, each of these
+  that exists is masked for the seat (an empty tmpfs for a directory, an empty
+  read-only file for a file): `.ssh`, `.gnupg`, `.aws`, `.config/gh`,
+  `.config/jev`, `.netrc`, `.git-credentials`, `.docker/config.json`,
+  `.codex`, `.claude`, `.config/claude`, `.anthropic`, `.config/gcloud`,
+  `.kube`, `.password-store`, `.local/share/keyrings`. Paths are compared
+  after resolving symlinks, and a masked symlink is masked at its target.
+  Two exceptions leave a listed path unmasked, with a note: it holds the kimi
+  binary (either its entry on `PATH` or the target that entry resolves to) or
+  the seat's sandbox directory, because the launch needs it. kimi's state
+  directories are not an exception: one that resolves onto, into or above a
+  masked location (for example `~/.kimi` as a symlink to `~/.ssh`) is not
+  bound, a note says so, and the seat sees that location as masked. The same
+  check applies to each state entry that would be mounted from the host (the
+  login-like entries and binaries): an entry that resolves, through a symlink
+  or a symlinked ancestor, onto, into or above a masked location is skipped
+  with a note and the other entries are bound as usual. A symlink nested
+  inside a bound or copied entry resolves inside the sandbox, where masked
+  locations are empty. This is a fixed list of known locations, and the checks
+  are by path. Credential locations outside the list, other readable home
+  directories, and hard links and other aliases of a credential file can stay
+  readable.
+- **`--kimi-unsafe`.** It runs plain kimi with no sandbox and no tool
+  restriction. It is refused (error, exit 1) with `--role validation`,
+  `--role cross-lab-review` and `--role plan-review`, so a review seat gets
+  tools only inside the `bwrap` sandbox. It still works for direct
+  `--to kimi` dispatches with trusted input.
+- **Not restricted either way.** Reads of any other file the user can read.
+  kimi's own login material is readable by the seat (kimi needs it to call
+  its API; a known limit), and the seat has network access.
 - **Reading the ruling.** The ruling is kimi's final assistant message
   (`--output-format stream-json`), taken from a stream with no malformed
   record (a line starting with `{` that is not a JSON object) and nothing but
