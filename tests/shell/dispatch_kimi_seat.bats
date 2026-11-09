@@ -390,13 +390,22 @@ agent_file_of() {
 }
 
 @test "kimi seat: a VERDICT value outside PASS, FAIL and UNRUN is an error, never a ruling" {
-    for body in $'VERDICT: CLEAN\nCRITERION: none' $'VERDICT: GARBAGE\nCRITERION: none' $'VERDICT: PASSED\nCRITERION: none' $'VERDICT: PASS-ISH\nCRITERION: none' $'VERDICT: PASS123\nCRITERION: none' $'VERDICT: PASS_UNKNOWN\nCRITERION: none' $'VERDICT:\nCRITERION: none'; do
+    for body in $'VERDICT: CLEAN\nCRITERION: none' $'VERDICT: GARBAGE\nCRITERION: none' $'VERDICT: PASSED\nCRITERION: none' $'VERDICT: PASS-ISH\nCRITERION: none' $'VERDICT: PASS123\nCRITERION: none' $'VERDICT: PASS_UNKNOWN\nCRITERION: none' $'VERDICT: PASS_\nCRITERION: none' $'VERDICT: PASS__\nCRITERION: none' $'VERDICT: **PASS**\nCRITERION: none' $'VERDICT: `PASS`\nCRITERION: none' $'VERDICT: _PASS_\nCRITERION: none' $'VERDICT:\nCRITERION: none'; do
         fake_kimi "$body"
         run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
         [ "$status" -ne 0 ] || { echo "not caught: $body"; return 1; }
         run cat "$T/out.md.verdict"
         [[ "$output" == *"STATUS: error"* ]] || { echo "no error verdict: $body"; return 1; }
         [[ "$output" != *"STATUS: pass"* ]]
+    done
+}
+
+@test "kimi seat: bare PASS and FAIL are accepted" {
+    for w in PASS FAIL; do
+        fake_kimi "VERDICT: $w"$'\nCRITERION: none'
+        run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+        run cat "$T/out.md.verdict"
+        [[ "$output" != *"STATUS: error"* ]] || { echo "rejected bare $w"; return 1; }
     done
 }
 

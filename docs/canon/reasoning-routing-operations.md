@@ -105,7 +105,8 @@ adds the following, each with the condition under which it holds:
   blank lines and `meta` records after that message. That message must have no
   `tool_calls`, or a null or empty list (any other value, an empty object
   included, makes it not a final message). It must open with a `VERDICT:`
-  line whose value is `PASS`, `FAIL` or `UNRUN`; any other value is an error.
+  line whose value is exactly the bare token `PASS`, `FAIL` or `UNRUN`; any
+  other value, decorated or suffixed forms included, is an error.
   It must hold no other line that starts with `VERDICT:` (a list, quote or
   heading marker before it still counts) and must not name a different verdict
   word after a `VERDICT:` elsewhere. Narration, quoted output and tool results

@@ -635,7 +635,7 @@ dispatch:
       # checkout at HEAD with a copy of the plan directory; a change to either
       # copy, or a copy that goes missing, is an error verdict, and only
       # kimi's final message of a clean stream is read for the ruling (its
-      # VERDICT value must be PASS, FAIL or UNRUN). Only where bwrap works is
+      # VERDICT value must be the bare token PASS, FAIL or UNRUN). Only where bwrap works is
       # the rest of the filesystem read-only, with kimi's state dirs replaced
       # by scratch copies discarded after the run; without bwrap nothing stops
       # writes outside the copy. Reads and network are open either way. It

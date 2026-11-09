@@ -2566,7 +2566,7 @@ def pf_validator_prompt(
         "`## Preconditions` fence describes the tree before the apply and is not replayed) with "
         "the Bash tool, every command, from the repo root, and judge only against its frozen "
         "Acceptance Criteria (a brief) or its `Expected:` lines (an exact plan): output line 1 "
-        "`VERDICT: PASS`, `VERDICT: FAIL`, or `VERDICT: UNRUN` (UNRUN whenever any Verification command could not be executed: a denied tool call, a missing program, an unreadable path, or a runner that crashed or was denied before the test ran, such as a panic, exit 101 or a denied cache path; an environment failure is UNRUN, never FAIL; never guess the outcome of a command you did not run), line 2 `CRITERION: <the "
+        "`VERDICT: PASS`, `VERDICT: FAIL`, or `VERDICT: UNRUN`, the word bare with no markdown or punctuation around it (UNRUN whenever any Verification command could not be executed: a denied tool call, a missing program, an unreadable path, or a runner that crashed or was denied before the test ran, such as a panic, exit 101 or a denied cache path; an environment failure is UNRUN, never FAIL; never guess the outcome of a command you did not run), line 2 `CRITERION: <the "
         "failing criterion, or for UNRUN the command that could not run, or none>`, line 3 "
         "`RECEIPT: <the verbatim output of the receipt command named below, or none>`. Then "
         "output `BEYOND THE GAUGE:` with bullets for real defects or risks the replay did not "
