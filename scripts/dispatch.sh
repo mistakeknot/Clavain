@@ -3341,6 +3341,21 @@ _kimi_state_dir_conflicts() {
   return 1
 }
 
+# Appends a read-only bind of the state entry $1 (at its own path) to the
+# array named by $2, unless the entry, resolved through any symlink or
+# symlinked ancestor, is the same as, inside or above a masked location (same
+# check as for whole state dirs); then it skips that one bind with a notice.
+# A symlink nested inside a bound directory needs no check: it resolves
+# inside the sandbox, where masked locations are empty.
+_kimi_state_entry_ro() {
+  local -n _eout="$2"
+  if _kimi_state_dir_conflicts "$1"; then
+    echo "Note: dispatch: not binding kimi state entry $1 for the kimi seat: it resolves onto, into or above a masked credential location" >&2
+    return 0
+  fi
+  _eout+=(--ro-bind "$1" "$1")
+}
+
 # Appends bwrap arguments to the array named by $2 that give the seat a
 # scratch version of one kimi state dir ($1), mounted at the real path. kimi
 # needs to write there (session files, logs, history), so the seat gets:
@@ -3374,10 +3389,10 @@ _kimi_state_binds() {
         if [[ -d "$e" && ! -L "$e" && -z "$(find "$e" -type f -size +0 -print -quit 2>/dev/null)" ]]; then
           cp -a -- "$e" "$slot/" 2>/dev/null || mkdir -p -- "$slot/$base"
         else
-          _out+=(--ro-bind "$e" "$e")
+          _kimi_state_entry_ro "$e" _out
         fi ;;
       bin|updates|*token*|*auth*|*secret*|*key*|*login*)
-        _out+=(--ro-bind "$e" "$e") ;;
+        _kimi_state_entry_ro "$e" _out ;;
       credentials)
         # kimi rewrites its login file when it starts, so the seat gets a
         # scratch copy: the rewrite lands in the copy and is discarded, the

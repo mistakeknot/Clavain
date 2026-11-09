@@ -381,6 +381,49 @@ agent_file_of() {
     [[ "$output" == *"not binding kimi state dir"* ]]
 }
 
+@test "kimi seat: a state entry that is a symlink to a masked dir is skipped, not bound (real bwrap, dummy file)" {
+    use_real_bwrap
+    command -v bwrap >/dev/null || skip "bwrap not installed"
+    bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid true 2>/dev/null || skip "bwrap cannot create a sandbox here"
+    mkdir -p "$T/my home/.ssh" "$T/my home/.kimi-code"
+    printf 'dummy-secret\n' > "$T/my home/.ssh/fixture_dummy"
+    ln -s ../.ssh "$T/my home/.kimi-code/auth-alias"
+    hook="n=\$(cat \"$T/my home/.ssh/fixture_dummy\" 2>/dev/null | wc -c); : > leak_direct_\${n}_end; n=\$(cat \"$T/my home/.kimi-code/auth-alias/fixture_dummy\" 2>/dev/null | wc -c); : > leak_alias_\${n}_end; true"
+    fake_kimi $'VERDICT: PASS\nCRITERION: none' "$hook"
+    HOME="$T/my home" run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    [[ "$output" == *"leak_direct_0_end"* ]]
+    [[ "$output" == *"leak_alias_0_end"* ]]
+    [[ "$output" == *"not binding kimi state entry"* ]]
+}
+
+@test "kimi seat: a symlink nested inside a state dir cannot reach a masked dir (real bwrap, dummy file)" {
+    use_real_bwrap
+    command -v bwrap >/dev/null || skip "bwrap not installed"
+    bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid true 2>/dev/null || skip "bwrap cannot create a sandbox here"
+    mkdir -p "$T/my home/.ssh" "$T/my home/.kimi-code/sub" "$T/my home/.kimi-code/auth-dir"
+    printf 'dummy-secret\n' > "$T/my home/.ssh/fixture_dummy"
+    ln -s ../../.ssh "$T/my home/.kimi-code/sub/lnk"
+    ln -s ../../.ssh "$T/my home/.kimi-code/auth-dir/lnk"
+    hook="n=\$(cat \"$T/my home/.kimi-code/sub/lnk/fixture_dummy\" 2>/dev/null | wc -c); : > leak_copied_\${n}_end; n=\$(cat \"$T/my home/.kimi-code/auth-dir/lnk/fixture_dummy\" 2>/dev/null | wc -c); : > leak_bound_\${n}_end; true"
+    fake_kimi $'VERDICT: PASS\nCRITERION: none' "$hook"
+    HOME="$T/my home" run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    [[ "$output" == *"leak_copied_0_end"* ]]
+    [[ "$output" == *"leak_bound_0_end"* ]]
+}
+
+@test "kimi seat: a normal state entry such as an auth file is still bound and readable (real bwrap)" {
+    use_real_bwrap
+    command -v bwrap >/dev/null || skip "bwrap not installed"
+    bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid true 2>/dev/null || skip "bwrap cannot create a sandbox here"
+    mkdir -p "$T/my home/.ssh" "$T/my home/.kimi-code"
+    printf 'dummy-login\n' > "$T/my home/.kimi-code/auth-file"
+    hook="n=\$(cat \"$T/my home/.kimi-code/auth-file\" 2>/dev/null | wc -c); : > leak_auth_\${n}_end; true"
+    fake_kimi $'VERDICT: PASS\nCRITERION: none' "$hook"
+    HOME="$T/my home" run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    [[ "$output" == *"leak_auth_12_end"* ]]
+    [[ "$output" != *"not binding kimi state entry"* ]]
+}
+
 @test "kimi seat: a kimi binary that is a symlink into an unmasked place still launches; .claude is left unmasked (real bwrap)" {
     use_real_bwrap
     command -v bwrap >/dev/null || skip "bwrap not installed"

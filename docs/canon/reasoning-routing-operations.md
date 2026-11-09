@@ -86,7 +86,8 @@ adds the following, each with the condition under which it holds:
   where `bwrap` can create a sandbox. Where it cannot (or
   `CLAVAIN_SEAT_BWRAP=0`), dispatch prints a warning and gives the seat the
   toolless profile, the same as a direct `--to kimi` dispatch (no Bash, no
-  `--add-dir`, no stream-json); it can then only answer `UNRUN`, and the
+  `--add-dir`, no stream-json); it cannot run verification, so it is expected
+  to answer `UNRUN` (the verdict word is not enforced), and the
   sandbox mode is reported as a toolless fallback. This choice is made before
   the agent file and arguments are built. Where `bwrap` works, the run gets a
   read-only root with only the copy and its temp dir writable, in its own
@@ -112,11 +113,16 @@ adds the following, each with the condition under which it holds:
   the seat's sandbox directory, because the launch needs it. kimi's state
   directories are not an exception: one that resolves onto, into or above a
   masked location (for example `~/.kimi` as a symlink to `~/.ssh`) is not
-  bound, a note says so, and the seat sees that location as masked. This is a
-  fixed list of known locations, and the checks are by path. Credential
-  locations outside the list, other readable home directories, hard links
-  and other aliases of a credential file, and symlinks inside a kimi state
-  directory that point at a masked location can stay readable.
+  bound, a note says so, and the seat sees that location as masked. The same
+  check applies to each state entry that would be mounted from the host (the
+  login-like entries and binaries): an entry that resolves, through a symlink
+  or a symlinked ancestor, onto, into or above a masked location is skipped
+  with a note and the other entries are bound as usual. A symlink nested
+  inside a bound or copied entry resolves inside the sandbox, where masked
+  locations are empty. This is a fixed list of known locations, and the checks
+  are by path. Credential locations outside the list, other readable home
+  directories, and hard links and other aliases of a credential file can stay
+  readable.
 - **`--kimi-unsafe`.** It runs plain kimi with no sandbox and no tool
   restriction. It is refused (error, exit 1) with `--role validation`,
   `--role cross-lab-review` and `--role plan-review`, so a review seat gets
