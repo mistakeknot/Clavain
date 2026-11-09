@@ -101,14 +101,27 @@ adds the following, each with the condition under which it holds:
   refreshed inside the seat is lost with the copy. The ruling file is outside
   the writable mounts.
 - **Credential directories, only with `bwrap`.** Under `$HOME`, each of these
-  that exists is hidden from the seat (an empty tmpfs for a directory, an empty
+  that exists is masked for the seat (an empty tmpfs for a directory, an empty
   read-only file for a file): `.ssh`, `.gnupg`, `.aws`, `.config/gh`,
   `.config/jev`, `.netrc`, `.git-credentials`, `.docker/config.json`,
   `.codex`, `.claude`, `.config/claude`, `.anthropic`, `.config/gcloud`,
-  `.kube`, `.password-store`, `.local/share/keyrings`. A listed path that
-  holds the kimi binary, the seat's sandbox directory or a kimi state
-  directory is skipped, and a note says so. This is a fixed list, so any other
-  credential file the user can read stays readable.
+  `.kube`, `.password-store`, `.local/share/keyrings`. Paths are compared
+  after resolving symlinks, and a masked symlink is masked at its target.
+  Two exceptions leave a listed path unmasked, with a note: it holds the kimi
+  binary (either its entry on `PATH` or the target that entry resolves to) or
+  the seat's sandbox directory, because the launch needs it. kimi's state
+  directories are not an exception: one that resolves onto, into or above a
+  masked location (for example `~/.kimi` as a symlink to `~/.ssh`) is not
+  bound, a note says so, and the seat sees that location as masked. This is a
+  fixed list of known locations, and the checks are by path. Credential
+  locations outside the list, other readable home directories, hard links
+  and other aliases of a credential file, and symlinks inside a kimi state
+  directory that point at a masked location can stay readable.
+- **`--kimi-unsafe`.** It runs plain kimi with no sandbox and no tool
+  restriction. It is refused (error, exit 1) with `--role validation`,
+  `--role cross-lab-review` and `--role plan-review`, so a review seat gets
+  tools only inside the `bwrap` sandbox. It still works for direct
+  `--to kimi` dispatches with trusted input.
 - **Not restricted either way.** Reads of any other file the user can read.
   kimi's own login material is readable by the seat (kimi needs it to call
   its API; a known limit), and the seat has network access.

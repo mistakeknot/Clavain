@@ -366,6 +366,45 @@ agent_file_of() {
     [[ "$output" == *"leak_login_12_end"* ]]
 }
 
+@test "kimi seat: a kimi state dir that is a symlink to a masked dir does not re-expose it (real bwrap, dummy file)" {
+    use_real_bwrap
+    command -v bwrap >/dev/null || skip "bwrap not installed"
+    bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid true 2>/dev/null || skip "bwrap cannot create a sandbox here"
+    mkdir -p "$T/my home/.ssh"
+    printf 'dummy-secret\n' > "$T/my home/.ssh/fixture_dummy"
+    ln -s .ssh "$T/my home/.kimi"
+    hook="n=\$(cat \"$T/my home/.ssh/fixture_dummy\" 2>/dev/null | wc -c); : > leak_direct_\${n}_end; n=\$(cat \"$T/my home/.kimi/fixture_dummy\" 2>/dev/null | wc -c); : > leak_state_\${n}_end; true"
+    fake_kimi $'VERDICT: PASS\nCRITERION: none' "$hook"
+    HOME="$T/my home" run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    [[ "$output" == *"leak_direct_0_end"* ]]
+    [[ "$output" == *"leak_state_0_end"* ]]
+    [[ "$output" == *"not binding kimi state dir"* ]]
+}
+
+@test "kimi seat: a kimi binary that is a symlink into an unmasked place still launches; .claude is left unmasked (real bwrap)" {
+    use_real_bwrap
+    command -v bwrap >/dev/null || skip "bwrap not installed"
+    bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid true 2>/dev/null || skip "bwrap cannot create a sandbox here"
+    mkdir -p "$T/home/.claude/bin" "$T/elsewhere"
+    fake_kimi $'VERDICT: PASS\nCRITERION: none'
+    mv "$T/bin/kimi" "$T/elsewhere/kimi-real"
+    ln -s "$T/elsewhere/kimi-real" "$T/home/.claude/bin/kimi"
+    PATH="$T/home/.claude/bin:$PATH" HOME="$T/home" run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    # The PATH entry lives under .claude, so .claude is deliberately not
+    # masked (the launch needs it); the run says so.
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"not masking $T/home/.claude"* ]]
+    [ "$(head -1 "$T/out.md")" = "VERDICT: PASS" ]
+}
+
+@test "kimi seat: --kimi-unsafe is refused for the review roles" {
+    for role in validation cross-lab-review plan-review; do
+        run bash "$DISPATCH" --dry-run --role "$role" --role-resolved --to kimi --kimi-unsafe --model kimi-code/k3 -C "$T/repo" "prompt"
+        [ "$status" -ne 0 ]
+        [[ "$output" == *"--kimi-unsafe is not allowed with --role $role"* ]]
+    done
+}
+
 # --- round 3: fail-closed fingerprints and a strict reading of the stream ---
 
 

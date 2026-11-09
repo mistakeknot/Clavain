@@ -2672,6 +2672,16 @@ elif [[ "$ENGINE" == "kimi" ]]; then
   # hook (~/.kimi-code/hooks/bd-prime-inject.sh) so dispatched output isn't
   # prefixed with beads workflow context; interactive sessions keep it.
   CMD=(env KIMI_BD_PRIME_SKIP=1)
+  # --kimi-unsafe runs plain kimi with no sandbox and no tool restriction. A
+  # review seat must never get tools that way, so it is refused for those roles.
+  if [[ "$KIMI_UNSAFE" == true ]]; then
+    case "${ROLE:-}" in
+      validation|cross-lab-review|plan-review)
+        echo "Error: --kimi-unsafe is not allowed with --role $ROLE: a review seat gets tools only inside the bwrap sandbox" >&2
+        _dispatch_write_failure_class terminal_configuration 2>/dev/null || true
+        exit 1 ;;
+    esac
+  fi
   if [[ "$KIMI_UNSAFE" != true ]]; then
     # Restricted no-tools profile (v2 engine) — tools/network structurally
     # absent, so untrusted prompt content cannot trigger tool/file/web use.
@@ -3280,18 +3290,25 @@ _tree_digest_diff() {
 # Appends bwrap arguments to the array named by $1 that hide other tools'
 # credentials under $HOME from the seat: each listed directory that exists is
 # replaced by an empty tmpfs, each listed file by an empty read-only file. The
-# caller puts them after the root bind and before kimi's state binds. kimi's
-# own state dirs are never listed. A path is skipped, with a note, when the
-# kimi binary, the seat's sandbox dir or a kimi state dir lives under it. This
-# is a list of known locations, not a complete one: other credential files
-# stay readable.
+# caller puts them after the root bind and before kimi's state binds. Every
+# path is compared in canonical form (symlinks resolved) as well as lexically.
+# A location is left unmasked, with a note, only when the kimi binary (its PATH
+# entry or its resolved target) or the seat's sandbox dir lives under it; in
+# that case the launch needs it. kimi's state dirs are not exceptions: a state
+# dir that resolves into or onto a masked location is not bound (see
+# _kimi_state_dir_conflicts). The canonical paths that were masked are left in
+# KIMI_MASKED_REALS. This is a list of known locations, not a complete one:
+# other credential files stay readable.
 _kimi_credential_masks() {
   local -n _mout="$1"
-  local home="${HOME:-}" kbin keep m real k skip
+  local home="${HOME:-}" kbin kreal keep m real k skip sreal
+  KIMI_MASKED_REALS=()
   [[ -n "$home" && "$home" != / ]] || return 0
   kbin="$(command -v kimi 2>/dev/null || true)"
-  [[ -z "$kbin" ]] || kbin="$(readlink -f -- "$kbin" 2>/dev/null || printf '%s' "$kbin")"
-  keep=("$KIMI_SANDBOX" "$kbin" "$home/.kimi-code" "$home/.kimi" "$home/.config/kimi-code")
+  kreal=""
+  [[ -z "$kbin" ]] || kreal="$(readlink -f -- "$kbin" 2>/dev/null || true)"
+  sreal="$(readlink -f -- "$KIMI_SANDBOX" 2>/dev/null || true)"
+  keep=("$KIMI_SANDBOX" "$sreal" "$kbin" "$kreal")
   for m in .ssh .gnupg .aws .config/gh .config/jev .netrc .git-credentials .docker/config.json \
            .codex .claude .config/claude .anthropic .config/gcloud .kube .password-store .local/share/keyrings; do
     m="$home/$m"
@@ -3306,9 +3323,22 @@ _kimi_credential_masks() {
       echo "Note: dispatch: not masking $m for the kimi seat: it holds a path the seat needs ($skip)" >&2
       continue
     fi
+    KIMI_MASKED_REALS+=("$real")
     if [[ -d "$real" ]]; then _mout+=(--tmpfs "$real")
     else _mout+=(--ro-bind /dev/null "$real"); fi
   done
+}
+
+# Succeeds when the kimi state dir $1, resolved, is the same as, inside or
+# above any location _kimi_credential_masks masked. Binding such a dir would
+# put its entries back over the mask, so the caller skips it.
+_kimi_state_dir_conflicts() {
+  local real r
+  real="$(readlink -f -- "$1" 2>/dev/null || printf '%s' "$1")"
+  for r in "${KIMI_MASKED_REALS[@]}"; do
+    if [[ "$real" == "$r" || "$real" == "$r"/* || "$r" == "$real"/* ]]; then return 0; fi
+  done
+  return 1
 }
 
 # Appends bwrap arguments to the array named by $2 that give the seat a
@@ -3442,7 +3472,12 @@ _kimi_seat_prepare() {
   local binds=(--bind "$KIMI_SANDBOX" "$KIMI_SANDBOX") d
   _kimi_credential_masks binds
   for d in "$HOME/.kimi-code" "$HOME/.kimi" "$HOME/.config/kimi-code"; do
-    [[ ! -d "$d" ]] || _kimi_state_binds "$d" binds || return 1
+    [[ -d "$d" ]] || continue
+    if _kimi_state_dir_conflicts "$d"; then
+      echo "Note: dispatch: not binding kimi state dir $d for the kimi seat: it resolves into or onto a masked credential location; the seat reads it as the masked path" >&2
+      continue
+    fi
+    _kimi_state_binds "$d" binds || return 1
   done
   KIMI_RUN_CMD=(bwrap --ro-bind / / "${binds[@]}" --dev /dev --proc /proc --unshare-pid --die-with-parent
                 --setenv TMPDIR "$KIMI_SANDBOX/tmp" -- "${KIMI_RUN_CMD[@]}")
