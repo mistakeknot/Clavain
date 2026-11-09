@@ -4304,7 +4304,10 @@ _emit_provider_stderr() {
 _claude_auth_failure() {
     local f="${1:-}"
     [[ -n "$f" && -s "$f" ]] || return 1
-    grep -qiE 'failed to authenticate|invalid api key|please run /login|oauth token has (expired|been revoked)|authentication_error|api error:? *401' "$f" 2>/dev/null
+    # Line-anchored: claude prints its diagnostics at the start of a line,
+    # optionally behind an "Error:" or "API Error:" prefix. A model or tool
+    # message that merely quotes these phrases mid-line does not match.
+    grep -qiE '^[[:space:]]*((api )?error:?[[:space:]]*)?(failed to authenticate|invalid api key|please run /login|oauth token has (expired|been revoked)|session expired\. please run /login|authentication_error)|^[[:space:]]*api error:?[[:space:]]*401' "$f" 2>/dev/null
 }
 
 # Bounded excerpt (last 20 lines, at most 2 KB) of the captured claude stderr.
@@ -4315,7 +4318,17 @@ _claude_auth_failure() {
 _claude_stderr_excerpt() {
     local f="${1:-}" text
     [[ -n "$f" && -s "$f" && "${TOKEN_LEAK_ERROR:-false}" != true ]] || return 1
-    text="$(tail -n 20 "$f" | tail -c 2048 | sed -E 's/\x1b\[[0-9;]*m//g' | tr -d '\000-\010\013-\037' | _redact_provider_text)" || return 1
+    # Redact whole lines first, then take the tail, so a bound can never cut a
+    # token in half. Very large captures are bounded to the last 1 MiB, with the
+    # possibly partial first line dropped.
+    local cleaned redacted
+    if [[ "$(wc -c < "$f")" -gt 1048576 ]]; then
+        cleaned="$(tail -c 1048576 "$f" | sed 1d)"
+    else
+        cleaned="$(cat "$f")"
+    fi
+    redacted="$(printf '%s\n' "$cleaned" | sed -E 's/\x1b\[[0-9;]*m//g' | tr -d '\000-\010\013-\037' | _redact_provider_text)" || return 1
+    text="$(printf '%s\n' "$redacted" | tail -n 20 | tail -c 2048)" || return 1
     [[ -n "$text" ]] || return 1
     _token_leak_safe_text "$text"
 }

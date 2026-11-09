@@ -89,3 +89,42 @@ run_claude() {
     [ "$excerpt" -le 20 ]
     [[ "$output" != *"line001"* ]]
 }
+
+# Redaction runs over whole lines before any bound is applied. Dummy values only.
+@test "redaction before bound: 80 hex inside a 4 KB line leaks no 40-char run" {
+    # 2100 spaces, 80 hex, 2007 spaces: the 2 KB byte cut lands mid-hex.
+    HEX=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    export FAKE_ERR="$(printf '%2100s' '')${HEX}$(printf '%2007s' '')"
+    run_claude
+    [ "$status" -ne 0 ]
+    [[ "$output" != *"${HEX:40:40}"* ]]
+    [[ "$output" != *"${HEX:0:40}"* ]]
+}
+
+@test "redaction before bound: sk- value at the byte boundary is redacted whole" {
+    # The byte cut removes the sk- prefix; redaction must have run first.
+    VAL=sk-test-dummy-abcdefghijklmnopqrstuvwxyz0123456789
+    export FAKE_ERR="${VAL}$(printf '%1998s' '')"
+    run_claude
+    [ "$status" -ne 0 ]
+    [[ "$output" != *"abcdefghijklmnopqrstuvwxyz0123456789"* ]]
+    [[ "$output" != *"dummy-abc"* ]]
+    [[ "$output" != *"<id>"* ]]
+}
+
+@test "redaction before bound: hex value at the 20-line boundary leaks no fragment" {
+    HEX=fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba98
+    export FAKE_ERR="$(printf 'head %s\n' "$HEX"; for i in $(seq 1 19); do printf 'filler %d\n' "$i"; done)"
+    run_claude
+    [ "$status" -ne 0 ]
+    [[ "$output" != *"${HEX:0:40}"* ]]
+    [[ "$output" != *"${HEX:30:40}"* ]]
+}
+
+@test "quoted login phrase mid-line stays terminal_error" {
+    export FAKE_ERR='model said: you should please run /login and Failed to authenticate with the registry'
+    run_claude
+    [ "$status" -ne 0 ]
+    [ "$(cat "$T/failure.class")" = terminal_error ]
+    [[ "$output" != *"authentication failure"* ]]
+}
