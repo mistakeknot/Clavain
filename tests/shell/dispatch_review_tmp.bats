@@ -54,7 +54,7 @@ SH
     [[ "$(uname -s)" == Linux ]] || skip 'Linux sandbox only'
     mkdir "$T/hosttmp"
     real_codex="$(command -v codex || true)"
-    [[ -n "$real_codex" ]] || skip 'Codex is not installed'
+    [[ -n "$real_codex" ]] || skip 'codex is not installed'
     cat > "$T/bin/codex" <<SH
 #!/usr/bin/env bash
 if [[ "\$1" == sandbox ]]; then exec "$real_codex" "\$@"; fi
