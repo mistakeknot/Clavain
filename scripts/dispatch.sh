@@ -82,6 +82,7 @@ DRY_RUN=false
 KIMI_UNSAFE=false
 KIMI_SEAT_TOOLS=false  # role-resolved kimi review seat: Bash + read tools, run in a disposable copy (mk-1rbg)
 KIMI_SANDBOX=""        # temp dir holding that copy; removed on exit
+KIMI_SANDBOX_MODE=""   # how the seat is contained, or why it fell back to toolless
 KIMI_FINAL_FILE=""      # kimi seat ruling (final message), kept outside the sandbox
 CLAUDE_UNSAFE=false
 NO_TOOLS=false  # --no-tools / CLAVAIN_SEAT_TOOLS=none: text-in/text-out Claude seat, every tool disabled
@@ -2554,6 +2555,13 @@ fi
 # Ordered executor failover for --to auto. The recursive invocation receives
 # the exact original arguments except the routing controls, so it cannot
 # recurse and preserves all backend-specific dispatch behavior.
+# True when bwrap can create the sandbox the tool-enabled kimi seat needs.
+# CLAVAIN_SEAT_BWRAP=0 turns it off. The seat with tools never runs without it.
+_kimi_bwrap_usable() {
+  [[ "${CLAVAIN_SEAT_BWRAP:-auto}" != 0 ]] && command -v bwrap >/dev/null 2>&1 \
+    && bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid true >/dev/null 2>&1
+}
+
 if [[ "$ENGINE" == "auto" ]]; then
   # shellcheck source=scripts/lib-routing.sh
   source "$(dirname "${BASH_SOURCE[0]}")/lib-routing.sh" 2>/dev/null || true
@@ -2677,16 +2685,24 @@ elif [[ "$ENGINE" == "kimi" ]]; then
     # disposable copy of the checkout at HEAD and a copy of the plan directory,
     # with a content digest of both taken around the run. A change to either
     # copy, or a copy that has gone, turns the verdict into an error. That
-    # digest says nothing about anywhere else. Only when bwrap is usable is
-    # the rest of the filesystem read-only and kimi's state dirs replaced by
-    # scratch copies (login entries read-only); reads and network are open
-    # either way. Without bwrap, writes outside the copy, including to kimi's
-    # real state, are not prevented and the run says so. A toolless
-    # kimi seat could only answer UNRUN. Direct --to kimi dispatches stay
+    # digest says nothing about anywhere else. The seat has tools only when
+    # bwrap is usable: the rest of the filesystem is read-only and kimi's state dirs replaced by
+    # scratch copies (login entries read-only; other credential directories
+    # under $HOME are masked); reads of the rest and network are open. Without
+    # bwrap the seat gets no tools: it takes the toolless profile and says so,
+    # and a toolless kimi seat could only answer UNRUN. Direct --to kimi dispatches stay
     # toolless; --no-tools still refuses kimi.
     KIMI_SEAT_TOOLS=false
     if [[ "$ROLE_RESOLVED" == true && "$NO_TOOLS" != true ]]; then
       case "$ROLE" in validation|cross-lab-review|plan-review) KIMI_SEAT_TOOLS=true ;; esac
+    fi
+    # Fail closed: the tool-enabled seat runs only inside a bwrap sandbox. Without
+    # one it takes the toolless profile (as with KIMI_SEAT_TOOLS=false), chosen
+    # here so the agent file, prompt and arguments below never carry tools.
+    if [[ "$KIMI_SEAT_TOOLS" == true ]] && ! _kimi_bwrap_usable; then
+      KIMI_SEAT_TOOLS=false
+      KIMI_SANDBOX_MODE="none: toolless fallback, no usable bwrap sandbox"
+      echo "Warning: dispatch: no usable bwrap sandbox (or CLAVAIN_SEAT_BWRAP=0); the kimi seat falls back to the toolless profile and cannot run a plan's Verification" >&2
     fi
     if [[ "$KIMI_SEAT_TOOLS" == true ]]; then
       KIMI_AGENT="$(mktemp -t clavain-kimi-seat.XXXXXX.md)"
@@ -3261,6 +3277,40 @@ _tree_digest_diff() {
       LC_ALL=C sort -u | head -20 | tr '\n' ' '; } 2>/dev/null || true
 }
 
+# Appends bwrap arguments to the array named by $1 that hide other tools'
+# credentials under $HOME from the seat: each listed directory that exists is
+# replaced by an empty tmpfs, each listed file by an empty read-only file. The
+# caller puts them after the root bind and before kimi's state binds. kimi's
+# own state dirs are never listed. A path is skipped, with a note, when the
+# kimi binary, the seat's sandbox dir or a kimi state dir lives under it. This
+# is a list of known locations, not a complete one: other credential files
+# stay readable.
+_kimi_credential_masks() {
+  local -n _mout="$1"
+  local home="${HOME:-}" kbin keep m real k skip
+  [[ -n "$home" && "$home" != / ]] || return 0
+  kbin="$(command -v kimi 2>/dev/null || true)"
+  [[ -z "$kbin" ]] || kbin="$(readlink -f -- "$kbin" 2>/dev/null || printf '%s' "$kbin")"
+  keep=("$KIMI_SANDBOX" "$kbin" "$home/.kimi-code" "$home/.kimi" "$home/.config/kimi-code")
+  for m in .ssh .gnupg .aws .config/gh .config/jev .netrc .git-credentials .docker/config.json \
+           .codex .claude .config/claude .anthropic .config/gcloud .kube .password-store .local/share/keyrings; do
+    m="$home/$m"
+    [[ -e "$m" || -L "$m" ]] || continue
+    real="$(readlink -f -- "$m" 2>/dev/null || printf '%s' "$m")"
+    skip=""
+    for k in "${keep[@]}"; do
+      [[ -n "$k" ]] || continue
+      if [[ "$k" == "$m" || "$k" == "$m"/* || "$k" == "$real" || "$k" == "$real"/* ]]; then skip="$k"; break; fi
+    done
+    if [[ -n "$skip" ]]; then
+      echo "Note: dispatch: not masking $m for the kimi seat: it holds a path the seat needs ($skip)" >&2
+      continue
+    fi
+    if [[ -d "$real" ]]; then _mout+=(--tmpfs "$real")
+    else _mout+=(--ro-bind /dev/null "$real"); fi
+  done
+}
+
 # Appends bwrap arguments to the array named by $2 that give the seat a
 # scratch version of one kimi state dir ($1), mounted at the real path. kimi
 # needs to write there (session files, logs, history), so the seat gets:
@@ -3272,8 +3322,11 @@ _tree_digest_diff() {
 #     paths; "credentials" is the one exception: kimi rewrites it on start, so
 #     it gets a scratch copy like the small entries.
 # So nothing the seat writes reaches the real state dir, and it cannot replace
-# the real login. The seat can still READ the login material (reads are not
-# restricted), and a token refreshed inside the seat is lost with the copy.
+# the real login. The seat can still READ kimi's own login material (kimi needs
+# it to call its API; this is a known limit, and the seat has network access),
+# and a token refreshed inside the seat is lost with the copy. Other tools'
+# credential directories under $HOME are masked (see _kimi_credential_masks);
+# the rest of the filesystem is readable.
 _kimi_state_binds() {
   local dir="$1" ref="$2" slot e base kb
   local -n _out="$ref"
@@ -3328,10 +3381,11 @@ _kimi_state_binds() {
 # ~/.config/kimi-code, whichever exist) are replaced inside the sandbox by
 # scratch copies that are discarded with it; the entries that hold login
 # material and the binaries are mounted read-only (see _kimi_state_binds), so
-# the seat cannot change the real state. It can still READ that login material.
-# When bwrap is not usable nothing stops the seat writing outside the copy,
-# including in kimi's real state dirs: it can reach any file the user can, and
-# a warning says so. Reads and network are not restricted either way. Sets
+# the seat cannot change the real state. It can still READ that login material,
+# which kimi needs, and it has network access. A list of other tools'
+# credential locations under $HOME is masked (see _kimi_credential_masks); any
+# other readable file stays readable. The seat is created only when bwrap is
+# usable: the caller falls back to the toolless profile otherwise. Sets
 # KIMI_SANDBOX, KIMI_RUN_DIR, KIMI_RUN_CMD, KIMI_SANDBOX_MODE and
 # KIMI_FINAL_FILE.
 _kimi_seat_prepare() {
@@ -3379,19 +3433,20 @@ _kimi_seat_prepare() {
     KIMI_RUN_CMD+=("$a")
   done
 
-  KIMI_SANDBOX_MODE="copy only; writes outside the copy are not prevented"
-  if [[ "${CLAVAIN_SEAT_BWRAP:-auto}" != 0 ]] && command -v bwrap >/dev/null 2>&1 \
-     && bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid true >/dev/null 2>&1; then
-    local binds=(--bind "$KIMI_SANDBOX" "$KIMI_SANDBOX") d
-    for d in "$HOME/.kimi-code" "$HOME/.kimi" "$HOME/.config/kimi-code"; do
-      [[ ! -d "$d" ]] || _kimi_state_binds "$d" binds || return 1
-    done
-    KIMI_RUN_CMD=(bwrap --ro-bind / / "${binds[@]}" --dev /dev --proc /proc --unshare-pid --die-with-parent
-                  --setenv TMPDIR "$KIMI_SANDBOX/tmp" -- "${KIMI_RUN_CMD[@]}")
-    KIMI_SANDBOX_MODE="bwrap: root read-only; the copy, its temp dir and scratch copies of kimi's state dirs writable"
-  else
-    echo "Warning: dispatch: no usable bwrap sandbox; the kimi seat runs in a disposable copy but writes outside it are not prevented" >&2
+  # Never fail open: no usable bwrap means no tool-enabled seat (the caller has
+  # already fallen back; this guards a direct call).
+  if ! _kimi_bwrap_usable; then
+    echo "Error: dispatch: the kimi seat needs a usable bwrap sandbox and none is available" >&2
+    return 1
   fi
+  local binds=(--bind "$KIMI_SANDBOX" "$KIMI_SANDBOX") d
+  _kimi_credential_masks binds
+  for d in "$HOME/.kimi-code" "$HOME/.kimi" "$HOME/.config/kimi-code"; do
+    [[ ! -d "$d" ]] || _kimi_state_binds "$d" binds || return 1
+  done
+  KIMI_RUN_CMD=(bwrap --ro-bind / / "${binds[@]}" --dev /dev --proc /proc --unshare-pid --die-with-parent
+                --setenv TMPDIR "$KIMI_SANDBOX/tmp" -- "${KIMI_RUN_CMD[@]}")
+  KIMI_SANDBOX_MODE="bwrap: root read-only; the copy, its temp dir and scratch copies of kimi's state dirs writable; other credential directories under HOME masked"
   # The ruling file is outside the sandbox's writable mounts. Under bwrap the
   # seat cannot replace it; without bwrap it could, if it guessed the name.
   KIMI_FINAL_FILE="$(mktemp -t clavain-kimi-final.XXXXXX)" || return 1
@@ -4806,6 +4861,8 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
     RUN_DIR="$KIMI_RUN_DIR"
     RUN_CMD=("${KIMI_RUN_CMD[@]}")
     echo "dispatch: kimi seat runs in a disposable copy ($KIMI_SANDBOX_MODE)" >&2
+  elif [[ "$ENGINE" == "kimi" && -n "$KIMI_SANDBOX_MODE" ]]; then
+    echo "dispatch: kimi seat sandbox: $KIMI_SANDBOX_MODE" >&2
   fi
   set +e
   # kimi carries its prompt in argv; claude reads it from PROMPT_STDIN_FILE
