@@ -79,6 +79,9 @@ STUB
 
 @test "claude child: CLAVAIN_SEAT_ENV_SCRUB=0 restores the inherited environment" {
     fake_claude
+    PATH="$T/bin:$PATH" run bash "$DISPATCH" --to claude --model m -C "$T/repo" -o "$T/out.md" "prompt"
+    [ "$status" -eq 0 ]
+    seen GH_TOKEN=unset
     CLAVAIN_SEAT_ENV_SCRUB=0 PATH="$T/bin:$PATH" run bash "$DISPATCH" --to claude --model m -C "$T/repo" -o "$T/out.md" "prompt"
     [ "$status" -eq 0 ]
     seen GH_TOKEN=set
@@ -89,6 +92,7 @@ STUB
     cat > "$T/bin/claude" <<STUB
 #!/usr/bin/env bash
 cat > /dev/null
+bash "$T/record.sh"
 jq -cn --arg b "VERDICT: PASS leaked \$ANTHROPIC_AUTH_TOKEN" '{type:"result",subtype:"success",is_error:false,result:\$b}'
 STUB
     chmod +x "$T/bin/claude"
@@ -96,6 +100,7 @@ STUB
     # The kept token is still a known value: the scan reports it and fails the run.
     [ "$status" -ne 0 ]
     [[ "$output" == *"bearer token found"* ]]
+    seen GH_TOKEN=unset
     ! grep -q 'dummy-not-a-real-value' "$T/out.md"
 }
 
@@ -134,6 +139,8 @@ STUB
 }
 
 @test "codex: CLAVAIN_SEAT_ENV_SCRUB=0 adds no exclude list" {
+    run codex_exclude_arg
+    [ "$status" -eq 0 ]
     CLAVAIN_SEAT_ENV_SCRUB=0 run codex_exclude_arg
     [ "$status" -eq 1 ]
 }
