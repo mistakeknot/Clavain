@@ -105,6 +105,7 @@ def judge_prompt(case: dict, response: str) -> str:
     )
 
 
+_VERDICT_LINE_RE = re.compile(r"VERDICT: (?:PASS|PASS WITH NOTES|FAIL)")
 _SCORE_LINE_RE = re.compile(r"SCORE: ([0-9]+(?:\.[0-9]+)?|\.[0-9]+)")
 
 
@@ -117,6 +118,8 @@ def parse_score(text: str) -> float:
     failure, never as a measurement.
     """
     lines = [line.rstrip() for line in text.splitlines() if line.strip()]
+    if lines and _VERDICT_LINE_RE.fullmatch(lines[-1]):
+        lines = lines[:-1]  # the packaged role contract appends a final VERDICT line
     if not lines:
         raise ValueError("judge reply is empty")
     match = _SCORE_LINE_RE.fullmatch(lines[-1])
@@ -224,8 +227,11 @@ def fake_judge(case: dict, response: str, identity: str) -> float:
 def read_receipt_identity(receipt_file: Path, role: str) -> str:
     """Model that actually served a dispatch, from its run receipts.
 
-    Considers only completed, exit-0 receipts for ``role``. Fails closed when
-    there is none, the model is blank, or receipts disagree.
+    Uses ``observed_model`` only; ``model`` is the requested model and is never
+    trusted. Dispatch writes "unknown" when the model could not be observed,
+    which fails closed, as do a missing or blank value, no completed exit-0
+    receipt for ``role``, or receipts that disagree. A mismatch between the
+    observed and requested model is fine: the observed value is the truth.
     """
     models: set[str] = set()
     if receipt_file.is_file():
@@ -236,8 +242,9 @@ def read_receipt_identity(receipt_file: Path, role: str) -> str:
                 continue
             if (isinstance(rec, dict) and rec.get("role") == role
                     and rec.get("outcome") == "completed" and rec.get("exit_code") == 0
-                    and isinstance(rec.get("model"), str) and rec["model"].strip()):
-                models.add(rec["model"].strip())
+                    and isinstance(rec.get("observed_model"), str)
+                    and rec["observed_model"].strip().lower() not in ("", "unknown")):
+                models.add(rec["observed_model"].strip())
     if len(models) != 1:
         raise RuntimeError(
             f"cannot determine the executor identity from the dispatch receipt "

@@ -163,13 +163,14 @@ def _receipt(tmp_path, *recs):
 
 
 def _rec(**kw):
-    base = {"role": "routine-execution", "outcome": "completed", "exit_code": 0, "model": "gpt-6.1-sol"}
+    base = {"role": "routine-execution", "outcome": "completed", "exit_code": 0,
+            "model": "requested-model", "observed_model": "gpt-6.1-sol"}
     base.update(kw)
     return base
 
 
 def test_receipt_identity_uses_completed_model_after_fallback(tmp_path):
-    f = _receipt(tmp_path, _rec(model="claude-sonnet-5-5", outcome="failed", exit_code=1), _rec())
+    f = _receipt(tmp_path, _rec(observed_model="claude-sonnet-5-5", outcome="failed", exit_code=1), _rec())
     assert sep.read_receipt_identity(f, "routine-execution") == "gpt-6.1-sol"
 
 
@@ -179,9 +180,9 @@ def test_receipt_identity_fails_closed(tmp_path):
     with pytest.raises(RuntimeError):
         sep.read_receipt_identity(_receipt(tmp_path, _rec(role="other")), "routine-execution")
     with pytest.raises(RuntimeError):
-        sep.read_receipt_identity(_receipt(tmp_path, _rec(model="")), "routine-execution")
+        sep.read_receipt_identity(_receipt(tmp_path, _rec(observed_model="")), "routine-execution")
     with pytest.raises(RuntimeError):
-        sep.read_receipt_identity(_receipt(tmp_path, _rec(), _rec(model="other")), "routine-execution")
+        sep.read_receipt_identity(_receipt(tmp_path, _rec(), _rec(observed_model="other")), "routine-execution")
 
 
 def _stub_dispatch(tmp_path, model):
@@ -193,7 +194,7 @@ def _stub_dispatch(tmp_path, model):
         "while [ $# -gt 0 ]; do case $1 in -o) out=$2; shift;; --role) role=$2; shift;;"
         " --producer-identity) echo \"$2\" >> \"$STUB_LOG\"; shift;; esac; shift; done\n"
         "printf 'reply\\nSCORE: 0.5\\n' > \"$out\"\n"
-        "printf '{\"role\":\"%s\",\"outcome\":\"completed\",\"exit_code\":0,\"model\":\"" + model + "\"}\\n'"
+        "printf '{\"role\":\"%s\",\"outcome\":\"completed\",\"exit_code\":0,\"model\":\"requested\",\"observed_model\":\"" + model + "\"}\\n'"
         " \"$role\" >> \"$CLAVAIN_DISPATCH_RECEIPT_FILE\"\n")
     stub.chmod(0o755)
     return stub
@@ -248,3 +249,47 @@ def test_cli_missing_dispatch_is_error(tmp_path, capsys):
     rc = sep.main(["--skill", str(skill), "--cases", str(ROOT / "tests/skill-evals/paired/ship.json"),
                    "--dispatch", str(tmp_path / "nope.sh")])
     assert rc == 1
+
+
+def test_receipt_identity_ignores_requested_model_and_rejects_unknown(tmp_path):
+    f = _receipt(tmp_path, _rec(model="claude-sonnet-5-5", observed_model="gpt-6.1-sol"))
+    assert sep.read_receipt_identity(f, "routine-execution") == "gpt-6.1-sol"  # mismatch: observed wins
+    agree = _receipt(tmp_path, _rec(model="m", observed_model="m"))
+    assert sep.read_receipt_identity(agree, "routine-execution") == "m"
+    for bad in ("unknown", "UNKNOWN", None):
+        rec = _rec(observed_model=bad)
+        with pytest.raises(RuntimeError):
+            sep.read_receipt_identity(_receipt(tmp_path, rec), "routine-execution")
+    rec = _rec()
+    del rec["observed_model"]  # only the requested model is present
+    with pytest.raises(RuntimeError):
+        sep.read_receipt_identity(_receipt(tmp_path, rec), "routine-execution")
+
+
+@pytest.mark.parametrize("text", [
+    "reasons\nSCORE: 0.5\n\nVERDICT: PASS",
+    "reasons\nSCORE: 0.5\nVERDICT: PASS WITH NOTES\n",
+    "reasons\nSCORE: 0.5\n\nVERDICT: FAIL",
+])
+def test_score_before_dispatch_verdict_line(text):
+    assert sep.parse_score(text) == 0.5
+
+
+@pytest.mark.parametrize("text", [
+    "SCORE: 0.5\nSCORE: 0.6\nVERDICT: PASS",
+    "SCORE: 0.5\ntrailing\nVERDICT: PASS",
+    "VERDICT: PASS",
+    "SCORE: 0.5\nVERDICT: PASS\nmore",
+    "SCORE: 0.5 VERDICT: PASS",
+    "SCORE: 1e309\nVERDICT: PASS",
+])
+def test_verdict_suffix_keeps_strictness(text):
+    with pytest.raises(ValueError):
+        sep.parse_score(text)
+
+
+def test_verdict_line_matches_dispatch_contract_text():
+    src = (ROOT / "scripts/dispatch.sh").read_text()
+    for word in ("VERDICT: PASS", "VERDICT: PASS WITH NOTES", "VERDICT: FAIL"):
+        assert word in src
+        assert sep._VERDICT_LINE_RE.fullmatch(word)
