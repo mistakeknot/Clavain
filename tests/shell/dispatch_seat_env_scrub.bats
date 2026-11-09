@@ -3,7 +3,7 @@
 # reach what a seat's own shell commands see. Dummy values only. Stub engines
 # record "set" or "unset" per name, never a value.
 
-NAMES="ANTHROPIC_AUTH_TOKEN GH_TOKEN GITHUB_TOKEN OPENAI_API_KEY CODEX_POOL_AUTH_TOKEN AWS_SECRET_ACCESS_KEY AWS_REGION CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID MY_SERVICE_SECRET db_password SAFE_SETTING"
+NAMES="ANTHROPIC_AUTH_TOKEN GH_TOKEN GITHUB_TOKEN OPENAI_API_KEY CODEX_POOL_AUTH_TOKEN AWS_SECRET_ACCESS_KEY AWS_REGION CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID MY_SERVICE_SECRET db_password SAFE_SETTING CLAUDE_X_SECRET ANTHROPIC_X_TOKEN GOOGLE_APPLICATION_CREDENTIALS AZURE_CLIENT_SECRET ANTHROPIC_FOUNDRY_API_KEY AWS_ACCESS_KEY_ID AWS_SESSION_TOKEN AWS_BEARER_TOKEN_BEDROCK"
 
 setup() {
     load test_helper
@@ -18,7 +18,7 @@ setup() {
     export CLAVAIN_CONTEXT_GATEWAY_MODE=off CLAVAIN_BB_DIRECT_POOL=0
     export KIMI_CONFIG="$T/kimi.toml"
     printf 'default_model = "kimi-code/k3"\n[models."kimi-code/k3"]\nprovider = "managed:kimi-code"\nmodel = "k3"\n' > "$KIMI_CONFIG"
-    unset CLAVAIN_SEAT_ENV_SCRUB CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY
+    unset CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY
     unset BB_SERVER_URL ANTHROPIC_BASE_URL CODEX_OPENAI_BASE_URL
     for n in $NAMES; do export "$n=dummy-not-a-real-value"; done
     export KIMI_API_KEY=dummy-not-a-real-value MOONSHOT_API_KEY=dummy-not-a-real-value
@@ -26,7 +26,7 @@ setup() {
     export FAKE_LOG="$T/seen.log"
     # Records each watched name as set/unset, never its value.
     cat > "$T/record.sh" <<'SH'
-for v in ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN KIMI_API_KEY MOONSHOT_API_KEY GH_TOKEN GITHUB_TOKEN OPENAI_API_KEY CODEX_POOL_AUTH_TOKEN AWS_SECRET_ACCESS_KEY AWS_REGION CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID MY_SERVICE_SECRET db_password SAFE_SETTING; do
+for v in ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN KIMI_API_KEY MOONSHOT_API_KEY GH_TOKEN GITHUB_TOKEN OPENAI_API_KEY CODEX_POOL_AUTH_TOKEN AWS_SECRET_ACCESS_KEY AWS_REGION CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID MY_SERVICE_SECRET db_password SAFE_SETTING CLAUDE_X_SECRET ANTHROPIC_X_TOKEN GOOGLE_APPLICATION_CREDENTIALS AZURE_CLIENT_SECRET ANTHROPIC_FOUNDRY_API_KEY AWS_ACCESS_KEY_ID AWS_SESSION_TOKEN AWS_BEARER_TOKEN_BEDROCK; do
   if [ -n "${!v+x}" ]; then echo "$v=set"; else echo "$v=unset"; fi
 done > "$FAKE_LOG"
 SH
@@ -68,24 +68,56 @@ STUB
     seen SAFE_SETTING=set
 }
 
-@test "claude child: a cloud-provider run keeps the provider's credentials" {
+@test "claude child: Bedrock flag keeps only the AWS auth names; Google and Azure stay removed" {
     fake_claude
     CLAUDE_CODE_USE_BEDROCK=1 PATH="$T/bin:$PATH" run bash "$DISPATCH" --to claude --model m -C "$T/repo" -o "$T/out.md" "prompt"
     [ "$status" -eq 0 ]
-    seen AWS_SECRET_ACCESS_KEY=set
-    seen GH_TOKEN=unset
-    seen CLOUDFLARE_API_TOKEN=unset
+    for n in AWS_SECRET_ACCESS_KEY AWS_ACCESS_KEY_ID AWS_SESSION_TOKEN AWS_BEARER_TOKEN_BEDROCK; do seen "$n=set"; done
+    for n in GOOGLE_APPLICATION_CREDENTIALS AZURE_CLIENT_SECRET ANTHROPIC_FOUNDRY_API_KEY GH_TOKEN CLOUDFLARE_API_TOKEN; do seen "$n=unset"; done
 }
 
-@test "claude child: CLAVAIN_SEAT_ENV_SCRUB=0 restores the inherited environment" {
+@test "claude child: Vertex flag keeps only the Google auth name" {
+    fake_claude
+    CLAUDE_CODE_USE_VERTEX=1 PATH="$T/bin:$PATH" run bash "$DISPATCH" --to claude --model m -C "$T/repo" -o "$T/out.md" "prompt"
+    [ "$status" -eq 0 ]
+    seen GOOGLE_APPLICATION_CREDENTIALS=set
+    for n in AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AZURE_CLIENT_SECRET ANTHROPIC_FOUNDRY_API_KEY; do seen "$n=unset"; done
+}
+
+@test "claude child: Foundry flag keeps only the Foundry/Azure auth names" {
+    fake_claude
+    CLAUDE_CODE_USE_FOUNDRY=1 PATH="$T/bin:$PATH" run bash "$DISPATCH" --to claude --model m -C "$T/repo" -o "$T/out.md" "prompt"
+    [ "$status" -eq 0 ]
+    seen ANTHROPIC_FOUNDRY_API_KEY=set
+    seen AZURE_CLIENT_SECRET=set
+    for n in AWS_SECRET_ACCESS_KEY AWS_BEARER_TOKEN_BEDROCK GOOGLE_APPLICATION_CREDENTIALS; do seen "$n=unset"; done
+}
+
+@test "claude child: with no provider flag every cloud provider's names are removed" {
     fake_claude
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --to claude --model m -C "$T/repo" -o "$T/out.md" "prompt"
     [ "$status" -eq 0 ]
-    seen GH_TOKEN=unset
+    for n in AWS_SECRET_ACCESS_KEY AWS_ACCESS_KEY_ID GOOGLE_APPLICATION_CREDENTIALS AZURE_CLIENT_SECRET ANTHROPIC_FOUNDRY_API_KEY; do seen "$n=unset"; done
+    CLAUDE_CODE_USE_BEDROCK=0 PATH="$T/bin:$PATH" run bash "$DISPATCH" --to claude --model m -C "$T/repo" -o "$T/out.md" "prompt"
+    seen AWS_SECRET_ACCESS_KEY=unset
+}
+
+@test "claude child: an arbitrary CLAUDE_* or ANTHROPIC_* secret that is not an auth name is removed" {
+    fake_claude
+    PATH="$T/bin:$PATH" run bash "$DISPATCH" --to claude --model m -C "$T/repo" -o "$T/out.md" "prompt"
+    [ "$status" -eq 0 ]
+    seen CLAUDE_X_SECRET=unset
+    seen ANTHROPIC_X_TOKEN=unset
+    seen ANTHROPIC_AUTH_TOKEN=set
+}
+
+@test "there is no switch that turns the scrub off: CLAVAIN_SEAT_ENV_SCRUB=0 changes nothing" {
+    fake_claude
     CLAVAIN_SEAT_ENV_SCRUB=0 PATH="$T/bin:$PATH" run bash "$DISPATCH" --to claude --model m -C "$T/repo" -o "$T/out.md" "prompt"
     [ "$status" -eq 0 ]
-    seen GH_TOKEN=set
-    seen AWS_REGION=set
+    seen GH_TOKEN=unset
+    seen SAFE_SETTING=set
+    seen CLAUDE_X_SECRET=unset
 }
 
 @test "claude child: the token-leak scan still knows the token that was kept" {
@@ -138,11 +170,65 @@ STUB
     done
 }
 
-@test "codex: CLAVAIN_SEAT_ENV_SCRUB=0 adds no exclude list" {
+@test "codex: CLAVAIN_SEAT_ENV_SCRUB=0 still adds the exclude list" {
     run codex_exclude_arg
     [ "$status" -eq 0 ]
     CLAVAIN_SEAT_ENV_SCRUB=0 run codex_exclude_arg
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'"*TOKEN*"'* ]]
+}
+
+review_dry_run() {
+    cat > "$T/bin/ic" <<'STUB'
+#!/bin/sh
+case "$*" in
+  *"route list"*) echo '[]' ;;
+  *"route identity"*) echo '{"model_identity":"gpt-6.1-sol"}' ;;
+  *"route record"*) exit 0 ;;
+  *) exit 3 ;;
+esac
+STUB
+    chmod +x "$T/bin/ic"
+    PATH="$T/bin:$PATH" bash "$DISPATCH" --role "$1" --role-resolved --to codex --dry-run \
+        -C "$T/repo" -o "$T/out" "${@:2}" 'Review it' 2>&1
+}
+
+@test "codex: a review or validation role rejects a shell_environment_policy passthrough" {
+    run review_dry_run cross-lab-review
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'shell_environment_policy.exclude=\['*'TOKEN'* ]]
+    for r in cross-lab-review validation plan-review; do
+        run review_dry_run "$r" -c 'shell_environment_policy.exclude=[]'
+        [ "$status" -eq 2 ]
+        [[ "$output" == *'does not accept a shell_environment_policy passthrough'* ]]
+        run review_dry_run "$r" -c 'shell_environment_policy.inherit=all'
+        [ "$status" -eq 2 ]
+    done
+}
+
+@test "codex: a review role still accepts an unrelated -c passthrough" {
+    run review_dry_run cross-lab-review -c 'model_reasoning_effort="low"'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'shell_environment_policy.exclude=\['*'TOKEN'* ]]
+}
+
+@test "codex: a plain (non-governed) call may still override the exclude; the later -c is last" {
+    PATH="$T/bin:$PATH" run bash "$DISPATCH" --to codex --dry-run -C "$T/repo" -o "$T/out" \
+        -c 'shell_environment_policy.exclude=[]' prompt
+    [ "$status" -eq 0 ]
+    # Display is %q-quoted: our list comes first, the caller's empty list after it.
+    [[ "$output" == *'exclude=\[\"'*'exclude=\[\]'* ]]
+}
+
+@test "codex: repeated -c keys take the last value (codex-cli precedence the rejection relies on)" {
+    [[ -n "$REAL_CODEX" && "$(uname -s)" == Linux ]] || skip 'codex sandbox (Linux) not installed'
+    "$REAL_CODEX" sandbox true >/dev/null 2>&1 || skip 'codex sandbox not usable here'
+    ex='shell_environment_policy.exclude=["*TOKEN*"]'
+    none='shell_environment_policy.exclude=["NOMATCH_X"]'
+    "$REAL_CODEX" sandbox -c "$ex" -c "$none" bash "$T/record.sh"
+    seen GH_TOKEN=set
+    "$REAL_CODEX" sandbox -c "$none" -c "$ex" bash "$T/record.sh"
+    seen GH_TOKEN=unset
 }
 
 @test "codex: the real codex sandbox obeys the exclude list dispatch passes (tool command path)" {

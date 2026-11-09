@@ -233,24 +233,44 @@ case-insensitive globs: `*TOKEN*`, `*SECRET*`, `*PASSWORD*`, `*PASSWD*`,
 `OPENAI_*` (`SEAT_SECRET_PATTERNS`).
 
 - Codex (`codex exec`, including the cross-lab-review seat): dispatch passes
-  `-c shell_environment_policy.exclude=[...]` with those patterns, before any
-  passthrough flag. The codex process keeps its own environment (and its own
-  auth files); only the commands it runs for the model lose the names. Confirmed
-  on codex-cli 0.167.0 by running `codex sandbox -c shell_environment_policy.exclude=[...]`
-  with dummy values: matching names, in any letter case, were absent from the
-  command and others were present. The setting's keys (`inherit`,
-  `ignore_default_excludes`, `exclude`, `include_only`, `filters`) are also in
-  the installed binary and `codex debug --help` lists the `-c` form.
-  Without this override, the same sandbox command passed every name through.
+  `-c shell_environment_policy.exclude=[...]` with those patterns. The codex
+  process keeps its own environment (and its own auth files); only the commands
+  it runs for the model lose the names. Confirmed on codex-cli 0.167.0 by
+  running `codex sandbox -c shell_environment_policy.exclude=[...]` with dummy
+  values: matching names, in any letter case, were absent from the command and
+  others were present. The same sandbox command passed every name through
+  without the override. For a repeated `-c` key codex takes the last value
+  (tested with both orders: the later list won). A caller's own passthrough
+  `-c shell_environment_policy...` therefore can override the list. For the
+  `validation`, `cross-lab-review` and `plan-review` roles dispatch refuses
+  (exit 2) any passthrough argument mentioning `shell_environment_policy`; for
+  other callers the caller's later `-c` still wins, deliberately.
 - Claude (`--to claude`, validation and review seats) and Kimi (`--to kimi`,
   including the kimi review seat): the child is started as `env -u NAME ...`
-  for every matching name in the dispatch shell, except the names that engine
-  authenticates with. Claude keeps `ANTHROPIC_*` and `CLAUDE_*`, and also
-  `AWS_*`, `GOOGLE_*` and `AZURE_*` when `CLAUDE_CODE_USE_BEDROCK`,
-  `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY` is set. Kimi keeps
-  `KIMI_*` and `MOONSHOT_*`. The dispatch shell's own environment is not
-  changed, so the leak scan values and later dispatch steps are unaffected.
-- `CLAVAIN_SEAT_ENV_SCRUB=0` turns this off for a run.
+  for every matching name in the dispatch shell except an exact,
+  case-sensitive keep name. Only names that match the patterns need a keep.
+  No keep is a prefix. The lists (`SEAT_KEEP_*` in `scripts/dispatch.sh`) come
+  from the env-name strings in the installed claude 2.1.319 and kimi binaries
+  and from `claude --help` (`setup-token`, auth):
+  - Claude always keeps `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` and
+    `CLAUDE_CODE_OAUTH_TOKEN`.
+  - Per provider, only when that provider's flag is set (not empty, `0` or
+    `false`): `CLAUDE_CODE_USE_BEDROCK` keeps `AWS_ACCESS_KEY_ID`,
+    `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_BEARER_TOKEN_BEDROCK`;
+    `CLAUDE_CODE_USE_VERTEX` keeps `GOOGLE_APPLICATION_CREDENTIALS`;
+    `CLAUDE_CODE_USE_FOUNDRY` keeps `ANTHROPIC_FOUNDRY_API_KEY` and
+    `AZURE_CLIENT_SECRET`. An inactive provider's names are always removed.
+  - Kimi keeps `KIMI_API_KEY` and `MOONSHOT_API_KEY`.
+  - Every other name that matches a pattern is removed, including any other
+    `CLAUDE_*` or `ANTHROPIC_*` secret (for example `CLAUDE_X_SECRET`). The
+    dispatch shell's own environment is not changed, so the leak scan values
+    and later dispatch steps are unaffected.
+- There is no opt-out. `CLAVAIN_SEAT_ENV_SCRUB=0` was removed (the earlier
+  version had it): a global bypass would expose every credential to a review
+  seat's commands. No per-name executor keep was added: `gh` on the host
+  authenticates from its own config file, not from `GH_TOKEN`/`GITHUB_TOKEN`
+  (`gh auth status` reports the config file; both variables are unset), so no
+  concrete executor need exists.
 
 Limits:
 
@@ -261,19 +281,25 @@ Limits:
   2.1.319 and not adopted: it forces the permission mode to default and enables a
   Bash sandbox that needs `socat`, and with `socat` absent the seat's Bash did not run.
   The same holds for the kept Kimi variables.
-- The codex preflight children and the other dispatch helpers are covered only
-  by the earlier token unsets. Programs that codex itself starts other than the
-  model's shell commands (MCP servers, hooks) are not covered by the exclude list.
+- The cross-lab-review sandbox preflight carries the same exclude (it copies the
+  seat's `-c` arguments), so the probe's sandboxed command loses the names; the
+  outer codex process of that probe, the codex version probe, the Claude help
+  probe and the other dispatch helpers keep their inherited environment apart
+  from the earlier token unsets. Programs that codex itself starts other than
+  the model's shell commands (MCP servers, hooks) are not covered by the
+  exclude list.
 - `--via bb` (`bb-seat.py`) and `--via zaka` start their agents through BB and
   zaka; this change does not alter their environment.
 - The match is by name. A secret in a variable with a name outside the
   patterns, or in a file the seat can read, is not removed. A matching but
   harmless name (for example `AWS_REGION`) is removed too.
-- A user codex `config.toml` that sets `shell_environment_policy.filters`
-  conflicts with the legacy `exclude` key; codex then refuses to start.
+- A user codex `config.toml` or profile that sets `shell_environment_policy`
+  is not inspected; `filters` there conflicts with the legacy `exclude` key and
+  codex then refuses to start.
 - Verified by `tests/shell/dispatch_seat_env_scrub.bats` with dummy values and
-  stub engines; the codex tool-command path is shown with the real
-  `codex sandbox` where it is installed, not with a model-driven `codex exec` run.
+  stub engines; the codex tool-command path and the repeated-key precedence are
+  shown with the real `codex sandbox` where it is installed, not with a
+  model-driven `codex exec` run.
 
 Remaining limits, stated plainly:
 
