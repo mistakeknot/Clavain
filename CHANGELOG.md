@@ -15,6 +15,7 @@ files are bumped by the release step (`ic publish`), not by this change.
 - **`review-round`** one-round review wrapper with strict terminal verdict block and CI-EXIT on failing CI (#81, #82, #83).
 - **New commands**: grill-me, blast-radius, correct, show-me-your-work (#78); blast-radius and show-me-your-work are now model-invocable (#80); breadth review before cross-lab convergence (#77).
 - **Upstream sync** of superpowers sdd-workspace fixes (#98); decision-log lock test (#79).
+- **Dispatch audit surfaces ic recording failures; `skill-eval-paired` records routing** (mk-8m26b). When `ic` cannot record a routing decision, the message now names one fixed reason (`database could not be opened`, `database locked`, or `ic failed; stderr withheld`) chosen by matching `ic` stderr; no byte of that stderr is printed. Real `skill-eval-paired` runs now refuse early without `CLAVAIN_INTERCORE_DB`, and the failure message now carries a redacted reason.
 - **Housekeeping**: public hygiene scrub (#91), interlens dropped from agent-rig and install fallbacks (#92), gitleaks fingerprints (#97), wiki version figure (#95).
 
 ### Earlier unreleased entries

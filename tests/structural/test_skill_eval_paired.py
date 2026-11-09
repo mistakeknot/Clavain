@@ -349,3 +349,46 @@ def test_judge_with_unknown_or_missing_observed_model_rejected(tmp_path):
 
 def test_judge_on_other_model_accepted(tmp_path):
     assert _run_pair(tmp_path, "gpt-6.1-sol", "claude-opus-5-5") == 0.5
+
+
+def _real_args(tmp_path):
+    skill = tmp_path / "SKILL.md"
+    skill.write_text("x")
+    stub = _stub_dispatch(tmp_path, "gpt-6.1-sol")
+    return ["--skill", str(skill), "--cases", str(ROOT / "tests/skill-evals/paired/ship.json"),
+            "--dispatch", str(stub), "--fake-judge", "--repeats", "1", "--seed", "1"]
+
+
+def test_real_run_refuses_without_audit_db(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("CLAVAIN_INTERCORE_DB", raising=False)
+    monkeypatch.setenv("STUB_LOG", str(tmp_path / "log"))
+    assert sep.main(_real_args(tmp_path)) == 1
+    assert "CLAVAIN_INTERCORE_DB is not set" in capsys.readouterr().err
+    assert not (tmp_path / "log").exists()  # refused before any dispatch
+
+
+def test_real_run_refuses_relative_or_missing_audit_db(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("STUB_LOG", str(tmp_path / "log"))
+    for bad in ("relative.db", str(tmp_path / "absent.db")):
+        monkeypatch.setenv("CLAVAIN_INTERCORE_DB", bad)
+        assert sep.main(_real_args(tmp_path)) == 1
+        assert "absolute path to an existing database" in capsys.readouterr().err
+
+
+def test_dispatch_receives_audit_db_from_environment(tmp_path, monkeypatch):
+    db = tmp_path / "temp-intercore.db"
+    db.write_text("")
+    monkeypatch.setenv("CLAVAIN_INTERCORE_DB", str(db))
+    stub = tmp_path / "dispatch.sh"
+    stub.write_text("#!/usr/bin/env bash\n"
+                    "out=''; while [ $# -gt 0 ]; do [ \"$1\" = -o ] && out=$2; shift; done\n"
+                    "printf 'r\\nSCORE: 0.5\\n' > \"$out\"\n"
+                    "printf '{\"role\":\"routine-execution\",\"outcome\":\"completed\",\"exit_code\":0,"
+                    "\"model\":\"m\",\"observed_model\":\"m\"}\\n' >> \"$CLAVAIN_DISPATCH_RECEIPT_FILE\"\n"
+                    "printf '%s' \"$CLAVAIN_INTERCORE_DB\" > \"$(dirname \"$out\")/seen\"\n"
+                    "cp \"$(dirname \"$out\")/seen\" \"$SEEN_COPY\"\n")
+    stub.chmod(0o755)
+    monkeypatch.setenv("SEEN_COPY", str(tmp_path / "seen"))
+    ex, _ = sep.make_dispatch_callables(stub, "routine-execution", "routine-execution", 30)
+    ex("injected", CASES[0], "BODY")
+    assert (tmp_path / "seen").read_text() == str(db)
