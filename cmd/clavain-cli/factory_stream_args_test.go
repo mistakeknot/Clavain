@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -18,7 +19,7 @@ func TestParseFactoryStreamArgsDefaults(t *testing.T) {
 
 func TestParseFactoryStreamArgsValid(t *testing.T) {
 	opts, err := parseFactoryStreamArgs([]string{
-		"--port", "9000", "--interval", "250ms", "--cors-origins", "http://localhost:3000",
+		"--port", "9000", "--interval", "250ms", "--cors-origins", "https://example.com",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -29,8 +30,20 @@ func TestParseFactoryStreamArgsValid(t *testing.T) {
 	if opts.interval != 250*time.Millisecond {
 		t.Errorf("interval = %s, want 250ms", opts.interval)
 	}
-	if opts.corsOrigins != "http://localhost:3000" {
+	if opts.corsOrigins != "https://example.com" {
 		t.Errorf("corsOrigins = %q", opts.corsOrigins)
+	}
+}
+
+func TestParseFactoryStreamArgsPortBounds(t *testing.T) {
+	for _, port := range []string{"0", "65535"} {
+		opts, err := parseFactoryStreamArgs([]string{"--port", port})
+		if err != nil {
+			t.Fatalf("port %s: unexpected error: %v", port, err)
+		}
+		if strconv.Itoa(opts.port) != port {
+			t.Errorf("port = %d, want %s", opts.port, port)
+		}
 	}
 }
 
