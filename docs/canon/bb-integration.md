@@ -281,7 +281,7 @@ and credentials. It reads Codex `limitWindows` and Claude provider/family window
 The best enabled account can differ by family. Unknown telemetry never proves
 exhaustion, and a pool error produces `status: unknown` with no routing change.
 
-Only `routine-execution`, `deep-execution`, and `scout` consume the forecast.
+Only `routine-execution`, `deep-execution`, `scout`, and `coordination` consume the forecast.
 The default floor is 10% weekly headroom and the five-hour switch threshold is
 the pool's `switchThreshold`, defaulting to 0.98. Routine and deep execution may
 prefer a declared candidate from another provider with more headroom; scout

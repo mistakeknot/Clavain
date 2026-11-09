@@ -1007,7 +1007,7 @@ def _render_attached(spec: dict[str, Any], sources: list[dict[str, str]]) -> str
 
 def _render_requested_output() -> str:
     return (
-        "State `VERDICT: PASS`, `VERDICT: FAIL`, or `VERDICT: UNRUN` (only when "
+        "State `VERDICT: PASS`, `VERDICT: FAIL`, or `VERDICT: UNRUN`, the word bare with no markdown or punctuation around it (UNRUN only when "
         "required verification could not be run -- UNRUN never means PASS). "
         "List findings with severity, location, and evidence drawn only from "
         "this packet. This deliverable gets one fix round followed by one "
