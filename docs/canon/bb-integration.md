@@ -224,6 +224,57 @@ as its only argument and without `ANTHROPIC_AUTH_TOKEN`,
 `CLAUDE_CODE_MESSAGING_TOKEN` in its environment, so a host can file a
 rotation task; a failing hook only warns, and no hook runs without a report.
 
+**Secret-named variables and the commands a seat runs (mk-1w54d).** Beyond the
+bearer tokens above, `scripts/dispatch.sh` removes other secret-named variables
+from the environment that a seat's own shell commands inherit. The names are
+case-insensitive globs: `*TOKEN*`, `*SECRET*`, `*PASSWORD*`, `*PASSWD*`,
+`*CREDENTIAL*`, `*API_KEY*`, `*APIKEY*`, `*PRIVATE_KEY*`, `*ACCESS_KEY*`,
+`AWS_*`, `CLOUDFLARE_*`, `AZURE_*`, `GOOGLE_*`, `GH_*`, `GITHUB_*` and
+`OPENAI_*` (`SEAT_SECRET_PATTERNS`).
+
+- Codex (`codex exec`, including the cross-lab-review seat): dispatch passes
+  `-c shell_environment_policy.exclude=[...]` with those patterns, before any
+  passthrough flag. The codex process keeps its own environment (and its own
+  auth files); only the commands it runs for the model lose the names. Confirmed
+  on codex-cli 0.167.0 by running `codex sandbox -c shell_environment_policy.exclude=[...]`
+  with dummy values: matching names, in any letter case, were absent from the
+  command and others were present. The setting's keys (`inherit`,
+  `ignore_default_excludes`, `exclude`, `include_only`, `filters`) are also in
+  the installed binary and `codex debug --help` lists the `-c` form.
+  Without this override, the same sandbox command passed every name through.
+- Claude (`--to claude`, validation and review seats) and Kimi (`--to kimi`,
+  including the kimi review seat): the child is started as `env -u NAME ...`
+  for every matching name in the dispatch shell, except the names that engine
+  authenticates with. Claude keeps `ANTHROPIC_*` and `CLAUDE_*`, and also
+  `AWS_*`, `GOOGLE_*` and `AZURE_*` when `CLAUDE_CODE_USE_BEDROCK`,
+  `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY` is set. Kimi keeps
+  `KIMI_*` and `MOONSHOT_*`. The dispatch shell's own environment is not
+  changed, so the leak scan values and later dispatch steps are unaffected.
+- `CLAVAIN_SEAT_ENV_SCRUB=0` turns this off for a run.
+
+Limits:
+
+- A Claude seat still passes its own kept variables (for example
+  `ANTHROPIC_AUTH_TOKEN`) to the commands it runs: the Claude CLI hands its
+  environment to its Bash tool. Claude Code has `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`
+  (found in the installed binary, not in `claude --help`). It was tried on
+  2.1.319 and not adopted: it forces the permission mode to default and enables a
+  Bash sandbox that needs `socat`, and with `socat` absent the seat's Bash did not run.
+  The same holds for the kept Kimi variables.
+- The codex preflight children and the other dispatch helpers are covered only
+  by the earlier token unsets. Programs that codex itself starts other than the
+  model's shell commands (MCP servers, hooks) are not covered by the exclude list.
+- `--via bb` (`bb-seat.py`) and `--via zaka` start their agents through BB and
+  zaka; this change does not alter their environment.
+- The match is by name. A secret in a variable with a name outside the
+  patterns, or in a file the seat can read, is not removed. A matching but
+  harmless name (for example `AWS_REGION`) is removed too.
+- A user codex `config.toml` that sets `shell_environment_policy.filters`
+  conflicts with the legacy `exclude` key; codex then refuses to start.
+- Verified by `tests/shell/dispatch_seat_env_scrub.bats` with dummy values and
+  stub engines; the codex tool-command path is shown with the real
+  `codex sandbox` where it is installed, not with a model-driven `codex exec` run.
+
 Remaining limits, stated plainly:
 
 - stdout already mirrored to the terminal before the scan cannot be retracted;
