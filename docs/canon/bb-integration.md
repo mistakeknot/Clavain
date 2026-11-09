@@ -243,13 +243,19 @@ Remaining limits, stated plainly:
   removal, such as the `sed` and `tail` beside `codex --version`, inherit it
   too. Follow-up for the preflight: bead mk-47vtm.2;
 - every message the scanner itself prints (stdout or stderr, including usage,
-  `--help` and its fixed error messages) is checked against the token values
-  (the default variables and any `--token-env`; raw and JSON-escaped forms)
-  and is printed only if no value occurs in it; otherwise nothing is printed
-  and only the exit status reports the outcome. A single-character value such
-  as `:` therefore silences a message that contains it, but is never echoed.
-  Messages printed by `dispatch.sh` itself are outside this check (bead
-  mk-47vtm.4);
+  `--help` and its fixed error messages) goes through one checked printer. It
+  checks the exact text to be written, newline terminator included, against
+  the values of the default variables and every `--token-env` named in argv
+  (any prefix of `--token-env` of three or more characters is treated as that
+  option, and the parser itself rejects abbreviations); raw and JSON-escaped
+  forms are checked. A message containing a value is not printed, and only the
+  exit status reports the outcome. A single-character value such as `:`
+  therefore silences a message that contains it, but is not echoed. If a write
+  or flush fails, the stream is pointed at `/dev/null` and the scanner ends
+  with the exit status of the outcome (for `--help`, 0), without shutdown
+  output. Limits: output the Python interpreter writes itself before the
+  script starts (for example a startup failure) is not covered, and messages
+  printed by `dispatch.sh` itself are outside this check (bead mk-47vtm.4);
 - a child that renders the token in a form other than the raw or JSON-escaped
   string (encoded, split or truncated) is not matched, and a fragment of one
   value that overlaps a different value is not matched separately;

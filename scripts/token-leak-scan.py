@@ -56,11 +56,18 @@ def _emit(message, stream=None):
         names = ["ANTHROPIC_AUTH_TOKEN", "CODEX_POOL_AUTH_TOKEN"]
         argv = sys.argv[1:]
         for i, arg in enumerate(argv):
-            if arg == "--token-env" and i + 1 < len(argv):
-                names.append(argv[i + 1])
-            elif arg.startswith("--token-env="):
-                names.append(arg[len("--token-env="):])
-        text = message.encode("utf-8", "surrogateescape")
+            if arg == "--":
+                break
+            # any prefix of --token-env (at least "--t"), in either form, so the
+            # list never depends on how the parser abbreviates
+            head, eq, rest = arg.partition("=")
+            if len(head) >= 3 and "--token-env".startswith(head):
+                if eq:
+                    names.append(rest)
+                elif i + 1 < len(argv):
+                    names.append(argv[i + 1])
+        # the exact bytes that will be written, newline terminator included
+        text = (message + "\n").encode("utf-8", "surrogateescape")
         for name in names:
             value = _os.environ.get(name, "")
             if not value:
@@ -72,9 +79,48 @@ def _emit(message, stream=None):
                 return  # escaped form cannot be computed: print nothing
             if any(form in text for form in forms):
                 return
-        print(message, file=stream or sys.stderr)
+        stream = stream or sys.stderr
+        try:
+            stream.write(message + "\n")
+            stream.flush()
+        except BaseException:
+            _silence(stream)
     except BaseException:
         return
+
+
+def _silence(stream):
+    """After a failed write or flush, point the stream at /dev/null so that
+    nothing buffered can fail (and print a diagnostic) at interpreter exit."""
+    try:
+        import os as _os
+
+        null = _os.open(_os.devnull, _os.O_WRONLY)
+        try:
+            _os.dup2(null, stream.fileno())
+        finally:
+            _os.close(null)
+    except BaseException:
+        pass
+    try:
+        stream.flush()
+    except BaseException:
+        try:
+            import io as _io
+
+            name = "stdout" if stream is sys.stdout else "stderr"
+            setattr(sys, name, _io.StringIO())
+        except BaseException:
+            pass
+
+
+def _final_flush():
+    """Flush both streams inside the checked path; a failure ends silently."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except BaseException:
+            _silence(stream)
 
 
 # Anything that can fail at import time sits inside this boundary, so no
@@ -385,15 +431,15 @@ class _QuietParser(argparse.ArgumentParser):
 
 
 def build_parser():
-    parser = _QuietParser(description=DESCRIPTION)
+    parser = _QuietParser(description=DESCRIPTION, allow_abbrev=False)
     sub = parser.add_subparsers(dest="command", required=True, parser_class=_QuietParser)
-    scan = sub.add_parser("scan")
+    scan = sub.add_parser("scan", allow_abbrev=False)
     scan.add_argument("--hits", required=True)
     scan.add_argument("--token-env", action="append")
     scan.add_argument("--root", action="append")
     scan.add_argument("files", nargs="*")
     scan.set_defaults(func=cmd_scan)
-    report = sub.add_parser("report")
+    report = sub.add_parser("report", allow_abbrev=False)
     report.add_argument("--hits", required=True)
     report.add_argument("--report", required=True)
     report.add_argument("--token-env", action="append")
@@ -417,4 +463,6 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _code = main()
+    _final_flush()
+    sys.exit(_code)

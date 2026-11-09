@@ -789,3 +789,28 @@ runpy.run_path(sys.argv[1], run_name="__main__")' "$ROOT/scripts/token-leak-scan
     [ "$status" -eq 4 ]
     [ "$output" = "token-leak-scan: internal error (details withheld)" ]
 }
+
+# mk-47vtm.4 round 2: abbreviated option, the appended newline, and failed
+# writes at interpreter shutdown. Dummy values only.
+@test "scanner: an abbreviated --token-env (space and equals forms) never echoes its value" {
+    CUSTOM_TOK=':' run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --token-e CUSTOM_TOK --hits "$T/missing-dir/hits" "$T/a.txt"
+    [[ "$output" != *:* ]]
+    CUSTOM_TOK=':' run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --token-e=CUSTOM_TOK --hits "$T/missing-dir/hits" "$T/a.txt"
+    [[ "$output" != *:* ]]
+}
+
+@test "scanner: a value that is a newline silences the message including its terminator" {
+    ANTHROPIC_AUTH_TOKEN=$'\n' run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/missing-dir/hits" "$T/a.txt"
+    [ "$status" -eq 4 ]
+    [ -z "$output" ]
+    run bash -c 'ANTHROPIC_AUTH_TOKEN="$(printf "x\n")" python3 -I "$1" scan --hits "$2/missing-dir/hits" "$2/a.txt" 2>&1 | od -An -c' _ "$ROOT/scripts/token-leak-scan.py" "$T"
+    [[ "$output" != *x* ]]
+}
+
+@test "scanner: a failed write to a full device ends silently with no interpreter shutdown output" {
+    ANTHROPIC_AUTH_TOKEN=OSError python3 -I "$ROOT/scripts/token-leak-scan.py" --help >/dev/full 2>"$T/err" && rc=0 || rc=$?
+    [ "$rc" -eq 0 ]
+    [ ! -s "$T/err" ]
+    ANTHROPIC_AUTH_TOKEN=OSError python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/missing-dir/hits" "$T/a.txt" >/dev/full 2>/dev/full && rc=0 || rc=$?
+    [ "$rc" -eq 4 ]
+}
