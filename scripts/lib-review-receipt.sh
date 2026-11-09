@@ -335,6 +335,7 @@ _review_receipt_write() {
     fi
   done
   file="$cand"
+  REVIEW_RECEIPT_PATH="$file"  # mk-ouz83: the dispatch token scan reads it
   rm -f "$tmpf"
   echo "review receipt: $file" >&2
   # An UNKNOWN verdict is on record but is not a usable ruling: return 3 so the

@@ -220,6 +220,7 @@ _reject_passing_suffix() {
     _review_receipt_prepare "$R"
     source <(awk '/^_dispatch_cleanup_state\(\)/ { emit=1 } emit { print; if ($0 == "}") exit }' "$DISPATCH")
     _review_scratch_cleanup() { :; }
+    _token_leak_scan_all() { :; }; _token_leak_conclude() { return 0; }  # the cleanup trap now scans (mk-ouz83)
     ROLE_RESOLVED=true ROLE=cross-lab-review OUTPUT="$OUT" STATE_FILE="$T/state"
     printf 'Findings\n\nVERDICT: BLOCK (fetch can erase unpushed refs).\n' > "$OUT"
     true
@@ -232,6 +233,7 @@ _reject_passing_suffix() {
     _review_receipt_prepare "$R"
     source <(awk '/^_dispatch_cleanup_state\(\)/ { emit=1 } emit { print; if ($0 == "}") exit }' "$DISPATCH")
     _review_scratch_cleanup() { :; }
+    _token_leak_scan_all() { :; }; _token_leak_conclude() { return 0; }  # the cleanup trap now scans (mk-ouz83)
     ROLE_RESOLVED=true ROLE=cross-lab-review OUTPUT="$OUT" STATE_FILE="$T/state"
     printf 'Findings\n\nVERDICT: PASS / BLOCK\n' > "$OUT"
     true
@@ -788,6 +790,7 @@ _reject_passing_suffix() {
     _review_receipt_prepare "$R"
     source <(awk '/^_dispatch_cleanup_state\(\)/ { emit=1 } emit { print; if ($0 == "}") exit }' "$DISPATCH")
     _review_scratch_cleanup() { :; }
+    _token_leak_scan_all() { :; }; _token_leak_conclude() { return 0; }  # the cleanup trap now scans (mk-ouz83)
     ROLE_RESOLVED=true ROLE=cross-lab-review OUTPUT="$OUT" STATE_FILE="$T/state"
     printf 'Findings\n\nVERDICT: APPROVE\n' > "$OUT"
     true
