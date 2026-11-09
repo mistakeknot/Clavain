@@ -35,6 +35,57 @@ _token_leak_capture() {
 }
 _token_leak_capture
 
+# mk-1w54d: inherited secrets stay out of what a seat's own shell commands see.
+# Names (case-insensitive globs) treated as secrets. Codex receives them as its
+# shell_environment_policy exclude list (its tool commands lose them, the codex
+# process keeps its environment); the Claude and Kimi children are started
+# through `env -u` for every matching name except the ones that engine needs
+# for its own authentication (see _seat_env_collect). The dispatch shell itself
+# is not changed, so _token_leak_capture values and later dispatch steps are
+# unaffected. CLAVAIN_SEAT_ENV_SCRUB=0 turns the whole mechanism off.
+SEAT_SECRET_PATTERNS=('*TOKEN*' '*SECRET*' '*PASSWORD*' '*PASSWD*' '*CREDENTIAL*'
+  '*API_KEY*' '*APIKEY*' '*PRIVATE_KEY*' '*ACCESS_KEY*'
+  'AWS_*' 'CLOUDFLARE_*' 'AZURE_*' 'GOOGLE_*' 'GH_*' 'GITHUB_*' 'OPENAI_*')
+SEAT_ENV_UNSET=()
+_seat_env_scrub_enabled() { [[ "${CLAVAIN_SEAT_ENV_SCRUB:-1}" != 0 ]]; }
+# Fills SEAT_ENV_UNSET with `-u NAME` pairs for the current environment.
+# $1 = engine (claude|kimi). Names the engine authenticates with are kept.
+_seat_env_collect() {
+  local engine="$1" name pat keep cloud=false nc=0
+  SEAT_ENV_UNSET=()
+  _seat_env_scrub_enabled || return 0
+  for name in CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY; do
+    [[ -z "${!name:-}" || "${!name}" == 0 ]] || cloud=true
+  done
+  shopt -q nocasematch && nc=1
+  shopt -s nocasematch
+  while IFS= read -r name; do
+    for pat in "${SEAT_SECRET_PATTERNS[@]}"; do
+      # shellcheck disable=SC2053
+      [[ "$name" == $pat ]] || continue
+      keep=false
+      case "$engine" in
+        claude)
+          case "$name" in ANTHROPIC_*|CLAUDE_*) keep=true ;; esac
+          if [[ "$cloud" == true ]]; then
+            case "$name" in AWS_*|GOOGLE_*|AZURE_*) keep=true ;; esac
+          fi ;;
+        kimi) case "$name" in KIMI_*|MOONSHOT_*) keep=true ;; esac ;;
+      esac
+      [[ "$keep" == true ]] || SEAT_ENV_UNSET+=(-u "$name")
+      break
+    done
+  done < <(compgen -e)
+  [[ "$nc" == 1 ]] || shopt -u nocasematch
+  return 0
+}
+# Codex: -c override that drops the same names from its tool commands' env.
+_seat_codex_env_args() {
+  local pat list=""
+  for pat in "${SEAT_SECRET_PATTERNS[@]}"; do list+="\"$pat\","; done
+  printf '%s\n' "shell_environment_policy.exclude=[${list%,}]"
+}
+
 # Size threshold for --inject-docs warning (bytes)
 INJECT_DOCS_WARN_THRESHOLD=20000
 
@@ -3121,6 +3172,10 @@ else
   # Build codex exec command
   CMD=(codex exec)
   CMD+=(-s "$SANDBOX")
+  # mk-1w54d: codex's own shell tool commands lose secret-named variables
+  # (confirmed: codex-cli 0.167.0 `codex sandbox -c shell_environment_policy.exclude=[...]`).
+  # Added before any user passthrough so an explicit -c can still override it.
+  if _seat_env_scrub_enabled; then CMD+=(-c "$(_seat_codex_env_args)"); fi
   if _bb_pool_available codex; then
     _bb_codex_pool_token
     # Match BB's provider-codex launch contract. The hub token stays in env.
@@ -5199,6 +5254,12 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
     echo "dispatch: kimi seat runs in a disposable copy ($KIMI_SANDBOX_MODE)" >&2
   elif [[ "$ENGINE" == "kimi" && -n "$KIMI_SANDBOX_MODE" ]]; then
     echo "dispatch: kimi seat sandbox: $KIMI_SANDBOX_MODE" >&2
+  fi
+  # mk-1w54d: start the child without secret-named variables, except the ones
+  # the engine authenticates with (the dispatch shell keeps its own).
+  _seat_env_collect "$ENGINE"
+  if [[ ${#SEAT_ENV_UNSET[@]} -gt 0 ]]; then
+    RUN_CMD=(env "${SEAT_ENV_UNSET[@]}" "${RUN_CMD[@]}")
   fi
   set +e
   # kimi carries its prompt in argv; claude reads it from PROMPT_STDIN_FILE
