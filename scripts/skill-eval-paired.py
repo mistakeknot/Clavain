@@ -241,10 +241,12 @@ def read_receipt_identity(receipt_file: Path, role: str) -> str:
             except json.JSONDecodeError:
                 continue
             if (isinstance(rec, dict) and rec.get("role") == role
-                    and rec.get("outcome") == "completed" and rec.get("exit_code") == 0
-                    and isinstance(rec.get("observed_model"), str)
-                    and rec["observed_model"].strip().lower() not in ("", "unknown")):
-                models.add(rec["observed_model"].strip())
+                    and rec.get("outcome") == "completed" and rec.get("exit_code") == 0):
+                value = rec.get("observed_model")
+                if not isinstance(value, str) or value.strip().lower() in ("", "unknown"):
+                    # a completed receipt with no usable identity is never skipped
+                    raise RuntimeError("a completed dispatch receipt has no observed model")
+                models.add(value.strip())
     if len(models) != 1:
         raise RuntimeError(
             f"cannot determine the executor identity from the dispatch receipt "
@@ -300,7 +302,9 @@ def make_dispatch_callables(dispatch: Path, executor_role: str, judge_role: str,
         return _dispatch(dispatch, executor_role, None, executor_prompt(case, body), timeout)
 
     def judge(case: dict, response: str, identity: str) -> float:
-        text, _ = _dispatch(dispatch, judge_role, identity, judge_prompt(case, response), timeout)
+        text, judge_model = _dispatch(dispatch, judge_role, identity, judge_prompt(case, response), timeout)
+        if judge_model == identity:
+            raise RuntimeError(f"judge ran on the producer's model ({identity}); not cross-model")
         return parse_score(text)
 
     return executor, judge
