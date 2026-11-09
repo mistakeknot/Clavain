@@ -2,14 +2,37 @@
 # routing-b5-shadow-report.sh — Analyze Track B5 (local model) shadow routing logs.
 # Shows would-route-locally count, ineligible count, unavailable count, and enforce readiness.
 #
-# Usage: bash routing-b5-shadow-report.sh [--days N] [--json]
+# Usage: bash routing-b5-shadow-report.sh [--days N]
+#   A bare number is also read as the day count. --json is accepted but the
+#   report is text only.
 
 set -euo pipefail
 
-DAYS="${1:-7}"
-JSON_MODE=""
-[[ "${1:-}" == "--json" || "${2:-}" == "--json" ]] && JSON_MODE=1
-[[ "${1:-}" =~ ^[0-9]+$ ]] && DAYS="$1"
+DAYS=7
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --days)
+      [[ "${2:-}" =~ ^[0-9]+$ ]] || { echo "ERROR: --days needs a whole number" >&2; exit 2; }
+      DAYS="$2"
+      shift 2
+      ;;
+    --days=*)
+      [[ "${1#--days=}" =~ ^[0-9]+$ ]] || { echo "ERROR: --days needs a whole number" >&2; exit 2; }
+      DAYS="${1#--days=}"
+      shift
+      ;;
+    --json)
+      # Accepted for compatibility; the report is text only.
+      shift
+      ;;
+    *)
+      # A bare number is the older positional form of --days.
+      [[ "$1" =~ ^[0-9]+$ ]] || { echo "ERROR: unknown argument: $1" >&2; exit 2; }
+      DAYS="$1"
+      shift
+      ;;
+  esac
+done
 
 echo "=== Track B5 Local Model Routing Shadow Report ==="
 echo "Period: last ${DAYS} days"
@@ -41,9 +64,11 @@ fi
 # Parse shadow lines
 echo "--- Event Distribution ---"
 TOTAL=$(echo "$SHADOW_LINES" | wc -l | tr -d ' ')
-WOULD_ROUTE=$(echo "$SHADOW_LINES" | grep -c 'would route locally' || echo "0")
-INELIGIBLE=$(echo "$SHADOW_LINES" | grep -c 'ineligible' || echo "0")
-UNAVAILABLE=$(echo "$SHADOW_LINES" | grep -c 'unavailable' || echo "0")
+# grep -c prints 0 itself when nothing matches (and exits 1), so only the
+# exit status needs absorbing.
+WOULD_ROUTE=$(echo "$SHADOW_LINES" | grep -c 'would route locally' || true)
+INELIGIBLE=$(echo "$SHADOW_LINES" | grep -c 'ineligible' || true)
+UNAVAILABLE=$(echo "$SHADOW_LINES" | grep -c 'unavailable' || true)
 
 echo "  Total events:      $TOTAL"
 echo "  Would route local: $WOULD_ROUTE"

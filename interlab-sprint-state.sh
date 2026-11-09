@@ -21,7 +21,8 @@ LOC=$(wc -l < hooks/lib-sprint.sh)
 echo "METRIC lib_sprint_loc=$LOC"
 
 # Count function definitions
-FUNC_COUNT=$(grep -c '^[a-z_]*()' hooks/lib-sprint.sh 2>/dev/null || echo 0)
+FUNC_COUNT=$(grep -c '^[a-z_]*()' hooks/lib-sprint.sh 2>/dev/null || true)
+FUNC_COUNT=${FUNC_COUNT:-0}
 echo "METRIC function_count=$FUNC_COUNT"
 
 # Measure a dry-run of sprint_find_active (will be fast if no sprints active)

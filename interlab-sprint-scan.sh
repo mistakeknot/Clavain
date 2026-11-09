@@ -19,7 +19,8 @@ LOC=$(wc -l < hooks/sprint-scan.sh)
 echo "METRIC sprint_scan_loc=$LOC"
 
 # Count grep/sed calls (pattern matching density)
-GREP_COUNT=$(grep -c 'grep\|sed\|awk' hooks/sprint-scan.sh 2>/dev/null || echo 0)
+GREP_COUNT=$(grep -c 'grep\|sed\|awk' hooks/sprint-scan.sh 2>/dev/null || true)
+GREP_COUNT=${GREP_COUNT:-0}
 echo "METRIC pattern_match_calls=$GREP_COUNT"
 
 # Measure orphan brainstorm detection

@@ -30,7 +30,8 @@ check() {
 check_count() {
     local label="$1" pattern="$2" min="$3"
     local count
-    count=$(grep -cE "$pattern" "$FILE" 2>/dev/null || echo 0)
+    count=$(grep -cE "$pattern" "$FILE" 2>/dev/null || true)
+    count=${count:-0}
     if [[ "$count" -lt "$min" ]]; then
         echo "FAIL: $label — expected >=$min matches, got $count"
         errors=$((errors + 1))
