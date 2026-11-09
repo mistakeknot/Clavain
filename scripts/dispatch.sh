@@ -1060,7 +1060,10 @@ _run_candidate_with_policy() {
 _codex_version_at_least() {
   local required="$1" current
   command -v codex >/dev/null 2>&1 || return 1
-  current="$(env -u ANTHROPIC_AUTH_TOKEN codex --version 2>/dev/null | sed -nE 's/.*[^0-9]([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | tail -1)"
+  # mk-47vtm.2: the whole pipeline (codex, sed, tail) runs without the bearer
+  # tokens, not just codex.
+  current="$(unset ANTHROPIC_AUTH_TOKEN CODEX_POOL_AUTH_TOKEN BB_ACCOUNT_POOL_PARENT_TOKEN CLAUDE_CODE_MESSAGING_TOKEN
+    codex --version 2>/dev/null | sed -nE 's/.*[^0-9]([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | tail -1)"
   [[ -n "$current" ]] || return 1
   awk -F. -v current="$current" -v required="$required" 'BEGIN {
     split(current, c, "."); split(required, r, ".");
@@ -3139,6 +3142,11 @@ else
     fi
     if _bb_codex_pooled; then _token_leak_capture; unset CODEX_POOL_AUTH_TOKEN CODEX_OPENAI_BASE_URL; fi
   fi
+  # mk-47vtm.2: the pooled alias (if any) is built, so a Codex run no longer
+  # needs ANTHROPIC_AUTH_TOKEN. Remove it before the sandbox preflight and the
+  # other helper children below; the value stays captured for the leak scan.
+  _token_leak_capture
+  unset ANTHROPIC_AUTH_TOKEN
   if ! git -C "${WORKDIR:-.}" rev-parse --git-dir >/dev/null 2>&1; then
     if [[ "$SANDBOX" == read-only ]]; then
       CMD+=(--skip-git-repo-check)
@@ -3254,7 +3262,9 @@ else
       done
       # Verify inside the actual sandbox before launching a model. Fail closed
       # on implementations without private, writable, executable shared memory.
-      (cd "${SCRATCH_CODEX_CD:-${WORKDIR:-.}}" && codex sandbox -c "sandbox_mode=$SANDBOX" \
+      # mk-47vtm.2: the preflight child also loses the pooled Codex alias; it
+      # runs a sandbox probe and makes no model call.
+      (unset CODEX_POOL_AUTH_TOKEN; cd "${SCRATCH_CODEX_CD:-${WORKDIR:-.}}" && codex sandbox -c "sandbox_mode=$SANDBOX" \
         "${_review_probe_args[@]}" -- env TMPDIR=/dev/shm python3 -c '
 import os, pathlib, subprocess, tempfile
 p = pathlib.Path("/dev/shm")
