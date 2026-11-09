@@ -64,6 +64,60 @@ to in that reordered position. `producer_model_conflict` and the existing
 `validation-opus -> validation-sonnet -> validation-sol -> validation-kimi`
 chain are unaffected: Intercore dedupes an already-visited profile_ref, so the
 new edge cannot reintroduce a seat the walk already excluded or already used.
+
+The role-resolved kimi seat (`validation`, `cross-lab-review`, `plan-review`)
+is asked to use Bash, Read, Glob and Grep and not Write or Edit, so it can run
+a plan's Verification the way the claude seat does. That tool list is a request
+to kimi, not a barrier: a shell can write anywhere the process can. Dispatch
+adds the following, each with the condition under which it holds:
+
+- **Copies.** The seat runs in a disposable copy of the checkout detached at
+  HEAD (a plain copy when the directory is not a git work tree), with a copy
+  of the plan directory, not the originals. Uncommitted changes are not in
+  the copy; a warning says so.
+- **Change detection, copies only.** Both copies are fingerprinted (file
+  content, modes, symlinks, ignored files, everything under `.git`, and `.git/index` by mode, raw
+  bytes and staged contents) before and after the run. A difference, a
+  copy that was removed, or a copy that cannot be read completely is an error
+  verdict and a failed dispatch. The fingerprint says nothing about any other
+  path. A seat can also change a file and change it back; nothing records
+  that.
+- **Filesystem boundary, only with `bwrap`.** Where `bwrap` can create a
+  sandbox, the run gets a read-only root with only the copy and its temp dir
+  writable, in its own process namespace so nothing it starts outlives it.
+  kimi's own state directories (`~/.kimi-code`, `~/.kimi`,
+  `~/.config/kimi-code`, whichever exist) are replaced inside the sandbox by
+  scratch copies that are discarded after the run: small entries are copied
+  (large ones such as sessions and caches start empty), kimi's `credentials`
+  entry is a copy because kimi rewrites it on start, and entries named like
+  login or token material, plus the binaries, are mounted read-only. So a
+  write by the seat does not reach the real state directory, and a token
+  refreshed inside the seat is lost with the copy. The ruling file is outside
+  the writable mounts. Where `bwrap` is unusable (or `CLAVAIN_SEAT_BWRAP=0`),
+  dispatch says so and nothing stops the seat writing outside the copy,
+  including to kimi's real state directories and login material.
+- **Not restricted either way.** Reads of any file the user can read, login
+  material included (the seat has a copy of it under `bwrap`), and network
+  access.
+- **Reading the ruling.** The ruling is kimi's final assistant message
+  (`--output-format stream-json`), taken from a stream with no malformed
+  record (a line starting with `{` that is not a JSON object) and nothing but
+  blank lines and `meta` records after that message. That message must have no
+  `tool_calls`, or a null or empty list (any other value, an empty object
+  included, makes it not a final message). It must open with a `VERDICT:`
+  line whose value is exactly the bare token `PASS`, `FAIL` or `UNRUN`; any
+  other value, decorated or suffixed forms included, is an error.
+  It must hold no other line that starts with `VERDICT:` (a list, quote or
+  heading marker before it still counts) and must not name a different verdict
+  word after a `VERDICT:` elsewhere. Narration, quoted output and tool results
+  are never read. Any other shape is an error verdict, not a pass. Not
+  detected: a record forged into the stream by a process the seat started,
+  while kimi was still running, that looks like kimi's own last record. Under
+  `bwrap` the process namespace stops such a process surviving kimi; without
+  it nothing does.
+
+A direct `--to kimi` dispatch stays toolless because it may carry untrusted
+input.
 Distinct profile_refs can still name one seat (`crosslab-opus` and
 `validation-opus` are both Opus 5.5), so the dispatch walk also skips a
 candidate whose backend and model already failed on capacity in the same walk.
@@ -247,7 +301,7 @@ prints a loud stderr warning naming the sidecar and
 ### Execution headroom forecasts
 
 Before role resolution, dispatch may read `bb pool status --json` for
-`routine-execution`, `deep-execution`, and `scout`. A forecast excludes a
+`routine-execution`, `deep-execution`, `scout`, and `coordination`. A forecast excludes a
 candidate only when every enabled account for its provider/family is below the
 floor: less than 10% weekly headroom, or five-hour utilization at or above the
 pool's `switchThreshold` (0.98 when absent). Provider and family limits both
