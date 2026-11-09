@@ -212,11 +212,12 @@ checked before they are printed (see the known limits below). A leak report (bea
 unscanned files, timestamp) is written to `<output>.token-leak.json`, or to a
 temporary file when there is no `-o` or the path itself would carry the value;
 if the temporary path would also carry a value, no report is written, the hook
-does not run and dispatch prints a fixed message. Each hit record is checked
-before it is written, against every value (the default variables plus each
+does not run and dispatch prints a fixed message. The whole hit output of one scan is
+joined and checked as one document before it is written (so a value that
+spans a record boundary is caught), against every value (the default variables plus each
 `--token-env`: a named variable adds to the defaults and never replaces them);
-one that would carry a value is replaced by a fixed value-free record (without
-the count), and if even that would carry a value nothing is written. This
+if the document would carry a value it is replaced by a fixed value-free record
+(without the count), and if even that would carry a value nothing is written. This
 holds wherever `--hits` points, including `/dev/stdout`, `/dev/stderr` and a
 pipe (bead mk-47vtm.5). `report` uses the same set of values. The run fails in
 every such case. The report keys and fixed text are not redacted: if a value occurs anywhere in

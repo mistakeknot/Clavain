@@ -402,11 +402,20 @@ def _safe_line(record, forms):
     return None
 
 
-def _write_hit(hits, line):
-    """The one write to the hits path: line comes from _safe_line, which has
-    checked it against every value (defaults and named); None writes nothing."""
-    if line:
-        hits.write(line)
+def _write_hits(hits, lines, forms):
+    """The one write to the hits path. The whole output of this invocation is
+    joined and checked as one document against every form (a value can span
+    a record boundary); if it carries a value it is replaced by the fixed
+    value-free record, or nothing if even that would carry one. Memory: one
+    short line per scanned file is held until the end."""
+    if not lines:
+        return
+    document = "".join(lines)
+    if any(form in document.encode("utf-8", "surrogateescape") for form in forms if form):
+        document = _safe_line({"file": "<withheld>", "unscanned": True}, forms)
+        if not document:
+            return
+    hits.write(document)
 
 
 def cmd_scan(args):
@@ -416,6 +425,7 @@ def cmd_scan(args):
     forms = all_forms(tokens)
     found = False
     failed = False
+    lines = []
     with open(args.hits, "a", encoding="utf-8") as hits:
         for path in args.files:
             try:
@@ -429,7 +439,8 @@ def cmd_scan(args):
             if status == "unscannable":
                 failed = True
                 line = _safe_line({"file": safe, "unscanned": True}, forms)
-                _write_hit(hits, line)
+                if line:
+                    lines.append(line)
                 message = "token-leak-scan: could not scan %s; failing closed" % safe
                 if any(f and f in message.encode("utf-8", "surrogateescape") for f in forms):
                     message = "token-leak-scan: could not scan a file; failing closed"
@@ -439,7 +450,9 @@ def cmd_scan(args):
                 # A record that would carry a value is replaced by a fixed
                 # value-free one (the file is still redacted and the run fails).
                 line = _safe_line({"file": safe, "count": count}, forms)
-                _write_hit(hits, line)
+                if line:
+                    lines.append(line)
+        _write_hits(hits, lines, forms)
     if found and failed:
         return BOTH_EXIT
     if failed:

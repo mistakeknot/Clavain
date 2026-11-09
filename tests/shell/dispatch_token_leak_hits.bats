@@ -77,3 +77,20 @@ assert_clean() {
     [ -e "$T/rep.json" ]
     assert_clean "$T/rep.json"
 }
+
+@test "a value that spans a record boundary (newline plus brace) never reaches the hits output" {
+    export SPAN_TOK=$'\n{'
+    for dest in /dev/stdout /dev/stderr "$T/hits"; do
+        printf 'one\n{two\n' > "$T/a.txt"
+        printf 'three\n{four\n' > "$T/b.txt"
+        : > "$T/hits"; : > "$T/out"; : > "$T/out.err"
+        run bash -c 'python3 -I "$0" scan --hits "$4" --token-env SPAN_TOK -- "$1" "$2" >"$3" 2>"$3.err"' \
+            "$SCAN" "$T/a.txt" "$T/b.txt" "$T/out" "$dest"
+        [ "$status" -eq 3 ]
+        # count occurrences of the value in each destination, one string each
+        for f in "$T/out" "$T/out.err" "$T/hits"; do
+            n="$(python3 -I -c 'import sys; print(open(sys.argv[1], "rb").read().count(b"\n{"))' "$f")"
+            [ "$n" -eq 0 ]
+        done
+    done
+}
