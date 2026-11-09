@@ -405,7 +405,9 @@ def verification_kind(cmd):
             if verifies(head, args):
                 return head
             continue
-        if info_only(args, HELP_FLAGS, passthrough=head in PASSTHROUGH_HEADS, combined=head != 'go'):
+        pytest_module = re.fullmatch(r'python[\d.]*', head) and args[:2] == ['-m', 'pytest']
+        if not pytest_module and info_only(args, HELP_FLAGS, passthrough=head in PASSTHROUGH_HEADS,
+                                           combined=head != 'go'):
             continue  # help or version output runs nothing, whatever the invocation form
         if head == 'go' and first in ('test', 'vet'):
             return f'go-{first}'

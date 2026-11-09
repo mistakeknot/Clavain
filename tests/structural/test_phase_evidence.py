@@ -804,3 +804,30 @@ def test_wrapper_ignores_a_huge_sparse_helper_output_within_the_deadline(env, tm
     proc = wrapper('stop', env, EDIT_PAYLOAD, path=fake_python(tmp_path, body, env['PATH']))
     assert proc.returncode == 0 and proc.stdout == ''
     assert time.time() - start < 4
+
+
+def test_wrapper_ignores_a_1gib_sparse_stdin_within_the_deadline(env, tmp_path):
+    sparse = tmp_path / 'sparse'
+    subprocess.run(['truncate', '-s', '1G', str(sparse)], check=True)
+    start = time.time()
+    with open(sparse, 'rb') as fh:
+        proc = subprocess.run(['/bin/bash', str(HOOK), 'stop'], stdin=fh, capture_output=True, text=True, env=env, timeout=30)
+    assert proc.returncode == 0 and proc.stdout == ''
+    assert time.time() - start < 4
+    assert not Path(env['CLAVAIN_PHASE_EVIDENCE_DIR']).exists() or not any(Path(env['CLAVAIN_PHASE_EVIDENCE_DIR']).iterdir())
+
+
+def test_wrapper_prefilter_handles_a_large_payload_with_many_escaped_tabs_within_the_deadline(env):
+    payload = '{"session_id":"s1","tool_name":"Bash","tool_input":{"command":"echo ' + '\\t' * 131072 + '"}}'
+    assert len(payload) > 262000
+    start = time.time()
+    proc = wrapper('post', env, payload)
+    assert proc.returncode == 0 and proc.stdout == ''
+    assert time.time() - start < 4
+
+
+@pytest.mark.parametrize('cmd', ['python3 -m pytest -khelp', 'python3 -m pytest -k help', 'uv run python -m pytest -khelp', 'pytest -khelp'])
+def test_pytest_k_value_is_not_a_help_flag_in_module_or_bare_form(env, tmp_path, cmd):
+    hook('post', env, 'Edit', file_path=str(tmp_path / 'a.py'))
+    hook('post', env, 'Bash', command=cmd)
+    assert 'verify-after-edit' not in warning(hook('stop', env, ''))
