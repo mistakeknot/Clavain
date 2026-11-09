@@ -167,6 +167,13 @@ func cmdCalibrationStreak(args []string) error {
 	}
 
 	subcommand := args[0]
+	// Help needs no project: answer it before the root lookup, which fails
+	// outside a beads project.
+	switch subcommand {
+	case "help", "--help", "-h":
+		printCalibrationStreakHelp()
+		return nil
+	}
 	rootOverride, rest, err := extractCalibrationStringFlag(args[1:], "root")
 	if err != nil {
 		return err
@@ -245,9 +252,6 @@ func cmdCalibrationStreak(args []string) error {
 			return verifyErr
 		}
 		fmt.Printf("A:L3 calibration proof verified: %d/%d\n", target, target)
-		return nil
-	case "help", "--help", "-h":
-		printCalibrationStreakHelp()
 		return nil
 	default:
 		return fmt.Errorf("calibration-streak: unknown subcommand %q", subcommand)
