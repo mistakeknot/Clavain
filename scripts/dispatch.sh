@@ -556,9 +556,18 @@ _token_leak_conclude() {
       else
         report="${TMPDIR:-/tmp}/clavain-token-leak-$$.json"
       fi
-      _token_leak_py report --hits "$TOKEN_LEAK_HITS" --report "$report" \
-        --bead "${CLAVAIN_BEAD_ID:-}" --role "${ROLE:-}" --run-id "$run_id" || {
-        echo "Error: dispatch: could not write the token leak report" >&2; report=""; }
+      # The fallback is checked too: a path that still carries a value is never
+      # used, passed to the hook or printed; the run fails with a fixed message.
+      safe_report="$(_token_leak_safe_text "$report")"
+      if [[ "$safe_report" != "$report" ]]; then
+        report=""
+        echo "Error: dispatch: no value-free path for the token leak report; report not written" >&2
+      fi
+      if [[ -n "$report" ]]; then
+        _token_leak_py report --hits "$TOKEN_LEAK_HITS" --report "$report" \
+          --bead "${CLAVAIN_BEAD_ID:-}" --role "${ROLE:-}" --run-id "$run_id" || {
+          echo "Error: dispatch: could not write the token leak report" >&2; report=""; }
+      fi
     fi
     if [[ -n "${OUTPUT:-}" ]]; then
       local detail="token leak scan could not complete"

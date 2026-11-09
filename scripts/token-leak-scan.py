@@ -11,10 +11,11 @@ redacted too, and every failure prints one fixed message.
   scan    FILE...   redact every occurrence in place; record hits
   report            write the leak report JSON from the recorded hits
 
-A symlinked artifact is resolved and its regular-file target is scanned (the
-run may have written through the link) only when the target lies under one of
-the run's own roots (--root, repeatable). A symlink that cannot be resolved to
-a regular file, or that resolves outside every root, is never opened or
+An artifact whose full real path differs from its given path (a symlinked
+file or a symlinked parent directory) is scanned (the run may have written
+through the link) only when the resolved regular file lies under one of the
+run's own roots (--root, repeatable). Anything that cannot be resolved to a
+regular file, or that resolves outside every root, is never opened or
 rewritten: it is recorded as unscanned (by a sanitized name) and fails closed.
 
 The replacement marker never contains a value: the default marker is used only
@@ -190,8 +191,11 @@ def redact_file(path, forms, roots=()):
     one of `roots`; any other symlink is never opened. Returns (count, status)
     where status is "ok", "absent" or "unscannable".
     """
-    if os.path.islink(path):
-        target = os.path.realpath(path)
+    # The full real path decides, not only the last component: a symlinked
+    # parent directory is followed only when the resolved file lies under a
+    # root. A path with no symlink anywhere in it is used as given.
+    target = os.path.realpath(path)
+    if target != os.path.normpath(os.path.abspath(path)) or os.path.islink(path):
         real_roots = [os.path.realpath(r) for r in roots if r]
         if not _under(target, real_roots) or not os.path.isfile(target):
             return 0, "unscannable"
@@ -217,6 +221,17 @@ def redact_file(path, forms, roots=()):
     return total, "ok"
 
 
+def _safe_line(record, forms):
+    """Serialized hit record; a fixed value-free one if it would carry a value;
+    None (write nothing) if even that would."""
+    for candidate in (record, {"file": "<withheld>", "unscanned": True}):
+        line = json.dumps(candidate) + "\n"
+        data = line.encode("utf-8", "surrogateescape")
+        if not any(form in data for form in forms if form):
+            return line
+    return None
+
+
 def cmd_scan(args):
     tokens = load_tokens(args.token_env or DEFAULT_ENVS)
     if not tokens:
@@ -236,14 +251,20 @@ def cmd_scan(args):
                 count, status = 0, "unscannable"
             if status == "unscannable":
                 failed = True
-                hits.write(json.dumps({"file": safe, "unscanned": True}) + "\n")
-                print(
-                    "token-leak-scan: could not scan %s; failing closed" % safe,
-                    file=sys.stderr,
-                )
+                line = _safe_line({"file": safe, "unscanned": True}, forms)
+                if line:
+                    hits.write(line)
+                message = "token-leak-scan: could not scan %s; failing closed" % safe
+                if any(f and f in message.encode("utf-8", "surrogateescape") for f in forms):
+                    message = "token-leak-scan: could not scan a file; failing closed"
+                print(message, file=sys.stderr)
             elif count:
                 found = True
-                hits.write(json.dumps({"file": safe, "count": count}) + "\n")
+                # A record that would carry a value is replaced by a fixed
+                # value-free one (the file is still redacted and the run fails).
+                line = _safe_line({"file": safe, "count": count}, forms)
+                if line:
+                    hits.write(line)
     if found and failed:
         return BOTH_EXIT
     if failed:

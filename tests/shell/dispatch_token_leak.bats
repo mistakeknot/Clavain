@@ -500,6 +500,50 @@ review_setup() {
     ! grep -q abc12 "$T/in/real.txt"
 }
 
+@test "scanner: a symlinked parent directory pointing outside the root is not read or rewritten" {
+    export ANTHROPIC_AUTH_TOKEN=abc12
+    mkdir "$T/in" "$T/out"
+    printf 'x abc12 y\n' > "$T/out/other.txt"
+    before="$(sha256sum "$T/out/other.txt")"
+    ln -s "$T/out" "$T/in/dir-link"
+    run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/hits" --root "$T/in" "$T/in/dir-link/other.txt"
+    [ "$status" -eq 4 ]
+    [ "$(sha256sum "$T/out/other.txt")" = "$before" ]
+    # a symlinked parent that stays inside the root is still scanned
+    mkdir "$T/in/real"
+    printf 'x abc12 y\n' > "$T/in/real/f.txt"
+    ln -s "$T/in/real" "$T/in/ok-dir"
+    run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/hits" --root "$T/in" "$T/in/ok-dir/f.txt"
+    [ "$status" -eq 3 ]
+    run grep -q abc12 "$T/in/real/f.txt"
+    [ "$status" -eq 1 ]
+}
+
+@test "scanner: a value that matches a fixed key of the hit record never reaches the hits file" {
+    for tok in count file unscanned; do
+        export ANTHROPIC_AUTH_TOKEN="$tok"
+        printf 'x %s y\n' "$tok" > "$T/m.txt"
+        : > "$T/hits"
+        run python3 -I "$ROOT/scripts/token-leak-scan.py" scan --hits "$T/hits" "$T/m.txt"
+        [ "$status" -eq 3 ]
+        run grep -q "$tok" "$T/hits"
+        [ "$status" -eq 1 ]
+        run grep -q "$tok" "$T/m.txt"
+        [ "$status" -eq 1 ]
+    done
+}
+
+@test "a fallback report path that carries a value is not used, passed to the hook or printed" {
+    export ANTHROPIC_AUTH_TOKEN=token-leak
+    LEAK=event TMPDIR="$T" CLAVAIN_TOKEN_LEAK_HOOK="$T/bin/hook" run governed -o "$T/o-token-leak.md"
+    [ "$status" -ne 0 ]
+    [[ "$output" != *token-leak* ]]
+    [[ "$output" == *"no value-free path"* ]]
+    [ ! -e "$T/hook.log" ]
+    run ls "$T"/clavain-token-leak-*.json
+    [ "$status" -ne 0 ]
+}
+
 # ---- signals ---------------------------------------------------------------
 
 @test "a signal still runs the scan from the exit trap" {
@@ -635,7 +679,7 @@ for line in open(sys.argv[2]):
 @test "scanner: the report never contains a colliding value; a report that cannot be made value-free is not written" {
     export ANTHROPIC_AUTH_TOKEN=REDACTED
     printf '{"file":"a/REDACTED/b","count":1}\n' > "$T/hits"
-    run python3 -I "$ROOT/scripts/token-leak-scan.py" report --hits "$T/hits" --report "$T/r.json" --bead REDACTED-1
+    run python3 -I "$ROOT/scripts/token-leak-scan.py" report --hits "$T/hits" --report "$T/r.json" --bead fixture-bead
     [ "$status" -eq 0 ]
     ! grep -q REDACTED "$T/r.json"
     # a value that is also in the fixed report text cannot be removed from it

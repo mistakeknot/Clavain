@@ -180,13 +180,14 @@ the EXIT trap. Flere has its own EXIT trap, installed before its worker
 starts, so a normal return, an early exit and INT or TERM all scan; the shell
 runs it once the foreground worker has returned.
 
-A symlinked artifact is followed only when its resolved regular-file target
-lies under the run's own roots: the output directory, the review receipt
-directory, the run receipt directory and the interband directory. A symlink
-that resolves anywhere else, or to something that is not a regular file, is
-never opened or rewritten; it is reported by a sanitized name, and the run
-fails closed. A symlinked parent directory of a non-symlink artifact is not
-checked. When neither token is set, the scan is skipped with a note that omits
+The full real path of every artifact is resolved, parent directories
+included. An artifact whose real path differs from its given path (a symlinked
+file or a symlinked parent directory) is followed only when the resolved
+regular file lies under the run's own roots: the output directory, the review
+receipt directory, the run receipt directory and the interband directory.
+Otherwise it is never opened or rewritten; it is reported by a sanitized name,
+and the run fails closed. An artifact path with no symlink in it is scanned
+wherever it is. When neither token is set, the scan is skipped with a note that omits
 any value.
 
 On a hit the run fails: nonzero exit and an error verdict. Every occurrence is
@@ -198,8 +199,12 @@ file is left unmodified, reported as unscanned and the run fails. File names,
 paths and metadata in the hits record, the hook argument and error text pass
 through the same redaction. A leak report (bead, role, run id, files, counts,
 unscanned files, timestamp) is written to `<output>.token-leak.json`, or to a
-temporary file when there is no `-o` or the path itself would carry the value.
-The report keys and fixed text are not redacted: if a value occurs anywhere in
+temporary file when there is no `-o` or the path itself would carry the value;
+if the temporary path would also carry a value, no report is written, the hook
+does not run and dispatch prints a fixed message. Each hit record is checked
+before it is written; one that would carry a value is replaced by a fixed
+value-free record (without the count), and if even that would carry a value
+nothing is written. The run fails in every such case. The report keys and fixed text are not redacted: if a value occurs anywhere in
 the finished report (a single common letter does), no report is written, the
 run still fails and the verdict does not point at a report. The scanner prints
 one fixed message on any internal error, including an import failure. If
@@ -223,8 +228,10 @@ Remaining limits, stated plainly:
   (`ic route record`) are not scanned;
 - zaka runs submit a session and exit, so dispatch does not scan zaka artifacts
   at all;
-- paths not named above, and artifacts reached through a symlinked parent
-  directory, are not scanned;
+- paths not named above are not scanned;
+- helper children that run before the token is removed, such as the `sed` and
+  `tail` beside `codex --version`, inherit `ANTHROPIC_AUTH_TOKEN`; only the
+  provider launch paths are scoped;
 - a child that renders the token in a form other than the raw or JSON-escaped
   string (encoded, split or truncated) is not matched, and a fragment of one
   value that overlaps a different value is not matched separately;
