@@ -4296,6 +4296,30 @@ _emit_provider_stderr() {
     printf '\n' >&2
 }
 
+# mk-bi91j: claude -p exits 1 for every failure, so its own stderr is the only
+# place an authentication failure shows. The phrases are claude's own messages
+# (present in the claude binary: "Failed to authenticate", "Invalid API key",
+# "Please run /login", "OAuth token has expired|been revoked", the API error
+# type authentication_error, "API Error: 401"). Used for the claude engine only.
+_claude_auth_failure() {
+    local f="${1:-}"
+    [[ -n "$f" && -s "$f" ]] || return 1
+    grep -qiE 'failed to authenticate|invalid api key|please run /login|oauth token has (expired|been revoked)|authentication_error|api error:? *401' "$f" 2>/dev/null
+}
+
+# Bounded excerpt (last 20 lines, at most 2 KB) of the captured claude stderr.
+# The file was already redacted in place for every known token value by
+# _token_leak_scan_all; the excerpt goes through the same provider-text
+# redaction _emit_provider_stderr uses, then the known-value redaction again.
+# When the scan could not verify the file, nothing is printed.
+_claude_stderr_excerpt() {
+    local f="${1:-}" text
+    [[ -n "$f" && -s "$f" && "${TOKEN_LEAK_ERROR:-false}" != true ]] || return 1
+    text="$(tail -n 20 "$f" | tail -c 2048 | sed -E 's/\x1b\[[0-9;]*m//g' | tr -d '\000-\010\013-\037' | _redact_provider_text)" || return 1
+    [[ -n "$text" ]] || return 1
+    _token_leak_safe_text "$text"
+}
+
 _provider_error_text() {
     local events_file="${1:-}" raw="${2:-}"
     [[ -n "$events_file" && -s "$events_file" ]] || return 1
@@ -4951,6 +4975,17 @@ _finalize_dispatch_result() {
   elif [[ -z "$failure_class" ]]; then
     failure_class="$(_classify_dispatch_failure "$STDERR_FILE" "$exit_code")"
   fi
+  # mk-bi91j: a claude authentication failure is an operational access failure
+  # (the same class a Codex account-access refusal gets), so the declared
+  # fallback or the auth diagnostic applies instead of the terminal stop. Only
+  # the two generic terminal classes are reclassified; a policy denial, a
+  # capacity class and an accounting failure keep theirs.
+  if [[ "$exit_code" != 0 && "${ENGINE:-}" == claude ]]; then
+    case "$failure_class" in
+      terminal_error|terminal_configuration)
+        if _claude_auth_failure "$STDERR_FILE"; then failure_class=account_access_absent; fi ;;
+    esac
+  fi
   if [[ "$exit_code" == "0" ]]; then
     : > "${CLAVAIN_DISPATCH_FAILURE_FILE:-/dev/null}" 2>/dev/null || true
   else
@@ -5162,8 +5197,16 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   # (HTTP status lines, zero-turn state) don't apply to kimi -p / claude -p,
   # which exit non-zero on failure.
   if [[ "$KIMI_EXIT" != "0" && -n "$OUTPUT" && -z "$SEAT_MUTATED" && -z "$SEAT_NO_RULING" ]]; then
-    _write_error_verdict "$OUTPUT" "error" "$ENGINE -p exited $KIMI_EXIT (see stderr above)"
-    echo "Warning: dispatch surfaced $ENGINE error — verdict overridden: $ENGINE -p exited $KIMI_EXIT" >&2
+    _auth_note=""
+    if [[ "$ENGINE" == claude ]] && _claude_auth_failure "$STDERR_FILE"; then
+      _auth_note="; claude reported an authentication failure"
+    fi
+    _write_error_verdict "$OUTPUT" "error" "$ENGINE -p exited $KIMI_EXIT$_auth_note (see stderr above)"
+    echo "Warning: dispatch surfaced $ENGINE error — verdict overridden: $ENGINE -p exited $KIMI_EXIT$_auth_note" >&2
+    if [[ "$ENGINE" == claude ]] && _claude_excerpt="$(_claude_stderr_excerpt "$STDERR_FILE")"; then
+      echo "dispatch: claude stderr (last lines, redacted):" >&2
+      printf '%s\n' "$_claude_excerpt" | sed 's/^/  | /' >&2
+    fi
   fi
 
   # Post-dispatch validation: scope check + secret scan
