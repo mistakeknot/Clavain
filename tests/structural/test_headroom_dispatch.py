@@ -33,6 +33,11 @@ if sys.argv[1:3] == ['route', 'record']:
     sys.exit(0)
 if sum(a.startswith('--context-file=') for a in sys.argv) > 1:
     sys.exit('duplicate context flag')
+# the capacity forecast script makes the same call and merges its stderr into JSON,
+# so the forecast re-resolution is told apart by its parent being dispatch.sh itself
+if os.environ.get('ROUTE_FORECAST_NOISE') and any(a.endswith('.context.json') for a in sys.argv) \\
+        and b'dispatch.sh' in open('/proc/%d/cmdline' % os.getppid(), 'rb').read():
+    sys.stderr.write('forecast note ' + os.environ['ROUTE_FORECAST_NOISE'] + '\\n')
 if os.environ.get('ROUTE_STDERR_NOISE'):
     sys.stderr.write('routing note ' + os.environ['ROUTE_STDERR_NOISE'] + '\\n')
 os.execv({real_ic!r}, [{real_ic!r}, *sys.argv[1:]])
@@ -214,3 +219,20 @@ def test_leak_in_routing_tool_stderr_fails_closed_and_is_never_mirrored(dispatch
     assert p.returncode != 0
     assert DUMMY not in p.stdout and DUMMY not in p.stderr
     assert 'bearer token found in run artifacts' in p.stderr
+
+
+def test_leak_in_forecast_reresolution_stderr_fails_closed_and_is_never_mirrored(dispatch):
+    # Only the second routing call (the forecast re-resolution, which reads the
+    # derived context) writes the value to stderr.
+    p, _, _, _ = dispatch([account('codex', .99), account('claude', .2)],
+                          extra_env={'ANTHROPIC_AUTH_TOKEN': DUMMY, 'ROUTE_FORECAST_NOISE': DUMMY})
+    assert p.returncode != 0
+    assert DUMMY not in p.stdout and DUMMY not in p.stderr
+    assert 'bearer token found in run artifacts' in p.stderr
+
+
+def test_clean_forecast_stderr_is_still_mirrored(dispatch):
+    p, _, _, _ = dispatch([account('codex', .99), account('claude', .2)],
+                          extra_env={'ANTHROPIC_AUTH_TOKEN': DUMMY, 'ROUTE_FORECAST_NOISE': 'harmless'})
+    assert p.returncode == 0, p.stderr
+    assert 'forecast note harmless' in p.stderr

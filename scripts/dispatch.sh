@@ -497,13 +497,19 @@ _review_scratch_verify_source() {
 # final-message file and agent file, the seat sandbox's agent copy, temp dir and
 # scratch state copies (regular files only), and the routing artifacts
 # (headroom evidence, derived decision contexts, the routing tool's stderr),
-# which are scanned as soon as they exist because routing runs before the exit
-# trap is installed.
+# which are scanned right after each routing command returns because routing
+# runs before the exit trap is installed. Every routing invocation (resolve,
+# forecast re-resolve, headroom probes, capacity forecast, identity lookups)
+# has its stderr captured and scanned before it is mirrored; on a hit it is not
+# mirrored at all. A signal that ends the run during a routing step ends it
+# before that step's scan: no cleanup trap exists yet, so artifacts left by an
+# interrupted routing step are not scanned.
 # Not scanned: stdout already mirrored to the caller's terminal, the shared
 # review events log, the Intercore routing database, zaka sessions (zaka
 # submits and exits before any artifact exists), the kimi seat's copies of the
 # checkout and plan directory (copies of the caller's own files), and
-# symlinks inside the kimi seat sandbox (not followed).
+# symlinks inside the kimi seat sandbox (not followed). A directory listing
+# that fails (an unreadable subtree) fails the run closed, counts only.
 TOKEN_LEAK_FOUND=false
 TOKEN_LEAK_ERROR=false
 TOKEN_LEAK_DIRTY=false
@@ -588,6 +594,44 @@ _token_leak_scan_now() {
 # Paths of artifacts registered for the exit-trap scans by their writers.
 TOKEN_LEAK_EXTRA_FILES=()
 
+# List the files under the given directories (find arguments after the
+# directories) into TOKEN_LEAK_ENUM. A find failure, such as an unreadable
+# subtree, would hide files from the scan, so it fails the run closed; nothing
+# but the fixed failure message is reported.
+TOKEN_LEAK_ENUM=()
+_token_leak_enum() {
+  TOKEN_LEAK_ENUM=()
+  local tmp f rc=0
+  tmp="$(mktemp "${TMPDIR:-/tmp}/clavain-token-leak-enum.XXXXXX")" || {
+    TOKEN_LEAK_ERROR=true; TOKEN_LEAK_DIRTY=true; return 0; }
+  find "$@" -print0 > "$tmp" 2>/dev/null || rc=$?
+  while IFS= read -r -d '' f; do TOKEN_LEAK_ENUM+=("$f"); done < "$tmp"
+  rm -f "$tmp"
+  [[ "$rc" -eq 0 ]] || { TOKEN_LEAK_ERROR=true; TOKEN_LEAK_DIRTY=true; }
+}
+
+# Run a routing command with stdout and stderr both captured, scan both, and
+# only then mirror the stderr (stdout goes to the variable named by $1). On a
+# leak or an unscannable capture the stderr is never mirrored and the run
+# fails (status 97, so a caller that tolerates the command's own failure can
+# tell the two apart). Reads the caller's stdin, so no pipe into this function.
+_routing_call() {
+  local __var="$1" __out __err __rc=0 __o
+  shift
+  __err="$(mktemp "${TMPDIR:-/tmp}/clavain-route-err.XXXXXX")" || return 97
+  __o="$(mktemp "${TMPDIR:-/tmp}/clavain-route-out.XXXXXX")" || { rm -f "$__err"; return 97; }
+  "$@" > "$__o" 2> "$__err" || __rc=$?
+  if ! _token_leak_scan_now "$__err" "$__o"; then
+    rm -f "$__err" "$__o"
+    return 97
+  fi
+  [[ ! -s "$__err" ]] || cat "$__err" >&2
+  __out="$(cat "$__o")"
+  rm -f "$__err" "$__o"
+  printf -v "$__var" '%s' "$__out"
+  return "$__rc"
+}
+
 # Everything this run writes that could carry a value (missing files are
 # skipped by the helper; unscannable symlinks fail the run).
 _token_leak_scan_all() {
@@ -599,8 +643,14 @@ _token_leak_scan_all() {
   files+=(${TOKEN_LEAK_EXTRA_FILES[@]+"${TOKEN_LEAK_EXTRA_FILES[@]}"})
   if [[ -n "${KIMI_SANDBOX:-}" && -d "$KIMI_SANDBOX" && ! -L "$KIMI_SANDBOX" ]]; then
     files+=("$KIMI_SANDBOX/agent.md")
-    while IFS= read -r -d '' f; do files+=("$f"); done < <(
-      find "$KIMI_SANDBOX/tmp" "$KIMI_SANDBOX"/state.* -type f -print0 2>/dev/null)
+    local -a kimi_dirs=()
+    for f in "$KIMI_SANDBOX/tmp" "$KIMI_SANDBOX"/state.*; do
+      [[ -d "$f" && ! -L "$f" ]] && kimi_dirs+=("$f")
+    done
+    if (( ${#kimi_dirs[@]} > 0 )); then
+      _token_leak_enum "${kimi_dirs[@]}" -type f
+      files+=(${TOKEN_LEAK_ENUM[@]+"${TOKEN_LEAK_ENUM[@]}"})
+    fi
   fi
   if [[ -n "${STATE_FILE:-}" ]]; then
     files+=("$STATE_FILE" "${STATE_FILE}.tmp")
@@ -618,8 +668,8 @@ _token_leak_scan_all() {
     # and session files): every regular file and every symlink under it. A
     # symlink is handed to the scanner, which follows it only inside the roots.
     if [[ -d "${OUTPUT}.attempt" && ! -L "${OUTPUT}.attempt" ]]; then
-      while IFS= read -r -d '' f; do files+=("$f"); done < <(
-        find "${OUTPUT}.attempt" \( -type f -o -type l \) -print0 2>/dev/null)
+      _token_leak_enum "${OUTPUT}.attempt" \( -type f -o -type l \)
+      files+=(${TOKEN_LEAK_ENUM[@]+"${TOKEN_LEAK_ENUM[@]}"})
     elif [[ -L "${OUTPUT}.attempt" ]]; then
       files+=("${OUTPUT}.attempt")
     fi
@@ -1260,7 +1310,10 @@ _dispatch_role_profile() {
   case "$role" in
     routine-execution|deep-execution|scout|coordination)
       if [[ "${CLAVAIN_POOL_HEADROOM:-1}" == 1 ]]; then
-        headroom="$(bash "$DISPATCH_SCRIPT_DIR/pool-headroom.sh")" || headroom='{"status":"unknown"}'
+        _routing_call headroom bash "$DISPATCH_SCRIPT_DIR/pool-headroom.sh" || {
+          [[ $? -ne 97 ]] || return 1
+          headroom='{"status":"unknown"}'
+        }
       fi
       ;;
   esac
@@ -1289,8 +1342,8 @@ _dispatch_role_profile() {
   [[ ! -s "$route_err" ]] || cat "$route_err" >&2
   rm -f "$route_err"
   if [[ "$(jq -r '.status' <<< "$headroom")" == known ]]; then
-    advice="$(jq -cn --argjson snapshot "$headroom" --argjson route "$resolved" '{snapshot:$snapshot,route:$route}' |
-      bash "$DISPATCH_SCRIPT_DIR/pool-headroom.sh" --stdin --role "$role")" || return 1
+    _routing_call advice bash "$DISPATCH_SCRIPT_DIR/pool-headroom.sh" --stdin --role "$role" \
+      <<< "$(jq -cn --argjson snapshot "$headroom" --argjson route "$resolved" '{snapshot:$snapshot,route:$route}')" || return 1
     exclusions="$(jq -c '.exclude | unique' <<< "$advice")"
     if [[ "$exclusions" != '[]' ]]; then
       local capacity_dir="${WORKDIR:-.}/.clavain/capacity" seat generated_base=""
@@ -1322,20 +1375,25 @@ _dispatch_role_profile() {
       # Only the base context this run wrote is a routing artifact; a caller's
       # own context file is not touched.
       TOKEN_LEAK_EXTRA_FILES+=("$generated_base" "$derived")
-      "${capacity_cmd[@]}" >&2 || { _token_leak_scan_now "$evidence" "$generated_base" "$derived" || true; return 1; }
+      # Its stdout belongs on stderr; both streams are scanned before either
+      # is mirrored.
+      local cap_out="" cap_rc=0
+      _routing_call cap_out "${capacity_cmd[@]}" || cap_rc=$?
+      [[ -z "$cap_out" ]] || printf '%s\n' "$cap_out" >&2
       _token_leak_scan_now "$evidence" "$generated_base" "$derived" || return 1
+      [[ "$cap_rc" -eq 0 ]] || return 1
       # Only this dispatch sees the forecast context; protected callers retain
       # their original context and the observed-failure path.
       local forecast_refs
       forecast_refs="$(jq -c --argjson seats "$exclusions" '[{profile_ref:.profile_ref,profile:.profile}] + (.fallback_chain // []) | [.[] | select(.profile.model as $m | $seats | index($m)) | .profile_ref]' <<< "$resolved")"
-      resolved="$("${route_cmd[@]}" --context-file="$derived")" || return 1
+      _routing_call resolved "${route_cmd[@]}" --context-file="$derived" || return 1
       resolved="$(jq -c --argjson refs "$forecast_refs" --argjson seats "$exclusions" --arg evidence "$evidence" '
         .headroom_exclusion=$seats | .headroom_evidence=$evidence |
         .excluded |= map(if .reason == "model_unavailable" and (.profile_ref as $r | $refs | index($r))
           then .reason="headroom_exclusion" else . end)' <<< "$resolved")" || return 1
     fi
-    advice="$(jq -cn --argjson snapshot "$headroom" --argjson route "$resolved" '{snapshot:$snapshot,route:$route}' |
-      bash "$DISPATCH_SCRIPT_DIR/pool-headroom.sh" --stdin --role "$role")" || return 1
+    _routing_call advice bash "$DISPATCH_SCRIPT_DIR/pool-headroom.sh" --stdin --role "$role" \
+      <<< "$(jq -cn --argjson snapshot "$headroom" --argjson route "$resolved" '{snapshot:$snapshot,route:$route}')" || return 1
     resolved="$(jq -c --argjson advice "$advice" --argjson snapshot "$headroom" '
       .headroom_reorder=$advice.headroom_reorder | .headroom_snapshot=$snapshot' <<< "$resolved")" || return 1
   fi
@@ -1526,7 +1584,7 @@ _dispatch_verify_review_packet() {
     echo "Error: review packet manifest is missing a producer identity" >&2
     return 1
   fi
-  canonical_json="$(ic --json route identity --policy="$identity_policy" --model="$declared_model")" || {
+  _routing_call canonical_json ic --json route identity --policy="$identity_policy" --model="$declared_model" || {
     echo "Error: ic route identity failed for the review packet's producer" >&2
     return 1
   }
@@ -1536,7 +1594,7 @@ _dispatch_verify_review_packet() {
     return 1
   fi
   if [[ -n "$PRODUCER_IDENTITY" ]]; then
-    caller_json="$(ic --json route identity --policy="$identity_policy" --model="$PRODUCER_IDENTITY")" || {
+    _routing_call caller_json ic --json route identity --policy="$identity_policy" --model="$PRODUCER_IDENTITY" || {
       echo "Error: ic route identity failed for --producer-identity" >&2
       return 1
     }

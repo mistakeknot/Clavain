@@ -366,6 +366,24 @@ W
     pkill -f "$T/mock/scripts/flere-worker.py" || true
 }
 
+@test "flere: an unreadable subdirectory of the attempt directory fails the run closed" {
+    [ "$(id -u)" -ne 0 ] || skip "root reads everything"
+    flere_setup
+    flere_attempt_worker
+    cat >> "$T/mock/scripts/flere-worker.py" <<'W'
+os.makedirs(att + "/locked")
+os.chmod(att + "/locked", 0)
+W
+    export LEAKVAL=clean-value-not-the-token
+    run bash "$MOCK_DISPATCH" --to flere -C "$T/project" -o "$T/out.md" -m provider/model "inspect"
+    chmod 700 "$T/out.md.attempt/locked" 2>/dev/null || true
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"token leak scan could not complete"* ]]
+    [[ "$output" != *"$DUMMY"* ]]
+    [ ! -e "$T/out.md.token-leak.json" ]
+    grep -q 'STATUS: error' "$T/out.md.verdict"
+}
+
 @test "flere: a symlink under the attempt directory pointing outside the roots is not followed" {
     flere_setup
     flere_attempt_worker
@@ -947,6 +965,15 @@ report_names() { jq -r '.files[] | (.path // .file // .name // .)' "$T/out.md.to
     report_names | grep -q 'note.txt'
 }
 
+@test "kimi seat: an unreadable directory under the seat's temp dir fails the run closed" {
+    [ "$(id -u)" -ne 0 ] || skip "root reads everything"
+    kimi_seat_setup $'VERDICT: PASS\nCRITERION: none' 'mkdir "$TMPDIR/locked" && chmod 000 "$TMPDIR/locked"'
+    run governed_kimi_seat
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"token leak scan could not complete"* ]]
+    [[ "$output" != *"$DUMMY"* ]]
+}
+
 @test "kimi seat: a value in the seat's agent-file copy is found" {
     kimi_seat_setup $'VERDICT: PASS\nCRITERION: none'
     mkdir -p "$T/plans-${DUMMY}"
@@ -956,4 +983,11 @@ report_names() { jq -r '.files[] | (.path // .file // .name // .)' "$T/out.md.to
     ! grep -qF "$DUMMY" "$T/out.md.token-leak.json"
     [[ "$output" != *"$DUMMY"* ]]
     report_names | grep -q 'agent.md'
+}
+
+@test "the leak-scan notes state that a signal during routing is not scanned" {
+    # Routing runs before the exit trap exists, so the documentation must not
+    # claim signal coverage for routing artifacts.
+    tr '\n' ' ' < "$DISPATCH" | tr -s ' #' ' ' | grep -qF 'A signal that ends the run during a routing step ends it before that step'
+    ! grep -n 'routing.*every signal' "$DISPATCH"
 }
