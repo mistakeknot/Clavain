@@ -309,6 +309,18 @@ _dispatch_sync_interband_from_legacy() {
 # A signal ends the run with the conventional 128+n status. The EXIT trap then
 # runs once with that status, so a signalled run is never receipted as completed.
 _dispatch_on_signal() {
+  # A signalled run produced no review to count, and exiting here skips the
+  # verdict extraction below. Record the cancellation as an error verdict first,
+  # so a stale or missing sidecar can never be read as a result (mk-47vtm.1).
+  if [[ -n "${OUTPUT:-}" ]]; then
+    if type _write_error_verdict >/dev/null 2>&1; then
+      _write_error_verdict "$OUTPUT" error "dispatch cancelled by signal (exit $1)" 2>/dev/null || true
+    else
+      # Flere and early exits run before the general verdict helpers exist.
+      printf -- '--- VERDICT ---\nSTATUS: error\nFILES: 0 changed\nFINDINGS: unknown\nSUMMARY: dispatch cancelled by signal (exit %s)\n---\n' \
+        "$1" > "${OUTPUT}.verdict" 2>/dev/null || true
+    fi
+  fi
   exit "$1"
 }
 
