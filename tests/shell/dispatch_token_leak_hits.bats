@@ -150,7 +150,8 @@ assert_clean() {
     printf 'one\n{two\n' > "$T/a.txt"
     run bash -c 'python3 -I "$0" scan --hits "$1" --token-env SPAN_TOK -- "$2" >"$3" 2>"$3.err"' \
         "$SCAN" "$T/hits" "$T/a.txt" "$T/out"
-    [ "$status" -ne 0 ]
+    # a.txt carries a hit, so the fail-closed exit is 5 (hit and error), not 4.
+    [ "$status" -eq 5 ]
     chmod 600 "$T/hits"
     [ "$(wc -c < "$T/hits")" -eq 1 ]
     for f in "$T/out" "$T/out.err" "$T/hits"; do

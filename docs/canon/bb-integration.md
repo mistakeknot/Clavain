@@ -218,7 +218,7 @@ spans a record boundary is caught). For a regular file opened for append the
 check also covers the last bytes already in the file (so a value spanning two
 scans is caught); that check needs the existing tail to be readable: if an
 existing non-empty file cannot be read, nothing is written to it, one fixed
-line is printed and the run fails (exit 4); for a path that is the same open file as stdout or stderr
+line is printed and the run fails (exit 4, or 5 when a hit was also found); for a path that is the same open file as stdout or stderr
 (`/dev/stderr` and `/proc/self/fd/2` join stderr's buffer, any other match
 stdout's) the records
 join that stream's buffer. When stdout and stderr are the same open file, both
