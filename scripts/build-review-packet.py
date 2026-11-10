@@ -58,6 +58,7 @@ KNOWN_KEYS = {
     "excerpts_not_applicable",
     "tests",
     "tests_not_run",
+    "seat_verdict",
     "prior_findings",
     "asks",
     "previous_packet",
@@ -81,6 +82,11 @@ SECTION_ORDER = [
 PREAMBLE_PATH = Path(__file__).resolve().parent / "review-packet-preamble.md"
 
 DEFAULT_MAX_BYTES = 49152
+
+# The only verdict words a review seat may claim. Matched exactly: no case
+# folding, stripping or substring search, because the claim is model output
+# over attacker-influenceable content and must never be interpreted charitably.
+VERDICT_WORDS = ("PASS", "FAIL", "UNRUN")
 
 
 class InputError(ValueError):
@@ -226,6 +232,9 @@ def validate_input(spec: dict[str, Any]) -> None:
                     f"tests entry {entry.get('label')!r} path must be a "
                     "non-empty string ('-' for no output file)"
                 )
+
+    if "seat_verdict" in spec and not isinstance(spec["seat_verdict"], str):
+        raise InputError("seat_verdict must be a string (the seat's claimed verdict word)")
 
     max_bytes = spec.get("max_bytes", DEFAULT_MAX_BYTES)
     if not isinstance(max_bytes, int) or max_bytes <= 0:
@@ -940,7 +949,91 @@ def _render_touched_excerpts(spec: dict[str, Any], changes: list[dict[str, str]]
     return "\n\n".join(p for p in parts if p and p != "None supplied") or "None supplied"
 
 
+def _exit_code_evidence(spec: dict[str, Any]) -> tuple[str, str]:
+    """Classify the out-of-band exit codes of the Verification commands.
+
+    Returns (status, detail), status one of:
+      all-zero  every tests entry has an integer exit_code of 0
+      nonzero   at least one integer exit_code is not 0
+      missing   no usable evidence: tests_not_run, no tests, or any exit_code
+                that is not a plain integer (a bool, string or null is not
+                an exit code). Fail closed: missing never confirms a PASS.
+    A nonzero code outranks a malformed sibling, since failure is already shown.
+    """
+    tests = spec.get("tests") or []
+    if spec.get("tests_not_run") or not tests:
+        return "missing", "no Verification exit codes were captured (tests_not_run or no tests)"
+    codes = [t.get("exit_code") for t in tests]
+    ints = [c for c in codes if type(c) is int]
+    if any(c != 0 for c in ints):
+        return "nonzero", f"{sum(1 for c in ints if c != 0)} of {len(codes)} commands exited nonzero"
+    if len(ints) != len(codes):
+        return "missing", "at least one exit_code is not an integer"
+    return "all-zero", f"all {len(codes)} commands exited 0"
+
+
+def reconcile_seat_verdict(spec: dict[str, Any]) -> dict[str, Any] | None:
+    """Cross-check the seat's self-reported verdict word against exit codes.
+
+    The claimed word is advisory model output. The effective verdict can only
+    equal or fall below the claim, never rise above it:
+      - PASS needs all-zero exit codes; a nonzero code gives FAIL, missing
+        evidence gives UNRUN.
+      - FAIL and UNRUN stay as claimed whatever the exit codes say.
+      - Anything that is not exactly PASS, FAIL or UNRUN counts as UNRUN.
+    Returns None when the input carries no seat_verdict.
+    """
+    if "seat_verdict" not in spec:
+        return None
+    claimed = spec["seat_verdict"]
+    claim_valid = claimed in VERDICT_WORDS
+    status, detail = _exit_code_evidence(spec)
+    base = claimed if claim_valid else "UNRUN"
+    if base == "PASS" and status == "nonzero":
+        effective, reason = "FAIL", f"PASS claim contradicted: {detail}"
+    elif base == "PASS" and status == "missing":
+        effective, reason = "UNRUN", f"PASS claim unconfirmed: {detail}"
+    elif not claim_valid:
+        effective, reason = "UNRUN", "claimed verdict is not exactly PASS, FAIL or UNRUN"
+    elif base == "PASS":
+        effective, reason = "PASS", f"PASS claim matches exit codes: {detail}"
+    else:
+        effective, reason = base, f"{base} claim kept: a claim is never raised ({detail})"
+    return {
+        "claimed": claimed if claim_valid else None,
+        "claim_valid": claim_valid,
+        "exit_codes": status,
+        "effective": effective,
+        "downgraded": effective != base or not claim_valid,
+        "reason": reason,
+    }
+
+
+def _render_seat_verdict_check(spec: dict[str, Any]) -> str | None:
+    check = reconcile_seat_verdict(spec)
+    if check is None:
+        return None
+    # Never echo the raw claim: it is model text. Only a recognised word is shown.
+    shown = check["claimed"] if check["claim_valid"] else "(unrecognised)"
+    return (
+        "**Seat verdict cross-check** (the seat's verdict word is advisory; "
+        "the effective verdict is bounded by the captured exit codes and can "
+        "only be equal to or lower than the claim):\n\n"
+        f"- Seat claimed: {shown}\n"
+        f"- Exit-code evidence: {check['exit_codes']}\n"
+        f"- Effective verdict: **{check['effective']}**"
+        + (" (downgraded)" if check["downgraded"] else "")
+        + f"\n- Reason: {check['reason']}"
+    )
+
+
 def _render_test_output(spec: dict[str, Any]) -> str:
+    rendered = _render_test_results(spec)
+    check = _render_seat_verdict_check(spec)
+    return f"{rendered}\n\n{check}" if check else rendered
+
+
+def _render_test_results(spec: dict[str, Any]) -> str:
     if spec.get("tests_not_run"):
         return f"UNRUN: {spec['tests_not_run']}"
     parts = []
@@ -1013,7 +1106,9 @@ def _render_requested_output() -> str:
         "this packet. This deliverable gets one fix round followed by one "
         "delta re-review; do not invent a further round. Preserve any "
         "role-specific conformance table as additional output alongside the "
-        "verdict."
+        "verdict. The verdict word is advisory: it is cross-checked against "
+        "independently captured exit codes, and a PASS those exit codes do "
+        "not support is downgraded."
     )
 
 
@@ -1073,6 +1168,7 @@ def _identity_payload(
         "tests": spec.get("tests"),
         "test_output_sha256": test_output_sha256,
         "tests_not_run": spec.get("tests_not_run"),
+        "seat_verdict": spec.get("seat_verdict"),
         "prior_findings": spec.get("prior_findings"),
         "asks": spec.get("asks"),
         "excerpts_not_applicable": spec.get("excerpts_not_applicable"),
@@ -1294,6 +1390,7 @@ def build_packet(spec: dict[str, Any], output_dir: str) -> Path:
         # hash itself or re-reading producer_receipt off disk.
         "producer_receipt_sha256": identity.get("producer_receipt_sha256"),
         "changes": changes,
+        "seat_verdict_check": reconcile_seat_verdict(spec),
         "previous_packet_id": (
             previous_manifest["packet_id"] if previous_manifest is not None else None
         ),
