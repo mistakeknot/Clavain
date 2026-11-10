@@ -212,13 +212,34 @@ checked before they are printed (see the known limits below). A leak report (bea
 unscanned files, timestamp) is written to `<output>.token-leak.json`, or to a
 temporary file when there is no `-o` or the path itself would carry the value;
 if the temporary path would also carry a value, no report is written, the hook
-does not run and dispatch prints a fixed message. Each hit record is checked
-before it is written; one that would carry a value is replaced by a fixed
-value-free record (without the count), and if even that would carry a value
-nothing is written. The run fails in every such case. The report keys and fixed text are not redacted: if a value occurs anywhere in
+does not run and dispatch prints a fixed message. The whole hit output of one scan is
+joined and checked as one document before it is written (so a value that
+spans a record boundary is caught). For a regular file opened for append the
+check also covers the last bytes already in the file (so a value spanning two
+scans is caught); that check needs the existing tail to be readable: if an
+existing non-empty file cannot be read, nothing is written to it, one fixed
+line is printed and the run fails (exit 4, or 5 when a hit was also found); for a path that is the same open file as stdout or stderr
+(`/dev/stderr` and `/proc/self/fd/2` join stderr's buffer, any other match
+stdout's) the records
+join that stream's buffer. When stdout and stderr are the same open file, both
+buffers (stdout's, then stderr's) are joined and checked as one document at
+exit, so records and diagnostics are checked together in the order written;
+if they carry a value, a fixed suppression line is written instead. The
+report is a separate file written by atomic replacement and shares no
+destination with the hits path or the diagnostics. Not covered: a hits path that is neither a regular file nor
+stdout or stderr (for example another pipe) is checked per scan only, and a
+stdout or stderr that is a regular file has no earlier content checked. The
+check is against every value (the default variables plus each
+`--token-env`: a named variable adds to the defaults and never replaces them);
+if the document would carry a value it is replaced by a fixed value-free record
+(without the count), and if even that would carry a value nothing is written. This
+holds for the destinations listed above, including `/dev/stdout` and
+`/dev/stderr` (bead mk-47vtm.5). `report` uses the same set of values. The run fails in
+every such case. The report keys and fixed text are not redacted: if a value occurs anywhere in
 the finished report (a single common letter does), no report is written, the
-run still fails and the verdict does not point at a report. The scanner prints
-one fixed message on any internal error, including an import failure. If
+run still fails and the verdict does not point at a report. On an internal
+error, including an import failure, the scanner prints one fixed line, or a
+fixed suppression line when its output would carry a value, or nothing. If
 `CLAVAIN_TOKEN_LEAK_HOOK` names an executable, it is run with the report path
 as its only argument and without `ANTHROPIC_AUTH_TOKEN`,
 `CODEX_POOL_AUTH_TOKEN`, `BB_ACCOUNT_POOL_PARENT_TOKEN` or

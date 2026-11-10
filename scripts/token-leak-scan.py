@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Post-run bearer-token leak scan for dispatch (bead mk-ouz83).
 
-Token values are read from the environment of this process (the variables
-named by --token-env, repeatable; default ANTHROPIC_AUTH_TOKEN and
-CODEX_POOL_AUTH_TOKEN), never from argv, so they are not visible in `ps`.
+Token values are read from the environment of this process (ANTHROPIC_AUTH_TOKEN and
+CODEX_POOL_AUTH_TOKEN always, plus the variables named by --token-env,
+repeatable; a named variable adds to the defaults), never from argv, so they are not visible in `ps`.
 Matching is fixed-string over raw bytes. Any nonempty value is scanned. A value
 is never printed, logged or written to a report: file names and metadata are
 redacted too, and every failure prints one fixed message.
@@ -119,14 +119,41 @@ def _contains_token(data, values, encoding, errors):
         return None
 
 
+def _same_file(first, second):
+    """True when the two streams are the same open file (same device and
+    inode); False when they differ or cannot be decided."""
+    try:
+        one = os.fstat(first.fileno())
+        two = os.fstat(second.fileno())
+        return (one.st_dev, one.st_ino) == (two.st_dev, two.st_ino)
+    except BaseException:
+        return False
+
+
 def _flush_output():
-    """The one output point: write each stream's buffer, checked as the exact
-    bytes that will be written, in one write; then keep shutdown quiet."""
+    """The one output point: write each destination's buffered text, checked
+    as the exact bytes that will be written, in one write; then keep shutdown
+    quiet. When stdout and stderr are the same open file they are one
+    destination: both buffers (stdout first, then stderr, the order written)
+    are joined and checked as one document."""
     try:
         values = _token_values()
-        for name in ("stdout", "stderr"):
-            chunks = _BUFFER[name]
-            _BUFFER[name] = []
+        joined = False
+        try:
+            joined = (
+                bool(_BUFFER["stdout"])
+                and bool(_BUFFER["stderr"])
+                and _same_file(sys.stdout, sys.stderr)
+            )
+        except BaseException:
+            joined = False
+        jobs = [("stdout", ("stdout", "stderr"))] if joined else [
+            ("stdout", ("stdout",)), ("stderr", ("stderr",))]
+        for name, sources in jobs:
+            chunks = []
+            for source in sources:
+                chunks.extend(_BUFFER[source])
+                _BUFFER[source] = []
             if not chunks:
                 continue
             stream = getattr(sys, name, None)
@@ -228,6 +255,12 @@ def load_tokens(envs):
         if value and value not in values:
             values.append(value)
     return values
+
+
+def _all_envs(args):
+    """The default variables plus every --token-env: an explicit name adds to
+    the defaults, never replaces them (as _token_values already treats them)."""
+    return tuple(DEFAULT_ENVS) + tuple(args.token_env or ())
 
 
 def needles(token):
@@ -396,13 +429,85 @@ def _safe_line(record, forms):
     return None
 
 
+def _std_stream_for(path):
+    """"stdout" or "stderr" when path is the same open file as that stream
+    (a terminal, file or pipe; /dev/stdout and /dev/stderr included), else
+    None."""
+    try:
+        target = os.stat(path)
+        order = ("stderr", "stdout") if path in ("/dev/stderr", "/proc/self/fd/2") else ("stdout", "stderr")
+        for name in order:
+            st = os.fstat(getattr(sys, name).fileno())
+            if (st.st_dev, st.st_ino) == (target.st_dev, target.st_ino):
+                return name
+    except BaseException:
+        pass
+    return None
+
+
+def _existing_tail(path, size):
+    """The last size bytes already in a regular file; b"" when there is
+    nothing to join to (no such regular file, or it is empty); None when the
+    file exists and is not empty (or its size is unknown) but cannot be read."""
+    try:
+        if size <= 0 or not os.path.isfile(path):
+            return b""
+        if os.stat(path).st_size == 0:
+            return b""
+        with open(path, "rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            handle.seek(max(0, handle.tell() - size))
+            return handle.read()
+    except BaseException:
+        return None
+
+
+def _write_hits(hits, lines, forms):
+    """The one output of hit records, checked as the whole destination.
+    The joined records of this scan are checked against every form together
+    with what they will be joined to: for a regular file opened for append,
+    the last (longest form - 1) bytes already in it; for a path that is the
+    same open file as stdout or stderr, the records go into that stream's
+    buffer, so the checked output point checks them together with the
+    diagnostics as one document. If the joined bytes would carry a value the
+    records are replaced by the fixed value-free record, or nothing if even
+    that would. If the tail of an existing non-empty regular file cannot be
+    read, nothing is written and False is returned (the scan fails closed).
+    Memory: one short line per scanned file."""
+    if not lines:
+        return True
+    std = _std_stream_for(hits.name)
+    tail = b"" if std else _existing_tail(
+        hits.name, max((len(f) for f in forms if f), default=1) - 1)
+
+    if tail is None:
+        # the boundary cannot be checked: write nothing, fail closed
+        return False
+
+    def carries(text):
+        data = tail + text.encode("utf-8", "surrogateescape")
+        return any(form in data for form in forms if form)
+
+    document = "".join(lines)
+    if carries(document):
+        document = _safe_line({"file": "<withheld>", "unscanned": True}, forms)
+        if not document or carries(document):
+            return True
+    if std:
+        _BUFFER[std].append(document)
+    else:
+        hits.write(document)
+    return True
+
+
 def cmd_scan(args):
-    tokens = load_tokens(args.token_env or DEFAULT_ENVS)
+    tokens = load_tokens(_all_envs(args))
     if not tokens:
         return 0
     forms = all_forms(tokens)
     found = False
     failed = False
+    lines = []
     with open(args.hits, "a", encoding="utf-8") as hits:
         for path in args.files:
             try:
@@ -417,7 +522,7 @@ def cmd_scan(args):
                 failed = True
                 line = _safe_line({"file": safe, "unscanned": True}, forms)
                 if line:
-                    hits.write(line)
+                    lines.append(line)
                 message = "token-leak-scan: could not scan %s; failing closed" % safe
                 if any(f and f in message.encode("utf-8", "surrogateescape") for f in forms):
                     message = "token-leak-scan: could not scan a file; failing closed"
@@ -428,7 +533,10 @@ def cmd_scan(args):
                 # value-free one (the file is still redacted and the run fails).
                 line = _safe_line({"file": safe, "count": count}, forms)
                 if line:
-                    hits.write(line)
+                    lines.append(line)
+        if not _write_hits(hits, lines, forms):
+            failed = True
+            _emit("token-leak-scan: could not check the hits file; failing closed")
     if found and failed:
         return BOTH_EXIT
     if failed:
@@ -437,7 +545,7 @@ def cmd_scan(args):
 
 
 def cmd_report(args):
-    tokens = load_tokens(args.token_env or DEFAULT_ENVS)
+    tokens = load_tokens(_all_envs(args))
     merged = {}
     unscanned = set()
     if os.path.exists(args.hits):
