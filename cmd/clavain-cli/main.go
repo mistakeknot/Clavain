@@ -291,12 +291,20 @@ func main() {
 }
 
 func printHelp() {
-	fmt.Print(`Usage: clavain-cli <command> [args...]
+	fmt.Print(helpText)
+}
+
+// helpText is the top-level usage. TestHelpListsEveryCommand keeps it in step
+// with the command switch in main.
+const helpText = `Usage: clavain-cli <command> [args...]
 
 Gate / Phase:
   advance-phase       <bead_id> <phase> <reason> <artifact_path>
   enforce-gate        <bead_id> <target_phase> <artifact_path>
   infer-bead          <artifact_path>
+  infer-action        <bead_id> [status]                   Print "<action>|<artifact_path>"
+  sprint-should-pause <bead_id> <target_phase>
+  verify-seal         <path>
 
 Sprint State:
   sprint-init         <bead_id>                            Bootstrap + formatted status banner
@@ -312,6 +320,8 @@ Sprint State:
   sprint-next-step    <phase>
   sprint-budget-remaining <bead_id>
   sprint-stats        [--complexity=N] [--since=DURATION] [--json] [--project=DIR]
+  recent-reflect-learnings <bead_id> [max_count]
+  review-calibration  <phase> <complexity>                 Print skip, lighten or full
 
 Budget:
   budget-total            <bead_id>
@@ -351,6 +361,8 @@ Factory:
   factory-status          [--json]   Fleet health dashboard (utilization, queue, WIP, dispatches)
   factory-stream          [flags]    SSE streaming server for live factory data
                   --port=8401  --interval=5s  --cors-origins="*"
+  factory-paused                     Print whether the factory is paused
+  agent-paused            <agent_id> Print whether the agent is paused
 
 Checkpoints:
   checkpoint-write    <bead_id> <phase> <step> <plan_path>
@@ -381,6 +393,8 @@ CXDB:
   cxdb-setup          Download and install cxdb-server binary [--version=<ver>]
   cxdb-sync           <sprint-id>           Backfill CXDB turns from Intercore + plugin evidence events
   cxdb-fork           <sprint-id> <turn-id> Create branched execution trajectory
+  cxdb-sync-verdicts  <bead-id>             Write dispatch turns from verdict files
+  cxdb-history        <bead-id>             JSON timeline of all turns for a sprint
 
 Scenarios:
   scenario-create     <name> [--holdout]     Scaffold scenario YAML
@@ -403,10 +417,11 @@ Interspect Calibration:
   calibration-streak              <record-receipt|record-manual LOOP [REASON]|status [--json]|verify [--target=10]>
 
 Policy:
-  policy              <check|record|record-signed|audit|anchor-legacy|sign|verify|doctor|token>  Auto-proceed authorization
+  policy              <check|record|record-signed|explain|audit|list|lint|init-key|anchor-legacy|sign|verify|doctor|rotate-key|quarantine|token>  Auto-proceed authorization
   scenario-policy-check <agent> <action> [--path=<p>]  Check scenario-access policy
   scenario-policy-show                                Display scenario-access policy
   policy-check                                         Deprecated scenario-policy-check alias
+  policy-show                                          Deprecated scenario-policy-show alias
 
 Handoff:
   validate-handoff    <artifact_path> [--type=<type>]     Validate artifact against handoff contract
@@ -420,5 +435,10 @@ Daemon:
 
 Intent Contract:
   intent submit   Submit a typed intent (JSON on stdin preferred; flags: --type, --bead, --session, --key)
-`)
-}
+
+Review / Prepare:
+  review          <submit|status>          Request JSON on stdin
+  review          work <receipt_path>
+  prepare         <ratify|submit|status>   Request JSON on stdin
+  prepare         work <receipt_path>
+`
