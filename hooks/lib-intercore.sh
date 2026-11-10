@@ -151,8 +151,28 @@ intercore_state_delete_all() {
     done < <("$INTERCORE_BIN" state list "$key" 2>/dev/null || true)
 }
 
-# _intercore_routing_prune_due — 0 when the routing prune stamp ($1) is absent or
-# a day old and no recent attempt marker ($1.failed, under an hour old) backs it off.
+# _intercore_routing_prune_key — print a stamp key for the text $1 (a database path):
+# the first 32 hex digits of its sha256 (sha256sum, else shasum), so two paths do not
+# share a key. Only a machine with neither falls back to "ck" plus the 32-bit cksum,
+# a weaker key that two paths can share (they would then share one stamp, so one
+# database's prune could be skipped for up to a day). Prints nothing and returns 1
+# when no tool works.
+_intercore_routing_prune_key() {
+    local k=""
+    if command -v sha256sum >/dev/null 2>&1; then
+        k="$(printf '%s' "$1" | sha256sum 2>/dev/null | cut -c1-32 2>/dev/null)" || k=""
+    elif command -v shasum >/dev/null 2>&1; then
+        k="$(printf '%s' "$1" | shasum -a 256 2>/dev/null | cut -c1-32 2>/dev/null)" || k=""
+    elif command -v cksum >/dev/null 2>&1; then
+        k="$(printf '%s' "$1" | cksum 2>/dev/null | cut -d' ' -f1 2>/dev/null)" || k=""
+        [[ "$k" =~ ^[0-9]+$ ]] && k="ck$k" || k=""
+    fi
+    [[ "$k" =~ ^([0-9a-f]{32}|ck[0-9]+)$ ]] || return 1
+    printf '%s\n' "$k"
+}
+
+# _intercore_routing_prune_due — 0 when the routing prune stamp ($1) is absent or a
+# day old, and no attempt marker ($1.failed) under an hour old backs it off.
 _intercore_routing_prune_due() {
     local stamp="$1"
     [[ ! -e "$stamp" || -n "$(find "$stamp" -mmin +1440 2>/dev/null)" ]] || return 1
@@ -165,28 +185,32 @@ intercore_cleanup_stale() {
     if ! intercore_available; then return 0; fi
     "$INTERCORE_BIN" sentinel prune --older-than=1h >/dev/null 2>&1 || true
     # Routing-decision retention: archive then delete decisions older than the
-    # window, normally once a day per database (the pass reads the whole table,
-    # about a second on 100 MB). A stamp file does the throttling because the
-    # sentinel prune above would delete a day-long sentinel within the hour. The
-    # stamp is keyed by the canonical absolute path of the database (INTERCORE_DB,
-    # else the nearest .clavain/intercore.db above $PWD, as ic finds it) so one
-    # project's run does not starve another's; ic itself is called as the other
-    # helpers here call it (--db only when INTERCORE_DB is set), so its own
-    # discovery rules apply.
+    # window. After a successful prune the next one is due a day later, per
+    # database (the pass reads the whole table, about a second on 100 MB). A stamp
+    # file does the throttling because the sentinel prune above would delete a
+    # day-long sentinel within the hour. The stamp is keyed by a sha256 prefix of
+    # the canonical absolute path of the database (INTERCORE_DB, else the nearest
+    # .clavain/intercore.db above $PWD, as ic finds it) so one project's run does
+    # not starve another's (a machine with neither sha256sum nor shasum falls back
+    # to cksum, a 32-bit key that two paths can share; see
+    # _intercore_routing_prune_key); ic itself is called as the other helpers here
+    # call it (--db only when INTERCORE_DB is set), so its own discovery rules apply.
     # This runs in a Stop hook, so the block is written to return 0 and stay
-    # quiet in every case below, and to prune at most once an hour even when
-    # things go wrong:
+    # quiet in every case below, and to make at most one prune attempt an hour per
+    # database even when things go wrong:
     #  - no usable state directory or key (no HOME, an unwritable directory, no
-    #    cksum or date) means skip, never prune unthrottled;
+    #    sha256sum, shasum or cksum, no date) means skip, never prune unthrottled;
     #  - a mkdir lock named for the current hour admits one of several
     #    simultaneous stops; the rest skip, as does a stop that finds a lock of
     #    the adjacent hour younger than ten minutes (clock read across an hour
     #    boundary). A lock a killed hook leaves behind
     #    expires with its hour (it is never "reclaimed", so no stop can take
     #    over a live one) and is swept once it is two hours old;
-    #  - before pruning, a ".failed" marker is written. It backs the next try
-    #    off for an hour, so a crash, a timeout, a failed prune or a stamp that
-    #    cannot be written is retried hourly, not on every stop;
+    #  - before pruning, a ".failed" marker is written. For the next hour the
+    #    stops skip the prune, so a crash, a timeout, a failed prune or a stamp
+    #    that cannot be written is not retried by the next stop: the first stop
+    #    more than an hour later retries it (hourly back-off), and only a
+    #    success starts the day's wait;
     #  - the prune is cut off after INTERCORE_ROUTING_PRUNE_TIMEOUT seconds
     #    (default 20; SIGTERM, then SIGKILL two seconds later), by
     #    `timeout`/`gtimeout` when present, else a bash watchdog;
@@ -230,8 +254,7 @@ intercore_cleanup_stale() {
             fi
         fi
         [[ -n "$state_dir" ]] || return 0
-        key="$(printf '%s' "${db_path:-$PWD}" | cksum 2>/dev/null | cut -d' ' -f1 2>/dev/null)" || key=""
-        [[ "$key" =~ ^[0-9]+$ ]] || return 0
+        key="$(_intercore_routing_prune_key "${db_path:-$PWD}")" || return 0
         hour="$(date +%s 2>/dev/null)" || hour=""
         [[ "$hour" =~ ^[0-9]+$ ]] || return 0
         hour=$(( 10#$hour / 3600 ))
