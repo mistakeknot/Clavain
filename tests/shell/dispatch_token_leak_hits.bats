@@ -141,3 +141,20 @@ assert_clean() {
     n="$(python3 -I -c 'import sys; print(open(sys.argv[1], "rb").read().count(b"true}\ntoken-leak-scan: could"))' "$T/both")"
     [ "$n" -eq 0 ]
 }
+
+@test "an existing hits file that cannot be read: nothing is written and the scan fails closed" {
+    [ "$(id -u)" -ne 0 ] || skip "root can read a mode 200 file, so the unreadable-destination case cannot be built"
+    export SPAN_TOK=$'\n{'
+    printf '\n' > "$T/hits"
+    chmod 200 "$T/hits"
+    printf 'one\n{two\n' > "$T/a.txt"
+    run bash -c 'python3 -I "$0" scan --hits "$1" --token-env SPAN_TOK -- "$2" >"$3" 2>"$3.err"' \
+        "$SCAN" "$T/hits" "$T/a.txt" "$T/out"
+    [ "$status" -ne 0 ]
+    chmod 600 "$T/hits"
+    [ "$(wc -c < "$T/hits")" -eq 1 ]
+    for f in "$T/out" "$T/out.err" "$T/hits"; do
+        n="$(python3 -I -c 'import sys; print(open(sys.argv[1], "rb").read().count(b"\n{"))' "$f")"
+        [ "$n" -eq 0 ]
+    done
+}

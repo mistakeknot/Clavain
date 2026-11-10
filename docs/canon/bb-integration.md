@@ -216,8 +216,11 @@ does not run and dispatch prints a fixed message. The whole hit output of one sc
 joined and checked as one document before it is written (so a value that
 spans a record boundary is caught). For a regular file opened for append the
 check also covers the last bytes already in the file (so a value spanning two
-scans is caught); for a path that is the same open file as stdout or stderr
-(`/dev/stderr` joins stderr's buffer, any other match stdout's) the records
+scans is caught); that check needs the existing tail to be readable: if an
+existing non-empty file cannot be read, nothing is written to it, one fixed
+line is printed and the run fails (exit 4); for a path that is the same open file as stdout or stderr
+(`/dev/stderr` and `/proc/self/fd/2` join stderr's buffer, any other match
+stdout's) the records
 join that stream's buffer. When stdout and stderr are the same open file, both
 buffers (stdout's, then stderr's) are joined and checked as one document at
 exit, so records and diagnostics are checked together in the order written;

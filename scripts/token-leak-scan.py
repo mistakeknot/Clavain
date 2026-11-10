@@ -446,16 +446,20 @@ def _std_stream_for(path):
 
 
 def _existing_tail(path, size):
-    """The last size bytes already in a regular file (b"" otherwise)."""
+    """The last size bytes already in a regular file; b"" when there is
+    nothing to join to (no such regular file, or it is empty); None when the
+    file exists and is not empty (or its size is unknown) but cannot be read."""
     try:
         if size <= 0 or not os.path.isfile(path):
+            return b""
+        if os.stat(path).st_size == 0:
             return b""
         with open(path, "rb") as handle:
             handle.seek(0, os.SEEK_END)
             handle.seek(max(0, handle.tell() - size))
             return handle.read()
     except BaseException:
-        return b""
+        return None
 
 
 def _write_hits(hits, lines, forms):
@@ -467,12 +471,18 @@ def _write_hits(hits, lines, forms):
     buffer, so the checked output point checks them together with the
     diagnostics as one document. If the joined bytes would carry a value the
     records are replaced by the fixed value-free record, or nothing if even
-    that would. Memory: one short line per scanned file."""
+    that would. If the tail of an existing non-empty regular file cannot be
+    read, nothing is written and False is returned (the scan fails closed).
+    Memory: one short line per scanned file."""
     if not lines:
-        return
+        return True
     std = _std_stream_for(hits.name)
     tail = b"" if std else _existing_tail(
         hits.name, max((len(f) for f in forms if f), default=1) - 1)
+
+    if tail is None:
+        # the boundary cannot be checked: write nothing, fail closed
+        return False
 
     def carries(text):
         data = tail + text.encode("utf-8", "surrogateescape")
@@ -482,11 +492,12 @@ def _write_hits(hits, lines, forms):
     if carries(document):
         document = _safe_line({"file": "<withheld>", "unscanned": True}, forms)
         if not document or carries(document):
-            return
+            return True
     if std:
         _BUFFER[std].append(document)
     else:
         hits.write(document)
+    return True
 
 
 def cmd_scan(args):
@@ -523,7 +534,9 @@ def cmd_scan(args):
                 line = _safe_line({"file": safe, "count": count}, forms)
                 if line:
                     lines.append(line)
-        _write_hits(hits, lines, forms)
+        if not _write_hits(hits, lines, forms):
+            failed = True
+            _emit("token-leak-scan: could not check the hits file; failing closed")
     if found and failed:
         return BOTH_EXIT
     if failed:
