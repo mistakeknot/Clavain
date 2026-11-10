@@ -338,6 +338,16 @@
       "source": "bead mk-7bb3q; skip added with the probe in PR 128 (bead mk-fdj7h); second case added with the temp-root probe in PR 147 (bead mk-nkprr)",
       "first_observed_in_run": "42182253658",
       "accepted_on": "2026-11-06"
+    },
+    "codex sandbox (Linux) not installed": {
+      "cases": [
+        "codex: repeated -c keys take the last value (codex-cli precedence the rejection relies on)",
+        "codex: the real codex sandbox obeys the exclude list dispatch passes (tool command path)"
+      ],
+      "why": "tests/shell/dispatch_seat_env_scrub.bats checks the codex shell_environment_policy exclude, and the precedence of repeated -c keys, against a real codex sandbox on Linux, so it needs codex installed and skips on a hosted runner by design. Both cases ran and passed, not skipped, on a host with codex-cli 0.167.0 at the head of PR 156 (44fd1797). Its stub-backed siblings in the same file run in CI and pass. No assertion that used to run here stopped running.",
+      "source": "bead mk-1w54d; skip added with the real-sandbox tests in PR 156",
+      "first_observed_in_run": "42726123764",
+      "accepted_on": "2026-11-09"
     }
   }
 }
