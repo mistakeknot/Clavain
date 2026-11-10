@@ -1234,9 +1234,19 @@ _dispatch_model_lab() {
 # capacity_substitute so a human auditing a same-lab review that was NOT
 # flagged (no capacity_failure_class was ever set) can at least check
 # whether an old ic explains it.
+#
+# The version string goes into the audit record, so it is scanned like every
+# other routing value (mk-47vtm.3): the caller names the variable to set, and a
+# hit fails the run. Usage: _dispatch_ic_version VAR || return 1
 _dispatch_ic_version() {
+  printf -v "$1" '%s' ""
   command -v ic >/dev/null 2>&1 || return 0
-  ic version 2>/dev/null | head -1
+  local __icv=""
+  _routing_call __icv bash -c 'exec ic version 2>/dev/null' || {
+    [[ $? -ne 97 ]] || return 1
+    __icv=""
+  }
+  printf -v "$1" '%s' "$(head -1 <<< "$__icv")"
 }
 
 # Opt-in static routing guard. Inactive unless
@@ -1325,12 +1335,16 @@ _dispatch_role_profile() {
   # Resolve against the control-plane checkout, not the task repository (which
   # can live outside Sylveste and need not carry its own routing.yaml).
   local context_note=""
-  local route_err
+  local route_err route_out route_rc=0
   route_err="$(mktemp "${TMPDIR:-/tmp}/clavain-route-err.XXXXXX")" || return 1
-  if ! resolved="$("${route_cmd[@]}" "${context_args[@]}" 2> "$route_err")"; then
-    # mk-47vtm.3: scan before the routing tool's stderr is mirrored or removed.
-    _token_leak_scan_now "$route_err" || { rm -f "$route_err"; return 1; }
-    [[ ! -s "$route_err" ]] || cat "$route_err" >&2
+  route_out="$(mktemp "${TMPDIR:-/tmp}/clavain-route-out.XXXXXX")" || { rm -f "$route_err"; return 1; }
+  "${route_cmd[@]}" "${context_args[@]}" > "$route_out" 2> "$route_err" || route_rc=$?
+  # mk-47vtm.3: scan both streams before stderr is mirrored, stdout is used or
+  # either file is removed; a hit mirrors nothing and fails the run.
+  _token_leak_scan_now "$route_err" "$route_out" || { rm -f "$route_err" "$route_out"; return 1; }
+  [[ ! -s "$route_err" ]] || cat "$route_err" >&2
+  if [[ "$route_rc" -ne 0 ]]; then
+    rm -f "$route_out"
     if grep -qiE 'unknown field|json:' "$route_err" 2>/dev/null; then
       context_note=" (the decision context was rejected: it has an unknown key or invalid JSON; see the error above)"
     fi
@@ -1338,9 +1352,8 @@ _dispatch_role_profile() {
     echo "Error: Intercore could not resolve dispatch role '$role'$context_note" >&2
     return 1
   fi
-  _token_leak_scan_now "$route_err" || { rm -f "$route_err"; return 1; }
-  [[ ! -s "$route_err" ]] || cat "$route_err" >&2
-  rm -f "$route_err"
+  resolved="$(cat "$route_out")"
+  rm -f "$route_err" "$route_out"
   if [[ "$(jq -r '.status' <<< "$headroom")" == known ]]; then
     _routing_call advice bash "$DISPATCH_SCRIPT_DIR/pool-headroom.sh" --stdin --role "$role" \
       <<< "$(jq -cn --argjson snapshot "$headroom" --argjson route "$resolved" '{snapshot:$snapshot,route:$route}')" || return 1
@@ -1486,8 +1499,10 @@ _dispatch_role_profile() {
       producer_lab="$(_dispatch_model_lab "$producer_model")"
       reviewer_lab="$(_dispatch_model_lab "$candidate_model_identity")"
       if [[ -n "$producer_lab" && "$producer_lab" == "$reviewer_lab" ]]; then
+        local ic_version_str=""
+        _dispatch_ic_version ic_version_str || return 1
         capacity_substitute="$(jq -cn --arg fc "$capacity_failure_class" --arg pl "$producer_lab" --arg rl "$reviewer_lab" \
-          --arg icv "$(_dispatch_ic_version)" \
+          --arg icv "$ic_version_str" \
           '{failure_class:$fc,producer_lab:$pl,reviewer_lab:$rl}
             + (if $icv != "" then {ic_version:$icv} else {} end)')"
       fi

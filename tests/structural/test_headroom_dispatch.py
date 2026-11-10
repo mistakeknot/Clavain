@@ -40,6 +40,24 @@ if os.environ.get('ROUTE_FORECAST_NOISE') and any(a.endswith('.context.json') fo
     sys.stderr.write('forecast note ' + os.environ['ROUTE_FORECAST_NOISE'] + '\\n')
 if os.environ.get('ROUTE_STDERR_NOISE'):
     sys.stderr.write('routing note ' + os.environ['ROUTE_STDERR_NOISE'] + '\\n')
+# stdout noise: a routing value (here an extra key in the resolved JSON) that carries the
+# dummy token, on the initial resolve (ROUTE_STDOUT_NOISE=initial) or the forecast
+# re-resolve (=forecast); ROUTE_STDOUT_VALUE is the value
+mode = os.environ.get('ROUTE_STDOUT_NOISE')
+if mode and sys.argv[1:4] == ['--json', 'route', 'dispatch'] \\
+        and b'dispatch.sh' in open('/proc/%d/cmdline' % os.getppid(), 'rb').read():
+    forecast = any(a.endswith('.context.json') for a in sys.argv)
+    if (mode == 'forecast') == forecast:
+        import json, subprocess
+        r = subprocess.run([{real_ic!r}, *sys.argv[1:]], capture_output=True, text=True)
+        sys.stderr.write(r.stderr)
+        if r.returncode:
+            sys.stdout.write(r.stdout)
+            sys.exit(r.returncode)
+        data = json.loads(r.stdout)
+        data['routing_note'] = os.environ['ROUTE_STDOUT_VALUE']
+        print(json.dumps(data))
+        sys.exit(0)
 os.execv({real_ic!r}, [{real_ic!r}, *sys.argv[1:]])
 ''',
         'bb': '''#!/usr/bin/env python3
@@ -191,16 +209,13 @@ def test_evidence_creation_is_portable(dispatch):
 DUMMY = 'sk-test-dummy-0123456789abcdef'
 
 
-def test_leak_in_derived_decision_context_is_redacted_and_fails_closed(dispatch):
-    # The derived context copies the caller's rationale; the headroom evidence
-    # and the derived files live under .clavain/capacity.
+def test_leak_in_caller_rationale_fails_closed_at_initial_resolve(dispatch):
+    # ic echoes the caller's rationale in the resolved JSON, so the initial resolve
+    # stdout scan catches it before any headroom evidence or derived context exists.
     p, _, _, work = dispatch([account('codex', .99), account('claude', .2)],
                              rationale='note ' + DUMMY, extra_env={'ANTHROPIC_AUTH_TOKEN': DUMMY})
     assert p.returncode != 0
-    files = list((work/'.clavain/capacity').glob('*.json'))
-    assert any(f.name.endswith('-headroom.json') for f in files)
-    assert any(f.name.endswith('.context.json') for f in files)
-    for f in files:
+    for f in (work/'.clavain/capacity').glob('*.json'):
         assert DUMMY not in f.read_text()
     assert DUMMY not in p.stdout and DUMMY not in p.stderr
     assert 'bearer token found in run artifacts' in p.stderr
@@ -236,3 +251,28 @@ def test_clean_forecast_stderr_is_still_mirrored(dispatch):
                           extra_env={'ANTHROPIC_AUTH_TOKEN': DUMMY, 'ROUTE_FORECAST_NOISE': 'harmless'})
     assert p.returncode == 0, p.stderr
     assert 'forecast note harmless' in p.stderr
+
+
+def test_leak_in_initial_resolve_stdout_fails_closed_and_is_never_printed(dispatch):
+    p, _, _, _ = dispatch([account('codex', .2), account('claude', .8)],
+                          extra_env={'ANTHROPIC_AUTH_TOKEN': DUMMY, 'ROUTE_STDOUT_NOISE': 'initial',
+                                     'ROUTE_STDOUT_VALUE': DUMMY})
+    assert p.returncode != 0
+    assert DUMMY not in p.stdout and DUMMY not in p.stderr
+    assert 'bearer token found in run artifacts' in p.stderr
+
+
+def test_leak_in_forecast_resolve_stdout_fails_closed_and_is_never_printed(dispatch):
+    p, _, _, _ = dispatch([account('codex', .99), account('claude', .2)],
+                          extra_env={'ANTHROPIC_AUTH_TOKEN': DUMMY, 'ROUTE_STDOUT_NOISE': 'forecast',
+                                     'ROUTE_STDOUT_VALUE': DUMMY})
+    assert p.returncode != 0
+    assert DUMMY not in p.stdout and DUMMY not in p.stderr
+    assert 'bearer token found in run artifacts' in p.stderr
+
+
+def test_clean_resolve_stdout_extra_key_still_passes(dispatch):
+    p, _, _, _ = dispatch([account('codex', .2), account('claude', .8)],
+                          extra_env={'ANTHROPIC_AUTH_TOKEN': DUMMY, 'ROUTE_STDOUT_NOISE': 'initial',
+                                     'ROUTE_STDOUT_VALUE': 'harmless'})
+    assert p.returncode == 0, p.stderr
