@@ -77,9 +77,41 @@ run_engine() {
     [ "$(printf '%s\n' "$output" | grep -c 'detail <redacted>')" -eq 1 ]
 }
 
-@test "control: a UUID, a timestamp and an error code are unchanged" {
+@test "control: a UUID, a timestamp and a short error code are unchanged" {
     FAKE_ERR="$UUID $TS invalid_request_error" run_engine claude
     [ "$(printf '%s\n' "$output" | grep -c "detail $UUID $TS invalid_request_error")" -eq 1 ]
     FAKE_ERR="$UUID $TS invalid_request_error" run_engine kimi
     [ "$(printf '%s\n' "$output" | grep -c "detail $UUID $TS invalid_request_error")" -eq 1 ]
+}
+
+# Load only the helper from dispatch.sh so it can be run on its own.
+load_helper() {
+    eval "$(awk '/^_strict_token_runs\(\) \{/,/^\}/' "$DISPATCH")"
+}
+
+@test "helper: a failing sed fails closed to the placeholder" {
+    load_helper
+    printf '#!/usr/bin/env bash\nexit 1\n' > "$T/bin/sed"
+    chmod +x "$T/bin/sed"
+    out="$(printf 'some text\n' | _strict_token_runs)"
+    [ "$(printf '%s\n' "$out" | grep -c -x '<redacted>')" -eq 1 ]
+    [ "$(printf '%s\n' "$out" | grep -c 'some text')" -eq 0 ]
+}
+
+@test "helper: a newline ends a run; a 20+ run on one line is replaced" {
+    load_helper
+    short="$(printf 'a1b2c3d4e5%.0s' 1)"
+    long="$(printf 'a1b2c3d4e5%.0s' 1 2)"
+    out="$(printf '%s\n%s\n%s\n' "$short" "$short" "$long" | _strict_token_runs)"
+    [ "$(printf '%s\n' "$out" | grep -c -x "$short")" -eq 2 ]
+    [ "$(printf '%s\n' "$out" | grep -c "$long")" -eq 0 ]
+    [ "$(printf '%s\n' "$out" | grep -c -x '<redacted>')" -eq 1 ]
+}
+
+@test "helper: a 25-letter segment inside an error code is replaced (documented)" {
+    load_helper
+    seg="$(printf 'abcde%.0s' 1 2 3 4 5)"
+    out="$(printf 'x_%s_error\n' "$seg" | _strict_token_runs)"
+    [ "$(printf '%s\n' "$out" | grep -c "$seg")" -eq 0 ]
+    [ "$(printf '%s\n' "$out" | grep -c -x 'x_<redacted>_error')" -eq 1 ]
 }

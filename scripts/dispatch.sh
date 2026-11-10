@@ -4480,11 +4480,13 @@ sys.stdout.write(mod.redact_text(sys.stdin.read()))
 # classification and removed on exit.
 # mk-47vtm.6: the shared redactor keeps bare 40- and 64-character hex as possible
 # SHAs, so an unlabeled credential of that shape that is not among the captured
-# token values would pass. The mirror (every engine path) therefore also replaces
-# each run of 20 or more letters, digits, '+' or '=' with <redacted>. '-', '_',
-# '.', '/' and ':' end a run, so UUIDs, timestamps, paths and error codes such as
-# invalid_request_error are unchanged. Git SHAs in mirrored stderr are replaced
-# too. Fails closed to a placeholder.
+# token values would pass. The mirror (the BB, Claude/Kimi and Codex callers of
+# _emit_provider_stderr) therefore also replaces any run of 20 or more characters
+# from [A-Za-z0-9+=] with <redacted>, including a run inside an error code, a
+# timestamp or a path component. '-', '_', '.', '/' and ':' end a run, and a
+# newline ends one, so short runs and runs split by those characters pass. The
+# shared redactor still runs first. Git SHAs in mirrored stderr are replaced too.
+# Fails closed to a placeholder.
 _strict_token_runs() {
     LC_ALL=C sed -E 's/[A-Za-z0-9+=]{20,}/<redacted>/g' || printf '<redacted>'
 }
