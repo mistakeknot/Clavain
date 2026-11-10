@@ -2,16 +2,39 @@
 # routing-shadow-report.sh — Analyze B2 shadow routing logs from recent sessions.
 # Shows tier distribution, would-have-changed counts, and enforce readiness.
 #
-# Usage: bash routing-shadow-report.sh [--days N] [--json]
+# Usage: bash routing-shadow-report.sh [--days N]
+#   A bare number is also read as the day count. --json is accepted but the
+#   report is text only.
 #
 # Requires: cass (session search), or falls back to grepping interstat session files.
 
 set -euo pipefail
 
-DAYS="${1:-7}"
-JSON_MODE=""
-[[ "${1:-}" == "--json" || "${2:-}" == "--json" ]] && JSON_MODE=1
-[[ "${1:-}" =~ ^[0-9]+$ ]] && DAYS="$1"
+DAYS=7
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --days)
+      [[ "${2:-}" =~ ^[0-9]+$ ]] || { echo "ERROR: --days needs a whole number" >&2; exit 2; }
+      DAYS="$2"
+      shift 2
+      ;;
+    --days=*)
+      [[ "${1#--days=}" =~ ^[0-9]+$ ]] || { echo "ERROR: --days needs a whole number" >&2; exit 2; }
+      DAYS="${1#--days=}"
+      shift
+      ;;
+    --json)
+      # Accepted for compatibility; the report is text only.
+      shift
+      ;;
+    *)
+      # A bare number is the older positional form of --days.
+      [[ "$1" =~ ^[0-9]+$ ]] || { echo "ERROR: unknown argument: $1" >&2; exit 2; }
+      DAYS="$1"
+      shift
+      ;;
+  esac
+done
 
 echo "=== B2 Complexity Routing Shadow Report ==="
 echo "Period: last ${DAYS} days"
@@ -50,8 +73,10 @@ echo ""
 
 echo "--- Would-Have-Changed Events ---"
 TOTAL=$(echo "$SHADOW_LINES" | wc -l)
-DOWNGRADES=$(echo "$SHADOW_LINES" | grep -c 'sonnet → haiku\|opus → sonnet\|opus → haiku' || echo "0")
-UPGRADES=$(echo "$SHADOW_LINES" | grep -c 'haiku → sonnet\|haiku → opus\|sonnet → opus' || echo "0")
+# grep -c prints 0 itself when nothing matches (and exits 1), so only the
+# exit status needs absorbing.
+DOWNGRADES=$(echo "$SHADOW_LINES" | grep -c 'sonnet → haiku\|opus → sonnet\|opus → haiku' || true)
+UPGRADES=$(echo "$SHADOW_LINES" | grep -c 'haiku → sonnet\|haiku → opus\|sonnet → opus' || true)
 NOCHANGE=$(( TOTAL - DOWNGRADES - UPGRADES ))
 
 echo "  Total events:  $TOTAL"
