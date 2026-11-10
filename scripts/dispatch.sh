@@ -4478,10 +4478,23 @@ sys.stdout.write(mod.redact_text(sys.stdin.read()))
 # Print a provider stderr capture to our stderr, redacted. The capture may hold
 # credentials or echoed prompt text; the raw file is only ever read for
 # classification and removed on exit.
+# mk-47vtm.6: the shared redactor keeps bare 40- and 64-character hex as possible
+# SHAs, so an unlabeled credential of that shape that is not among the captured
+# token values would pass. The mirror (the BB, Claude/Kimi and Codex callers of
+# _emit_provider_stderr) therefore also replaces any run of 20 or more characters
+# from [A-Za-z0-9+=] with <redacted>, including a run inside an error code, a
+# timestamp or a path component. '-', '_', '.', '/' and ':' end a run, and a
+# newline ends one, so short runs and runs split by those characters pass. The
+# shared redactor still runs first. Git SHAs in mirrored stderr are replaced too.
+# Fails closed to a placeholder.
+_strict_token_runs() {
+    LC_ALL=C sed -E 's/[A-Za-z0-9+=]{20,}/<redacted>/g' || printf '<redacted>'
+}
+
 _emit_provider_stderr() {
     local f="${1:-}"
     [[ -n "$f" && -s "$f" ]] || return 0
-    _redact_provider_text < "$f" >&2 || true
+    _redact_provider_text < "$f" | _strict_token_runs >&2 || true
     printf '\n' >&2
 }
 
