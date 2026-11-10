@@ -10,7 +10,8 @@
 # Usage:
 #   review-round.sh --mode first|confirm --repo DIR --base REF --head SHA \
 #       --producer-identity ID --out-dir DIR [--prompt-file F] \
-#       [--gate-cmd 'CMD']... [--ci-cmd 'CMD'] [--prior-findings FILE] [--dry-run]
+#       [--gate-cmd 'CMD']... [--ci-cmd 'CMD'] [--prior-head SHA] \
+#       [--prior-findings FILE] [--dry-run]
 #
 # --gate-cmd  Pre-review gate (run in --repo, repeatable). Any failure stops the
 #             round with exit 10 BEFORE any review is dispatched.
@@ -119,7 +120,7 @@ while [ $# -gt 0 ]; do
     --prior-findings) PRIOR=$2; shift 2;;
     --prior-head) PRIOR_HEAD=$2; shift 2;;
     --dry-run) DRY=1; shift;;
-    -h|--help) sed -n 2,28p "$0"; exit 0;;
+    -h|--help) awk -v first=2 'NR < first {next} !/^#/ {exit} {print}' "$0"; exit 0;;  # the whole header comment
     *) die "unknown argument: $1";;
   esac
 done
