@@ -20,6 +20,7 @@ INTERCORE_WARNED=false
 # means local automatic consumers must not open shared state, even when a
 # binary was cached earlier in the shell. Removing it is an explicit rebind.
 intercore_remote_authority() {
+    [[ -n "${HOME:-}" ]] || return 1
     [[ -e "$HOME/.config/clavain/remote-shared-state" || -L "$HOME/.config/clavain/remote-shared-state" ]]
 }
 
@@ -150,25 +151,50 @@ intercore_state_delete_all() {
     done < <("$INTERCORE_BIN" state list "$key" 2>/dev/null || true)
 }
 
+# _intercore_routing_prune_due — 0 when the routing prune stamp ($1) is absent or
+# a day old and no recent attempt marker ($1.failed, under an hour old) backs it off.
+_intercore_routing_prune_due() {
+    local stamp="$1"
+    [[ ! -e "$stamp" || -n "$(find "$stamp" -mmin +1440 2>/dev/null)" ]] || return 1
+    [[ ! -e "$stamp.failed" || -n "$(find "$stamp.failed" -mmin +60 2>/dev/null)" ]] || return 1
+}
+
 # intercore_cleanup_stale — prune old sentinels and old routing decisions.
 # Called ONCE per stop cycle from session-handoff.sh only — not from every hook.
 intercore_cleanup_stale() {
     if ! intercore_available; then return 0; fi
     "$INTERCORE_BIN" sentinel prune --older-than=1h >/dev/null 2>&1 || true
     # Routing-decision retention: archive then delete decisions older than the
-    # window, at most once a day per database (the pass reads the whole table,
+    # window, normally once a day per database (the pass reads the whole table,
     # about a second on 100 MB). A stamp file does the throttling because the
     # sentinel prune above would delete a day-long sentinel within the hour. The
-    # stamp is keyed by the absolute path of the database (INTERCORE_DB resolved
-    # against $PWD, else the nearest .clavain/intercore.db above $PWD, as ic
-    # finds it) so one project's run does not starve another's; ic itself is
-    # called as the other helpers here call it (--db only when INTERCORE_DB is
-    # set), so its own discovery rules apply. The stamp is touched only after a
-    # successful prune, so a failure is retried on the next stop.
+    # stamp is keyed by the canonical absolute path of the database (INTERCORE_DB,
+    # else the nearest .clavain/intercore.db above $PWD, as ic finds it) so one
+    # project's run does not starve another's; ic itself is called as the other
+    # helpers here call it (--db only when INTERCORE_DB is set), so its own
+    # discovery rules apply.
+    # This runs in a Stop hook, so the block is written to return 0 and stay
+    # quiet in every case below, and to prune at most once an hour even when
+    # things go wrong:
+    #  - no usable state directory or key (no HOME, an unwritable directory, no
+    #    cksum or date) means skip, never prune unthrottled;
+    #  - a mkdir lock named for the current hour admits one of several
+    #    simultaneous stops; the rest skip, as does a stop that finds a lock of
+    #    the adjacent hour younger than ten minutes (clock read across an hour
+    #    boundary). A lock a killed hook leaves behind
+    #    expires with its hour (it is never "reclaimed", so no stop can take
+    #    over a live one) and is swept once it is two hours old;
+    #  - before pruning, a ".failed" marker is written. It backs the next try
+    #    off for an hour, so a crash, a timeout, a failed prune or a stamp that
+    #    cannot be written is retried hourly, not on every stop;
+    #  - the prune is cut off after INTERCORE_ROUTING_PRUNE_TIMEOUT seconds
+    #    (default 20; SIGTERM, then SIGKILL two seconds later), by
+    #    `timeout`/`gtimeout` when present, else a bash watchdog;
+    #  - success writes the day stamp and clears the marker.
     # INTERCORE_ROUTING_RETENTION=<N>d|<duration> sets the window (default 30d);
     # =off skips it. An `ic` without `route prune` fails harmlessly here.
     if [[ "${INTERCORE_ROUTING_RETENTION:-30d}" != "off" ]]; then
-        local db_path="${INTERCORE_DB:-}" d
+        local db_path="${INTERCORE_DB:-}" d dd t n state_dir key stamp lock hour secs tbin pid wd rc=0
         if [[ -n "$db_path" ]]; then
             [[ "$db_path" == /* ]] || db_path="$PWD/$db_path"
         else
@@ -179,15 +205,77 @@ intercore_cleanup_stale() {
                 d="$(dirname "$d")"
             done
         fi
-        local key stamp
-        key="$(printf '%s' "${db_path:-$PWD}" | cksum | cut -d' ' -f1)"
-        stamp="${INTERCORE_ROUTING_PRUNE_STAMP_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/intercore}/routing-prune-$key.stamp"
-        if [[ ! -e "$stamp" ]] || [[ -n "$(find "$stamp" -mmin +1440 2>/dev/null)" ]]; then
-            if "$INTERCORE_BIN" route prune --older-than="${INTERCORE_ROUTING_RETENTION:-30d}" ${INTERCORE_DB:+--db="$INTERCORE_DB"} >/dev/null 2>&1; then
-                { mkdir -p "$(dirname "$stamp")" && : > "$stamp"; } 2>/dev/null || true
+        # Canonical path (resolves ./, ../ and symlinked directories and database
+        # files) so equivalent spellings of one database share one stamp.
+        if [[ -n "$db_path" ]]; then
+            dd="$(cd "$(dirname "$db_path")" 2>/dev/null && pwd -P)" && db_path="$dd/$(basename "$db_path")"
+            # Follow a symlinked database file too (up to 40 hops).
+            n=0
+            while [[ -L "$db_path" && "$n" -lt 40 ]]; do
+                t="$(readlink "$db_path" 2>/dev/null)" || break
+                [[ -n "$t" ]] || break
+                [[ "$t" == /* ]] || t="$(dirname "$db_path")/$t"
+                dd="$(cd "$(dirname "$t")" 2>/dev/null && pwd -P)" || break
+                db_path="$dd/$(basename "$t")"
+                n=$(( n + 1 ))
+            done
+            # A chain this long, a loop, or a link readlink cannot read has no
+            # trustworthy identity: skip rather than prune under a second key.
+            [[ ! -L "$db_path" ]] || return 0
+        fi
+        state_dir="${INTERCORE_ROUTING_PRUNE_STAMP_DIR:-}"
+        if [[ -z "$state_dir" ]]; then
+            if [[ -n "${XDG_STATE_HOME:-}" ]]; then state_dir="$XDG_STATE_HOME/intercore"
+            elif [[ -n "${HOME:-}" ]]; then state_dir="$HOME/.local/state/intercore"
             fi
         fi
+        [[ -n "$state_dir" ]] || return 0
+        key="$(printf '%s' "${db_path:-$PWD}" | cksum 2>/dev/null | cut -d' ' -f1 2>/dev/null)" || key=""
+        [[ "$key" =~ ^[0-9]+$ ]] || return 0
+        hour="$(date +%s 2>/dev/null)" || hour=""
+        [[ "$hour" =~ ^[0-9]+$ ]] || return 0
+        hour=$(( 10#$hour / 3600 ))
+        stamp="$state_dir/routing-prune-$key.stamp"
+        lock="$state_dir/routing-prune-$key.lock.$hour"
+        _intercore_routing_prune_due "$stamp" || return 0
+        mkdir -p "$state_dir" 2>/dev/null || return 0
+        mkdir "$lock" 2>/dev/null || return 0
+        # A stop that read the clock on the other side of an hour boundary holds a
+        # different lock. Each takes its own lock first, then looks for a fresh
+        # neighbour: at least one of two such stops sees the other and skips.
+        for t in $(( hour - 1 )) $(( hour + 1 )); do
+            if [[ -n "$(find "$state_dir/routing-prune-$key.lock.$t" -maxdepth 0 -mmin -10 2>/dev/null)" ]]; then
+                rmdir "$lock" 2>/dev/null || true
+                return 0
+            fi
+        done
+        # Sweep locks from killed hooks of earlier hours (a prune is bounded to seconds).
+        find "$state_dir" -maxdepth 1 -name 'routing-prune-*.lock.*' -mmin +120 -exec rmdir {} + >/dev/null 2>&1 || true
+        # Re-check under the lock, then record the attempt before making it: if the
+        # state directory cannot be written there is no prune at all.
+        if _intercore_routing_prune_due "$stamp" && { : > "$stamp.failed"; } 2>/dev/null; then
+            secs="${INTERCORE_ROUTING_PRUNE_TIMEOUT:-20}"
+            [[ "$secs" =~ ^[0-9]{1,6}$ ]] && secs=$(( 10#$secs )) && (( secs > 0 )) || secs=20
+            tbin="$(command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null)" || tbin=""
+            if [[ -n "$tbin" ]]; then
+                # The group's own stderr is discarded too: bash prints "Killed ..." for a child timeout -k had to SIGKILL.
+                { "$tbin" -k 2 "$secs" "$INTERCORE_BIN" route prune --older-than="${INTERCORE_ROUTING_RETENTION:-30d}" ${INTERCORE_DB:+--db="$INTERCORE_DB"} >/dev/null 2>&1 || rc=$?; } 2>/dev/null
+            else
+                "$INTERCORE_BIN" route prune --older-than="${INTERCORE_ROUTING_RETENTION:-30d}" ${INTERCORE_DB:+--db="$INTERCORE_DB"} >/dev/null 2>&1 &
+                pid=$!
+                { sleep "$secs"; kill "$pid"; sleep 2; kill -9 "$pid"; } >/dev/null 2>&1 &
+                wd=$!
+                { wait "$pid"; } 2>/dev/null || rc=$?
+                { kill "$wd"; wait "$wd"; } >/dev/null 2>&1 || true
+            fi
+            if [[ "$rc" == 0 ]]; then
+                # rm first: an expired stamp this user cannot truncate must not pin the marker.
+                { { rm -f "$stamp"; : > "$stamp"; } 2>/dev/null && rm -f "$stamp.failed" 2>/dev/null; } || true
+            fi
+        fi
+        rmdir "$lock" 2>/dev/null || true
     fi
+    return 0
 }
 
 # --- Dispatch wrappers ---
