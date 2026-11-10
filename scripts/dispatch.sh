@@ -167,6 +167,7 @@ KIMI_SEAT_TOOLS=false  # role-resolved kimi review seat: Bash + read tools, run 
 KIMI_SANDBOX=""        # temp dir holding that copy; removed on exit
 KIMI_SANDBOX_MODE=""   # how the seat is contained, or why it fell back to toolless
 KIMI_FINAL_FILE=""      # kimi seat ruling (final message), kept outside the sandbox
+KIMI_AGENT=""           # kimi agent file (a temp file; the seat gets a copy in the sandbox)
 CLAUDE_UNSAFE=false
 NO_TOOLS=false  # --no-tools / CLAVAIN_SEAT_TOOLS=none: text-in/text-out Claude seat, every tool disabled
 [[ "${CLAVAIN_SEAT_TOOLS:-}" != none ]] || NO_TOOLS=true
@@ -492,9 +493,17 @@ _review_scratch_verify_source() {
 # argument or environment. A hit redacts every occurrence in place and fails the
 # run; the scan runs again from the EXIT trap, after the last write the run
 # makes, and the trap also covers signals and early exits.
+# mk-47vtm.3: also scanned, before any of them is removed: the kimi seat's
+# final-message file and agent file, the seat sandbox's agent copy, temp dir and
+# scratch state copies (regular files only), and the routing artifacts
+# (headroom evidence, derived decision contexts, the routing tool's stderr),
+# which are scanned as soon as they exist because routing runs before the exit
+# trap is installed.
 # Not scanned: stdout already mirrored to the caller's terminal, the shared
-# review events log, the Intercore routing database, and zaka sessions (zaka
-# submits and exits before any artifact exists).
+# review events log, the Intercore routing database, zaka sessions (zaka
+# submits and exits before any artifact exists), the kimi seat's copies of the
+# checkout and plan directory (copies of the caller's own files), and
+# symlinks inside the kimi seat sandbox (not followed).
 TOKEN_LEAK_FOUND=false
 TOKEN_LEAK_ERROR=false
 TOKEN_LEAK_DIRTY=false
@@ -568,13 +577,31 @@ _token_leak_scan() {
   esac
 }
 
+# Scan the given files now and fail the caller on a hit or an unscannable file.
+# For artifacts written before the exit trap exists (routing); the run then
+# ends without the trap's later scan, so the verdict and report are made here.
+_token_leak_scan_now() {
+  _token_leak_scan "$@"
+  _token_leak_conclude
+}
+
+# Paths of artifacts registered for the exit-trap scans by their writers.
+TOKEN_LEAK_EXTRA_FILES=()
+
 # Everything this run writes that could carry a value (missing files are
 # skipped by the helper; unscannable symlinks fail the run).
 _token_leak_scan_all() {
   local -a files=("${STDERR_FILE:-}" "${PROVIDER_EVENTS:-}" "${PROMPT_STDIN_FILE:-}"
                   "${SUMMARY_FILE:-}" "${CLAVAIN_DISPATCH_FAILURE_FILE:-}"
-                  "${DISPATCH_INTERCEPT_EVIDENCE_PATH:-}" "${REVIEW_RECEIPT_PATH:-}")
+                  "${DISPATCH_INTERCEPT_EVIDENCE_PATH:-}" "${REVIEW_RECEIPT_PATH:-}"
+                  "${KIMI_FINAL_FILE:-}" "${KIMI_AGENT:-}")
   local f
+  files+=(${TOKEN_LEAK_EXTRA_FILES[@]+"${TOKEN_LEAK_EXTRA_FILES[@]}"})
+  if [[ -n "${KIMI_SANDBOX:-}" && -d "$KIMI_SANDBOX" && ! -L "$KIMI_SANDBOX" ]]; then
+    files+=("$KIMI_SANDBOX/agent.md")
+    while IFS= read -r -d '' f; do files+=("$f"); done < <(
+      find "$KIMI_SANDBOX/tmp" "$KIMI_SANDBOX"/state.* -type f -print0 2>/dev/null)
+  fi
   if [[ -n "${STATE_FILE:-}" ]]; then
     files+=("$STATE_FILE" "${STATE_FILE}.tmp")
   fi
@@ -1248,6 +1275,8 @@ _dispatch_role_profile() {
   local route_err
   route_err="$(mktemp "${TMPDIR:-/tmp}/clavain-route-err.XXXXXX")" || return 1
   if ! resolved="$("${route_cmd[@]}" "${context_args[@]}" 2> "$route_err")"; then
+    # mk-47vtm.3: scan before the routing tool's stderr is mirrored or removed.
+    _token_leak_scan_now "$route_err" || { rm -f "$route_err"; return 1; }
     [[ ! -s "$route_err" ]] || cat "$route_err" >&2
     if grep -qiE 'unknown field|json:' "$route_err" 2>/dev/null; then
       context_note=" (the decision context was rejected: it has an unknown key or invalid JSON; see the error above)"
@@ -1256,6 +1285,7 @@ _dispatch_role_profile() {
     echo "Error: Intercore could not resolve dispatch role '$role'$context_note" >&2
     return 1
   fi
+  _token_leak_scan_now "$route_err" || { rm -f "$route_err"; return 1; }
   [[ ! -s "$route_err" ]] || cat "$route_err" >&2
   rm -f "$route_err"
   if [[ "$(jq -r '.status' <<< "$headroom")" == known ]]; then
@@ -1263,7 +1293,7 @@ _dispatch_role_profile() {
       bash "$DISPATCH_SCRIPT_DIR/pool-headroom.sh" --stdin --role "$role")" || return 1
     exclusions="$(jq -c '.exclude | unique' <<< "$advice")"
     if [[ "$exclusions" != '[]' ]]; then
-      local capacity_dir="${WORKDIR:-.}/.clavain/capacity" seat
+      local capacity_dir="${WORKDIR:-.}/.clavain/capacity" seat generated_base=""
       if [[ "${REVIEW_SCRATCH:-false}" == true ]]; then
         capacity_dir="$(_review_scratch_state_dir capacity)" || return 1
       else
@@ -1272,10 +1302,15 @@ _dispatch_role_profile() {
       # Python's suffix support is portable; BSD mktemp requires trailing Xs.
       evidence="$(python3 -c 'import os,sys,tempfile; fd,path=tempfile.mkstemp(dir=sys.argv[1], prefix=sys.argv[2]+"-", suffix="-headroom.json"); os.close(fd); print(path)' "$capacity_dir" "$(date -u +%Y%m%dT%H%M%SZ)")" || return 1
       printf '%s\n' "$headroom" > "$evidence"
+      # mk-47vtm.3: the evidence and the contexts derived from it are routing
+      # artifacts left on disk; scan them once written (see below) and again
+      # from the exit trap.
+      TOKEN_LEAK_EXTRA_FILES+=("$evidence")
       base_context="${CLAVAIN_DECISION_CONTEXT:-}"
       if [[ -z "$base_context" ]]; then
         base_context="${evidence%.json}.base.json"
         printf '%s\n' '{"reasons":[],"rationale":"execution dispatch"}' > "$base_context"
+        generated_base="$base_context"
       fi
       derived="${evidence%.json}.context.json"
       local -a capacity_cmd=(bash "$DISPATCH_SCRIPT_DIR/capacity-fallback.sh" --forecast
@@ -1284,7 +1319,11 @@ _dispatch_role_profile() {
       [[ -z "${CLAVAIN_POLICY_PROFILE:-}" ]] || capacity_cmd+=(--policy-profile "$CLAVAIN_POLICY_PROFILE")
       [[ -z "$PRODUCER_IDENTITY" ]] || capacity_cmd+=(--producer-identity "$PRODUCER_IDENTITY")
       while IFS= read -r seat; do capacity_cmd+=(--seat "$seat"); done < <(jq -r '.[]' <<< "$exclusions")
-      "${capacity_cmd[@]}" >&2 || return 1
+      # Only the base context this run wrote is a routing artifact; a caller's
+      # own context file is not touched.
+      TOKEN_LEAK_EXTRA_FILES+=("$generated_base" "$derived")
+      "${capacity_cmd[@]}" >&2 || { _token_leak_scan_now "$evidence" "$generated_base" "$derived" || true; return 1; }
+      _token_leak_scan_now "$evidence" "$generated_base" "$derived" || return 1
       # Only this dispatch sees the forecast context; protected callers retain
       # their original context and the observed-failure path.
       local forecast_refs

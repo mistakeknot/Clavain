@@ -884,3 +884,76 @@ assert b"KeyboardInterrupt" not in out + err and b"Traceback" not in out + err, 
 PY
     [ "$status" -eq 0 ]
 }
+
+# ---- mk-47vtm.3: kimi seat artifacts ------------------------------------------
+
+# A resolved kimi review seat (tools on, a stub bwrap that runs the command
+# unsandboxed) whose fake kimi speaks stream-json. $1 = final message, $2 =
+# optional shell to run first inside the seat.
+kimi_seat_setup() {
+    printf '[models."k"]\nmodel = "k"\n' > "$T/kimi.toml"
+    cat > "$T/bin/bwrap" <<'STUB'
+#!/usr/bin/env bash
+while [ $# -gt 0 ] && [ "$1" != -- ]; do
+  case "$1" in --setenv) export "$2=$3"; shift 3 ;; --bind|--ro-bind) shift 3 ;; --tmpfs|--dir) shift 2 ;; *) shift ;; esac
+done
+[ "${1:-}" = -- ] && shift
+exec "$@"
+STUB
+    cat > "$T/bin/kimi" <<EOF2
+#!/usr/bin/env bash
+${2:-}
+printf '{"role":"meta","type":"system.version","version":"0.42.0"}\n'
+jq -cn --arg c "\$FAKE_BODY" '{role:"assistant",content:\$c}'
+printf '{"role":"meta","type":"session.resume_hint","session_id":"s"}\n'
+EOF2
+    chmod +x "$T/bin/bwrap" "$T/bin/kimi"
+    export FAKE_BODY="$1" KIMI_CONFIG="$T/kimi.toml"
+}
+
+governed_kimi_seat() {
+    bash "$DISPATCH" --role validation --role-resolved --resolved-profile-ref p1 \
+        --resolved-route-json "{\"policy_hash\":\"$POLICY_HASH\"}" \
+        --resolved-profile-json '{"profile_ref":"p1"}' --producer-identity prod-model \
+        --to kimi --model k -C "$T/repo" --prompt-file "$T/prompt.md" -o "$T/out.md" "$@"
+}
+
+# the leak report lists file names (never values) and counts
+report_names() { jq -r '.files[] | (.path // .file // .name // .)' "$T/out.md.token-leak.json" 2>/dev/null; }
+
+@test "kimi seat: a clean run with a token set passes and leaves no report" {
+    kimi_seat_setup $'VERDICT: PASS\nCRITERION: none'
+    run governed_kimi_seat
+    [ "$status" -eq 0 ]
+    [ ! -e "$T/out.md.token-leak.json" ]
+}
+
+@test "kimi seat: a value in the final-message file is found before the file is removed" {
+    kimi_seat_setup "VERDICT: PASS CRITERION: ${DUMMY}"
+    run governed_kimi_seat
+    [ "$status" -ne 0 ]
+    [ -f "$T/out.md.token-leak.json" ]
+    ! grep -qF "$DUMMY" "$T/out.md.token-leak.json"
+    report_names | grep -q 'clavain-kimi-final\.'
+    # the temp file is still removed afterwards
+    [ -z "$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'clavain-kimi-final.*' -newer "$T/prompt.md" 2>/dev/null)" ]
+}
+
+@test "kimi seat: a value written under the seat's temp dir is found and redacted" {
+    kimi_seat_setup $'VERDICT: PASS\nCRITERION: none' "printf 'x %s' \"${DUMMY}\" > \"\$TMPDIR/note.txt\""
+    run governed_kimi_seat
+    [ "$status" -ne 0 ]
+    ! grep -qF "$DUMMY" "$T/out.md.token-leak.json"
+    report_names | grep -q 'note.txt'
+}
+
+@test "kimi seat: a value in the seat's agent-file copy is found" {
+    kimi_seat_setup $'VERDICT: PASS\nCRITERION: none'
+    mkdir -p "$T/plans-${DUMMY}"
+    printf '# plan\n' > "$T/plans-${DUMMY}/plan.md"
+    run governed_kimi_seat --plan "$T/plans-${DUMMY}/plan.md"
+    [ "$status" -ne 0 ]
+    ! grep -qF "$DUMMY" "$T/out.md.token-leak.json"
+    [[ "$output" != *"$DUMMY"* ]]
+    report_names | grep -q 'agent.md'
+}
