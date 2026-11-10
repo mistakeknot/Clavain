@@ -35,6 +35,65 @@ _token_leak_capture() {
 }
 _token_leak_capture
 
+# mk-1w54d: inherited secrets stay out of what a seat's own shell commands see.
+# Names (case-insensitive globs) treated as secrets. Codex receives them as its
+# shell_environment_policy exclude list (its tool commands lose them, the codex
+# process keeps its environment); the Claude and Kimi children are started
+# through `env -u` for every matching name except the exact (case-sensitive)
+# authentication names listed below for the engine and, for Claude, only the
+# cloud provider whose CLAUDE_CODE_USE_* flag is active. The dispatch shell
+# itself is not changed, so _token_leak_capture values and later dispatch steps
+# are unaffected. There is no switch that turns this off.
+SEAT_SECRET_PATTERNS=('*TOKEN*' '*SECRET*' '*PASSWORD*' '*PASSWD*' '*CREDENTIAL*'
+  '*API_KEY*' '*APIKEY*' '*PRIVATE_KEY*' '*ACCESS_KEY*'
+  'AWS_*' 'CLOUDFLARE_*' 'AZURE_*' 'GOOGLE_*' 'GH_*' 'GITHUB_*' 'OPENAI_*')
+# Exact names the engine reads to authenticate (claude CLI 2.1.319 env-name
+# list; kimi binary env-name list). Only names matching SEAT_SECRET_PATTERNS
+# need a keep; nothing here is a prefix.
+SEAT_KEEP_CLAUDE=(ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN)
+SEAT_KEEP_CLAUDE_BEDROCK=(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_BEARER_TOKEN_BEDROCK)
+SEAT_KEEP_CLAUDE_VERTEX=(GOOGLE_APPLICATION_CREDENTIALS)
+SEAT_KEEP_CLAUDE_FOUNDRY=(ANTHROPIC_FOUNDRY_API_KEY AZURE_CLIENT_SECRET)
+SEAT_KEEP_KIMI=(KIMI_API_KEY MOONSHOT_API_KEY)
+SEAT_ENV_UNSET=()
+_seat_flag_on() { local v="${!1:-}"; [[ -n "$v" && "$v" != 0 && "$v" != false ]]; }
+# Fills SEAT_ENV_UNSET with `-u NAME` pairs for the current environment.
+# $1 = engine (claude|kimi).
+_seat_env_collect() {
+  local engine="$1" name pat k nc=0 keep
+  local -a keeps=()
+  SEAT_ENV_UNSET=()
+  case "$engine" in
+    claude)
+      keeps=("${SEAT_KEEP_CLAUDE[@]}")
+      ! _seat_flag_on CLAUDE_CODE_USE_BEDROCK || keeps+=("${SEAT_KEEP_CLAUDE_BEDROCK[@]}")
+      ! _seat_flag_on CLAUDE_CODE_USE_VERTEX || keeps+=("${SEAT_KEEP_CLAUDE_VERTEX[@]}")
+      ! _seat_flag_on CLAUDE_CODE_USE_FOUNDRY || keeps+=("${SEAT_KEEP_CLAUDE_FOUNDRY[@]}") ;;
+    kimi) keeps=("${SEAT_KEEP_KIMI[@]}") ;;
+  esac
+  shopt -q nocasematch && nc=1
+  shopt -s nocasematch
+  while IFS= read -r name; do
+    for pat in "${SEAT_SECRET_PATTERNS[@]}"; do
+      # shellcheck disable=SC2053
+      [[ "$name" == $pat ]] || continue
+      keep=false
+      # `[` compares case-sensitively regardless of nocasematch.
+      for k in "${keeps[@]}"; do [ "$name" = "$k" ] && { keep=true; break; }; done
+      [[ "$keep" == true ]] || SEAT_ENV_UNSET+=(-u "$name")
+      break
+    done
+  done < <(compgen -e)
+  [[ "$nc" == 1 ]] || shopt -u nocasematch
+  return 0
+}
+# Codex: -c override that drops the same names from its tool commands' env.
+_seat_codex_env_args() {
+  local pat list=""
+  for pat in "${SEAT_SECRET_PATTERNS[@]}"; do list+="\"$pat\","; done
+  printf '%s\n' "shell_environment_policy.exclude=[${list%,}]"
+}
+
 # Size threshold for --inject-docs warning (bytes)
 INJECT_DOCS_WARN_THRESHOLD=20000
 
@@ -3121,6 +3180,12 @@ else
   # Build codex exec command
   CMD=(codex exec)
   CMD+=(-s "$SANDBOX")
+  # mk-1w54d: codex's own shell tool commands lose secret-named variables
+  # (confirmed: codex-cli 0.167.0 `codex sandbox -c shell_environment_policy.exclude=[...]`).
+  # codex 0.167.0: a repeated -c key takes the last value, so a user passthrough
+  # could override this. Governed roles reject a shell_environment_policy
+  # passthrough below; other callers may still override it deliberately.
+  CMD+=(-c "$(_seat_codex_env_args)")
   if _bb_pool_available codex; then
     _bb_codex_pool_token
     # Match BB's provider-codex launch contract. The hub token stays in env.
@@ -3233,6 +3298,15 @@ else
   done
 
   if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
+    case "${ROLE:-}" in
+      validation|cross-lab-review|plan-review)
+        for _xa in "${EXTRA_ARGS[@]}"; do
+          if [[ "$_xa" == *shell_environment_policy* ]]; then
+            echo "Error: role '$ROLE' does not accept a shell_environment_policy passthrough (mk-1w54d)" >&2
+            exit 2
+          fi
+        done ;;
+    esac
     CMD+=("${EXTRA_ARGS[@]}")
   fi
 
@@ -3343,7 +3417,7 @@ if [[ "$DRY_RUN" == true ]]; then
     echo ""
   else
     if [[ -n "${UV_NO_SYNC:-}" ]]; then echo "# Env: UV_NO_SYNC=$UV_NO_SYNC (validation seat replays without syncing)" >&2; fi
-    DISPLAY_CMD=(codex exec -s "$SANDBOX")
+    DISPLAY_CMD=(codex exec -s "$SANDBOX" -c "$(_seat_codex_env_args)")
     if [[ -n "${SCRATCH_CODEX_TMPDIR:-}" ]]; then
       echo "# Env: TMPDIR=$SCRATCH_CODEX_TMPDIR (review scratch)" >&2
       DISPLAY_CMD+=("${SCRATCH_CODEX_ARGS[@]}")
@@ -5199,6 +5273,12 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
     echo "dispatch: kimi seat runs in a disposable copy ($KIMI_SANDBOX_MODE)" >&2
   elif [[ "$ENGINE" == "kimi" && -n "$KIMI_SANDBOX_MODE" ]]; then
     echo "dispatch: kimi seat sandbox: $KIMI_SANDBOX_MODE" >&2
+  fi
+  # mk-1w54d: start the child without secret-named variables, except the ones
+  # the engine authenticates with (the dispatch shell keeps its own).
+  _seat_env_collect "$ENGINE"
+  if [[ ${#SEAT_ENV_UNSET[@]} -gt 0 ]]; then
+    RUN_CMD=(env "${SEAT_ENV_UNSET[@]}" "${RUN_CMD[@]}")
   fi
   set +e
   # kimi carries its prompt in argv; claude reads it from PROMPT_STDIN_FILE

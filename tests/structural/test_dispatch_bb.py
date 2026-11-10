@@ -98,7 +98,7 @@ sys.stdin.read()
 Path(os.environ['CALL']).write_text(json.dumps({
     'argv': sys.argv,
     'base_url': os.environ.get('ANTHROPIC_BASE_URL'),
-    'token_matches': os.environ.get('ANTHROPIC_AUTH_TOKEN') == os.environ.get('POOL_TOKEN_SENTINEL'),
+    'token_matches': os.environ.get('ANTHROPIC_AUTH_TOKEN') == os.environ.get('POOL_EXPECTED_VALUE'),
     'tool_search': os.environ.get('ENABLE_TOOL_SEARCH'),
 }))
 print(json.dumps({'type':'result','is_error':False,'result':'VERDICT: CLEAN'}))
@@ -119,7 +119,7 @@ else:
                CLAVAIN_BB_DIRECT_POOL="1" if pool else "0", BB_CLI=str(bb), BB_THREAD_ID='thr_fixture',
                BB_SERVER_URL=pool_origin, CODEX_POOL_AUTH_TOKEN='fixture-only',
                CODEX_OPENAI_BASE_URL=pool_origin+'/api/v1/plugins/account-pool/http/v1',
-               POOL_TOKEN_SENTINEL='fixture-only',
+               POOL_EXPECTED_VALUE='fixture-only',
                CLAVAIN_REQUIRE_USAGE="1" if budget else "0", CLAVAIN_REVIEW_EVENTS=str(tmp_path/"events"))
     for key, value in (env_override or {}).items():
         if value is None:
