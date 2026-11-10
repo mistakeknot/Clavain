@@ -11,7 +11,10 @@ setup() {
     load test_helper
 
     SCRIPT_UNDER_TEST="$BATS_TEST_DIRNAME/../../scripts/next-goal-candidates.sh"
-    TEST_DIR="$(mktemp -d)"
+    # Root discovery walks up from $PWD and takes every ancestor .beads, so the
+    # fixtures must not sit under a directory that has a tracker of its own
+    # (a $TMPDIR inside a home or workspace directory can). /tmp has none.
+    TEST_DIR="$(mktemp -d /tmp/next-goal-candidates.XXXXXX)"
 
     # A stub bd. `where` always resolves (the roots under test have .beads/);
     # `ready` behaves per-root according to a marker file, so one run can mix
