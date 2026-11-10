@@ -9,6 +9,10 @@ setup() {
     load test_helper
     DISPATCH="$BATS_TEST_DIRNAME/../../scripts/dispatch.sh"
     REAL_CODEX="$(command -v codex || true)"
+    # record.sh appends to a log under $T. Without a codex config (a fresh HOME)
+    # the sandbox default is read-only, so name the writable profile here rather
+    # than rely on the host's ~/.codex/config.toml.
+    SANDBOX_WRITABLE='default_permissions=":workspace"'
     T="$(mktemp -d)"
     mkdir -p "$T/bin" "$T/repo"
     git -C "$T/repo" init -q
@@ -225,9 +229,9 @@ STUB
     "$REAL_CODEX" sandbox true >/dev/null 2>&1 || skip 'codex sandbox not usable here'
     ex='shell_environment_policy.exclude=["*TOKEN*"]'
     none='shell_environment_policy.exclude=["NOMATCH_X"]'
-    "$REAL_CODEX" sandbox -c "$ex" -c "$none" bash "$T/record.sh"
+    "$REAL_CODEX" sandbox -c "$SANDBOX_WRITABLE" -c "$ex" -c "$none" bash "$T/record.sh"
     seen GH_TOKEN=set
-    "$REAL_CODEX" sandbox -c "$none" -c "$ex" bash "$T/record.sh"
+    "$REAL_CODEX" sandbox -c "$SANDBOX_WRITABLE" -c "$none" -c "$ex" bash "$T/record.sh"
     seen GH_TOKEN=unset
 }
 
@@ -235,7 +239,7 @@ STUB
     [[ -n "$REAL_CODEX" && "$(uname -s)" == Linux ]] || skip 'codex sandbox (Linux) not installed'
     "$REAL_CODEX" sandbox true >/dev/null 2>&1 || skip 'codex sandbox not usable here'
     arg="$(codex_exclude_arg)"
-    run "$REAL_CODEX" sandbox -c "$arg" bash "$T/record.sh"
+    run "$REAL_CODEX" sandbox -c "$SANDBOX_WRITABLE" -c "$arg" bash "$T/record.sh"
     [ "$status" -eq 0 ]
     for n in GH_TOKEN GITHUB_TOKEN OPENAI_API_KEY CODEX_POOL_AUTH_TOKEN AWS_SECRET_ACCESS_KEY AWS_REGION \
              CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID MY_SERVICE_SECRET db_password ANTHROPIC_AUTH_TOKEN; do

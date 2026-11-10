@@ -1,7 +1,10 @@
 """Static handoff preflight: real CLI, fixture scripts are never executed."""
 import os
 import hashlib
+import shutil
 import subprocess
+import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -276,16 +279,23 @@ def test_handoff_requires_absolute_command(lint, fixture_script, tmp_path):
     assert "[pinned-handoff]" in result.stdout
 
 
-def test_never_executes_or_sources_input(lint, fixture_script, tmp_path):
-    marker = tmp_path / "executed"
-    path = fixture_script(GOOD + f"touch {marker}\nexit 42\n")
-    before = path.read_bytes(), path.stat().st_mode
-    result = lint(path, env={"PATH": "/usr/bin:/bin"})
-    # It fails the sticky-write rule, without running even the unsafe payload.
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert "[sticky-writes]" in result.stdout
-    assert not marker.exists()
-    assert (path.read_bytes(), path.stat().st_mode) == before
+def test_never_executes_or_sources_input(lint, fixture_script):
+    # The payload must write under /tmp so the sticky-write rule is what fails it.
+    # pytest's tmp_path follows $TMPDIR, which under an isolated run can sit under
+    # the owner's home and trip [mk-home-user] instead, so use a private /tmp dir.
+    sticky_dir = Path(tempfile.mkdtemp(prefix="script-lint-exec-", dir="/tmp"))
+    try:
+        marker = sticky_dir / "executed"
+        path = fixture_script(GOOD + f"touch {marker}\nexit 42\n")
+        before = path.read_bytes(), path.stat().st_mode
+        result = lint(path, env={"PATH": "/usr/bin:/bin"})
+        # It fails the sticky-write rule, without running even the unsafe payload.
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert "[sticky-writes]" in result.stdout
+        assert not marker.exists()
+        assert (path.read_bytes(), path.stat().st_mode) == before
+    finally:
+        shutil.rmtree(sticky_dir, ignore_errors=True)
 
 
 @pytest.mark.parametrize("args", [[], ["--thread"], ["--handoff-message"], ["--unknown"]])
