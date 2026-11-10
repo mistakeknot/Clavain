@@ -7,6 +7,10 @@ setup() {
     load test_helper
     ROOT="$BATS_TEST_DIRNAME/../.."
     DISPATCH="$ROOT/scripts/dispatch.sh"
+    # The fixtures record this checkout's policy hash, so pin dispatch to the
+    # same policy instead of whatever routing policy the caller inherited.
+    export CLAVAIN_ROUTING_POLICY="$ROOT/config/routing.yaml"
+    unset CLAVAIN_POLICY_PROFILE
     T="$(mktemp -d)"
     DUMMY=sk-test-dummy-0123456789abcdef
     mkdir -p "$T/bin" "$T/repo"
