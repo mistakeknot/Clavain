@@ -70,35 +70,63 @@ func (b *streamBroker) broadcast(eventType string, data []byte) {
 	b.mu.Unlock()
 }
 
-// cmdFactoryStream starts an SSE server streaming factory status.
-func cmdFactoryStream(args []string) error {
-	port := 8401
-	interval := 5 * time.Second
-	corsOrigins := "*"
+// factoryStreamOptions holds the parsed factory-stream flags.
+type factoryStreamOptions struct {
+	port        int
+	interval    time.Duration
+	corsOrigins string
+}
+
+// parseFactoryStreamArgs reads the factory-stream flags. A flag with a missing
+// or unusable value is an error: the interval feeds time.NewTicker, which
+// panics on zero or negative durations, and a silently ignored --port would
+// start the server somewhere the caller did not ask for.
+func parseFactoryStreamArgs(args []string) (factoryStreamOptions, error) {
+	opts := factoryStreamOptions{port: 8401, interval: 5 * time.Second, corsOrigins: "*"}
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--port":
-			if i+1 < len(args) {
-				i++
-				if p, err := strconv.Atoi(args[i]); err == nil {
-					port = p
-				}
+			if i+1 >= len(args) {
+				return opts, fmt.Errorf("factory-stream: --port needs a value")
 			}
+			i++
+			p, err := strconv.Atoi(args[i])
+			if err != nil || p < 0 || p > 65535 {
+				return opts, fmt.Errorf("factory-stream: --port must be a number from 0 to 65535, got %q", args[i])
+			}
+			opts.port = p
 		case "--interval":
-			if i+1 < len(args) {
-				i++
-				if d, err := time.ParseDuration(args[i]); err == nil {
-					interval = d
-				}
+			if i+1 >= len(args) {
+				return opts, fmt.Errorf("factory-stream: --interval needs a value")
 			}
+			i++
+			d, err := time.ParseDuration(args[i])
+			if err != nil {
+				return opts, fmt.Errorf("factory-stream: --interval must be a duration such as 5s, got %q", args[i])
+			}
+			if d <= 0 {
+				return opts, fmt.Errorf("factory-stream: --interval must be greater than zero, got %q", args[i])
+			}
+			opts.interval = d
 		case "--cors-origins":
-			if i+1 < len(args) {
-				i++
-				corsOrigins = args[i]
+			if i+1 >= len(args) {
+				return opts, fmt.Errorf("factory-stream: --cors-origins needs a value")
 			}
+			i++
+			opts.corsOrigins = args[i]
 		}
 	}
+	return opts, nil
+}
+
+// cmdFactoryStream starts an SSE server streaming factory status.
+func cmdFactoryStream(args []string) error {
+	opts, err := parseFactoryStreamArgs(args)
+	if err != nil {
+		return err
+	}
+	port, interval, corsOrigins := opts.port, opts.interval, opts.corsOrigins
 
 	broker := newStreamBroker()
 	startTime := time.Now()
