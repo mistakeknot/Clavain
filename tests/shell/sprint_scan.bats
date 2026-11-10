@@ -15,6 +15,17 @@ setup() {
     # Hermetic: block real network calls — on machines with a live
     # intermute (zklw), sprint_brief_scan otherwise reports real agents.
     stub_network
+
+    # Hermetic: a live intercore database otherwise adds a real
+    # "Active sprint" line to sprint_brief_scan. Shadow ic/intercore with a
+    # stub that fails its health check so the library treats it as absent.
+    mkdir -p "$TEST_PROJECT/.stub-bin"
+    printf '#!/bin/sh\nexit 1\n' > "$TEST_PROJECT/.stub-bin/ic"
+    chmod +x "$TEST_PROJECT/.stub-bin/ic"
+    cp "$TEST_PROJECT/.stub-bin/ic" "$TEST_PROJECT/.stub-bin/intercore"
+    export PATH="$TEST_PROJECT/.stub-bin:$PATH"
+    INTERCORE_BIN=""
+    _SPRINT_IC_AVAILABLE=""
 }
 
 teardown() {
