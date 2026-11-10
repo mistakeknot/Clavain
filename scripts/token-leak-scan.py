@@ -119,14 +119,41 @@ def _contains_token(data, values, encoding, errors):
         return None
 
 
+def _same_file(first, second):
+    """True when the two streams are the same open file (same device and
+    inode); False when they differ or cannot be decided."""
+    try:
+        one = os.fstat(first.fileno())
+        two = os.fstat(second.fileno())
+        return (one.st_dev, one.st_ino) == (two.st_dev, two.st_ino)
+    except BaseException:
+        return False
+
+
 def _flush_output():
-    """The one output point: write each stream's buffer, checked as the exact
-    bytes that will be written, in one write; then keep shutdown quiet."""
+    """The one output point: write each destination's buffered text, checked
+    as the exact bytes that will be written, in one write; then keep shutdown
+    quiet. When stdout and stderr are the same open file they are one
+    destination: both buffers (stdout first, then stderr, the order written)
+    are joined and checked as one document."""
     try:
         values = _token_values()
-        for name in ("stdout", "stderr"):
-            chunks = _BUFFER[name]
-            _BUFFER[name] = []
+        joined = False
+        try:
+            joined = (
+                bool(_BUFFER["stdout"])
+                and bool(_BUFFER["stderr"])
+                and _same_file(sys.stdout, sys.stderr)
+            )
+        except BaseException:
+            joined = False
+        jobs = [("stdout", ("stdout", "stderr"))] if joined else [
+            ("stdout", ("stdout",)), ("stderr", ("stderr",))]
+        for name, sources in jobs:
+            chunks = []
+            for source in sources:
+                chunks.extend(_BUFFER[source])
+                _BUFFER[source] = []
             if not chunks:
                 continue
             stream = getattr(sys, name, None)
@@ -408,7 +435,8 @@ def _std_stream_for(path):
     None."""
     try:
         target = os.stat(path)
-        for name in ("stdout", "stderr"):
+        order = ("stderr", "stdout") if path in ("/dev/stderr", "/proc/self/fd/2") else ("stdout", "stderr")
+        for name in order:
             st = os.fstat(getattr(sys, name).fileno())
             if (st.st_dev, st.st_ino) == (target.st_dev, target.st_ino):
                 return name

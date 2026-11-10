@@ -119,3 +119,25 @@ assert_clean() {
     n="$(python3 -I -c 'import sys; print(open(sys.argv[1], "rb").read().count(b"\n{"))' "$T/hits")"
     [ "$n" -eq 0 ]
 }
+
+@test "stdout and stderr on one file: a value spanning hits and a diagnostic never reaches it (hits to /dev/stderr)" {
+    export SPAN_TOK=$'true}\ntoken-leak-scan: could'
+    ln -s "$T/nowhere" "$T/dangling"
+    : > "$T/both"
+    run bash -c 'python3 -I "$0" scan --hits /dev/stderr --token-env SPAN_TOK -- "$1" >"$2" 2>&1' \
+        "$SCAN" "$T/dangling" "$T/both"
+    [ "$status" -eq 4 ]
+    n="$(python3 -I -c 'import sys; print(open(sys.argv[1], "rb").read().count(b"true}\ntoken-leak-scan: could"))' "$T/both")"
+    [ "$n" -eq 0 ]
+}
+
+@test "stdout and stderr on one file: a value spanning hits and a diagnostic never reaches it (hits to /dev/stdout)" {
+    export SPAN_TOK=$'true}\ntoken-leak-scan: could'
+    ln -s "$T/nowhere" "$T/dangling"
+    : > "$T/both"
+    run bash -c 'python3 -I "$0" scan --hits /dev/stdout --token-env SPAN_TOK -- "$1" >"$2" 2>&1' \
+        "$SCAN" "$T/dangling" "$T/both"
+    [ "$status" -eq 4 ]
+    n="$(python3 -I -c 'import sys; print(open(sys.argv[1], "rb").read().count(b"true}\ntoken-leak-scan: could"))' "$T/both")"
+    [ "$n" -eq 0 ]
+}

@@ -217,16 +217,21 @@ joined and checked as one document before it is written (so a value that
 spans a record boundary is caught). For a regular file opened for append the
 check also covers the last bytes already in the file (so a value spanning two
 scans is caught); for a path that is the same open file as stdout or stderr
-the records join that stream's buffer and are checked with the diagnostics as
-one document. Not covered: a hits path that is neither a regular file nor
+(`/dev/stderr` joins stderr's buffer, any other match stdout's) the records
+join that stream's buffer. When stdout and stderr are the same open file, both
+buffers (stdout's, then stderr's) are joined and checked as one document at
+exit, so records and diagnostics are checked together in the order written;
+if they carry a value, a fixed suppression line is written instead. The
+report is a separate file written by atomic replacement and shares no
+destination with the hits path or the diagnostics. Not covered: a hits path that is neither a regular file nor
 stdout or stderr (for example another pipe) is checked per scan only, and a
 stdout or stderr that is a regular file has no earlier content checked. The
 check is against every value (the default variables plus each
 `--token-env`: a named variable adds to the defaults and never replaces them);
 if the document would carry a value it is replaced by a fixed value-free record
 (without the count), and if even that would carry a value nothing is written. This
-holds wherever `--hits` points, including `/dev/stdout`, `/dev/stderr` and a
-pipe (bead mk-47vtm.5). `report` uses the same set of values. The run fails in
+holds for the destinations listed above, including `/dev/stdout` and
+`/dev/stderr` (bead mk-47vtm.5). `report` uses the same set of values. The run fails in
 every such case. The report keys and fixed text are not redacted: if a value occurs anywhere in
 the finished report (a single common letter does), no report is written, the
 run still fails and the verdict does not point at a report. On an internal
