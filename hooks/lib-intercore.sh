@@ -150,11 +150,44 @@ intercore_state_delete_all() {
     done < <("$INTERCORE_BIN" state list "$key" 2>/dev/null || true)
 }
 
-# intercore_cleanup_stale — prune old sentinels.
+# intercore_cleanup_stale — prune old sentinels and old routing decisions.
 # Called ONCE per stop cycle from session-handoff.sh only — not from every hook.
 intercore_cleanup_stale() {
     if ! intercore_available; then return 0; fi
     "$INTERCORE_BIN" sentinel prune --older-than=1h >/dev/null 2>&1 || true
+    # Routing-decision retention: archive then delete decisions older than the
+    # window, at most once a day per database (the pass reads the whole table,
+    # about a second on 100 MB). A stamp file does the throttling because the
+    # sentinel prune above would delete a day-long sentinel within the hour. The
+    # stamp is keyed by the absolute path of the database (INTERCORE_DB resolved
+    # against $PWD, else the nearest .clavain/intercore.db above $PWD, as ic
+    # finds it) so one project's run does not starve another's; ic itself is
+    # called as the other helpers here call it (--db only when INTERCORE_DB is
+    # set), so its own discovery rules apply. The stamp is touched only after a
+    # successful prune, so a failure is retried on the next stop.
+    # INTERCORE_ROUTING_RETENTION=<N>d|<duration> sets the window (default 30d);
+    # =off skips it. An `ic` without `route prune` fails harmlessly here.
+    if [[ "${INTERCORE_ROUTING_RETENTION:-30d}" != "off" ]]; then
+        local db_path="${INTERCORE_DB:-}" d
+        if [[ -n "$db_path" ]]; then
+            [[ "$db_path" == /* ]] || db_path="$PWD/$db_path"
+        else
+            d="$PWD"
+            while [[ -n "$d" ]]; do
+                if [[ -e "$d/.clavain/intercore.db" ]]; then db_path="$d/.clavain/intercore.db"; break; fi
+                [[ "$d" == "/" ]] && break
+                d="$(dirname "$d")"
+            done
+        fi
+        local key stamp
+        key="$(printf '%s' "${db_path:-$PWD}" | cksum | cut -d' ' -f1)"
+        stamp="${INTERCORE_ROUTING_PRUNE_STAMP_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/intercore}/routing-prune-$key.stamp"
+        if [[ ! -e "$stamp" ]] || [[ -n "$(find "$stamp" -mmin +1440 2>/dev/null)" ]]; then
+            if "$INTERCORE_BIN" route prune --older-than="${INTERCORE_ROUTING_RETENTION:-30d}" ${INTERCORE_DB:+--db="$INTERCORE_DB"} >/dev/null 2>&1; then
+                { mkdir -p "$(dirname "$stamp")" && : > "$stamp"; } 2>/dev/null || true
+            fi
+        fi
+    fi
 }
 
 # --- Dispatch wrappers ---
