@@ -568,6 +568,26 @@ agent_file_of() {
     done
 }
 
+@test "kimi seat: a lowercase or mixed-case verdict word is an error, never a ruling" {
+    for w in pass Pass fail Fail unrun Unrun; do
+        fake_kimi "VERDICT: $w"$'\nCRITERION: none'
+        run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+        [ "$status" -ne 0 ] || { echo "not caught: $w"; return 1; }
+        run cat "$T/out.md.verdict"
+        [[ "$output" == *"STATUS: error"* ]] || { echo "no error verdict: $w"; return 1; }
+        [[ "$output" != *"STATUS: pass"* ]]
+    done
+}
+
+@test "kimi seat: a PASS ruling does not stand when the seat process exits nonzero (word cross-checked against the exit code)" {
+    fake_kimi $'VERDICT: PASS\nCRITERION: none' "" "" 'exit 3'
+    run governed_kimi -C "$T/repo" -o "$T/out.md" "prompt"
+    [ "$status" -ne 0 ]
+    run cat "$T/out.md.verdict"
+    [[ "$output" == *"STATUS: error"* ]]
+    [[ "$output" != *"STATUS: pass"* ]]
+}
+
 @test "kimi seat: bare PASS and FAIL are accepted" {
     for w in PASS FAIL; do
         fake_kimi "VERDICT: $w"$'\nCRITERION: none'

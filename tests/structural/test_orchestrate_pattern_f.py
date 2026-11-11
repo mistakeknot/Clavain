@@ -117,6 +117,9 @@ case "$role" in
     else
       printf -- '--- VERDICT ---\nSTATUS: %s\nSUMMARY: stub\n---\n' "$sc" > "$out.verdict"
     fi
+    # PF_STUB_RC: the dispatch process exits with this code after writing a
+    # normal-looking verdict (the seat word is advisory; the exit code is not).
+    if [[ -n "${PF_STUB_RC:-}" ]]; then exit "$PF_STUB_RC"; fi
     ;;
   routine-execution)
     [[ -n "${PF_STUB_EXEC_SLEEP:-}" ]] && sleep "$PF_STUB_EXEC_SLEEP"
@@ -879,3 +882,72 @@ def test_the_default_reservation_scope_is_the_checkout_path(orc, repo, stubs, tm
     plan = _brief(tmp_path)
     run = orc.load_pf_run(str(_run_file(tmp_path, repo, [("a", plan, {})], stubs["register"])))
     assert orc._pf_scope(run) == str(repo.resolve())
+
+
+# mk-6ohot: the seat's verdict word is advisory; cross-check it against the
+# independently captured dispatch exit code (same rules as build-review-packet).
+
+@pytest.mark.parametrize("word,codes,expect", [
+    ("PASS", [0], "PASS"),
+    ("PASS", [0, 0], "PASS"),
+    ("PASS", [1], "FAIL"),
+    ("PASS", [0, 2], "FAIL"),
+    ("PASS", [], "UNRUN"),
+    ("PASS", [None], "UNRUN"),
+    ("PASS", ["0"], "UNRUN"),
+    ("PASS", [True], "UNRUN"),
+    ("PASS", [0, "x"], "UNRUN"),
+    ("FAIL", [0], "FAIL"),
+    ("FAIL", [], "FAIL"),
+    ("UNRUN", [0], "UNRUN"),
+    ("UNRUN", [3], "UNRUN"),
+    ("pass", [0], "UNRUN"),
+    ("Pass", [0], "UNRUN"),
+    ("PASSED", [0], "UNRUN"),
+    ("PASS.", [0], "UNRUN"),
+    ("", [0], "UNRUN"),
+])
+def test_reconcile_seat_verdict_rules(orc, word, codes, expect):
+    eff, _why = orc.reconcile_seat_verdict(word, codes)
+    assert eff == expect
+
+
+def test_reconcile_never_echoes_an_invalid_word(orc):
+    eff, why = orc.reconcile_seat_verdict("SECRET-WORD-123", [0])
+    assert eff == "UNRUN"
+    assert "SECRET-WORD-123" not in (why or "")
+
+
+def _validate_one(orc, repo, tmp_path, stubs):
+    plan = tmp_path / "exact.md"
+    plan.write_text(GOOD)
+    return orc.orchestrate_pattern_f(str(_run_file(tmp_path, repo, [("t1", plan, {})], stubs["register"])))[0]
+
+
+def test_pass_word_with_nonzero_dispatch_exit_is_not_merged(orc, repo, tmp_path, stubs, monkeypatch):
+    monkeypatch.setenv("PF_STUB_RC", "3")
+    r = _validate_one(orc, repo, tmp_path, stubs)
+    assert r.validator_verdict == "FAIL"
+    assert r.status != "merged"
+    assert "nonzero" in (r.note or "")
+
+
+def test_lowercase_pass_word_is_unrun_and_not_echoed(orc, repo, tmp_path, stubs, monkeypatch):
+    monkeypatch.setenv("PF_STUB_VERDICT", "pass")
+    r = _validate_one(orc, repo, tmp_path, stubs)
+    assert r.validator_verdict == "UNRUN"
+    assert r.status != "merged"
+    assert "no VERDICT line from the seat" in (r.note or "")
+
+
+def test_fail_word_is_not_raised_by_a_zero_exit(orc, repo, tmp_path, stubs, monkeypatch):
+    monkeypatch.setenv("PF_STUB_VERDICT", "FAIL")
+    r = _validate_one(orc, repo, tmp_path, stubs)
+    assert r.validator_verdict == "FAIL"
+    assert r.status != "merged"
+
+
+def test_pass_word_with_zero_exit_still_merges(orc, repo, tmp_path, stubs):
+    r = _validate_one(orc, repo, tmp_path, stubs)
+    assert r.validator_verdict == "PASS"
+    assert r.status == "merged"
