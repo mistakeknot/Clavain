@@ -509,23 +509,57 @@ def test_dry_golden_records_both_known_policies():
     assert len(_dry_golden()) >= 2
 
 
+# Historical policy tables are frozen as recorded. Every table must cover all of
+# o.ROLES with every reason set and refuse only release-authority, except these
+# pinned policies, which predate the one-shot-author role: main's baseline
+# policy refuses it as unknown, and the two older policies lack its rows.
+_FULL = frozenset(o.ROLES)
+_NO_ONE_SHOT = _FULL - {"one-shot-author"}
+_PINNED_DRY_TABLES = {
+    "a52fa61626006a71f8a8cfe28666eaa959f31724732484df72be8335012ce2a8":
+        (_NO_ONE_SHOT, {"release-authority"}),
+    "d6ab9ed082cc51405c1d5f635f09648b5950ec62e9299c3b512ce428eb8688cd":
+        (_NO_ONE_SHOT, {"release-authority"}),
+    "f0c1794a0c75c2e617ba368059fcd1a99b10391ff15559a10d8c3760fcb3bf0f":
+        (_FULL, {"release-authority", "one-shot-author"}),
+}
+
+
+def _dry_table_problems(key, table):
+    roles, refused_expected = _PINNED_DRY_TABLES.get(
+        key, (_FULL, {"release-authority"}))
+    problems = []
+    got_roles = {k.split("|")[0] for k in table}
+    if got_roles != roles:
+        problems.append(f"roles differ: missing {sorted(roles - got_roles)}, "
+                        f"extra {sorted(got_roles - roles)}")
+    if len(table) != len(roles) * len(o.DRY_REASON_SETS):
+        problems.append(f"{len(table)} rows, expected "
+                        f"{len(roles) * len(o.DRY_REASON_SETS)}")
+    refused = {k.split("|")[0] for k, v in table.items() if v["rc"] != 0}
+    if refused != set(refused_expected):
+        problems.append(f"refused roles {sorted(refused)}")
+    return problems
+
+
 def test_dry_golden_covers_every_role_and_reason_set():
-    # A pinned older policy may predate a role (the baseline tables stay as
-    # recorded); the current policy's table must cover every role in o.ROLES.
     golden = _dry_golden()
-    current = golden[o.policy_sha256(o.policy_under_test())]
-    assert {k.split("|")[0] for k in current} == set(o.ROLES)
-    current_key = o.policy_sha256(o.policy_under_test())
+    assert o.policy_sha256(o.policy_under_test()) in golden
     for key, table in golden.items():
-        roles = {k.split("|")[0] for k in table}
-        assert roles <= set(o.ROLES)
-        assert len(table) == len(roles) * len(o.DRY_REASON_SETS)
-        refused = {k.split("|")[0] for k, v in table.items() if v["rc"] != 0}
-        if key == current_key:
-            assert refused == {"release-authority"}
-        else:
-            # A pinned older policy refuses a role it predates.
-            assert {"release-authority"} <= refused <= {"release-authority", "one-shot-author"}
+        assert _dry_table_problems(key, table) == [], key
+
+
+@pytest.mark.parametrize("key", sorted(_dry_golden()))
+def test_dry_golden_check_rejects_a_deleted_row(key):
+    # Mutation check on every recorded table: deleting both planning rows, or
+    # just one, must be reported as a failure.
+    table = _dry_golden()[key]
+    assert _dry_table_problems(key, table) == []
+    both = {k: v for k, v in table.items() if k.split("|")[0] != "planning"}
+    assert any("planning" in p for p in _dry_table_problems(key, both))
+    one = dict(table)
+    one.pop(next(k for k in table if k.startswith("planning|")))
+    assert _dry_table_problems(key, one)
 
 
 # ---------------------------------------------------------------------------
