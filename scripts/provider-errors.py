@@ -151,17 +151,22 @@ def _claude_error_text(event, kind):
 def classify(events, stderr=""):
     failures = set()
     transient_errors = set()
-    claude_auth_failed = False
+    claude_auth_text = None  # text of an authentication failure awaiting its closing result
     for event in events:
         event, kind, error = _envelope(event)
         if event is None:
             continue
         if kind == "assistant" and error == CLAUDE_AUTH_FAILED:
             failures.add("account_access_absent")
-            claude_auth_failed = True
+            claude_auth_text = _claude_error_text(event, kind).strip()
             continue
-        if kind == "result" and claude_auth_failed and error in ({}, None, ""):
-            # The same failure, restated by the closing result event.
+        if (kind == "result" and claude_auth_text is not None
+                and _claude_error_text(event, kind).strip() == claude_auth_text
+                and error in ({}, None, "") and not event.get("errors")):
+            # Only the result that restates this same authentication failure
+            # is absorbed, once. Any other later result (a different message,
+            # an errors list, a limit message) is classified as usual.
+            claude_auth_text = None
             continue
         if kind == 'turn.completed':
             # Codex can recover from stream errors within a turn. Only its

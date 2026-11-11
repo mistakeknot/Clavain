@@ -121,6 +121,36 @@ def test_claude_auth_failed_does_not_mask_a_later_real_error():
     assert provider_errors.classify(events) == "terminal_policy"
 
 
+def test_claude_auth_failed_then_errors_list_result_is_not_absorbed():
+    # A later result that carries its own errors list is a different failure:
+    # it must keep the terminal stop, not become fallback-eligible access loss.
+    events = claude_not_logged_in_events()[:2] + [
+        {"type": "result", "subtype": "error_during_execution", "is_error": True,
+         "errors": ["permission_denied"]},
+    ]
+    assert provider_errors.classify(events) == "terminal_error"
+
+
+def test_claude_auth_failed_then_other_result_text_is_not_absorbed():
+    events = claude_not_logged_in_events()[:2] + [
+        {"type": "result", "subtype": "success", "is_error": True, "result": "something else broke"},
+    ]
+    assert provider_errors.classify(events) == "terminal_error"
+
+
+def test_claude_auth_failed_then_quota_result_is_quota_exhausted():
+    events = claude_not_logged_in_events()[:2] + [
+        {"type": "result", "subtype": "success", "is_error": True,
+         "result": "Claude AI usage limit reached|1790000000"},
+    ]
+    assert provider_errors.classify(events) == "quota_exhausted"
+
+
+def test_claude_auth_failed_absorbs_only_one_matching_result():
+    events = claude_not_logged_in_events() + [claude_not_logged_in_events()[2]]
+    assert provider_errors.classify(events) == "terminal_error"
+
+
 CODEX_EXHAUSTED_429 = "exceeded retry limit, last status: 429 Too Many Requests"
 
 
