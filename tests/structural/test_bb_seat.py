@@ -171,12 +171,13 @@ def test_dispatch_carries_headroom_route_to_bb_journal(seat):
     receipt=json.loads((root/'result.receipt.json').read_text())
     assert receipt['requested_provider']=='claude-code'
     assert receipt['requested_model']=='claude-sonnet-5-5'
-    # mk-hpwq: routine-execution leads with Sonnet 5.5, so favouring Claude
-    # headroom keeps it first and only moves Sol behind Sonnet's own substitute.
-    assert receipt['profile_ref']=='routine-exec-sonnet'
+    # mk-mhuo2.1: routine-execution leads with Sol at high, so favouring Claude
+    # headroom moves Sonnet 5.5 (its fallback) ahead of Sol.
+    assert receipt['profile_ref']=='routine-exec-sol'
     assert receipt['resolved_profile_ref']=='routine-exec-sonnet'
-    assert receipt['headroom_reorder']['from'][0]==receipt['headroom_reorder']['to'][0]=='routine-exec-sonnet'
-    assert receipt['headroom_reorder']['to'][-1]=='routine-sol'
+    assert receipt['headroom_reorder']['from'][0]=='routine-exec-sol'
+    assert receipt['headroom_reorder']['to'][0]=='routine-exec-sonnet'
+    assert receipt['headroom_reorder']['to'][-1]=='routine-exec-sol'
     assert receipt['actual_model']=='unknown'
 
 

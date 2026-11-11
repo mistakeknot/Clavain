@@ -115,17 +115,17 @@ print('{"type":"result","subtype":"success","is_error":false,"result":"VERDICT: 
     return run
 
 
-def test_execution_reorders_and_receipt_preserves_ic_profile(dispatch):
-    # mk-hpwq: routine-execution leads with Sonnet 5.5, so spare Codex headroom (low utilization)
-    # promotes Sol above it.
+def test_execution_keeps_sol_first_and_receipt_preserves_ic_profile(dispatch):
+    # mk-mhuo2.1: routine-execution leads with Sol at high, so spare Codex headroom (low
+    # utilization) keeps it first and the route is not reordered.
     p, rows, calls, _ = dispatch([account('codex', .2), account('claude', .8)])
     assert p.returncode == 0, p.stderr
     assert calls == 'status\n'
     r = rows[-1]
     assert r['execution']['model'] == 'gpt-6.1-sol'
-    assert r['profile_ref'] == r['resolved_route']['profile_ref'] == 'routine-exec-sonnet'
-    assert r['resolved_profile']['profile_ref'] == 'routine-sol'
-    assert r['headroom_reorder']['to'][0] == 'routine-sol'
+    assert r['profile_ref'] == r['resolved_route']['profile_ref'] == 'routine-exec-sol'
+    assert r['resolved_profile']['profile_ref'] == 'routine-exec-sol'
+    assert not r.get('headroom_reorder')
 
 
 def test_forecast_exclusion_has_evidence_and_separate_label(dispatch):
@@ -180,7 +180,7 @@ def test_protected_resolution_never_probes_pool(dispatch, role):
 def test_unknown_pool_does_not_change_execution(dispatch):
     p, rows, _, work = dispatch([])
     assert p.returncode == 0, p.stderr
-    assert rows[-1]['execution']['model'] == 'claude-sonnet-5-5'
+    assert rows[-1]['execution']['model'] == 'gpt-6.1-sol'
     assert rows[-1].get('headroom_exclusion', []) == []
     assert not list(work.glob('.clavain/capacity/*'))
 
@@ -195,7 +195,7 @@ def test_forecast_does_not_resurrect_previously_unavailable_models(dispatch):
 def test_probe_wrapper_failure_leaves_route_unchanged(dispatch):
     p, rows, _, _ = dispatch([], broken_probe=True)
     assert p.returncode == 0, p.stderr
-    assert rows[-1]['execution']['model'] == 'claude-sonnet-5-5'
+    assert rows[-1]['execution']['model'] == 'gpt-6.1-sol'
 
 
 def test_evidence_creation_is_portable(dispatch):
