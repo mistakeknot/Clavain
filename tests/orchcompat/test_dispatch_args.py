@@ -510,10 +510,22 @@ def test_dry_golden_records_both_known_policies():
 
 
 def test_dry_golden_covers_every_role_and_reason_set():
-    for table in _dry_golden().values():
-        assert len(table) == len(o.ROLES) * len(o.DRY_REASON_SETS)
+    # A pinned older policy may predate a role (the baseline tables stay as
+    # recorded); the current policy's table must cover every role in o.ROLES.
+    golden = _dry_golden()
+    current = golden[o.policy_sha256(o.policy_under_test())]
+    assert {k.split("|")[0] for k in current} == set(o.ROLES)
+    current_key = o.policy_sha256(o.policy_under_test())
+    for key, table in golden.items():
+        roles = {k.split("|")[0] for k in table}
+        assert roles <= set(o.ROLES)
+        assert len(table) == len(roles) * len(o.DRY_REASON_SETS)
         refused = {k.split("|")[0] for k, v in table.items() if v["rc"] != 0}
-        assert refused == {"release-authority"}
+        if key == current_key:
+            assert refused == {"release-authority"}
+        else:
+            # A pinned older policy refuses a role it predates.
+            assert {"release-authority"} <= refused <= {"release-authority", "one-shot-author"}
 
 
 # ---------------------------------------------------------------------------
