@@ -8,7 +8,7 @@ Counts are the tests collected per module (230 in all; 229 run on current main, 
 
 | Behavior | Where | How it is pinned |
 |----------|-------|------------------|
-| Resolved backend, model, effort, tier, fallbacks, exclusions and floors for each of the 16 dispatch roles, for each reason set (none, each of the five reasons, all five) and each producer identity (none, Anthropic, OpenAI) | `test_role_resolution.py` (8) | Golden table `role_resolution.json`, keyed by policy sha256; both baseline and main tables recorded |
+| Resolved backend, model, effort, tier, fallbacks, exclusions and floors for each of the 17 dispatch roles, for each reason set (none, each of the five reasons, all five) and each producer identity (none, Opus 5.5, Fable 5.2, OpenAI) | `test_role_resolution.py` (8) | Golden table `role_resolution.json`, keyed by policy sha256; both baseline and main tables recorded |
 | Refusals from `ic route dispatch`: review roles without a producer identity, unknown role, unknown classification reason, the reserved `release-authority` role, missing policy file | `test_role_resolution.py`, `test_dispatch_args.py` (real-`ic` tests) | Exit code and message asserted |
 | The role list itself | `test_role_resolution.py` | Pinned list; adding or removing a role fails |
 | `roster-slugs.yaml` and `roster-families.yaml` as shipped: slug count, families, labs | `test_roster_config.py` (80) | Golden `roster_config.json` |

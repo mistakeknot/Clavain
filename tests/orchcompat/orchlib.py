@@ -248,11 +248,11 @@ ROLES = (
     "planning", "frontier-planning", "plan-review", "escalation", "main-integrator",
     "scout", "routine-execution", "deep-execution", "validation", "release-preparation",
     "release-authority", "cross-lab-review", "coordination", "coordinator-seat",
-    "main-session", "lane",
+    "main-session", "lane", "one-shot-author",
 )
 # Roles that refuse to resolve without a producer identity (checked by the
 # golden: the no-producer case for these records the refusal).
-PRODUCERS = (None, "claude-opus-5-5", "gpt-6.1-sol")
+PRODUCERS = (None, "claude-opus-5-5", "gpt-6.1-sol", "claude-fable-5-2")
 REASON_SETS = ((),) + tuple((r,) for r in REASONS) + (tuple(REASONS),)
 
 

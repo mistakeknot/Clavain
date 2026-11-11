@@ -57,6 +57,7 @@ def test_every_real_slug_row_resolves_against_a_well_formed_snapshot():
 @pytest.mark.parametrize("model,expect", [
     ("claude-opus-5-5", ["anthropic", "opus", "Claude Opus 5.5"]),
     ("claude-fable-5-1", ["anthropic", "fable", "Claude Fable 5.1"]),
+    ("claude-fable-5-2", ["anthropic", "fable", "Claude Fable 5.2"]),
     ("gpt-6-astra", ["openai", "astra", "GPT-6 Astra"]),
 ])
 def test_slug_to_family_lookup(model, expect):

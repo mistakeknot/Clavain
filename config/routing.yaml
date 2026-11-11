@@ -112,7 +112,12 @@ reasoning:
   # has no reachable reviewer from another model, routing fails closed and the
   # agent applies mk's adversarial orthogonal same-model Opus review by hand,
   # declared as such (routable seat tracked in mk-2e1e).
-  frontier_models: [gpt-6-astra, claude-opus-5-5]
+  # claude-fable-5-2 (Fable 5.2, the latest frontier model) is listed for the
+  # one-shot-author seat only (bead mk-f0z9d). Eligibility is not selection: no
+  # other role's chain names a Fable seat, so Opus 5.5 keeps plan-review and
+  # every other seat stays as it was. Fable-authored work is reviewed by another
+  # lab through cross_lab_first (see the note above `cross_lab_first`).
+  frontier_models: [gpt-6-astra, claude-opus-5-5, claude-fable-5-2]
   frontier_reasons: [unresolved-success-criteria, foundational-invariants, broad-consequences, difficult-verification, capability-failure]
   dual_review_reasons: [foundational-invariants, broad-consequences]
   strikes: 2
@@ -197,6 +202,10 @@ dispatch:
     frontier-planning: planning-opus
     plan-review: review-opus
     escalation: planning-opus
+    # bead mk-f0z9d: a one-shot (a prototype, app or isolated module built end to
+    # end by one session) is authored by the latest frontier model, currently
+    # Fable 5.2. Author seat only; it grants no review, validation or planning.
+    one-shot-author: one-shot-fable
     main-integrator: main-astra
     scout: scout-sol
     # Execution roles default to GPT-6.1 Sol at high effort, with Sonnet 5.5 at
@@ -371,6 +380,37 @@ dispatch:
       # this seat never ran at), same mandatory escalation/48h-revert terms as
       # planning-astra above.
       fallbacks: [review-astra]
+    # bead mk-f0z9d: one-shot author seats. Fable 5.2 first; Opus 5.5 and then
+    # Astra only when the Fable lane is out (capacity, not a capability call).
+    # The reviewer of a one-shot is never selected from this chain: the review
+    # roles pick the producer's other lab first (cross_lab_first), and
+    # producer_model_conflict removes a seat that matches the producer model.
+    # high, not medium: a one-shot is built in a single session, so the seat
+    # starts at the effort the effort floors would raise it to anyway.
+    one-shot-fable:
+      role: one-shot-author
+      backend: claude
+      model: claude-fable-5-2
+      reasoning_effort: high
+      service_tier: standard
+      fallbacks: [one-shot-opus, one-shot-astra]
+      description: One-shot author, the latest frontier model (bead mk-f0z9d)
+    one-shot-opus:
+      role: one-shot-author
+      backend: claude
+      model: claude-opus-5-5
+      reasoning_effort: high
+      service_tier: standard
+      fallbacks: [one-shot-astra]
+      description: One-shot author fallback when the Fable lane is out of usage
+    one-shot-astra:
+      role: one-shot-author
+      backend: codex
+      model: gpt-6-astra
+      reasoning_effort: high
+      service_tier: standard
+      minimum_codex_version: 0.153.1
+      description: One-shot author fallback when the Claude lane is out of usage
     pilot-opus:
       role: main-integrator
       backend: main
