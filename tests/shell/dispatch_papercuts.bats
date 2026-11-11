@@ -34,6 +34,10 @@ setup() {
             if ($0 ~ /^}[[:space:]]*$/) { emit=0 }
         }
     ' "$DISPATCH_SCRIPT" >> "$HELPERS"
+    # _dispatch_role_profile scans its routing capture for a bearer token. No
+    # token is set in these tests, so the scan has nothing to match: stand in
+    # for the full scanner (covered in dispatch_token_leak.bats) with a pass.
+    printf '_token_leak_scan_now() { return 0; }\n' >> "$HELPERS"
 }
 
 teardown() {
