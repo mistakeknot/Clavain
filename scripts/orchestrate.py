@@ -2679,6 +2679,29 @@ def pf_execute_brief(
     return PFExecution(commit, "FAIL", criterion, model, note)
 
 
+def reconcile_seat_verdict(word: str, exit_codes: list) -> tuple[str, str | None]:
+    """Cross-check a seat's verdict word against independently captured exit
+    codes. The word is model self-report and only advisory.
+
+    Anything but the exact words PASS, FAIL or UNRUN is UNRUN (the word is not
+    echoed). PASS with a nonzero code is FAIL; PASS with no codes, or any
+    non-integer code, is UNRUN. FAIL and UNRUN are never raised. Returns
+    (effective word, reason or None).
+    """
+    if word not in ("PASS", "FAIL", "UNRUN"):
+        return "UNRUN", "seat verdict word is not exactly PASS, FAIL or UNRUN"
+    if word != "PASS":
+        return word, None
+    if not exit_codes:
+        return "UNRUN", "PASS has no captured exit code to check it against"
+    for c in exit_codes:
+        if isinstance(c, bool) or not isinstance(c, int):
+            return "UNRUN", "PASS has a non-integer captured exit code"
+    if any(c != 0 for c in exit_codes):
+        return "FAIL", "seat said PASS but a captured exit code was nonzero"
+    return "PASS", None
+
+
 def pf_validate(
     run: PFRun, item: PFItem, contract: str, wt: str, commit: str, packet: str,
     producer: str, item_dir: str, dispatch_sh: str, meter: list[dict],
@@ -2733,7 +2756,8 @@ def pf_validate(
         with open(output, errors="replace") as f:
             text = f.read()
     verdict_words = (_pf_named_line(text, "VERDICT") or "").split()
-    v = verdict_words[0].upper() if verdict_words else ""
+    # The seat word is advisory and matched exactly (no case folding).
+    v = verdict_words[0] if verdict_words else ""
     crit = _pf_named_line(text, "CRITERION")
     rec = _pf_named_line(text, "RECEIPT")
     findings = _pf_beyond_the_gauge(text)
@@ -2748,6 +2772,14 @@ def pf_validate(
         return PFValidation("UNRUN", crit, _pf_sidecar_summary(output + ".verdict") or "dispatch reported an error verdict", receipt_ok, [], model)
     if v not in ("PASS", "FAIL", "UNRUN"):
         return PFValidation("UNRUN", crit, f"no VERDICT line from the seat (dispatch rc={rc}, sidecar {status or 'missing'})", receipt_ok, findings, model)
+    if v == "PASS":
+        # Cross-check the word against the validator dispatch's own exit code,
+        # which the seat did not write.
+        eff, why = reconcile_seat_verdict(v, [rc])
+        if eff != "PASS":
+            return PFValidation(
+                eff, crit, f"{why} (dispatch rc={rc})", receipt_ok, findings, model,
+            )
     if v == "PASS" and status is not None and status != "pass":
         # dispatch.sh demotes a body PASS (warn/fail) when a present trailing
         # verdict block disagrees; a pass needs every verdict source to agree.
