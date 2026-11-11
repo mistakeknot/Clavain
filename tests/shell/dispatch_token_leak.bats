@@ -366,6 +366,24 @@ W
     pkill -f "$T/mock/scripts/flere-worker.py" || true
 }
 
+@test "flere: an unreadable subdirectory of the attempt directory fails the run closed" {
+    [ "$(id -u)" -ne 0 ] || skip "root reads everything"
+    flere_setup
+    flere_attempt_worker
+    cat >> "$T/mock/scripts/flere-worker.py" <<'W'
+os.makedirs(att + "/locked")
+os.chmod(att + "/locked", 0)
+W
+    export LEAKVAL=clean-value-not-the-token
+    run bash "$MOCK_DISPATCH" --to flere -C "$T/project" -o "$T/out.md" -m provider/model "inspect"
+    chmod 700 "$T/out.md.attempt/locked" 2>/dev/null || true
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"token leak scan could not complete"* ]]
+    [[ "$output" != *"$DUMMY"* ]]
+    [ ! -e "$T/out.md.token-leak.json" ]
+    grep -q 'STATUS: error' "$T/out.md.verdict"
+}
+
 @test "flere: a symlink under the attempt directory pointing outside the roots is not followed" {
     flere_setup
     flere_attempt_worker
@@ -883,4 +901,93 @@ assert p.returncode == -signal.SIGINT, p.returncode
 assert b"KeyboardInterrupt" not in out + err and b"Traceback" not in out + err, (out, err)
 PY
     [ "$status" -eq 0 ]
+}
+
+# ---- mk-47vtm.3: kimi seat artifacts ------------------------------------------
+
+# A resolved kimi review seat (tools on, a stub bwrap that runs the command
+# unsandboxed) whose fake kimi speaks stream-json. $1 = final message, $2 =
+# optional shell to run first inside the seat.
+kimi_seat_setup() {
+    printf '[models."k"]\nmodel = "k"\n' > "$T/kimi.toml"
+    cat > "$T/bin/bwrap" <<'STUB'
+#!/usr/bin/env bash
+while [ $# -gt 0 ] && [ "$1" != -- ]; do
+  case "$1" in --setenv) export "$2=$3"; shift 3 ;; --bind|--ro-bind) shift 3 ;; --tmpfs|--dir) shift 2 ;; *) shift ;; esac
+done
+[ "${1:-}" = -- ] && shift
+exec "$@"
+STUB
+    cat > "$T/bin/kimi" <<EOF2
+#!/usr/bin/env bash
+${2:-}
+printf '{"role":"meta","type":"system.version","version":"0.42.0"}\n'
+jq -cn --arg c "\$FAKE_BODY" '{role:"assistant",content:\$c}'
+printf '{"role":"meta","type":"session.resume_hint","session_id":"s"}\n'
+EOF2
+    chmod +x "$T/bin/bwrap" "$T/bin/kimi"
+    export FAKE_BODY="$1" KIMI_CONFIG="$T/kimi.toml"
+}
+
+governed_kimi_seat() {
+    bash "$DISPATCH" --role validation --role-resolved --resolved-profile-ref p1 \
+        --resolved-route-json "{\"policy_hash\":\"$POLICY_HASH\"}" \
+        --resolved-profile-json '{"profile_ref":"p1"}' --producer-identity prod-model \
+        --to kimi --model k -C "$T/repo" --prompt-file "$T/prompt.md" -o "$T/out.md" "$@"
+}
+
+# the leak report lists file names (never values) and counts
+report_names() { jq -r '.files[] | (.path // .file // .name // .)' "$T/out.md.token-leak.json" 2>/dev/null; }
+
+@test "kimi seat: a clean run with a token set passes and leaves no report" {
+    kimi_seat_setup $'VERDICT: PASS\nCRITERION: none'
+    run governed_kimi_seat
+    [ "$status" -eq 0 ]
+    [ ! -e "$T/out.md.token-leak.json" ]
+}
+
+@test "kimi seat: a value in the final-message file is found before the file is removed" {
+    kimi_seat_setup "VERDICT: PASS CRITERION: ${DUMMY}"
+    run governed_kimi_seat
+    [ "$status" -ne 0 ]
+    [ -f "$T/out.md.token-leak.json" ]
+    ! grep -qF "$DUMMY" "$T/out.md.token-leak.json"
+    report_names | grep -q 'clavain-kimi-final\.'
+    # the temp file is still removed afterwards
+    [ -z "$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'clavain-kimi-final.*' -newer "$T/prompt.md" 2>/dev/null)" ]
+}
+
+@test "kimi seat: a value written under the seat's temp dir is found and redacted" {
+    kimi_seat_setup $'VERDICT: PASS\nCRITERION: none' "printf 'x %s' \"${DUMMY}\" > \"\$TMPDIR/note.txt\""
+    run governed_kimi_seat
+    [ "$status" -ne 0 ]
+    ! grep -qF "$DUMMY" "$T/out.md.token-leak.json"
+    report_names | grep -q 'note.txt'
+}
+
+@test "kimi seat: an unreadable directory under the seat's temp dir fails the run closed" {
+    [ "$(id -u)" -ne 0 ] || skip "root reads everything"
+    kimi_seat_setup $'VERDICT: PASS\nCRITERION: none' 'mkdir "$TMPDIR/locked" && chmod 000 "$TMPDIR/locked"'
+    run governed_kimi_seat
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"token leak scan could not complete"* ]]
+    [[ "$output" != *"$DUMMY"* ]]
+}
+
+@test "kimi seat: a value in the seat's agent-file copy is found" {
+    kimi_seat_setup $'VERDICT: PASS\nCRITERION: none'
+    mkdir -p "$T/plans-${DUMMY}"
+    printf '# plan\n' > "$T/plans-${DUMMY}/plan.md"
+    run governed_kimi_seat --plan "$T/plans-${DUMMY}/plan.md"
+    [ "$status" -ne 0 ]
+    ! grep -qF "$DUMMY" "$T/out.md.token-leak.json"
+    [[ "$output" != *"$DUMMY"* ]]
+    report_names | grep -q 'agent.md'
+}
+
+@test "the leak-scan notes state that a signal during routing is not scanned" {
+    # Routing runs before the exit trap exists, so the documentation must not
+    # claim signal coverage for routing artifacts.
+    tr '\n' ' ' < "$DISPATCH" | tr -s ' #' ' ' | grep -qF 'A signal that ends the run during a routing step ends it before that step'
+    ! grep -n 'routing.*every signal' "$DISPATCH"
 }

@@ -33,6 +33,31 @@ if sys.argv[1:3] == ['route', 'record']:
     sys.exit(0)
 if sum(a.startswith('--context-file=') for a in sys.argv) > 1:
     sys.exit('duplicate context flag')
+# the capacity forecast script makes the same call and merges its stderr into JSON,
+# so the forecast re-resolution is told apart by its parent being dispatch.sh itself
+if os.environ.get('ROUTE_FORECAST_NOISE') and any(a.endswith('.context.json') for a in sys.argv) \\
+        and b'dispatch.sh' in open('/proc/%d/cmdline' % os.getppid(), 'rb').read():
+    sys.stderr.write('forecast note ' + os.environ['ROUTE_FORECAST_NOISE'] + '\\n')
+if os.environ.get('ROUTE_STDERR_NOISE'):
+    sys.stderr.write('routing note ' + os.environ['ROUTE_STDERR_NOISE'] + '\\n')
+# stdout noise: a routing value (here an extra key in the resolved JSON) that carries the
+# dummy token, on the initial resolve (ROUTE_STDOUT_NOISE=initial) or the forecast
+# re-resolve (=forecast); ROUTE_STDOUT_VALUE is the value
+mode = os.environ.get('ROUTE_STDOUT_NOISE')
+if mode and sys.argv[1:4] == ['--json', 'route', 'dispatch'] \\
+        and b'dispatch.sh' in open('/proc/%d/cmdline' % os.getppid(), 'rb').read():
+    forecast = any(a.endswith('.context.json') for a in sys.argv)
+    if (mode == 'forecast') == forecast:
+        import json, subprocess
+        r = subprocess.run([{real_ic!r}, *sys.argv[1:]], capture_output=True, text=True)
+        sys.stderr.write(r.stderr)
+        if r.returncode:
+            sys.stdout.write(r.stdout)
+            sys.exit(r.returncode)
+        data = json.loads(r.stdout)
+        data['routing_note'] = os.environ['ROUTE_STDOUT_VALUE']
+        print(json.dumps(data))
+        sys.exit(0)
 os.execv({real_ic!r}, [{real_ic!r}, *sys.argv[1:]])
 ''',
         'bb': '''#!/usr/bin/env python3
@@ -61,14 +86,15 @@ print('{"type":"result","subtype":"success","is_error":false,"result":"VERDICT: 
     receipt = tmp_path / 'receipts'
     calls = tmp_path / 'calls'
     context = tmp_path / 'context.json'
-    def run(accounts, role='routine-execution', available=None, disabled=False, broken_probe=False, bsd_temp=False):
+    def run(accounts, role='routine-execution', available=None, disabled=False, broken_probe=False, bsd_temp=False,
+            rationale='fixture', extra_env=None):
         if broken_probe:
             (bins/'python3').write_text('#!/bin/sh\ncase "$1" in */pool-headroom.py) exit 70 ;; esac\nexec '+shutil.which('python3')+' "$@"\n')
             (bins/'python3').chmod(0o755)
         if bsd_temp:
             (bins/'mktemp').write_text('#!/bin/sh\ncase "$*" in *XXXXXX-*) exit 2 ;; esac\nexec '+shutil.which('mktemp')+' "$@"\n')
             (bins/'mktemp').chmod(0o755)
-        ctx = {'reasons': [], 'rationale': 'fixture'}
+        ctx = {'reasons': [], 'rationale': rationale}
         if available is not None:
             ctx['available_models'] = available
         context.write_text(json.dumps(ctx))
@@ -78,7 +104,7 @@ print('{"type":"result","subtype":"success","is_error":false,"result":"VERDICT: 
                    POOL_FIXTURE=json.dumps({'accounts': accounts}), POOL_CALLS=str(calls),
                    RECEIPTS=str(receipt), CLAVAIN_CONTEXT_GATEWAY_MODE='off',
                    CLAVAIN_BB_DIRECT_POOL='0', CLAVAIN_POOL_HEADROOM='0' if disabled else '1',
-                   CLAVAIN_REQUIRE_USAGE='0')
+                   CLAVAIN_REQUIRE_USAGE='0', **(extra_env or {}))
         args = ['bash', str(ROOT/'scripts/dispatch.sh'), '--role', role, '--context-file', str(context),
                 '-C', str(work), '-o', str(tmp_path/'out')]
         if role in ('plan-review', 'validation', 'cross-lab-review'):
@@ -176,3 +202,77 @@ def test_evidence_creation_is_portable(dispatch):
     p, rows, _, _ = dispatch([account('codex', .99), account('claude', .2)], bsd_temp=True)
     assert p.returncode == 0, p.stderr
     assert rows[-1]['headroom_exclusion'] == ['gpt-6.1-sol']
+
+
+# mk-47vtm.3: routing artifacts are scanned for the bearer token before routing
+# returns. Only a dummy value is used; the assertions report no value.
+DUMMY = 'sk-test-dummy-0123456789abcdef'
+
+
+def test_leak_in_caller_rationale_fails_closed_at_initial_resolve(dispatch):
+    # ic echoes the caller's rationale in the resolved JSON, so the initial resolve
+    # stdout scan catches it before any headroom evidence or derived context exists.
+    p, _, _, work = dispatch([account('codex', .99), account('claude', .2)],
+                             rationale='note ' + DUMMY, extra_env={'ANTHROPIC_AUTH_TOKEN': DUMMY})
+    assert p.returncode != 0
+    for f in (work/'.clavain/capacity').glob('*.json'):
+        assert DUMMY not in f.read_text()
+    assert DUMMY not in p.stdout and DUMMY not in p.stderr
+    assert 'bearer token found in run artifacts' in p.stderr
+
+
+def test_clean_routing_artifacts_still_pass_with_a_token_set(dispatch):
+    p, _, _, _ = dispatch([account('codex', .99), account('claude', .2)],
+                          extra_env={'ANTHROPIC_AUTH_TOKEN': DUMMY})
+    assert p.returncode == 0, p.stderr
+    assert 'bearer token found' not in p.stderr
+
+
+def test_leak_in_routing_tool_stderr_fails_closed_and_is_never_mirrored(dispatch):
+    p, _, _, _ = dispatch([account('codex', .2), account('claude', .8)],
+                          extra_env={'ANTHROPIC_AUTH_TOKEN': DUMMY, 'ROUTE_STDERR_NOISE': DUMMY})
+    assert p.returncode != 0
+    assert DUMMY not in p.stdout and DUMMY not in p.stderr
+    assert 'bearer token found in run artifacts' in p.stderr
+
+
+def test_leak_in_forecast_reresolution_stderr_fails_closed_and_is_never_mirrored(dispatch):
+    # Only the second routing call (the forecast re-resolution, which reads the
+    # derived context) writes the value to stderr.
+    p, _, _, _ = dispatch([account('codex', .99), account('claude', .2)],
+                          extra_env={'ANTHROPIC_AUTH_TOKEN': DUMMY, 'ROUTE_FORECAST_NOISE': DUMMY})
+    assert p.returncode != 0
+    assert DUMMY not in p.stdout and DUMMY not in p.stderr
+    assert 'bearer token found in run artifacts' in p.stderr
+
+
+def test_clean_forecast_stderr_is_still_mirrored(dispatch):
+    p, _, _, _ = dispatch([account('codex', .99), account('claude', .2)],
+                          extra_env={'ANTHROPIC_AUTH_TOKEN': DUMMY, 'ROUTE_FORECAST_NOISE': 'harmless'})
+    assert p.returncode == 0, p.stderr
+    assert 'forecast note harmless' in p.stderr
+
+
+def test_leak_in_initial_resolve_stdout_fails_closed_and_is_never_printed(dispatch):
+    p, _, _, _ = dispatch([account('codex', .2), account('claude', .8)],
+                          extra_env={'ANTHROPIC_AUTH_TOKEN': DUMMY, 'ROUTE_STDOUT_NOISE': 'initial',
+                                     'ROUTE_STDOUT_VALUE': DUMMY})
+    assert p.returncode != 0
+    assert DUMMY not in p.stdout and DUMMY not in p.stderr
+    assert 'bearer token found in run artifacts' in p.stderr
+
+
+def test_leak_in_forecast_resolve_stdout_fails_closed_and_is_never_printed(dispatch):
+    p, _, _, _ = dispatch([account('codex', .99), account('claude', .2)],
+                          extra_env={'ANTHROPIC_AUTH_TOKEN': DUMMY, 'ROUTE_STDOUT_NOISE': 'forecast',
+                                     'ROUTE_STDOUT_VALUE': DUMMY})
+    assert p.returncode != 0
+    assert DUMMY not in p.stdout and DUMMY not in p.stderr
+    assert 'bearer token found in run artifacts' in p.stderr
+
+
+def test_clean_resolve_stdout_extra_key_still_passes(dispatch):
+    p, _, _, _ = dispatch([account('codex', .2), account('claude', .8)],
+                          extra_env={'ANTHROPIC_AUTH_TOKEN': DUMMY, 'ROUTE_STDOUT_NOISE': 'initial',
+                                     'ROUTE_STDOUT_VALUE': 'harmless'})
+    assert p.returncode == 0, p.stderr
