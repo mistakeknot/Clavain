@@ -22,6 +22,13 @@ models:
     lab: anthropic
     family: fable
     snapshot_name: Claude Fable 5.1
+  # mk-f0z9d: Fable 5.2 is the one-shot-author seat model. The pinned snapshot
+  # (2026-09-23) has no Fable 5.2 row, so the roster-slugs.yaml entry for it
+  # cannot verify until a newer snapshot is pinned (same gap as Sonnet 5.5).
+  claude-fable-5-2:
+    lab: anthropic
+    family: fable
+    snapshot_name: Claude Fable 5.2
   claude-opus-5:
     lab: anthropic
     family: opus

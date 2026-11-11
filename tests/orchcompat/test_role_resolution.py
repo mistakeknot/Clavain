@@ -1,6 +1,6 @@
 """Role x reason routing table, pinned against golden/role_resolution.json.
 
-For each of the 16 dispatch roles, each decision-context reason set (none, the
+For each of the 17 dispatch roles, each decision-context reason set (none, the
 five single reasons, all five) and each producer identity (none, an Anthropic
 model, an OpenAI model), the real `ic route dispatch` resolves the role from
 the policy passed explicitly. The normalized result (backend, model, effort,
