@@ -55,6 +55,23 @@ SEAT_KEEP_CLAUDE_BEDROCK=(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TO
 SEAT_KEEP_CLAUDE_VERTEX=(GOOGLE_APPLICATION_CREDENTIALS)
 SEAT_KEEP_CLAUDE_FOUNDRY=(ANTHROPIC_FOUNDRY_API_KEY AZURE_CLIENT_SECRET)
 SEAT_KEEP_KIMI=(KIMI_API_KEY MOONSHOT_API_KEY)
+# mk-7bzyr: variables a host (a bb claude-code thread, the Agent SDK) injects
+# into the parent's own session. Inherited by a child `claude -p` they make it
+# believe it runs under the same host: CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST in
+# particular makes the CLI ignore the subscription login (`claude auth status`
+# reports loggedIn=false), so Claude review seats fail "Not logged in".
+# Removed from the claude child only; the dispatch shell keeps them. A named
+# list plus the MESSAGING_ prefix, not a CLAUDE_* sweep: the user's own config
+# (HOME, XDG_*, PATH, CLAUDE_CONFIG_DIR), the cloud-provider selectors
+# (CLAUDE_CODE_USE_*), the engine's auth names (SEAT_KEEP_CLAUDE) and the pool
+# transport set by _bb_claude_pool_env (ANTHROPIC_*, ENABLE_TOOL_SEARCH) are
+# never touched.
+SEAT_HOST_SESSION_CLAUDE=(
+  CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST CLAUDE_CODE_SESSION_ID
+  CLAUDE_CODE_CHILD_SESSION CLAUDE_CODE_ENTRYPOINT CLAUDE_CODE_EXECPATH
+  CLAUDE_CODE_SESSION_ATTENDED CLAUDE_AGENT_SDK_VERSION
+  CLAUDECODE CLAUDE_PID CLAUDE_EFFORT)
+SEAT_HOST_SESSION_CLAUDE_PREFIX=CLAUDE_CODE_MESSAGING_
 SEAT_ENV_UNSET=()
 _seat_flag_on() { local v="${!1:-}"; [[ -n "$v" && "$v" != 0 && "$v" != false ]]; }
 # Fills SEAT_ENV_UNSET with `-u NAME` pairs for the current environment.
@@ -85,6 +102,18 @@ _seat_env_collect() {
     done
   done < <(compgen -e)
   [[ "$nc" == 1 ]] || shopt -u nocasematch
+  if [[ "$engine" == claude ]]; then
+    local un dup hit
+    while IFS= read -r name; do
+      hit=false
+      for k in "${SEAT_HOST_SESSION_CLAUDE[@]}"; do [ "$name" = "$k" ] && { hit=true; break; }; done
+      [ "${name#"$SEAT_HOST_SESSION_CLAUDE_PREFIX"}" = "$name" ] || hit=true
+      [[ "$hit" == true ]] || continue
+      dup=false
+      for un in "${SEAT_ENV_UNSET[@]+"${SEAT_ENV_UNSET[@]}"}"; do [ "$un" = "$name" ] && { dup=true; break; }; done
+      [[ "$dup" == true ]] || SEAT_ENV_UNSET+=(-u "$name")
+    done < <(compgen -e)
+  fi
   return 0
 }
 # Codex: -c override that drops the same names from its tool commands' env.
