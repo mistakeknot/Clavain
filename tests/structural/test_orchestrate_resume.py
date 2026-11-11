@@ -83,7 +83,10 @@ stages:
 
 
 def _git_repo(path: Path) -> None:
-    subprocess.run(["git", "init", "-q"], cwd=path, check=True)
+    # An empty template keeps the repo hermetic: a host-level init.templateDir
+    # would otherwise seed .git/hooks/pre-push, which the guard (correctly)
+    # backs up and restores, so "guard removed" could never hold (mk-47vtm.1).
+    subprocess.run(["git", "init", "-q", "--template="], cwd=path, check=True)
     subprocess.run(["git", "-C", str(path), "config", "user.email", "t@t"], check=True)
     subprocess.run(["git", "-C", str(path), "config", "user.name", "t"], check=True)
     (path / ".keep").write_text("")

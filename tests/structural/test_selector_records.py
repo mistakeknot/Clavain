@@ -195,8 +195,13 @@ def _append_worker(record_dir: str, n: int) -> None:
 
 def test_concurrent_append(tmp_path):
     record_dir = tmp_path / "selector" / "records"
+    # Pin "spawn": Python 3.14 defaults to "forkserver", which connects to its
+    # server over a Unix socket that the loopback-only socket guard rightly
+    # refuses. Spawn hands the child its state over a pipe, needs no socket, and
+    # behaves the same on every platform (mk-47vtm.1).
+    ctx = multiprocessing.get_context("spawn")
     procs = [
-        multiprocessing.Process(target=_append_worker, args=(str(record_dir), 50))
+        ctx.Process(target=_append_worker, args=(str(record_dir), 50))
         for _ in range(4)
     ]
     for p in procs:
