@@ -75,6 +75,15 @@ rows:
     effort: high
     reasoning_mode: reasoning
     slug: claude-fable-5-1-high
+  # (bead mk-f0z9d): one-shot-fable runs Fable 5.2 at high. UNVERIFIED slug: the
+  # pinned snapshot (2026-09-23) has no Fable 5.2 row, so, like the Sonnet 5.5
+  # and GPT-6.1 Sol rows, the generator refuses until a snapshot carrying
+  # "Claude Fable 5.2 (Adaptive Reasoning, High Effort)" is pinned. Do not
+  # substitute Fable 5.1 rows.
+  - model: claude-fable-5-2
+    effort: high
+    reasoning_mode: reasoning
+    slug: claude-fable-5-2-high
   # mk ruling 2026-09-26: every Sol seat runs GPT-6 Sol at medium, except the
   # authority, planning and deep-execution seats at high.
   - model: gpt-6-sol
