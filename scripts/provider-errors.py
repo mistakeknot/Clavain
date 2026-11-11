@@ -21,6 +21,12 @@ CLAUDE_LIMIT_MESSAGE = re.compile(
     r"^(?:You[’']ve hit your (?:[\w’' -]{0,40}?limit\b|team[’']s shared budget\b)"
     r"|Claude AI usage limit reached\b)"
 )
+# The Claude CLI marks an assistant event "authentication_failed" when it has
+# no usable login ("Not logged in · Please run /login"; mk-7bzyr). In a
+# `claude -p` run this reaches stdout only, never stderr, and the closing
+# result event repeats it with an empty error. It is seat availability (the
+# class a Codex account refusal gets), not a task failure.
+CLAUDE_AUTH_FAILED = "authentication_failed"
 # Codex's own retries ran out on HTTP 429. Dispatch retries the same model;
 # a persistent 429 does not walk (tests/routing/role-dispatch-test.sh).
 CODEX_EXHAUSTED_429 = re.compile(r"^exceeded retry limit, last status: 429\b")
@@ -145,9 +151,22 @@ def _claude_error_text(event, kind):
 def classify(events, stderr=""):
     failures = set()
     transient_errors = set()
+    claude_auth_text = None  # text of an authentication failure awaiting its closing result
     for event in events:
         event, kind, error = _envelope(event)
         if event is None:
+            continue
+        if kind == "assistant" and error == CLAUDE_AUTH_FAILED:
+            failures.add("account_access_absent")
+            claude_auth_text = _claude_error_text(event, kind).strip()
+            continue
+        if (kind == "result" and claude_auth_text is not None
+                and _claude_error_text(event, kind).strip() == claude_auth_text
+                and error in ({}, None, "") and not event.get("errors")):
+            # Only the result that restates this same authentication failure
+            # is absorbed, once. Any other later result (a different message,
+            # an errors list, a limit message) is classified as usual.
+            claude_auth_text = None
             continue
         if kind == 'turn.completed':
             # Codex can recover from stream errors within a turn. Only its
