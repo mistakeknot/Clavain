@@ -16,8 +16,10 @@ import yaml
 
 AUTHORITY_SEATS = {"main-sol", "release-authority-sol"}
 JUDGMENT_SEATS = {"planning-sol"}
-DEEP_SEATS = {"deep", "deep-clavain", "deep-sol"}
-HIGH_SEATS = AUTHORITY_SEATS | JUDGMENT_SEATS | DEEP_SEATS
+DEEP_SEATS = {"deep", "deep-clavain", "deep-sol", "deep-exec-sol"}
+# mk-mhuo2.1: the default execution seats are Sol at high (routine included).
+EXECUTION_SOL_SEATS = {"routine-exec-sol", "deep-exec-sol"}
+HIGH_SEATS = AUTHORITY_SEATS | JUDGMENT_SEATS | DEEP_SEATS | EXECUTION_SOL_SEATS
 # Roster Rule 6 classes (scripts/roster/generate.py ROLE_CLASS) barred from Sol-medium.
 RULE6_BARRED_ROLES = {"main-integrator", "release-authority", "frontier-planning", "escalation", "planning"}
 
@@ -59,3 +61,32 @@ def test_planning_has_its_own_sol_seat(project_root):
     seat = dispatch["tiers"]["planning-sol"]
     assert seat["role"] == "planning"
     assert seat.get("fallbacks") == dispatch["tiers"]["routine-sol"].get("fallbacks")
+
+
+def test_execution_roles_default_to_sol_high_with_sonnet_high_fallback(project_root):
+    """bead mk-mhuo2.1: routine-execution and deep-execution resolve to
+    gpt-6.1-sol at high first, and the ordered fallbacks reach a Sonnet 5.5
+    high seat."""
+    dispatch = _dispatch(project_root)
+    tiers = dispatch["tiers"]
+    for role, head_name in (("routine-execution", "routine-exec-sol"), ("deep-execution", "deep-exec-sol")):
+        assert dispatch["roles"][role] == head_name
+        head = tiers[head_name]
+        assert (head["backend"], head["model"], head["reasoning_effort"], head["service_tier"]) == (
+            "codex", "gpt-6.1-sol", "high", "standard"), role
+        assert head["role"] == role
+        # Walk the fallback chain from the head; it must reach Sonnet 5.5 at high.
+        seen, queue, chain = {head_name}, list(head.get("fallbacks", [])), []
+        while queue:
+            name = queue.pop(0)
+            if name in seen:
+                continue
+            seen.add(name)
+            chain.append(name)
+            queue.extend(tiers[name].get("fallbacks", []))
+        sonnet = [n for n in chain if tiers[n]["model"] == "claude-sonnet-5-5"]
+        assert sonnet, role
+        assert tiers[sonnet[0]]["reasoning_effort"] == "high", role
+        assert tiers[sonnet[0]]["backend"] == "claude", role
+        # Sonnet is the first fallback behind the Sol head.
+        assert chain[0] == sonnet[0], role

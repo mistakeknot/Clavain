@@ -64,10 +64,10 @@ check_primary() { # check_primary <role> <ctx> <expected-profile_ref> [producer]
   got="$(echo "$got" | jq -r '.profile_ref')"
   [[ "$got" == "$3" ]] || fail "$1 primary drifted: want $3, got $got"
 }
-check_primary routine-execution   "$WORK/c-routine.json" routine-exec-sonnet
+check_primary routine-execution   "$WORK/c-routine.json" routine-exec-sol
 check_primary scout               "$WORK/c-routine.json" scout-sol
 check_primary release-preparation "$WORK/c-routine.json" release-sol
-check_primary deep-execution      "$WORK/c-routine.json" deep-sonnet
+check_primary deep-execution      "$WORK/c-routine.json" deep-exec-sol
 check_primary deep-execution      "$WORK/c-front.json"   deep-astra
 check_primary plan-review         "$WORK/c-front.json"   review-opus gpt-6-astra
 check_primary plan-review         "$WORK/c-front.json"   review-astra claude-opus-5-5

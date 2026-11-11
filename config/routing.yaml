@@ -208,14 +208,17 @@ dispatch:
     one-shot-author: one-shot-fable
     main-integrator: main-astra
     scout: scout-sol
-    # mk ruling 2026-09-28 (mk-hpwq): execution roles default to Sonnet 5.5.
-    # mk ruling 2026-09-29 (mk-hpwq.1, mk-ezna): both run at high, routine
-    # included (was medium). Sol stays the cross-lab executor and the capacity
-    # fallback behind each seat.
-    # Elevated contexts still reach Astra/Opus: Sonnet is not a frontier model,
-    # so the frontier_required filter removes both Sonnet execution seats.
-    routine-execution: routine-exec-sonnet
-    deep-execution: deep-sonnet
+    # Execution roles default to GPT-6.1 Sol at high effort, with Sonnet 5.5 at
+    # high as the fallback (bead mk-mhuo2.1; supersedes the Sonnet-first order of
+    # mk-hpwq and mk-hpwq.1, which keep both seats at high, routine included).
+    # Order: routine-execution is routine-exec-sol then routine-exec-sonnet;
+    # deep-execution is deep-exec-sol, then deep-sonnet, then the existing
+    # Astra/Sol/Opus capacity chain behind deep-sonnet.
+    # Elevated contexts still reach Astra/Opus: neither Sol nor Sonnet is a
+    # frontier model, so the frontier_required filter removes both non-frontier
+    # execution seats of each role.
+    routine-execution: routine-exec-sol
+    deep-execution: deep-exec-sol
     # mk ruling 2026-09-08: Opus validates, Sonnet 5.5 is the fallback (mk ruling 2026-09-28). The
     # producer is normally gpt-6.1-sol, so any Claude model keeps independence.
     validation: validation-opus
@@ -606,14 +609,36 @@ dispatch:
       # redirects planning to frontier-planning before this chain is reached.
       fallbacks: [routine-sonnet]
       description: Unelevated planning; Sol at high because Rule 6 bars Sol-medium from judgment roles
+    routine-exec-sol:
+      role: routine-execution
+      backend: codex
+      model: gpt-6.1-sol
+      reasoning_effort: high
+      service_tier: standard
+      # Default routine-execution seat (bead mk-mhuo2.1). High, not routine-sol's
+      # medium: routine-sol keeps its medium seat for the fast/scout-style
+      # callers that name it; the default execution seat runs at high.
+      fallbacks: [routine-exec-sonnet]
+      description: Default routine (mechanical) execution seat, Sol at high with Sonnet 5.5 high behind it (bead mk-mhuo2.1)
     routine-exec-sonnet:
       role: routine-execution
       backend: claude
       model: claude-sonnet-5-5
       reasoning_effort: high
       service_tier: standard
-      fallbacks: [routine-sol]
-      description: Default routine (mechanical) execution seat, mk rulings 2026-09-28 (mk-hpwq) and 2026-09-29 (mk-hpwq.1, high not medium)
+      description: Routine-execution fallback when the Codex lane is out, Sonnet 5.5 at high (mk-hpwq, mk-hpwq.1; fallback position since mk-mhuo2.1)
+    deep-exec-sol:
+      role: deep-execution
+      backend: codex
+      model: gpt-6.1-sol
+      reasoning_effort: high
+      service_tier: standard
+      # Default deep-execution seat when the context is not elevated (bead
+      # mk-mhuo2.1). Sonnet 5.5 high is next; deep-sonnet keeps the Astra/Sol/Opus
+      # tail, which is what an elevated context reaches once the frontier_required
+      # filter drops both non-frontier seats.
+      fallbacks: [deep-sonnet]
+      description: Default deep-execution seat when the context is not elevated, Sol at high with Sonnet 5.5 high behind it (bead mk-mhuo2.1)
     deep-sonnet:
       role: deep-execution
       backend: claude
@@ -621,7 +646,7 @@ dispatch:
       reasoning_effort: high
       service_tier: standard
       fallbacks: [deep-astra]
-      description: Default deep-execution seat when the context is not elevated, mk ruling 2026-09-28 (mk-hpwq)
+      description: Deep-execution fallback behind deep-exec-sol, Sonnet 5.5 at high (mk-hpwq; fallback position since mk-mhuo2.1)
     routine-sonnet:
       role: routine-execution
       backend: claude

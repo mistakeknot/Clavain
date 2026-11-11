@@ -174,6 +174,180 @@
     "rc": 0
    }
   },
+  "6410bcff60351e1c15820892c0ec6ecc40b77ee882e720da0f49b8e546764a5a": {
+   "coordination|none": {
+    "command": "cd <T>/repo && claude --effort medium --model claude-sonnet-5-5 --permission-mode dontAsk --allowedTools Bash --disallowedTools Edit\\,Write\\,NotebookEdit --setting-sources project\\,local -p --output-format stream-json --verbose <PROMPT> > <T>/out.md",
+    "env": [],
+    "rc": 0
+   },
+   "coordination|unresolved-success-criteria,foundational-invariants,broad-consequences,difficult-verification,capability-failure": {
+    "command": "cd <T>/repo && claude --effort high --model claude-sonnet-5-5 --permission-mode dontAsk --allowedTools Bash --disallowedTools Edit\\,Write\\,NotebookEdit --setting-sources project\\,local -p --output-format stream-json --verbose <PROMPT> > <T>/out.md",
+    "env": [],
+    "rc": 0
+   },
+   "coordinator-seat|none": {
+    "command": "cd <T>/repo && claude --effort medium --model claude-sonnet-5-5 --permission-mode dontAsk --allowedTools Bash --disallowedTools Edit\\,Write\\,NotebookEdit --setting-sources project\\,local -p --output-format stream-json --verbose <PROMPT> > <T>/out.md",
+    "env": [],
+    "rc": 0
+   },
+   "coordinator-seat|unresolved-success-criteria,foundational-invariants,broad-consequences,difficult-verification,capability-failure": {
+    "command": "cd <T>/repo && claude --effort high --model claude-sonnet-5-5 --permission-mode dontAsk --allowedTools Bash --disallowedTools Edit\\,Write\\,NotebookEdit --setting-sources project\\,local -p --output-format stream-json --verbose <PROMPT> > <T>/out.md",
+    "env": [],
+    "rc": 0
+   },
+   "cross-lab-review|none": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -c sandbox_workspace_write.exclude_tmpdir_env_var=true -c sandbox_workspace_write.exclude_slash_tmp=true -c shell_environment_policy.set.TMPDIR=\\\"/dev/shm\\\" -C <T>/repo -o <T>/out.md -m gpt-6.1-sol -c model_reasoning_effort=medium -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "cross-lab-review|unresolved-success-criteria,foundational-invariants,broad-consequences,difficult-verification,capability-failure": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -c sandbox_workspace_write.exclude_tmpdir_env_var=true -c sandbox_workspace_write.exclude_slash_tmp=true -c shell_environment_policy.set.TMPDIR=\\\"/dev/shm\\\" -C <T>/repo -o <T>/out.md -m gpt-6.1-sol -c model_reasoning_effort=high -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "deep-execution|none": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6.1-sol -c model_reasoning_effort=high -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "deep-execution|unresolved-success-criteria,foundational-invariants,broad-consequences,difficult-verification,capability-failure": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6-astra -c model_reasoning_effort=high -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "escalation|none": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6-astra -c model_reasoning_effort=medium -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "escalation|unresolved-success-criteria,foundational-invariants,broad-consequences,difficult-verification,capability-failure": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6-astra -c model_reasoning_effort=high -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "frontier-planning|none": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6-astra -c model_reasoning_effort=medium -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "frontier-planning|unresolved-success-criteria,foundational-invariants,broad-consequences,difficult-verification,capability-failure": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6-astra -c model_reasoning_effort=high -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "lane|none": {
+    "command": "cd <T>/repo && claude --effort medium --model claude-sonnet-5-5 --permission-mode dontAsk --allowedTools Bash --disallowedTools Edit\\,Write\\,NotebookEdit --setting-sources project\\,local -p --output-format stream-json --verbose <PROMPT> > <T>/out.md",
+    "env": [],
+    "rc": 0
+   },
+   "lane|unresolved-success-criteria,foundational-invariants,broad-consequences,difficult-verification,capability-failure": {
+    "command": "cd <T>/repo && claude --effort high --model claude-sonnet-5-5 --permission-mode dontAsk --allowedTools Bash --disallowedTools Edit\\,Write\\,NotebookEdit --setting-sources project\\,local -p --output-format stream-json --verbose <PROMPT> > <T>/out.md",
+    "env": [],
+    "rc": 0
+   },
+   "main-integrator|none": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6-astra -c model_reasoning_effort=xhigh -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "main-integrator|unresolved-success-criteria,foundational-invariants,broad-consequences,difficult-verification,capability-failure": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6-astra -c model_reasoning_effort=xhigh -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "main-session|none": {
+    "command": "cd <T>/repo && claude --effort medium --model claude-sonnet-5-5 --permission-mode dontAsk --allowedTools Bash --disallowedTools Edit\\,Write\\,NotebookEdit --setting-sources project\\,local -p --output-format stream-json --verbose <PROMPT> > <T>/out.md",
+    "env": [],
+    "rc": 0
+   },
+   "main-session|unresolved-success-criteria,foundational-invariants,broad-consequences,difficult-verification,capability-failure": {
+    "command": "cd <T>/repo && claude --effort high --model claude-sonnet-5-5 --permission-mode dontAsk --allowedTools Bash --disallowedTools Edit\\,Write\\,NotebookEdit --setting-sources project\\,local -p --output-format stream-json --verbose <PROMPT> > <T>/out.md",
+    "env": [],
+    "rc": 0
+   },
+   "one-shot-author|none": {
+    "command": "cd <T>/repo && claude --effort high --model claude-fable-5-2 --permission-mode dontAsk --allowedTools Bash --disallowedTools Edit\\,Write\\,NotebookEdit --setting-sources project\\,local -p --output-format stream-json --verbose <PROMPT> > <T>/out.md",
+    "env": [],
+    "rc": 0
+   },
+   "one-shot-author|unresolved-success-criteria,foundational-invariants,broad-consequences,difficult-verification,capability-failure": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6-astra -c model_reasoning_effort=high -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "plan-review|none": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6-astra -c model_reasoning_effort=medium -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "plan-review|unresolved-success-criteria,foundational-invariants,broad-consequences,difficult-verification,capability-failure": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6-astra -c model_reasoning_effort=high -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "planning|none": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6-astra -c model_reasoning_effort=medium -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "planning|unresolved-success-criteria,foundational-invariants,broad-consequences,difficult-verification,capability-failure": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6-astra -c model_reasoning_effort=high -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "release-authority|none": {
+    "error": "Error: role 'release-authority' is reserved for the main integrator and cannot be delegated",
+    "rc": 1
+   },
+   "release-authority|unresolved-success-criteria,foundational-invariants,broad-consequences,difficult-verification,capability-failure": {
+    "error": "Error: Intercore could not resolve dispatch role 'release-authority'",
+    "rc": 1
+   },
+   "release-preparation|none": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6.1-sol -c model_reasoning_effort=medium -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "release-preparation|unresolved-success-criteria,foundational-invariants,broad-consequences,difficult-verification,capability-failure": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6.1-sol -c model_reasoning_effort=high -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "routine-execution|none": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6.1-sol -c model_reasoning_effort=high -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "routine-execution|unresolved-success-criteria,foundational-invariants,broad-consequences,difficult-verification,capability-failure": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6-astra -c model_reasoning_effort=high -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "scout|none": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6.1-sol -c model_reasoning_effort=medium -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "scout|unresolved-success-criteria,foundational-invariants,broad-consequences,difficult-verification,capability-failure": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6.1-sol -c model_reasoning_effort=high -c service_tier=default ",
+    "env": [],
+    "rc": 0
+   },
+   "validation|none": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6.1-sol -c model_reasoning_effort=medium -c service_tier=default ",
+    "env": [
+     "# Env: UV_NO_SYNC=1 (validation seat replays without syncing)"
+    ],
+    "rc": 0
+   },
+   "validation|unresolved-success-criteria,foundational-invariants,broad-consequences,difficult-verification,capability-failure": {
+    "command": "codex exec -s workspace-write -c shell_environment_policy.exclude=\\[\\\"\\*TOKEN\\*\\\"\\,\\\"\\*SECRET\\*\\\"\\,\\\"\\*PASSWORD\\*\\\"\\,\\\"\\*PASSWD\\*\\\"\\,\\\"\\*CREDENTIAL\\*\\\"\\,\\\"\\*API_KEY\\*\\\"\\,\\\"\\*APIKEY\\*\\\"\\,\\\"\\*PRIVATE_KEY\\*\\\"\\,\\\"\\*ACCESS_KEY\\*\\\"\\,\\\"AWS_\\*\\\"\\,\\\"CLOUDFLARE_\\*\\\"\\,\\\"AZURE_\\*\\\"\\,\\\"GOOGLE_\\*\\\"\\,\\\"GH_\\*\\\"\\,\\\"GITHUB_\\*\\\"\\,\\\"OPENAI_\\*\\\"\\] -C <T>/repo -o <T>/out.md -m gpt-6.1-sol -c model_reasoning_effort=high -c service_tier=default ",
+    "env": [
+     "# Env: UV_NO_SYNC=1 (validation seat replays without syncing)"
+    ],
+    "rc": 0
+   }
+  },
   "a52fa61626006a71f8a8cfe28666eaa959f31724732484df72be8335012ce2a8": {
    "coordination|none": {
     "command": "cd <T>/repo && claude --effort medium --model claude-sonnet-5-5 --permission-mode dontAsk --allowedTools Bash --disallowedTools Edit\\,Write\\,NotebookEdit --setting-sources project\\,local -p --output-format stream-json --verbose <PROMPT> > <T>/out.md",
