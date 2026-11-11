@@ -66,7 +66,16 @@ STUB
 
 @test "claude child: with usage accounting required the wrapped claude is scrubbed too" {
     fake_claude
-    command -v ic >/dev/null || skip "ic is needed to resolve the model identity"
+    # The accounting wrapper resolves a model identity through ic; CI has no ic,
+    # so answer that one query with a dummy and nothing else.
+    cat > "$T/bin/ic" <<'STUB'
+#!/bin/sh
+case "$*" in
+  *"route identity"*) echo '{"model_identity":"claude-sonnet-5-5"}' ;;
+  *) exit 3 ;;
+esac
+STUB
+    chmod +x "$T/bin/ic"
     CLAVAIN_REQUIRE_USAGE=1 CLAVAIN_REVIEW_EVENTS="$T/events.jsonl" PATH="$T/bin:$PATH" \
         run bash "$DISPATCH" --to claude --model claude-sonnet-5-5 -C "$T/repo" -o "$T/out.md" "prompt"
     # The stub reports no usage, so the run may fail accounting; what matters
