@@ -85,6 +85,42 @@ def test_claude_limit_text_in_ordinary_output_is_not_a_failure():
     assert provider_errors.classify(events) == ""
 
 
+def claude_not_logged_in_events():
+    # Shape captured from `claude -p --output-format stream-json` with no login
+    # (mk-7bzyr): the failure is on stdout only; stderr carries nothing.
+    text = "Not logged in · Please run /login"
+    return [
+        {"type": "system", "subtype": "init"},
+        {"type": "assistant", "error": "authentication_failed",
+         "message": {"content": [{"type": "text", "text": text}]}},
+        {"type": "result", "subtype": "success", "is_error": True, "result": text},
+    ]
+
+
+def test_claude_not_logged_in_is_account_access_absent_not_terminal_error():
+    # The closing result event restates the failure with an empty error; it must
+    # not outrank the access class and bring back the terminal stop.
+    assert provider_errors.classify(claude_not_logged_in_events()) == "account_access_absent"
+
+
+def test_claude_auth_failed_assistant_event_alone_is_account_access_absent():
+    assert provider_errors.classify(claude_not_logged_in_events()[:2]) == "account_access_absent"
+
+
+def test_claude_result_error_without_auth_event_stays_terminal():
+    # Free text alone never reclassifies: only the structured assistant code does.
+    events = [{"type": "result", "subtype": "success", "is_error": True,
+               "result": "Not logged in · Please run /login"}]
+    assert provider_errors.classify(events) == "terminal_error"
+
+
+def test_claude_auth_failed_does_not_mask_a_later_real_error():
+    events = claude_not_logged_in_events()[:2] + [
+        {"type": "result", "subtype": "error", "is_error": True, "error": {"type": "permission_denied"}},
+    ]
+    assert provider_errors.classify(events) == "terminal_policy"
+
+
 CODEX_EXHAUSTED_429 = "exceeded retry limit, last status: 429 Too Many Requests"
 
 
