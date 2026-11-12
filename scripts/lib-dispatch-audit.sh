@@ -235,7 +235,7 @@ _role_audit_context() {
         + (if $intercept | type == "object" then {intercept_evidence:$intercept} else {} end)
         + (if $intercept_error != "" then {intercept_evidence_error:$intercept_error} else {} end))}
       + (if $enrollment != "" then {task_envelope:{enrollment_id:$enrollment,manifest_sha256:$manifest,cohort_id:$cohort}} else {} end)
-      + (if $review_packet != null then {review_packet:$review_packet} else {} end)'
+      + (if $review_packet != null then {review_packet:$review_packet} else {} end)' | _augment_dispatch_receipt
 }
 
 _record_role_routing_decision() {
@@ -375,7 +375,19 @@ _build_dispatch_run_receipt() {
                    tokens_cache_write_in, tokens_reasoning_out} | with_entries(select(.value != null)))')"
     [[ -n "$line" ]] && break
   done
-  printf '%s\n' "$line"
+  printf '%s\n' "$line" | _augment_dispatch_receipt
+}
+
+# The same additive evidence accompanies lifecycle and terminal records.
+_augment_dispatch_receipt() {
+  local line
+  IFS= read -r line || return 1
+  if declare -F _hold_receipt_fields >/dev/null; then
+    jq -cn --argjson base "$line" --argjson held "$(_hold_receipt_fields)" --arg outcome "${HELD_OUTCOME:-}" --argjson held_mode "${HELD_MODE:-false}" \
+      '(if $held_mode then $base+$held else $held+$base end) | if $outcome!="" then .outcome=$outcome else . end'
+  else
+    printf '%s\n' "$line"
+  fi
 }
 
 # Appends one prebuilt line. INT and TERM are ignored only here.
