@@ -813,9 +813,11 @@ _reject_passing_suffix() {
         [ "$status" -ne 0 ]
         [[ "$output" == *"experimental"* ]]
     done
-    RESOLVED_ROUTE_JSON='{"policy_profile":"experiment-other"}' run _review_receipt_write "$OUT" 0
-    [ "$status" -ne 0 ]
-    [[ "$output" == *"experimental"* ]]
+    for marker in '{"policy_profile":"experiment-other"}' '{"experimental":true}' '{"gate_review_eligible":false}' '{"experiment_arm":"experiment-other"}'; do
+        RESOLVED_ROUTE_JSON="$marker" run _review_receipt_write "$OUT" 0
+        [ "$status" -ne 0 ]
+        [[ "$output" == *"experimental"* ]]
+    done
     [ ! -d "$T/reviews" ]
 }
 @test "experimental receipts cannot be selected as an ordinary effective review" {

@@ -1248,6 +1248,7 @@ Options:
   --held-max-age <SECONDS>     Manifest TTL (default 86400)
   --context-file <PATH>        Structured reasoning decision context
   --policy-profile <NAME>      Declared policy overlay (pilot requires campaign scope)
+  --experiment-task-type <TYPE>  Sol experiment requires advisory-support-grouping; never a gate review
   --producer-identity <ID>      Producer backend/model identity for validator audit records
   --repo OWNER/NAME --repo-id ID --pr N --head SHA --base SHA
                                 Write a review receipt (cross-lab-review only; all five

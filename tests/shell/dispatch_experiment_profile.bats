@@ -84,14 +84,6 @@ FAKE
 printf '%s\n' "$@" >> "$T/bd-argv"
 exit 1
 FAKE
-    cat > "$T/bin/claude" <<'FAKE'
-#!/usr/bin/env bash
-if [[ "$*" == *--help* || "$*" == *--version* ]]; then echo '--tools --effort'; exit; fi
-printf '%s\n' "$@" >> "$T/backend"
-cat >/dev/null
-printf '{"type":"result","subtype":"success","is_error":false,"result":"done"}\n'
-exit "${FAKE_EXIT:-0}"
-FAKE
     cat > "$T/bin/codex" <<'FAKE'
 #!/usr/bin/env bash
 if [[ "$*" == *--version* ]]; then echo 'codex-cli 0.153.2'; exit; fi
@@ -144,15 +136,14 @@ refused() { [ "$status" -eq 2 ]; [ ! -e "$T/backend" ]; }
     refused
     [[ "$output" == *"unregistered experiment"* ]]
 }
-@test "outer reaches each backend with exact effort and strict complete evidence" {
+@test "outer reaches Sol with exact effort and strict complete evidence" {
     for spec in 'sol-medium opus' 'sol-medium anthropic/claude-opus-5-5'; do
         read -r a p <<< "$spec"; arm "$a" "$p"
         rm -f "$T/backend" "$T/receipts"
         run outer
         [ "$status" -eq 0 ]
         grep -qx "$MODEL" "$T/backend"
-        if [[ "$ENGINE" == codex ]]; then [ "$(grep -cx model_reasoning_effort=medium "$T/backend")" -eq 1 ];
-        else grep -qx high "$T/backend"; fi
+        [ "$(grep -cx model_reasoning_effort=medium "$T/backend")" -eq 1 ]
         [ "$(wc -l < "$T/receipts")" -eq 2 ]
         jq -se '.[0].outcome=="started" and .[1].launched==true and .[0].run_id==.[1].run_id and
           all(.[]; .schema_version==1 and .evidence_mode=="strict" and .scope=="mk-d0h1j.1" and
@@ -449,7 +440,8 @@ WRAP
     run outer --bead mk-other; refused
     run outer --experiment-task-type advisory-support-grouping; refused
 }
-@test "removed experiment profile is refused before any backend" {
-    PROFILE=experiment-deferred run outer; refused
-    [[ "$output" == *"unregistered experiment"* ]]
+@test "registry contains only the task-scoped advisory Sol arm" {
+    jq -e 'keys==["experiment-mk-d0h1j.1-sol-medium"] and
+      all(.[]; .bead=="mk-d0h1j.1" and .task_type=="advisory-support-grouping" and
+        .expires=="2026-12-31T00:00:00Z" and .assert.model=="gpt-6.1-sol")' "$ROOT/config/experiment-profiles.json"
 }
