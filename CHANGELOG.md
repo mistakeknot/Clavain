@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+
+- Pruned role boilerplate and redundant wording in five planning, execution and
+  review skills and three authoring/execution commands; added step completion criteria
+  while retaining review, evidence and authority gates (mk-7k5v0.3).
+
 ### Added
 
 - `/clavain:prototype` builds a disposable experiment for one design question,

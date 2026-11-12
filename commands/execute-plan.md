@@ -35,7 +35,11 @@ fi
 clavain-cli advance-phase "$BEAD_ID" "executing" "Executing: <plan_file_path>" "<plan_file_path>"
 ```
 
-Invoke the `clavain:executing-plans` skill and follow it exactly. For offload runs (a fresh-context executor subagent plus a separate validator subagent), the executor and validator contracts are in `${CLAUDE_PLUGIN_ROOT}/skills/executing-plans/references/pattern-f-contracts.md`.
+Done when the gate permits execution and the `executing` transition is recorded; a blocked gate stops execution.
+
+Invoke the `clavain:executing-plans` skill. For offload runs (a fresh-context executor subagent plus a separate validator subagent), the executor and validator contracts are in `${CLAUDE_PLUGIN_ROOT}/skills/executing-plans/references/pattern-f-contracts.md`.
+
+Done when all tasks are executed and ledgered and the final independent review is resolved, or the skill reports a stop condition.
 
 **On plan completion** (all tasks executed, final review resolved), record the routing outcome (capability-routing doctrine Rule 7 — silent, fail-open). Skip if `/clavain:quality-gates` ran for this plan — it already recorded the outcome. Set `_executor` to your model tier (`opus`/`sonnet`/`haiku`); `_author` to the plan author's tier (from the plan's frontmatter/provenance if recorded, else `unknown`); `_validator` to the final reviewer's tier (`self` only if the review was blocked). Count the plan's `<verify>` blocks into `_ct` and how many failed on final run into `_cf`:
 
@@ -50,3 +54,5 @@ if source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh" 2>/dev/null; then
   fi
 fi
 ```
+
+Done when routing-outcome recording has been attempted or skipped because `/clavain:quality-gates` already recorded it; recording remains fail-open.
