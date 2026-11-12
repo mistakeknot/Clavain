@@ -36,13 +36,15 @@ _review_receipt_dir() {
 # Experiment evidence cannot satisfy an ordinary review gate (mk-47vtm.10).
 _review_receipt_gate_eligible() {
   jq -e '.experimental != true and .gate_review_eligible != false and .experiment_arm == null and
-    ((.policy_profile // .resolved_route.policy_profile // "") | startswith("experiment-") | not)' "$1" >/dev/null 2>&1
+    ([.policy_profile, .resolved_route.policy_profile] | map(select(type=="string")) |
+      any(startswith("experiment-")) | not)' "$1" >/dev/null 2>&1
 }
 
 _review_receipt_experiment_run() {
   [[ "${CLAVAIN_POLICY_PROFILE:-}" == experiment-* || -n "${EXPERIMENT_ENTRY:-}" ]] && return 0
   jq -e '.experimental == true or .gate_review_eligible == false or .experiment_arm != null or
-    ((.policy_profile // "") | startswith("experiment-"))' \
+    ([.policy_profile, .resolved_route.policy_profile] | map(select(type=="string")) |
+      any(startswith("experiment-")))' \
     <<< "${RESOLVED_ROUTE_JSON:-null}" >/dev/null 2>&1
 }
 

@@ -813,7 +813,7 @@ _reject_passing_suffix() {
         [ "$status" -ne 0 ]
         [[ "$output" == *"experimental"* ]]
     done
-    for marker in '{"policy_profile":"experiment-other"}' '{"experimental":true}' '{"gate_review_eligible":false}' '{"experiment_arm":"experiment-other"}'; do
+    for marker in '{"policy_profile":"experiment-other"}' '{"experimental":true}' '{"gate_review_eligible":false}' '{"experiment_arm":"experiment-other"}' '{"policy_profile":"default","resolved_route":{"policy_profile":"experiment-other"}}'; do
         RESOLVED_ROUTE_JSON="$marker" run _review_receipt_write "$OUT" 0
         [ "$status" -ne 0 ]
         [[ "$output" == *"experimental"* ]]
@@ -824,7 +824,7 @@ _reject_passing_suffix() {
     _review_receipt_prepare "$R"
     _review_receipt_write "$OUT" 0
     f="$T/reviews/o__r/7-$HEAD_SHA.json"
-    for marker in '{"experimental":true}' '{"gate_review_eligible":false}' '{"policy_profile":"experiment-other"}' '{"experiment_arm":"experiment-other"}' '{"resolved_route":{"policy_profile":"experiment-other"}}'; do
+    for marker in '{"experimental":true}' '{"gate_review_eligible":false}' '{"policy_profile":"experiment-other"}' '{"experiment_arm":"experiment-other"}' '{"resolved_route":{"policy_profile":"experiment-other"}}' '{"policy_profile":"default","resolved_route":{"policy_profile":"experiment-other"}}'; do
         jq --argjson marker "$marker" '.+$marker' "$f" > "$T/marked.json"
         run _review_receipt_effective "$T/marked.json"
         [ "$status" -ne 0 ]
