@@ -17,7 +17,7 @@ Done when the comment's target and constraints are identified.
 
 Done when the affected files and intended changes are named, with side effects considered.
 
-**3. Implement** — follow CLAUDE.md guidelines and keep changes scoped to the comment.
+**3. Implement** — follow CLAUDE.md guidelines and existing codebase conventions; keep changes minimal and limited to the requested comment.
 
 Done when the scoped change is implemented under the project's guidelines.
 

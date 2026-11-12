@@ -47,7 +47,7 @@ UNVERIFIABLE. Keep unavailable evidence classified as UNVERIFIABLE.
 Validate all required outcomes and consumer connections after implementation.
 Source presence is not invoked behavior. Retain fresh host, play, device or
 production evidence where the plan requires it. Incomplete must-haves remain
-open; acceptance requires all evidence specified by the plan.
+open; do not mark a task accepted from structural checks alone.
 
 Done when every required outcome and consumer connection has acceptance evidence, with incomplete must-haves left open.
 
