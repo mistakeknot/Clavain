@@ -445,3 +445,27 @@ WRAP
       all(.[]; .bead=="mk-d0h1j.1" and .task_type=="advisory-support-grouping" and
         .expires=="2026-12-31T00:00:00Z" and .assert.model=="gpt-6.1-sol")' "$ROOT/config/experiment-profiles.json"
 }
+
+@test "Astra-only profile refuses other-lab producers in outer and resolved dispatch" {
+    for producer in opus claude-opus-5-5 anthropic/claude-opus-5-5 sonnet claude-sonnet-5-5 kimi-code/k3; do
+        arm sol-medium "$producer"
+        run outer; refused
+        route
+        run child; refused
+    done
+}
+@test "missing and invalid experiment registry files refuse with one-line errors" {
+    package_fixture
+    mkdir "$T/yaml-stub"
+    printf 'def safe_load(_):\n    raise AssertionError("policy parsed before registry refusal")\n' > "$T/yaml-stub/yaml.py"
+    for mode in missing invalid; do
+        if [[ "$mode" == missing ]]; then rm "$T/package/config/experiment-profiles.json";
+        else printf '{invalid' > "$T/package/config/experiment-profiles.json"; fi
+        PYTHONPATH="$T/yaml-stub" run python3 "$T/package/scripts/tier-fallback-chain.py" --policy "$ROOT/config/routing.yaml" --tier fast
+        [ "$status" -eq 4 ]
+        [ "$output" = 'tier-fallback-chain: experiment registry missing or invalid' ]
+        run bash "$DISPATCH" --tier fast --dry-run fixture
+        [ "$status" -eq 2 ]
+        [ "$output" = 'Error: experiment registry missing or invalid' ]
+    done
+}

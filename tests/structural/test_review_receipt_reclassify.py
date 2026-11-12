@@ -116,3 +116,27 @@ def test_receipts_with_verdict_raw_are_verified_and_get_no_note(tmp_path):
     assert "block-unverified: 2" in r.stdout
     assert run(src, out).returncode == 0
     assert {p.name for p in out.rglob("*.note.json")} == {"4-d.note.json", "5-e.note.json"}
+
+
+def test_experimental_receipts_are_flagged_even_with_passing_or_verified_verdicts(tmp_path):
+    src, out = tmp_path / "reviews", tmp_path / "notes"
+    src.mkdir()
+    markers = [
+        {"experimental": True}, {"gate_review_eligible": False},
+        {"policy_profile": "experiment-other"}, {"experiment_arm": "experiment-other"},
+        {"policy_profile": "default", "resolved_route": {"policy_profile": "experiment-other"}},
+    ]
+    for i, marker in enumerate(markers):
+        (src / f"{i}.json").write_text(json.dumps({"verdict": "PASS", **marker}))
+    (src / "block.json").write_text(json.dumps({"verdict": "BLOCK", "verdict_raw": "FAIL", "experimental": True}))
+    before = snapshot(src)
+    r = run(src, out, "--check")
+    assert r.returncode == 0, r.stderr
+    assert "experimental-ineligible: 6" in r.stdout
+    assert not out.exists()
+    assert run(src, out).returncode == 0
+    assert snapshot(src) == before
+    notes = [json.loads(p.read_text()) for p in out.glob("*.note.json")]
+    assert len(notes) == 6
+    assert all(n["verdict_reclass"] == "experimental-ineligible" for n in notes)
+    assert all("ordinary gate" in n["reason"] for n in notes)
