@@ -279,3 +279,34 @@ WRAP
     run outer
     refused
 }
+@test "missing flock refuses strict launch" {
+    mkdir "$T/nolock"
+    for tool in bash jq date sha256sum awk sed head dirname mkdir sleep cat wc tr rm seq mktemp chmod stat git python3 cp env touch sort grep comm tee tail cut basename readlink timeout; do
+        path="$(command -v "$tool")" || continue
+        ln -s "$path" "$T/nolock/$tool"
+    done
+    ln -s "$T/bin/ic" "$T/nolock/ic"
+    ln -s "$T/bin/codex" "$T/nolock/codex"
+    ln -s "$T/bin/claude" "$T/nolock/claude"
+    PATH="$T/nolock" run outer
+    [ "$status" -eq 4 ]
+    [ ! -e "$T/backend" ]
+}
+@test "receipt lock timeout refuses strict launch" {
+    ( exec 8>>"$T/receipts.lock"; flock 8; touch "$T/locked"; sleep 12 ) &
+    holder=$!
+    for _ in $(seq 1 50); do [ -f "$T/locked" ] && break; sleep 0.02; done
+    run outer
+    wait "$holder"
+    [ "$status" -eq 4 ]
+    [ ! -e "$T/backend" ]
+    [ ! -s "$T/receipts" ]
+}
+@test "mutating original context after launch cannot change snapshot evidence" {
+    before="$(sha256sum "$T/ctx" | awk '{print $1}')"
+    sed -i '/cat >\/dev\/null/a echo changed > "$T/ctx"' "$T/bin/codex"
+    run outer
+    [ "$status" -eq 0 ]
+    [ "$(cat "$T/ctx")" = changed ]
+    jq -se --arg hash "$before" 'all(.[]; .decision_context_sha256==$hash)' "$T/receipts"
+}

@@ -378,7 +378,7 @@ _build_dispatch_run_receipt() {
   line="$(printf '%s\n' "$line" | _augment_dispatch_receipt)" || return 1
   if declare -F _experiment_receipt_fields >/dev/null; then
     jq -cn --argjson base "$line" --argjson exp "$(_experiment_receipt_fields)" --arg outcome "${EXPERIMENT_OUTCOME:-}" \
-      '$base+$exp | if $outcome!="" then .outcome=$outcome else . end'
+      '(if $exp.evidence_mode=="strict" then $base+$exp else $exp+$base end) | if $outcome!="" then .outcome=$outcome else . end'
   else
     printf '%s\n' "$line"
   fi

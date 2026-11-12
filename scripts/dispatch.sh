@@ -2346,10 +2346,10 @@ _experiment_entry() {
   fresh="$("${cmd[@]}")" || _experiment_refuse 'experiment fresh resolution failed'
   semantics="$(_experiment_semantics <<< "$fresh")" || _experiment_refuse 'experiment invalid fresh route'
   [[ "$semantics" == "$(_experiment_semantics <<< "$RESOLVED_ROUTE_JSON")" ]] || _experiment_refuse 'experiment route is stale for this context'
-  jq -e --arg p "$PRODUCER_IDENTITY" --arg v "$VALIDATOR_RELATIONSHIP" --argjson e "$expected" '
+  jq -e --arg p "$PRODUCER_IDENTITY" --arg v "$VALIDATOR_RELATIONSHIP" --argjson e "$expected" --arg profile "$CLAVAIN_POLICY_PROFILE" '
     .producer_identity==$p and ($v=="" or .validator_relationship==$v) and
     .requested_role=="cross-lab-review" and
-    (.effort_floors_exempted|index("difficult-verification")!=null) and .policy_profile!=null
+    (.effort_floors_exempted as $actual | all($e.require_exempted[]; . as $r | $actual|index($r)!=null)) and .policy_profile==$profile
     ' <<< "$fresh" >/dev/null || _experiment_refuse 'experiment producer or exemption mismatch'
   producer_model="$(jq -r '.producer_model // empty' <<< "$fresh")"
   [[ -n "$producer_model" ]] || _experiment_refuse 'experiment producer has no canonical model'
