@@ -121,8 +121,9 @@ without a cited source; they do not authenticate the source.
    actor claim twice, so parallel sessions need distinct `--actor` names.
 3. **Resolve it by type:**
    - `grilling`: send the round (rule 2). Resolve only on the owner's answer.
-   - `prototype`: build the variants somewhere disposable, present them, and
-     wait for the owner's pick.
+   - `prototype`: use `/clavain:prototype <ticket-id>` to build and exercise
+     disposable code, record evidence, and remove or quarantine it. Wait for
+     the owner's pick, then return here to resolve the ticket.
    - `research`: read the findings, or dispatch the research and stop.
    - `task`: do the manual step that unblocks a decision.
    - `revisit`: grill the reversal like a grilling ticket; the owner's

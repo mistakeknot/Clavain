@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `/clavain:prototype` builds a disposable experiment for one design question,
+  records observations and the answer, then removes or quarantines the code.
+  Wayfind prototype tickets link to the command and retain their owner-pick
+  resolution gate. Includes command registration, help and discovery coverage
+  (mk-7k5v0.5).
+
 ## 0.6.332
 
 Release notes for everything merged since the installed 0.6.331. The version

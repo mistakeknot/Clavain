@@ -1,9 +1,9 @@
 {
-  "generated": "2026-11-02T19:19:02Z",
+  "generated": "2026-11-12T08:08:58Z",
   "counts": {
     "skills": 28,
     "agents": 6,
-    "commands": 65,
+    "commands": 66,
     "hooks": 22,
     "mcp_servers": 0,
     "review": 2,
@@ -299,6 +299,10 @@
     {
       "name": "pr-triage",
       "description": "Triage all open PRs \u2014 batch by theme, review with parallel agents, generate report, walk through decisions. With a PR reference, run one follow-up pass on your own PR after a watcher update."
+    },
+    {
+      "name": "prototype",
+      "description": "Build disposable code to answer one design question, record the evidence and answer, then remove or quarantine the experiment"
     },
     {
       "name": "quality-gates",

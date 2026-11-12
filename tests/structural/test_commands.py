@@ -17,6 +17,17 @@ def _get_command_files():
 COMMAND_FILES = _get_command_files()
 
 
+def test_prototype_is_discoverable_and_wayfind_links_to_it(project_root, plugin_json):
+    """Prototype tickets have a registered build command users can find."""
+    assert "./commands/prototype.md" in plugin_json["commands"]
+    assert (project_root / "commands/prototype.md").is_file()
+    assert "/prototype" in (project_root / "README.md").read_text()
+    for name in ("clavain-help", "wayfind"):
+        assert "/clavain:prototype" in (
+            project_root / "commands" / f"{name}.md"
+        ).read_text()
+
+
 def test_command_count(commands_dir, plugin_json):
     """Command count on filesystem matches plugin.json manifest."""
     files = sorted(commands_dir.glob("*.md"))
