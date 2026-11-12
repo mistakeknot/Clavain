@@ -4,6 +4,8 @@
 # never changes the dispatch exit status.
 
 setup() {
+    # Each fixture selects its own policy and context, independent of its parent.
+    unset CLAVAIN_ROUTING_POLICY CLAVAIN_DECISION_CONTEXT CLAVAIN_SELECTED_ROOT
     load test_helper
     ROOT="$BATS_TEST_DIRNAME/../.."
     DISPATCH="$ROOT/scripts/dispatch.sh"

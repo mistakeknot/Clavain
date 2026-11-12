@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 setup() {
+    # Each fixture selects its own policy and context, independent of its parent.
+    unset CLAVAIN_ROUTING_POLICY CLAVAIN_DECISION_CONTEXT CLAVAIN_SELECTED_ROOT
     load test_helper
     ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
     DISPATCH="$ROOT/scripts/dispatch.sh"
@@ -469,7 +471,14 @@ FAKE
 }
 @test "11 ordinary prompt argv cwd gateway NUL and legacy receipts match main" {
     fake_engines
-    baseline="$(git -C "$ROOT" merge-base HEAD origin/main)"
+    # Immutable pre-feature baseline; shallow CI checkouts need no branch ref.
+    baseline=d8384ac814178802ff294174776de932e3af2ed0
+    if ! git -C "$ROOT" cat-file -e "$baseline:scripts/dispatch.sh" 2>/dev/null; then
+        if ! git -C "$ROOT" fetch --no-tags --depth=1 origin "$baseline"; then
+            printf 'Cannot fetch pinned ordinary-dispatch baseline %s\n' "$baseline" >&2
+            return 1
+        fi
+    fi
     golden="$(mktemp "$ROOT/scripts/.dispatch-golden.XXXXXX")"
     git -C "$ROOT" show "$baseline:scripts/dispatch.sh" > "$golden"
     # Dummy binaries capture actual transport input rather than shell displays.
