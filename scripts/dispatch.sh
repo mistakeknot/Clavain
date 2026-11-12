@@ -2374,6 +2374,7 @@ _experiment_flags() {
     esac
   done
   [[ "$profile" == experiment-* ]] || return 0
+  EXPERIMENT_REQUESTED=true
   for arg in "${ORIGINAL_ARGS[@]}"; do
     case "$arg" in
       -c|-c?*|--config|--config=*|-p|-p?*|--profile|--profile=*|--add-dir|--add-dir=*|-a|-a?*|--output-schema|--output-schema=*|--claude-unsafe|--yolo|--dangerously-*|--via|--via=*|--capacity-substitute|--capacity-substitute=*)
@@ -2393,7 +2394,10 @@ while [[ $# -gt 0 ]]; do
   case "$experiment_flag" in --engine) experiment_flag=--to ;; -m) experiment_flag=--model ;; esac
   case "$experiment_flag" in
     --to|--model|--reasoning-effort|--service-tier|--resolved-profile-ref|--resolved-profile-json|--resolved-route-json)
-      EXPERIMENT_FLAG_COUNTS[$experiment_flag]=$(( ${EXPERIMENT_FLAG_COUNTS[$experiment_flag]:-0}+1 )) ;;
+      EXPERIMENT_FLAG_COUNTS[$experiment_flag]=$(( ${EXPERIMENT_FLAG_COUNTS[$experiment_flag]:-0}+1 ))
+      if [[ "${EXPERIMENT_REQUESTED:-false}" == true && ${EXPERIMENT_FLAG_COUNTS[$experiment_flag]} -gt 1 ]]; then
+        _experiment_refuse "experiment requires exactly one $experiment_flag"
+      fi ;;
   esac
   case "$1" in
     --help|-h)

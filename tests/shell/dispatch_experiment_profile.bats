@@ -31,6 +31,7 @@ esac
 FAKE
     cat > "$T/bin/claude" <<'FAKE'
 #!/usr/bin/env bash
+if [[ "$*" == *--help* || "$*" == *--version* ]]; then echo '--tools --effort'; exit; fi
 printf '%s\n' "$@" >> "$T/backend"
 cat >/dev/null
 printf '{"type":"result","subtype":"success","is_error":false,"result":"done"}\n'
@@ -39,6 +40,7 @@ FAKE
     cat > "$T/bin/codex" <<'FAKE'
 #!/usr/bin/env bash
 if [[ "$*" == *--version* ]]; then echo 'codex-cli 0.153.2'; exit; fi
+if [[ "${1:-}" != exec || "$*" == *--help* ]]; then echo '--ephemeral --json'; exit; fi
 printf '%s\n' "$@" >> "$T/backend"
 cat >/dev/null
 printf '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}\n'
@@ -62,7 +64,9 @@ arm() {
     else ENGINE=claude; MODEL=claude-fable-5-2; EFFORT=high; fi
 }
 outer() {
-    bash "$DISPATCH" --policy-profile "$PROFILE" --role cross-lab-review --producer-identity "$PRODUCER" \
+    local -a producer=()
+    [[ -z "$PRODUCER" ]] || producer=(--producer-identity "$PRODUCER")
+    bash "$DISPATCH" --policy-profile "$PROFILE" --role cross-lab-review "${producer[@]}" \
       --bead mk-d0h1j.1 --context-file "$T/ctx" -C "$T/repo" --prompt-file "$T/prompt" -o "$T/out" "$@"
 }
 route() {

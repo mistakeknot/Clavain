@@ -41,6 +41,8 @@ with tempfile.TemporaryDirectory() as tmp:
         context.write_text(json.dumps({'reasons':list(reasons),'rationale':'routing fixture', **({'scope':scope} if scope else {})}))
         args=['ic','--json','route','dispatch',f'--policy={path}',f'--role={role}',f'--context-file={context}']
         if profile: args.append(f'--policy-profile={profile}')
+        if producer is None and role in {'plan-review','validation','cross-lab-review'}:
+            producer = 'gpt-6.1-sol' if role=='plan-review' or (profile and 'fable-high' in profile) else 'opus'
         if producer: args.append(f'--producer-identity={producer}')
         result=subprocess.run(args, text=True, capture_output=True)
         if not ok:
