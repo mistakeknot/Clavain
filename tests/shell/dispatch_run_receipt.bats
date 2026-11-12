@@ -235,6 +235,10 @@ FAKE
                     _hold_receipt_fields() { cat "$HOLD_FIELDS"; }
                     ROLE=validation ENGINE=claude MODEL=m1 REASONING_EFFORT=high
                     PRODUCER_IDENTITY=fixture-producer STARTED_TS=1699999999
+                    DISPATCH_ID=fixture-dispatch ATTEMPT_ID=fixture-attempt
+                    CLAVAIN_BEAD_ID=mk-fixture BB_THREAD_ID="" DISPATCH_SESSION_ID=""
+                    CLAVAIN_DECISION_CONTEXT="" CLAVAIN_REQUIRE_USAGE=0 CLAVAIN_REVIEW_EVENTS=""
+                    SUMMARY_FILE="" PROVIDER_EVENTS="" VIA="" DISPATCH_RESULT_READY=false
                     HELD_MODE="$4"
                     if [[ "$3" == unset ]]; then unset EXPERIMENT_ENTRY; else EXPERIMENT_ENTRY=""; fi
                     _build_dispatch_run_receipt 0 > "$5"
