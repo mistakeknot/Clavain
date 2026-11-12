@@ -11,6 +11,7 @@ setup() {
     printf '{"reasons":["difficult-verification"],"scope":"mk-d0h1j.1","rationale":"experiment fixture"}\n' > "$T/ctx"
     chmod 600 "$T/ctx"
     printf 'fixture prompt\n' > "$T/prompt"
+    printf '1798675199\n' > "$T/clock"
     cat > "$T/bin/ic" <<'FAKE'
 #!/usr/bin/env python3
 import hashlib
@@ -422,7 +423,10 @@ WRAP
     package_fixture
     jq 'with_entries(.value |= del(.tier))' "$T/package/config/experiment-profiles.json" > "$T/no-tier.json"
     cp "$T/no-tier.json" "$T/package/config/experiment-profiles.json"
-    run python3 "$T/package/scripts/tier-fallback-chain.py" --policy "$ROOT/config/routing.yaml" --tier fast
+    # Registry validation must refuse before the optional policy parser runs.
+    mkdir "$T/yaml-stub"
+    printf 'def safe_load(_):\n    raise AssertionError("policy parsed before registry refusal")\n' > "$T/yaml-stub/yaml.py"
+    PYTHONPATH="$T/yaml-stub" run python3 "$T/package/scripts/tier-fallback-chain.py" --policy "$ROOT/config/routing.yaml" --tier fast
     [ "$status" -eq 4 ]
     [[ "$output" == *"experiment registry"* ]]
     [[ "$output" != *"Traceback"* ]]
