@@ -27,8 +27,8 @@ also require [pattern-f-contracts.md](references/pattern-f-contracts.md).
 
 For each logical task: mark progress, implement the specified behavior, run the
 meaningful checks, inspect their results and preserve review evidence. Use
-`intertest:test-driven-development` for behavior changes. Execute continuously;
-do not pause between tasks for approval. Rule on conflicts, ambiguities and plan
+`intertest:test-driven-development` for behavior changes. Execute continuously
+within the existing authorization. Rule on conflicts, ambiguities and plan
 defects against the spec and ledger each ruling with its cost if wrong. Stop and
 ask only for an irreversible or destructive operation, a security-sensitive
 action, a side effect outside the worktree that needs authority (merge, shared
@@ -37,15 +37,19 @@ authority (including an auth-gated interactive step), a checkpoint the plan or
 user explicitly requires, a Critical or Important finding still open after the
 final review's re-review, or a plan so broken that every path is a guess.
 
+Done when the task's checks have been inspected and its progress and review evidence recorded, or a stop condition has been reported.
+
 Verification blocks require a zero process exit as well as the declared
 expectation. Reject unknown expectation syntax; output text never overrides a
 nonzero exit. Missing tools, malformed inputs or unavailable services are
-UNVERIFIABLE. Do not turn unavailable evidence into a pass or a capability failure.
+UNVERIFIABLE. Keep unavailable evidence classified as UNVERIFIABLE.
 
 Validate all required outcomes and consumer connections after implementation.
 Source presence is not invoked behavior. Retain fresh host, play, device or
 production evidence where the plan requires it. Incomplete must-haves remain
-open; do not mark a task accepted from structural checks alone.
+open; acceptance requires all evidence specified by the plan.
+
+Done when every required outcome and consumer connection has acceptance evidence, with incomplete must-haves left open.
 
 Fix bugs and blockers introduced by this work within scope. Two demonstrated
 capability failures require policy escalation; a disproven premise requires

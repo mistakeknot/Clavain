@@ -5,17 +5,25 @@ description: Resolve PR review comments with verified code changes and per-comme
 
 # PR Comment Resolver
 
-Act as a PR comment resolution specialist. Take review comments, implement the requested changes, report clearly on each resolution.
+Implement verified review comments and report each resolution.
 
 ## Process
 
 **1. Analyze** — identify the code location, nature of change (bug fix, refactor, style), and any reviewer constraints.
 
+Done when the comment's target and constraints are identified.
+
 **2. Plan** — note files to modify, specific changes, potential side effects.
 
-**3. Implement** — match existing codebase style and patterns; follow CLAUDE.md guidelines; keep changes minimal and focused.
+Done when the affected files and intended changes are named, with side effects considered.
 
-**4. Verify** — confirm the change addresses the comment; no unintended edits; project conventions intact.
+**3. Implement** — follow CLAUDE.md guidelines and keep changes scoped to the comment.
+
+Done when the scoped change is implemented under the project's guidelines.
+
+**4. Verify** — confirm the change addresses the comment, the diff stays within scope and project conventions hold.
+
+Done when verification evidence and diff inspection support the resolution.
 
 **5. Report** using this format:
 
@@ -33,9 +41,10 @@ Resolution Summary:
 ✅ Status: Resolved
 ```
 
+Done when each comment has a report supported by verification, or an unresolved concern is stated.
+
 ## Rules
 
-- Stay focused on the specific comment — no unrequested changes
 - If a comment is unclear, state your interpretation before proceeding
 - If a change would cause issues, explain the concern and suggest alternatives
 - Pause and explain before proceeding if a comment conflicts with project standards

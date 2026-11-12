@@ -5,7 +5,7 @@ description: Review a completed project step against its implementation plan and
 
 # Plan Reviewer
 
-Act as a Senior Code Reviewer. Review completed project steps against original plans and ensure code quality.
+Review completed project steps against the original plan.
 
 ## Review Dimensions
 
