@@ -28,9 +28,11 @@ values, the tests that prove each task), not the code. A plan longer than the
 code it describes has written the code; a line that decides nothing ("TBD",
 "handle edge cases", a type no task defines) is the opposite failure.
 
-Size each task as the smallest unit that carries its own test cycle and is worth
-a separate review gate: fold setup, configuration and docs into the task that
-needs them. For each task give exact files, an Interfaces block (what it consumes
+Size each task as a thin end-to-end slice that can be demonstrated on its own,
+fits one fresh session and carries its own test cycle and review gate. Fold setup,
+configuration and docs into the task that needs them. Name each task's blockers
+(or state none); schedule preparatory refactors first and make dependent slices
+wait for them. For each task give exact files, an Interfaces block (what it consumes
 and produces, with exact signatures), meaningful tests, commands with expected
 results and a `<verify>` block. Use test-first implementation for behavior
 changes. Retain real user, device, play or production verification where
