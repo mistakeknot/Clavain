@@ -381,3 +381,9 @@ WRAP
     [[ "$output" == *"experiment registry"* ]]
     [[ "$output" != *"Traceback"* ]]
 }
+
+@test "fixture resolution does not require an installed IC binary" {
+    REAL_IC="$T/absent-ic" run outer
+    [ "$status" -eq 0 ]
+    [ -e "$T/backend" ]
+}
