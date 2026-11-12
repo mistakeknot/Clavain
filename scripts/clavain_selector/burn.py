@@ -14,6 +14,8 @@ import dataclasses
 import datetime as dt
 import importlib.util
 import json
+import math
+import re
 import os
 from pathlib import Path
 import subprocess
@@ -310,22 +312,107 @@ def _codex_consistency(paths: Sequence[Path], requests: list[dict], issues: list
     }
 
 
-def _selector_overhead(selector_usage: Sequence[Mapping[str, Any]], weights: Mapping[str, float]) -> dict:
-    totals = {"input_tokens": 0, "output_tokens": 0}
-    for item in selector_usage:
-        totals["input_tokens"] += int(item.get("input_tokens") or 0)
-        totals["output_tokens"] += int(item.get("output_tokens") or 0)
-    weighted_total = (
-        weights.get("input_tokens", 1.0) * totals["input_tokens"]
-        + weights.get("output_tokens", 5.0) * totals["output_tokens"]
-    )
-    return {"calls": len(selector_usage), "raw": totals, "weighted_total": weighted_total}
+def _normal(complete, raw=None, unknown=0, evidence="present"):
+    return {"complete": complete, "known_total": raw or {"input_tokens": 0, "output_tokens": 0},
+            "unknown_attempts": unknown, "attempt_evidence": evidence}
+
+
+def normalize_selector_entry(entry):
+    from clavain_selector.accounting import valid_usage, TOKEN_KEYS
+    if not isinstance(entry, Mapping): return _normal("invalid")
+    if "basis_version" in entry:
+        schema = json.loads((Path(__file__).resolve().parents[2] / "schemas/jev-accounting.v1.schema.json").read_text())
+        try: import jsonschema
+        except ImportError: return _normal("invalid")
+        try:
+            jsonschema.Draft202012Validator({"$ref": "#/$defs/accounting_v1", "$defs": schema["$defs"]}).validate(entry)
+        except (ValueError, jsonschema.ValidationError): return _normal("invalid")
+        counts = ("basis_version", "attempts", "reported_attempts", "not_sent_attempts", "unknown_attempts")
+        if any(type(entry.get(k)) is not int for k in counts) or any(type(entry["known_total"].get(k)) is not int for k in TOKEN_KEYS): return _normal("invalid")
+        if entry["attempts"] != sum(entry[k] for k in ("reported_attempts", "not_sent_attempts", "unknown_attempts")) or entry["complete"] != (entry["unknown_attempts"] == 0): return _normal("invalid")
+        return _normal(entry["complete"], dict(entry["known_total"]), entry["unknown_attempts"])
+    attempts = entry.get("attempts")
+    if type(attempts) is not int or attempts < 0: return _normal("invalid")
+    usage = entry.get("jev_usage")
+    if usage is not None and (not isinstance(usage, Mapping) or any(k in usage and (type(usage[k]) is not int or not 0 <= usage[k] <= 2**40) for k in TOKEN_KEYS)): return _normal("invalid")
+    if attempts == 0: return _normal("unknown", evidence="absent")
+    if not valid_usage(usage): return _normal(False, unknown=attempts)
+    return _normal(attempts == 1, {k: usage[k] for k in TOKEN_KEYS}, attempts - 1)
+
+
+def accounting_from_record(obj):
+    from clavain_selector.accounting import AttemptLog, TOKEN_KEYS, valid_usage
+    if not isinstance(obj, Mapping): return _normal("invalid")
+    if "schema" in obj:
+        if obj["schema"] not in ("clavain.selector.decision", "clavain.selector.support_check") or type(obj.get("schema_version")) is not int or obj["schema_version"] != 1: return _normal("invalid")
+        block = obj.get("selector") if obj["schema"] == "clavain.selector.decision" else obj
+    elif "basis_version" in obj: return normalize_selector_entry(obj)
+    elif "attempts" in obj: block = obj
+    else: return _normal("invalid")
+    if not isinstance(block, Mapping): return _normal("invalid")
+    if "jev_usage_accounting" not in block: return normalize_selector_entry(block)
+    envelope = block["jev_usage_accounting"]
+    normalized = normalize_selector_entry(envelope)
+    if normalized["complete"] == "invalid": return normalized
+    attempts = block.get("attempt_records")
+    if not isinstance(attempts, list) or type(block.get("attempts")) is not int or block["attempts"] != len(attempts): return _normal("invalid")
+    schema = json.loads((Path(__file__).resolve().parents[2] / "schemas/jev-accounting.v1.schema.json").read_text())
+    import jsonschema
+    validator = jsonschema.Draft202012Validator({"$ref": "#/$defs/attempt_record_v1", "$defs": schema["$defs"]})
+    for i, attempt in enumerate(attempts, 1):
+        if not validator.is_valid(attempt) or type(attempt.get("attempt_no")) is not int or attempt["attempt_no"] != i: return _normal("invalid")
+        if isinstance(attempt["usage"], dict) and not valid_usage(attempt["usage"]): return _normal("invalid")
+    if AttemptLog._accounting(attempts) != envelope: return _normal("invalid")
+    return normalized
+
+
+def _validate_selector_weights(weights):
+    if weights is None: return
+    if not isinstance(weights, Mapping) or set(weights) != {"input_tokens", "output_tokens", "source"}: raise ValueError("invalid selector weights")
+    for k in ("input_tokens", "output_tokens"):
+        value = weights[k]
+        try: valid = type(value) in (int, float) and math.isfinite(value) and value > 0
+        except OverflowError: valid = False
+        if not valid: raise ValueError("invalid selector weight")
+    if not isinstance(weights["source"], str) or not re.fullmatch(r"[a-z0-9._-]{1,64}", weights["source"]): raise ValueError("invalid weights source")
+
+
+def _selector_overhead(entries, weights, *, legacy=False):
+    from clavain_selector.accounting import valid_usage
+    normalized = []
+    for entry in entries:
+        if legacy:
+            normalized.append(_normal("unknown", dict(entry) if valid_usage(entry) else None, evidence="absent"))
+        else: normalized.append(accounting_from_record(entry))
+    raw = {k: sum(n["known_total"][k] for n in normalized) for k in ("input_tokens", "output_tokens")}
+    states = [n["complete"] for n in normalized]
+    complete = False if any(s is False or s == "invalid" for s in states) else "unknown" if "unknown" in states else True
+    result = dict(calls=len(entries), raw=raw, unknown_attempts=sum(n["unknown_attempts"] for n in normalized),
+                  unknown_entries=states.count("unknown"), invalid_entries=states.count("invalid"), complete=complete,
+                  bound="unbounded", bound_reason="incomplete", weighted_total=None, weights_source=None)
+    if complete is True:
+        result["bound_reason"] = "no_weights" if weights is None else "non_finite"
+        if weights is not None:
+            try:
+                parts = [float(weights[k]) * float(raw[k]) for k in raw]
+                total = math.fsum(parts)
+                if all(math.isfinite(p) for p in parts) and math.isfinite(total):
+                    result.update(bound="bounded", bound_reason=None, weighted_total=total, weights_source=weights["source"])
+            except OverflowError: pass
+    if legacy: result["weighted_total_legacy"] = raw["input_tokens"] + 5 * raw["output_tokens"]
+    return result
+
+
+def cost_bound_passes(overhead):
+    return overhead.get("bound") == "bounded"
 
 
 def ledger(
     paths: Sequence[str | Path],
     host: str,
     *,
+    selector_accounting: Sequence[Mapping[str, Any]] | None = None,
+    selector_weights: Mapping[str, Any] | None = None,
     selector_usage: Sequence[Mapping[str, Any]] | None = None,
     interstat_root: str | Path | None = None,
 ) -> dict:
@@ -336,6 +423,8 @@ def ledger(
     a fabricated zero total. If Interstat is absent or a parser raises, the
     result is `status: unavailable`, never a numeric total.
     """
+    _validate_selector_weights(selector_weights)
+    if selector_accounting is not None and selector_usage is not None: raise ValueError("both selector keywords supplied")
     if host in _UNSUPPORTED_HOSTS or host not in _SUPPORTED_HOSTS:
         return {"status": "unsupported", "host": host}
 
@@ -375,8 +464,8 @@ def ledger(
         "weighted_total": weighted_total,
         "consistency": consistency,
     }
-    if selector_usage:
-        result["selector_overhead"] = _selector_overhead(selector_usage, weights)
+    if selector_accounting is not None or selector_usage is not None:
+        result["selector_overhead"] = _selector_overhead(selector_accounting if selector_accounting is not None else selector_usage, selector_weights, legacy=selector_usage is not None)
     return result
 
 

@@ -6,6 +6,18 @@ from pathlib import Path
 
 import pytest
 
+# These modules require the strict namespace fixture. Directory collection keeps
+# them separate; qualify-support-adapter.sh selects every file explicitly.
+# test_selector_qualification_collection.py checks this list against both the
+# fixture inventory and the runner, and verifies ordinary selector coverage.
+collect_ignore = [
+    "test_selector_support.py",
+    "test_selector_support_accounting.py",
+    "test_selector_support_burn.py",
+    "test_selector_support_cli.py",
+    "test_selector_support_selector.py",
+]
+
 # ---------------------------------------------------------------------------
 # `ic`-dependent selection (Sylveste-psey)
 #

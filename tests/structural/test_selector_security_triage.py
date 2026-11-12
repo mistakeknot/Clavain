@@ -336,7 +336,7 @@ def _client_for(outcome):
         def __init__(self, credential):
             pass
 
-        def call(self, call):
+        def call(self, call, *, log):
             if isinstance(outcome, FallbackReason):
                 detail = {
                     FallbackReason.TIMEOUT: jev_client.FailureDetail.DEADLINE,

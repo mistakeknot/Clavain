@@ -26,13 +26,15 @@ import json
 import math
 import os
 import ssl
+import tempfile
 import threading
 import time
 import urllib.parse
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Mapping
+from clavain_selector.accounting import AttemptLog, valid_usage, digest
 
 import clavain_selector.contract as contract
 import clavain_selector.egress as egress
@@ -416,15 +418,32 @@ def _is_allowed_url(url: str) -> bool:
     return hostname in ("127.0.0.1", "::1")
 
 
+@dataclass(frozen=True)
+class RawReply:
+    status: int
+    headers: Mapping[str, str]
+    data: bytes
+
+
+Transport = Callable[[bytes, float, Callable[[str], None]], RawReply]
+
+
+def _join(thread, timeout):
+    thread.join(timeout)
+
+
 class JevClient:
     """Sends one `JevCall` at a time, never blocking past its deadline."""
 
-    def __init__(self, credential: SecretStr, *, url: str = TYPESAFE_URL) -> None:
+    def __init__(self, credential: SecretStr, *, url: str = TYPESAFE_URL,
+                 transport: Transport | None = None, sleep=time.sleep) -> None:
         if not _is_allowed_url(url):
             raise ClientConfigError(
                 f"JevClient url must be {TYPESAFE_URL!r} or a loopback http:// test URL, got {url!r}"
             )
         self._credential = credential
+        self._transport = transport or self._http_transport
+        self._sleep = sleep
         self._url = url
         parsed = urllib.parse.urlsplit(url)
         self._scheme = parsed.scheme
@@ -445,12 +464,14 @@ class JevClient:
         conn.connect()
         return conn
 
-    def _perform(self, wire_body: bytes, read_timeout_s: float, box: dict[str, Any]) -> None:
+    def _http_transport(self, wire_body, read_timeout_s, progress):
         conn: http.client.HTTPConnection | None = None
         try:
+            progress("connect")
             conn = self._open_connection(CONNECT_TIMEOUT_S)
             if conn.sock is not None:
                 conn.sock.settimeout(read_timeout_s)
+            progress("request_sent")
             conn.request(
                 "POST",
                 self._path,
@@ -461,21 +482,27 @@ class JevClient:
                 },
             )
             resp = conn.getresponse()
+            progress("response_read")
             data = resp.read(MAX_RESPONSE_BYTES + 1)
-            box["status"] = resp.status
-            box["headers"] = {k.lower(): v for k, v in resp.getheaders()}
-            box["data"] = data
-        except Exception as exc:  # noqa: BLE001 - reported to the caller, never re-raised here
-            box["exception"] = exc
+            return RawReply(resp.status, {k.lower(): v for k, v in resp.getheaders()}, data)
         finally:
             if conn is not None:
                 try:
                     conn.close()
                 except Exception:  # noqa: BLE001
                     pass
+
+    def _perform(self, wire_body, timeout, box, log, entry):
+        try:
+            log.progress(entry, "connect")
+            reply = self._transport(wire_body, timeout, lambda phase: log.progress(entry, phase))
+            box.update(status=reply.status, headers={k.lower(): v for k, v in reply.headers.items()}, data=reply.data[:MAX_RESPONSE_BYTES + 1])
+        except BaseException as exc:
+            box["exception"] = exc
+        finally:
             _inflight_exit()
 
-    def _attempt(self, call: JevCall) -> tuple[dict[str, Any], int]:
+    def _attempt(self, call, log, attempt_no) -> tuple[dict[str, Any], int]:
         """Run one attempt in a daemon thread; return (box, elapsed_ms).
 
         `box` may be empty (join timed out; the thread is abandoned and will
@@ -484,20 +511,30 @@ class JevClient:
         remaining_ms = call.deadline.remaining_ms()
         box: dict[str, Any] = {}
         wire_body = call.wire_body()
+        entry = log.begin(attempt_no, digest(wire_body))
         started = time.monotonic()
         thread = threading.Thread(
             target=self._perform,
-            args=(wire_body, max(remaining_ms, 0) / 1000.0, box),
+            args=(wire_body, max(remaining_ms, 0) / 1000.0, box, log, entry),
             daemon=True,
         )
         thread.start()
-        thread.join(remaining_ms / 1000.0)
+        _join(thread, remaining_ms / 1000.0)
         elapsed_ms = int((time.monotonic() - started) * 1000)
         box["_timed_out"] = thread.is_alive()
+        log.finalize(entry, box)
+        box["_phase"] = entry["phase"]
         return box, elapsed_ms
 
-    def call(self, call: JevCall) -> JevResult:
-        if not isinstance(call, JevCall):
+    def call(self, call: JevCall, *, log: AttemptLog) -> JevResult:
+        try:
+            return self._call(call, log)
+        finally:
+            log.finalize_open()
+
+    def _call(self, call, log):
+        from clavain_selector.support import SupportCall
+        if not isinstance(call, (JevCall, SupportCall)):
             raise NotAdmitted("JevClient.call requires a JevCall built from a verified AdmittedRequest")
         # `JevCall.__post_init__` already verified `call.admitted` (and would
         # have raised NotAdmitted/BatteryMismatch at construction time), so
@@ -513,11 +550,11 @@ class JevClient:
             if not _inflight_enter():
                 return JevFailure(
                     reason=FallbackReason.TIMEOUT, detail=FailureDetail.INFLIGHT_CAP,
-                    attempts=0, http_status=None, latency_ms=0,
+                    attempts=attempts, http_status=None, latency_ms=0,
                 )
 
             attempts += 1
-            box, elapsed_ms = self._attempt(call)
+            box, elapsed_ms = self._attempt(call, log, attempts)
 
             # Under scheduler delay the worker's socket read timeout (set to the
             # remaining budget) can fire before `join` returns; that is the
@@ -530,12 +567,16 @@ class JevClient:
                     attempts=attempts, http_status=None, latency_ms=elapsed_ms,
                 )
 
-            result, retry_after_ms = self._interpret(box, call.battery, elapsed_ms, attempts)
+            if isinstance(call, SupportCall):
+                result, retry_after_ms = call.interpret(box, elapsed_ms, attempts)
+            else:
+                result, retry_after_ms = self._interpret(box, call.battery, elapsed_ms, attempts)
             if not isinstance(result, JevFailure):
                 return result
 
-            if self._should_retry(result, attempts, call.deadline, retry_after_ms):
-                time.sleep(RETRY_DELAY_S)
+            retry_exception = "exception" not in box or box["_phase"] == "connect"
+            if retry_exception and self._should_retry(result, attempts, call.deadline, retry_after_ms):
+                self._sleep(RETRY_DELAY_S)
                 continue
             return result
 
@@ -620,7 +661,7 @@ class JevClient:
         remaining = deadline.remaining_ms()
         if remaining < RETRY_MIN_REMAINING_MS:
             return False
-        if retry_after_ms is not None and retry_after_ms > remaining:
+        if retry_after_ms is not None and (retry_after_ms >= MAX_DEADLINE_MS or retry_after_ms > remaining):
             return False
         return True
 
@@ -629,8 +670,13 @@ def _retry_after_ms(value: str | None) -> int | None:
     if not value:
         return None
     try:
-        return int(float(value) * 1000)
-    except ValueError:
+        seconds = float(value)
+        if not math.isfinite(seconds):
+            return MAX_DEADLINE_MS
+        if seconds < 0:
+            return None
+        return int(min(seconds, MAX_DEADLINE_MS / 1000) * 1000)
+    except (ValueError, OverflowError, TypeError):
         return None
 
 
@@ -715,7 +761,7 @@ def _validate_response(
 
     input_tokens = usage.get("input_tokens")
     output_tokens = usage.get("output_tokens")
-    if not isinstance(input_tokens, int) or not isinstance(output_tokens, int):
+    if not valid_usage(usage):
         return FailureDetail.SCHEMA, None
 
     return JevResponse(
@@ -871,19 +917,88 @@ class Budget:
         self._path = base / "budget" / f"{digest}.json"
 
     def consume(self) -> FallbackReason | None:
-        fd, state = _read_locked_json(self._path)
+        return FallbackReason.BUDGET_EXHAUSTED if self.consume_all([self]) is not None else None
+
+    @staticmethod
+    def _read_state(path):
+        """Only a missing file starts a fresh budget; invalid evidence is exhausted."""
         try:
-            used = int(state.get(self._integration, 0))
-            if used >= self._limit:
-                return FallbackReason.BUDGET_EXHAUSTED
-            state[self._integration] = used + 1
-            _write_locked_json(fd, state)
-            fd = -1
+            fd = os.open(path, os.O_RDONLY)
+        except FileNotFoundError:
+            return {}
+        except OSError:
+            return None
+        try:
+            raw = bytearray()
+            while chunk := os.read(fd, 65536):
+                raw.extend(chunk)
+            state = json.loads(raw.decode("utf-8"))
+            if not isinstance(state, dict) or any(type(count) is not int or count < 0 for count in state.values()):
+                return None
+            return state
+        except (OSError, ValueError, UnicodeError):
             return None
         finally:
+            os.close(fd)
+
+    @staticmethod
+    def _write_state(path, state):
+        """Publish a complete durable replacement while holding the sidecar lock."""
+        fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+        try:
+            encoded = json.dumps(state).encode("utf-8")
+            offset = 0
+            while offset < len(encoded):
+                written = os.write(fd, encoded[offset:])
+                if written <= 0:
+                    raise OSError("budget state write made no progress")
+                offset += written
+            os.fsync(fd)
+            os.close(fd)
+            fd = -1
+            os.replace(name, path)
+            directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        finally:
             if fd >= 0:
-                fcntl.flock(fd, fcntl.LOCK_UN)
                 os.close(fd)
+            Path(name).unlink(missing_ok=True)
+
+    @staticmethod
+    def consume_all(budgets):
+        """Reserve all caps together; a refused cap consumes none of the others.
+
+        Lock order is stable even when sessions share a daily budget. A failed
+        state write can conservatively spend capacity, never add capacity.
+        Returns the index of a refused budget, or None.
+        """
+        opened = {}
+        try:
+            for path in sorted({b._path for b in budgets}):
+                path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                # The lock inode must survive replacement of the state inode.
+                fd = os.open(str(path) + ".lock", os.O_RDWR | os.O_CREAT, 0o600)
+                opened[path] = [fd, None]
+                fcntl.flock(fd, fcntl.LOCK_EX)
+                opened[path][1] = Budget._read_state(path)
+            for index, budget in enumerate(budgets):
+                state = opened[budget._path][1]
+                if state is None or state.get(budget._integration, 0) >= budget._limit:
+                    return index
+            for budget in budgets:
+                state = opened[budget._path][1]
+                state[budget._integration] = int(state.get(budget._integration, 0)) + 1
+            for path, (_, state) in opened.items():
+                Budget._write_state(path, state)
+            return None
+        finally:
+            for fd, _ in opened.values():
+                if fd >= 0:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                    os.close(fd)
 
 
 # ---------------------------------------------------------------------------
@@ -912,13 +1027,15 @@ def to_record_fields(
         "latency_ms": result.latency_ms,
     }
     if isinstance(result, JevOk):
-        selector_block["model_returned"] = result.response.model
+        model_returned = result.response.model
         selector_block["jev_usage"] = {
             "input_tokens": result.response.usage.input_tokens,
             "output_tokens": result.response.usage.output_tokens,
         }
     else:
-        selector_block["model_returned"] = result.model_returned
+        model_returned = result.model_returned
+    selector_block["model_returned_matches"] = model_returned == PINNED_MODEL if model_returned is not None else None
+    selector_block["model_returned_sha256"] = digest(model_returned.encode()) if model_returned is not None else None
 
     if isinstance(outcome, Selection):
         result_block = {

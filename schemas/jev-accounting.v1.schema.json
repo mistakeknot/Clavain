@@ -1,0 +1,455 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "attempt_record_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attempt_no",
+        "state",
+        "started_at",
+        "ended_at",
+        "abandoned_at",
+        "interrupted_at",
+        "phase",
+        "http_status",
+        "error_class",
+        "usage",
+        "usage_basis",
+        "request_sha256",
+        "response_sha256",
+        "request_id_sha256",
+        "request_id_len",
+        "retry_after_ms",
+        "retry_after_malformed"
+      ],
+      "properties": {
+        "attempt_no": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "state": {
+          "enum": [
+            "finished",
+            "abandoned",
+            "interrupted"
+          ]
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+        },
+        "ended_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "abandoned_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "interrupted_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "phase": {
+          "enum": [
+            "not_started",
+            "connect",
+            "request_sent",
+            "response_read"
+          ]
+        },
+        "http_status": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error_class": {
+          "enum": [
+            null,
+            "ok",
+            "inflight_cap",
+            "deadline",
+            "connect_error",
+            "status",
+            "oversize",
+            "bad_json",
+            "schema",
+            "question_set",
+            "probability_keys",
+            "probability_sum",
+            "chosen_not_max",
+            "invalid_fit",
+            "model"
+          ]
+        },
+        "usage": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "input_tokens",
+                "output_tokens"
+              ],
+              "properties": {
+                "input_tokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1099511627776
+                },
+                "output_tokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1099511627776
+                }
+              }
+            },
+            {
+              "const": "unknown"
+            }
+          ]
+        },
+        "usage_basis": {
+          "enum": [
+            "reported",
+            "not_sent",
+            "unknown_unparseable",
+            "unknown_non200",
+            "unknown_abandoned",
+            "unknown_interrupted"
+          ]
+        },
+        "request_sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "response_sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "request_id_sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "request_id_len": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retry_after_ms": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retry_after_malformed": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "finished"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "ended_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+              },
+              "abandoned_at": {
+                "type": "null"
+              },
+              "interrupted_at": {
+                "type": "null"
+              },
+              "usage_basis": {
+                "enum": [
+                  "reported",
+                  "not_sent",
+                  "unknown_unparseable",
+                  "unknown_non200"
+                ]
+              },
+              "error_class": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "abandoned"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "ended_at": {
+                "type": "null"
+              },
+              "abandoned_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+              },
+              "interrupted_at": {
+                "type": "null"
+              },
+              "usage_basis": {
+                "enum": [
+                  "unknown_abandoned"
+                ]
+              },
+              "error_class": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "interrupted"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "ended_at": {
+                "type": "null"
+              },
+              "abandoned_at": {
+                "type": "null"
+              },
+              "interrupted_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+              },
+              "usage_basis": {
+                "enum": [
+                  "unknown_interrupted"
+                ]
+              },
+              "error_class": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "usage_basis": {
+                "enum": [
+                  "reported",
+                  "not_sent"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "usage": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "input_tokens",
+                  "output_tokens"
+                ],
+                "properties": {
+                  "input_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1099511627776
+                  },
+                  "output_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1099511627776
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "usage": {
+                "const": "unknown"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "usage_basis": {
+                "const": "not_sent"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "usage": {
+                "const": {
+                  "input_tokens": 0,
+                  "output_tokens": 0
+                }
+              },
+              "phase": {
+                "enum": [
+                  "connect",
+                  "not_started"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "usage_basis": {
+                "const": "reported"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "http_status": {
+                "const": 200
+              }
+            }
+          }
+        }
+      ]
+    },
+    "accounting_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "basis_version",
+        "attempts",
+        "reported_attempts",
+        "not_sent_attempts",
+        "unknown_attempts",
+        "known_total",
+        "complete"
+      ],
+      "properties": {
+        "basis_version": {
+          "const": 1
+        },
+        "attempts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reported_attempts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_sent_attempts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown_attempts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "known_total": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "input_tokens",
+            "output_tokens"
+          ],
+          "properties": {
+            "input_tokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "output_tokens": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "complete": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

@@ -555,3 +555,9 @@ def admit(
     body_sha256 = hashlib.sha256(body).hexdigest()
     tag = _compute_tag(body_sha256)
     return AdmittedRequest(body=body, sha256=body_sha256, tag=tag)
+
+
+def admit_support(request, *, key_literal=None):
+    """Admit revision-backed support spans; source helpers get absolute paths."""
+    from clavain_selector.support import admit_support as support_admit
+    return support_admit(request, key_literal=key_literal)

@@ -17,6 +17,16 @@
   Experiment launch admission is Linux-only and requires GNU `date`, `stat`,
   and `sha256sum`.
 
+- Default-off, evaluation-only three-label Jev support checks with pinned Git
+  source provenance and per-attempt usage accounting (mk-42j9.7.3). Live budget
+  values remain unset. Selector read-phase failures no longer retry, and
+  returned model names are recorded as hashes. Burn bounds require complete
+  accounting and explicit finite weights. Default structural collection keeps
+  namespace-only qualification separate, with an inventory guard tying its
+  exclusions to the explicit qualification runner.
+  Budget state uses atomic replacement and refuses unreadable or corrupt state;
+  non-finite Retry-After values veto retries at the existing deadline cap.
+
 - Governed dispatch can hold the final prompt for external manifest-digest approval,
   then submit those exact bytes once with bound decision and execution evidence.
   Receipts include final prompt hashes and transport tool isolation (mk-47vtm.9).

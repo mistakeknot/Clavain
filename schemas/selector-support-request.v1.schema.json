@@ -1,0 +1,133 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "run_id",
+    "case_id",
+    "claim",
+    "project_root",
+    "revision",
+    "sections",
+    "label_descriptions",
+    "abstain_below",
+    "deadline_ms"
+  ],
+  "properties": {
+    "schema": {
+      "const": "clavain.selector.support_request"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+    },
+    "case_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "sha256"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "project_root": {
+      "type": "string",
+      "pattern": "^/"
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sections": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "start_line",
+          "end_line",
+          "text",
+          "sha256"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "start_line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "end_line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 12000
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "label_descriptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supported",
+        "not_supported",
+        "unclear"
+      ],
+      "properties": {
+        "supported": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "not_supported": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "unclear": {
+          "type": "string",
+          "maxLength": 500
+        }
+      }
+    },
+    "abstain_below": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "deadline_ms": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5000
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Span lines are 1-based inclusive; bytes include the ending newline when present, decode as strict UTF-8, and hash as UTF-8. Checkout bytes must equal the pinned Git blob; conversion filters fail closed."
+}
