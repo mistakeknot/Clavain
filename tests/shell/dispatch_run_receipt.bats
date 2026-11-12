@@ -215,18 +215,21 @@ FAKE
 }
 
 @test "ordinary receipt bytes match main with experiment hooks loaded" {
-    mkdir -p "$T/main/scripts"
-    git -C "$ROOT" show origin/main:scripts/lib-dispatch-audit.sh > "$T/main/scripts/lib-dispatch-audit.sh"
-    ln -s "$ROOT/scripts/provider_usage.py" "$T/main/scripts/provider_usage.py"
+    # Frozen main receipts were generated at the approved base, with the
+    # deterministic inputs below: 2169cd63494f0958532832603a817d233328af67.
+    # They also work in shallow CI checkouts without a main tracking ref.
     sed -n '/^_experiment_receipt_fields() {/,/^}/p' "$DISPATCH" > "$T/experiment-hook.sh"
-    # Both builders receive identical inputs, a frozen clock and the real
-    # experiment hook. cmp checks key order and newlines as well as values.
+    # Load the real experiment hook; cmp checks key order and newlines as
+    # well as values against the main-generated receipt bytes.
     printf '%s\n' '{"final_prompt_sha256":"fixture-prompt","policy_hash":"fixture-policy","executed_profile_ref":"p1","policy_profile":"default"}' > "$T/hold-fields.json"
     for entry in empty unset; do
         for held in false true; do
             for version in main current; do
+                if [[ "$version" == main ]]; then
+                    cp "$ROOT/tests/fixtures/dispatch-receipt-main-held-$held.jsonl" "$T/main.json"
+                    continue
+                fi
                 lib="$ROOT/scripts/lib-dispatch-audit.sh"
-                [[ "$version" != main ]] || lib="$T/main/scripts/lib-dispatch-audit.sh"
                 run bash -eu -c '
                     source "$1"
                     source "$2"
