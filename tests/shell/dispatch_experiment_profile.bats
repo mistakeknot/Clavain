@@ -41,7 +41,6 @@ def option(name, default=None):
 
 arms = {
     "experiment-mk-d0h1j.1-sol-medium": ("codex", "gpt-6.1-sol", "medium"),
-    "experiment-mk-d0h1j.1-fable-high": ("claude", "claude-fable-5-2", "high"),
 }
 profile = option("--policy-profile")
 backend, model, effort = arms[profile]
@@ -50,7 +49,7 @@ reasons = context.get("reasons", [])
 if any(reason != "difficult-verification" for reason in reasons):
     effort = "high"
 producer = option("--producer-identity")
-aliases = {"opus": "claude-opus-5-5", "sol": "gpt-6.1-sol"}
+aliases = {"opus": "claude-opus-5-5", "sol": "gpt-6.1-sol", "astra": "gpt-6-astra"}
 canonical = aliases.get(producer, producer)
 for prefix in ("anthropic/", "openai/"):
     if canonical.startswith(prefix):
@@ -120,14 +119,13 @@ teardown() { rm -rf "$T"; }
 arm() {
     ARM="$1"; PRODUCER="$2"
     PROFILE="experiment-mk-d0h1j.1-$ARM"
-    if [[ "$ARM" == sol-medium ]]; then ENGINE=codex; MODEL=gpt-6.1-sol; EFFORT=medium
-    else ENGINE=claude; MODEL=claude-fable-5-2; EFFORT=high; fi
+    ENGINE=codex; MODEL=gpt-6.1-sol; EFFORT=medium
 }
 outer() {
     local -a producer=()
     [[ -z "$PRODUCER" ]] || producer=(--producer-identity "$PRODUCER")
     bash "$DISPATCH" --policy-profile "$PROFILE" --role cross-lab-review "${producer[@]}" \
-      --bead mk-d0h1j.1 --context-file "$T/ctx" -C "$T/repo" --prompt-file "$T/prompt" -o "$T/out" "$@"
+      --experiment-task-type "${TASK_TYPE:-advisory-support-grouping}" --bead mk-d0h1j.1 --context-file "$T/ctx" -C "$T/repo" --prompt-file "$T/prompt" -o "$T/out" "$@"
 }
 route() {
     ROUTE="$("$T/bin/ic" --json route dispatch --policy="$ROOT/config/routing.yaml" --role=cross-lab-review \
@@ -136,7 +134,7 @@ route() {
 }
 child() {
     bash "$DISPATCH" --role-resolved --policy-profile "$PROFILE" --role cross-lab-review --producer-identity "$PRODUCER" \
-      --bead mk-d0h1j.1 --context-file "$T/ctx" --resolved-profile-ref "exp-mk-d0h1j.1-$ARM" \
+      --experiment-task-type "${TASK_TYPE:-advisory-support-grouping}" --bead mk-d0h1j.1 --context-file "$T/ctx" --resolved-profile-ref "exp-mk-d0h1j.1-$ARM" \
       --resolved-route-json "$ROUTE" --resolved-profile-json "$CANDIDATE" --to "$ENGINE" --model "$MODEL" \
       --reasoning-effort "$EFFORT" --service-tier standard -C "$T/repo" --prompt-file "$T/prompt" -o "$T/out" "$@"
 }
@@ -147,7 +145,7 @@ refused() { [ "$status" -eq 2 ]; [ ! -e "$T/backend" ]; }
     [[ "$output" == *"unregistered experiment"* ]]
 }
 @test "outer reaches each backend with exact effort and strict complete evidence" {
-    for spec in 'sol-medium opus' 'fable-high sol' 'sol-medium anthropic/claude-opus-5-5' 'fable-high openai/gpt-6.1-sol'; do
+    for spec in 'sol-medium opus' 'sol-medium anthropic/claude-opus-5-5'; do
         read -r a p <<< "$spec"; arm "$a" "$p"
         rm -f "$T/backend" "$T/receipts"
         run outer
@@ -203,16 +201,13 @@ refused() { [ "$status" -eq 2 ]; [ ! -e "$T/backend" ]; }
         refused
     done
 }
-@test "canonical producer aliases refuse same lab for both arms" {
-    for p in opus claude-opus-5-5 anthropic/claude-opus-5-5; do
-        arm fable-high "$p"; run outer; refused
-    done
+@test "canonical producer aliases refuse same lab for the Sol arm" {
     for p in sol gpt-6.1-sol openai/gpt-6.1-sol; do
         arm sol-medium "$p"; run outer; refused
     done
 }
-@test "unknown empty and missing canonical producer refuse both arms" {
-    for spec in 'sol-medium opus' 'fable-high sol'; do
+@test "unknown empty and missing canonical producer refuse the Sol arm" {
+    for spec in 'sol-medium opus'; do
         read -r a p <<< "$spec"; arm "$a" "$p"
         for mode in unknown empty missing; do
             FAKE_ROUTE="$mode" run outer; refused
@@ -225,7 +220,7 @@ refused() { [ "$status" -eq 2 ]; [ ! -e "$T/backend" ]; }
     run outer --bead mk-other; refused
 }
 @test "bare experiment tiers never reach a backend" {
-    for a in sol-medium fable-high; do
+    for a in sol-medium; do
         run bash "$DISPATCH" --tier "exp-mk-d0h1j.1-$a" --dry-run hello
         refused
     done
@@ -339,7 +334,7 @@ WRAP
 @test "missing service flag refuses the resolved child" {
     route
     run bash "$DISPATCH" --role-resolved --policy-profile "$PROFILE" --role cross-lab-review --producer-identity "$PRODUCER" \
-      --bead mk-d0h1j.1 --context-file "$T/ctx" --resolved-profile-ref "exp-mk-d0h1j.1-$ARM" \
+      --experiment-task-type "${TASK_TYPE:-advisory-support-grouping}" --bead mk-d0h1j.1 --context-file "$T/ctx" --resolved-profile-ref "exp-mk-d0h1j.1-$ARM" \
       --resolved-route-json "$ROUTE" --resolved-profile-json "$CANDIDATE" --to "$ENGINE" --model "$MODEL" \
       --reasoning-effort "$EFFORT" --dry-run fixture
     refused
@@ -384,7 +379,7 @@ WRAP
 }
 
 @test "fresh canonical same-lab guard refuses aliases independently of resolver exclusion" {
-    for spec in 'sol-medium opus gpt-6.1-sol sol' 'sol-medium opus gpt-6.1-sol openai/gpt-6.1-sol' 'sol-medium opus gpt-6.1-sol gpt-6.1-sol' 'fable-high gpt-6.1-sol claude-opus-5-5 opus' 'fable-high gpt-6.1-sol claude-opus-5-5 anthropic/claude-opus-5-5' 'fable-high gpt-6.1-sol claude-opus-5-5 claude-opus-5-5'; do
+    for spec in 'sol-medium opus gpt-6.1-sol sol' 'sol-medium opus gpt-6.1-sol openai/gpt-6.1-sol' 'sol-medium opus gpt-6.1-sol gpt-6.1-sol'; do
         read -r a p canonical raw <<< "$spec"
         arm "$a" "$p"; route
         ROUTE="$(jq -c --arg p "$raw" --arg m "$canonical" '.producer_identity=$p | .producer_model=$m' <<< "$ROUTE")"
@@ -436,4 +431,25 @@ WRAP
     REAL_IC="$T/absent-ic" run outer
     [ "$status" -eq 0 ]
     [ -e "$T/backend" ]
+}
+
+@test "Astra aliases are admitted only as experimental advisory support" {
+    for producer in astra gpt-6-astra openai/gpt-6-astra; do
+        arm sol-medium "$producer"
+        rm -f "$T/backend" "$T/receipts"
+        run outer
+        [ "$status" -eq 0 ]
+        jq -se 'all(.[]; .experimental==true and .gate_review_eligible==false and
+          .experiment_task_type=="advisory-support-grouping" and .producer_model=="gpt-6-astra")' "$T/receipts"
+    done
+}
+@test "advisory scope cannot become adjudication or another bead" {
+    arm sol-medium gpt-6-astra
+    TASK_TYPE=adjudication run outer; refused
+    run outer --bead mk-other; refused
+    run outer --experiment-task-type advisory-support-grouping; refused
+}
+@test "removed experiment profile is refused before any backend" {
+    PROFILE=experiment-deferred run outer; refused
+    [[ "$output" == *"unregistered experiment"* ]]
 }
