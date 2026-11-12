@@ -97,6 +97,10 @@ submit() { invoke --submit-held "$T/holds/p" --held-manifest-sha256 "$(sha256sum
     [ "$status" = 2 ]
 }
 @test "5 passthrough cannot change resolved command" {
+    for config in model_reasoning_effort=high model_provider=x; do
+        run hold -c "$config"
+        [ "$status" = 2 ]; [ ! -e "$T/holds/p" ]
+    done
     for flag in -c --profile --add-dir; do
         run hold "$flag" dummy
         [ "$status" = 2 ]; [ ! -e "$T/holds/p" ]
@@ -282,6 +286,13 @@ FAKE
     [ "$status" = 0 ]
     jq -e '.executed_profile_ref=="fallback" and .capacity_failure_class=="insufficient_codex_version" and .capacity_substitute_json!=null and (.skipped_candidates|length)>0' "$T/holds/p.manifest.json"
     probes="$(wc -l < "$T/probes")"
+    cp "$T/holds/p.manifest.json" "$T/original-manifest"
+    jq '.capacity_substitute_json=null' "$T/original-manifest" > "$T/holds/p.manifest.json"
+    run outer --submit-held "$T/holds/p" --held-manifest-sha256 "$(sha256sum "$T/holds/p.manifest.json" | cut -d' ' -f1)"
+    [ "$status" = 2 ]; [[ "$output" == *'capacity contract mismatch'* ]]
+    [ ! -e "$T/count" ]
+    [ "$(jq -r .state "$T/holds/p.state")" = held ]
+    cp "$T/original-manifest" "$T/holds/p.manifest.json"
     run outer --submit-held "$T/holds/p" --held-manifest-sha256 "$(sha256sum "$T/holds/p.manifest.json" | cut -d' ' -f1)"
     [ "$status" = 0 ]
     [ "$(wc -l < "$T/probes")" = "$probes" ]
@@ -341,6 +352,10 @@ FAKE
 }
 @test "5 passthrough refused on submit as well as hold" {
     hold >/dev/null
+    for config in model_reasoning_effort=high model_provider=x; do
+        run submit -c "$config"
+        [ "$status" = 2 ]; [ ! -e "$T/count" ]
+    done
     for flag in -c --profile --add-dir; do
         run submit "$flag" dummy
         [ "$status" = 2 ]; [ ! -e "$T/count" ]
@@ -453,24 +468,28 @@ FAKE
     [ "$status" = 2 ]; [[ "$output" == *'manifest digest mismatch'* ]]
 }
 @test "11 ordinary prompt argv cwd gateway NUL and legacy receipts match main" {
+    fake_engines
     baseline="$(git -C "$ROOT" merge-base HEAD origin/main)"
     golden="$(mktemp "$ROOT/scripts/.dispatch-golden.XXXXXX")"
     git -C "$ROOT" show "$baseline:scripts/dispatch.sh" > "$golden"
     # Dummy binaries capture actual transport input rather than shell displays.
     sed -i '/printf.*launch/i printf "%s\\0" "$@" > "$T/argv"' "$T/bin/claude"
-    for source in normal nul; do
+    for engine in claude codex; do
+      for source in normal nul; do
+        printf '%s\n' '-payload' '' > "$T/prompt"
         if [[ "$source" == nul ]]; then printf 'a\0b\n' > "$T/prompt"; fi
-        run invoke --prompt-file "$T/prompt"
+        run invoke --to "$engine" --prompt-file "$T/prompt"
         [ "$status" = 0 ]
         cp "$T/received" "$T/new-prompt"; cp "$T/argv" "$T/new-argv"; cp "$T/cwd" "$T/new-cwd"
         tail -1 "$T/receipts" > "$T/new-receipt"
         current="$DISPATCH"; DISPATCH="$golden"
-        run invoke --prompt-file "$T/prompt"
+        run invoke --to "$engine" --prompt-file "$T/prompt"
         DISPATCH="$current"
         [ "$status" = 0 ]
         cmp "$T/new-prompt" "$T/received"; cmp "$T/new-argv" "$T/argv"; cmp "$T/new-cwd" "$T/cwd"
         fields='{schema_version,kind,role,backend,model,effort,producer_identity,bead_id,decision_context_sha256,exit_code,outcome,tokens_in,tokens_out,usage_status,usage_basis}'
         [ "$(jq -cS "$fields" "$T/new-receipt")" = "$(tail -1 "$T/receipts" | jq -cS "$fields")" ]
+      done
     done
     rm -f "$golden"
 }
