@@ -4,6 +4,9 @@
 
 ### Changed
 
+- The experiment tiers and profiles change the `routing.yaml` SHA256; the next
+  release carries the updated policy hash in managed contracts (mk-47vtm.10).
+
 - Pruned role boilerplate and redundant wording in five planning, execution and
   review skills and three authoring/execution commands; added step completion criteria
   while retaining review, evidence and authority gates (mk-7k5v0.3).
@@ -11,6 +14,8 @@
 ### Added
 
 - Added opt-in, task-scoped routing experiment profiles with producer checks, launch expiry checks and strict receipts (mk-47vtm.10).
+  Experiment launch admission is Linux-only and requires GNU `date`, `stat`,
+  and `sha256sum`.
 
 - Governed dispatch can hold the final prompt for external manifest-digest approval,
   then submit those exact bytes once with bound decision and execution evidence.
