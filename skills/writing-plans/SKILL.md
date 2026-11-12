@@ -6,8 +6,8 @@ description: Plan multi-step implementation from a spec or requirements before e
 # Writing Plans
 
 Use an existing approved design when available. Read the relevant repository
-instructions, philosophy, source, prior solutions and task history. Do not restart
-a brainstorm when the user supplied a plan. Announce this skill once.
+instructions, philosophy, source, prior solutions and task history. Continue from
+the user's supplied plan. Announce this skill once.
 
 Read the glossary before naming plan tasks: starting at the repo root, check `docs/glossary.md`, `GLOSSARY.md`, then `CONCEPTS.md` in each directory up to the workspace root; use the first file found, or continue if none exists.
 
@@ -19,7 +19,8 @@ failures do not justify downgrading a required model or gate.
 Write `docs/plans/YYYY-MM-DD-<feature-name>.md` with the goal, architecture,
 spec pointer, global constraints, review focus, alignment and conflict/risk.
 Name observable outcomes, artifacts, consumer connections and acceptance
-evidence. Use the project's existing tracker; do not add markdown checkboxes.
+evidence. Keep progress exclusively in the project's existing tracker rather
+than markdown checkboxes.
 
 Write for a capable engineer who has not seen this codebase or spec: they write
 idiomatic code once they know the exact interface and test. A plan records the
@@ -39,6 +40,8 @@ changes. Retain real user, device, play or production verification where
 required; a fixture cannot replace acceptance. Define explicit handoff decisions,
 constraints, verification and escalation conditions.
 
+Done when each task names its interfaces, blockers, test cycle and acceptance evidence.
+
 Read [plan-format.md](references/plan-format.md) when writing the header, task
 steps, verification blocks, the self-review or an execution manifest. For
 independent execution with three or more tasks, include a dependency manifest if
@@ -54,3 +57,5 @@ method. Otherwise link the saved plan for review; approving an idea or a scope
 is not approval of a plan the user has not seen. Ask only for missing
 information or authority that changes the work. Preserve user-requested review
 checkpoints and separate publication authority.
+
+Done when the self-review findings are resolved and the plan is handed off with the required review and authority checkpoints preserved.

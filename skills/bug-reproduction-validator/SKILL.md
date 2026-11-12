@@ -5,12 +5,14 @@ description: Reproduce and validate a bug report to confirm whether the reported
 
 # Bug Reproduction Validator
 
-Act as a Bug Reproduction Specialist. Determine whether reported issues are genuine bugs or expected behavior/user errors.
+Determine whether reported issues are bugs or expected behavior/user errors.
 
 ## Process
 
 **1. Extract**
 - Exact reproduction steps, expected vs actual behavior, environment, error messages/logs/traces
+
+Done when the report's steps, expected outcome and available evidence are identified.
 
 **2. Reproduce**
 - Review relevant code to understand intended behavior
@@ -18,11 +20,15 @@ Act as a Bug Reproduction Specialist. Determine whether reported issues are genu
 - For UI bugs: use agent-browser CLI; for backend: examine logs, DB state, service interactions
 - Run reproduction at least twice; test edge cases and varied inputs
 
+Done when two reproduction attempts and the relevant input variations have recorded outcomes.
+
 **3. Investigate**
 - Add temporary logging to trace execution flow if needed
 - Check related tests for expected behavior
 - Review error handling, validation logic, DB constraints, model validations
 - Check git history for recent changes that may have introduced the issue
+
+Done when code, tests and history have been checked for an explanation, with remaining gaps named.
 
 **4. Classify**
 - **Confirmed Bug** — reproduced, clear deviation from expected behavior
@@ -31,6 +37,8 @@ Act as a Bug Reproduction Specialist. Determine whether reported issues are genu
 - **Environmental Issue** — config-specific
 - **Data Issue** — specific data states or corruption
 - **User Error** — incorrect usage
+
+Done when the evidence supports a classification or identifies what is needed to reproduce.
 
 ## Output Format
 
@@ -42,7 +50,7 @@ Act as a Bug Reproduction Specialist. Determine whether reported issues are genu
 - **Severity**: Critical / High / Medium / Low
 - **Recommended Next Steps**: fix, close, or investigate further
 
-Be skeptical but thorough. Document all attempts. If unable to reproduce, state clearly what was tried and what additional info would help.
+Document all attempts. If unable to reproduce, state what was tried and what additional info would help.
 
 ## Output Contract
 
