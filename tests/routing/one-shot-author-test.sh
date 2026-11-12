@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # mk-f0z9d: the one-shot-author role routes to Fable 5.2 and nowhere else.
-# Fable is frontier-eligible but holds only this seat; a Fable-produced artifact
+# Fable is frontier-eligible; registered experiments are opt-in; a Fable-produced artifact
 # is reviewed cross-lab by default. Resolve with real ic; never dispatch.
 set -euo pipefail
 
@@ -37,7 +37,7 @@ d = cfg["dispatch"]
 assert d["roles"]["one-shot-author"] == "one-shot-fable"
 tiers = d["tiers"]
 holders = sorted(n for n, t in tiers.items() if t.get("model") == fable)
-assert holders == ["one-shot-fable"], f"fable tiers: {holders}"
+assert holders == ["exp-mk-d0h1j.1-fable-high", "one-shot-fable"], f"fable tiers: {holders}"
 assert tiers["one-shot-fable"]["role"] == "one-shot-author"
 reachable = {"one-shot-fable"}
 for role, head in d["roles"].items():

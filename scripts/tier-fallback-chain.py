@@ -32,6 +32,7 @@ non-python resolution instead of failing dispatch outright).
 import argparse
 import json
 import sys
+from pathlib import Path
 
 try:
     import yaml
@@ -44,7 +45,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--policy", required=True)
     parser.add_argument("--tier", required=True)
+    parser.add_argument("--experiment-profile")
     args = parser.parse_args()
+    registry = json.loads((Path(__file__).resolve().parent.parent / "config/experiment-profiles.json").read_text())
 
     with open(args.policy, encoding="utf-8") as fh:
         policy = yaml.safe_load(fh) or {}
@@ -62,6 +65,10 @@ def main() -> int:
         if name in seen:
             continue
         seen.add(name)
+        owners = [p for p, entry in registry.items() if entry["tier"] == name]
+        if owners and args.experiment_profile not in owners:
+            print("tier-fallback-chain: experiment tier requires matching profile", file=sys.stderr)
+            return 4
         tier = tiers.get(name)
         if tier is None:
             print(f"tier-fallback-chain: unknown tier '{name}'" + ("" if name == args.tier else f" (referenced from a fallbacks: list)"), file=sys.stderr)

@@ -10,6 +10,8 @@
 
 ### Added
 
+- Added opt-in, task-scoped routing experiment profiles with producer checks, launch expiry checks and strict receipts (mk-47vtm.10).
+
 - Governed dispatch can hold the final prompt for external manifest-digest approval,
   then submit those exact bytes once with bound decision and execution evidence.
   Receipts include final prompt hashes and transport tool isolation (mk-47vtm.9).

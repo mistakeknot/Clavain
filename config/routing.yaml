@@ -130,6 +130,14 @@ reasoning:
     # `coordinator-seat: coordinator-seat-sonnet` default fallback (see the
     # `reasoning:` seats block), so no per-project override is needed. Review
     # and execution seats are unchanged.
+    experiment-mk-d0h1j.1-sol-medium:
+      scope: mk-d0h1j.1
+      roles:
+        cross-lab-review: exp-mk-d0h1j.1-sol-medium
+    experiment-mk-d0h1j.1-fable-high:
+      scope: mk-d0h1j.1
+      roles:
+        cross-lab-review: exp-mk-d0h1j.1-fable-high
     ci-campaign-pilot:
       scope: mk-ag2s
       roles:
@@ -307,6 +315,20 @@ dispatch:
   #   Measured at effort and task type: crosslab-sol, routine-sol, fast.
 
   tiers:
+    exp-mk-d0h1j.1-sol-medium:
+      role: cross-lab-review
+      backend: codex
+      model: gpt-6.1-sol
+      reasoning_effort: medium
+      service_tier: standard
+      fallbacks: []
+    exp-mk-d0h1j.1-fable-high:
+      role: cross-lab-review
+      backend: claude
+      model: claude-fable-5-2
+      reasoning_effort: high
+      service_tier: standard
+      fallbacks: []
     planning-astra:
       role: frontier-planning
       backend: codex

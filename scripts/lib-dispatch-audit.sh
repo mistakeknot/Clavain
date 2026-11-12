@@ -375,7 +375,13 @@ _build_dispatch_run_receipt() {
                    tokens_cache_write_in, tokens_reasoning_out} | with_entries(select(.value != null)))')"
     [[ -n "$line" ]] && break
   done
-  printf '%s\n' "$line" | _augment_dispatch_receipt
+  line="$(printf '%s\n' "$line" | _augment_dispatch_receipt)" || return 1
+  if declare -F _experiment_receipt_fields >/dev/null; then
+    jq -cn --argjson base "$line" --argjson exp "$(_experiment_receipt_fields)" --arg outcome "${EXPERIMENT_OUTCOME:-}" \
+      '$base+$exp | if $outcome!="" then .outcome=$outcome else . end'
+  else
+    printf '%s\n' "$line"
+  fi
 }
 
 # The same additive evidence accompanies lifecycle and terminal records.
@@ -402,6 +408,10 @@ _append_dispatch_run_receipt() {
     trap '' INT TERM
     exec 9>>"${file}.lock" || exit 1
     flock -w 10 9 || exit 1
+    if [[ -n "${EXPERIMENT_ENTRY:-}" ]] && [[ "$(jq -r .outcome <<< "$line")" == started ]]; then
+      _experiment_expiry_check || exit 2
+      line="$(jq -c --arg checked "$EXPERIMENT_CHECKED_AT" '.expiry_checked_at=$checked' <<< "$line")" || exit 1
+    fi
     printf '%s\n' "$line" >> "$file" || exit 1
   )
 }

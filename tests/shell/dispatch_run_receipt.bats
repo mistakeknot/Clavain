@@ -213,3 +213,10 @@ FAKE
     [ "$status" -eq 0 ]
     jq -e '.schema_version == 1 and (.final_prompt_sha256 | test("^[a-f0-9]{64}$")) and .final_prompt_bytes > 0 and .tool_isolation.transport == "direct" and .context_gateway_mode == "off" and .context_gateway_invoked == true' "$T/state/receipts.jsonl" >/dev/null
 }
+
+@test "ordinary run experiment fields remain null and evidence is best effort" {
+    run governed
+    [ "$status" -eq 0 ]
+    jq -e '.experiment_arm==null and .scope==null and .producer_model==null and .producer_lab==null and
+      .fresh_route_sha256==null and .launched==null and .evidence_mode=="best-effort"' "$T/state/receipts.jsonl"
+}

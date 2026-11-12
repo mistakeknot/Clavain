@@ -1,0 +1,32 @@
+{
+  "experiment-mk-d0h1j.1-sol-medium": {
+    "bead": "mk-d0h1j.1",
+    "expires": "2026-12-31T00:00:00Z",
+    "role": "cross-lab-review",
+    "tier": "exp-mk-d0h1j.1-sol-medium",
+    "assert": {
+      "backend": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "service_tier": "standard",
+      "require_exempted": [
+        "difficult-verification"
+      ]
+    }
+  },
+  "experiment-mk-d0h1j.1-fable-high": {
+    "bead": "mk-d0h1j.1",
+    "expires": "2026-12-31T00:00:00Z",
+    "role": "cross-lab-review",
+    "tier": "exp-mk-d0h1j.1-fable-high",
+    "assert": {
+      "backend": "claude",
+      "model": "claude-fable-5-2",
+      "effort": "high",
+      "service_tier": "standard",
+      "require_exempted": [
+        "difficult-verification"
+      ]
+    }
+  }
+}
