@@ -4,7 +4,7 @@ Adapted from compound-engineering `ce-compound` (v3.29.0, `references/concepts-v
 
 ## Target file
 
-Use the project's existing glossary: `docs/glossary.md`, `GLOSSARY.md`, or `CONCEPTS.md`, in that order. When the repo sits inside a larger workspace, also look in parent directories up to the workspace root and use the nearest glossary found. Never start a second glossary beside an existing one. When none exists, create `CONCEPTS.md` at the repo root, but only if this learning surfaced at least one qualifying term. Seed it with that learning's area only; do not survey the whole project.
+Starting at the repo root, check `docs/glossary.md`, `GLOSSARY.md`, then `CONCEPTS.md` in each directory, continuing through parent directories up to the workspace root. Use the first file found and match its format. Never start a second glossary beside an existing one. If none exists, create `docs/glossary.md` at the repo root (including `docs/` if needed), but only if this learning surfaced at least one qualifying term. Seed it with that learning's area only; do not survey the whole project.
 
 ## What qualifies
 

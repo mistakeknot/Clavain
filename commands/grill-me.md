@@ -60,8 +60,12 @@ Word each question so "yes" accepts your recommendation.
 With `--docs`, write the model down as it crystallises, creating each file only
 when there is something to put in it:
 
-- `GLOSSARY.md` at the repo root: one entry per resolved term, in the project's
-  own words.
+- Glossary: starting at the repo root, check `docs/glossary.md`, `GLOSSARY.md`,
+  then `CONCEPTS.md` in each directory, continuing through parent directories
+  up to the workspace root. Use the first file found and match its format.
+  Never start a second glossary beside an existing one. If none exists,
+  create `docs/glossary.md` at the repo root (including `docs/` if needed).
+  Add one entry per resolved term, in the project's own words.
 - `docs/adr/NNNN-<slug>.md`: one short decision record per decision that is
   hard to reverse, surprising without context, or the result of a real
   trade-off.
