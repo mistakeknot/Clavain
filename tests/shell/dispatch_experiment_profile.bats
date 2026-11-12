@@ -354,3 +354,30 @@ WRAP
         refused
     done
 }
+
+@test "registry read failure aborts tier guard even under set +e" {
+    # One-line helpers are emitted separately from the multiline guard.
+    sed -n '/^_experiment_refuse() /p; /^_experiment_registry() /p; /^_experiment_tier_guard() {/,/^}/p' "$DISPATCH" > "$T/tier-guard.sh"
+    run bash -c '
+        set -uo pipefail
+        set +e
+        source "$1"
+        _experiment_registry() { return 1; }
+        ROLE_RESOLVED=false EXPERIMENT_VALIDATED=false CLAVAIN_POLICY_PROFILE=""
+        _experiment_tier_guard ordinary
+        touch "$2"
+    ' _ "$T/tier-guard.sh" "$T/continued"
+    [ "$status" -eq 2 ]
+    [ ! -e "$T/continued" ]
+    [[ "$output" == *"experiment registry"* ]]
+}
+
+@test "tier helper clearly refuses a registry entry with no tier" {
+    package_fixture
+    jq 'with_entries(.value |= del(.tier))' "$T/package/config/experiment-profiles.json" > "$T/no-tier.json"
+    cp "$T/no-tier.json" "$T/package/config/experiment-profiles.json"
+    run python3 "$T/package/scripts/tier-fallback-chain.py" --policy "$ROOT/config/routing.yaml" --tier fast
+    [ "$status" -eq 4 ]
+    [[ "$output" == *"experiment registry"* ]]
+    [[ "$output" != *"Traceback"* ]]
+}

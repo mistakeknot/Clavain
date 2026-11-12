@@ -214,9 +214,35 @@ FAKE
     jq -e '.schema_version == 1 and (.final_prompt_sha256 | test("^[a-f0-9]{64}$")) and .final_prompt_bytes > 0 and .tool_isolation.transport == "direct" and .context_gateway_mode == "off" and .context_gateway_invoked == true' "$T/state/receipts.jsonl" >/dev/null
 }
 
-@test "ordinary run experiment fields remain null and evidence is best effort" {
-    run governed
-    [ "$status" -eq 0 ]
-    jq -e '.experiment_arm==null and .scope==null and .producer_model==null and .producer_lab==null and
-      .fresh_route_sha256==null and .launched==null and .evidence_mode=="best-effort"' "$T/state/receipts.jsonl"
+@test "ordinary receipt bytes match main with experiment hooks loaded" {
+    mkdir -p "$T/main/scripts"
+    git -C "$ROOT" show origin/main:scripts/lib-dispatch-audit.sh > "$T/main/scripts/lib-dispatch-audit.sh"
+    ln -s "$ROOT/scripts/provider_usage.py" "$T/main/scripts/provider_usage.py"
+    sed -n '/^_experiment_receipt_fields() {/,/^}/p' "$DISPATCH" > "$T/experiment-hook.sh"
+    # Both builders receive identical inputs, a frozen clock and the real
+    # experiment hook. cmp checks key order and newlines as well as values.
+    printf '%s\n' '{"final_prompt_sha256":"fixture-prompt","policy_hash":"fixture-policy","executed_profile_ref":"p1","policy_profile":"default"}' > "$T/hold-fields.json"
+    for entry in empty unset; do
+        for held in false true; do
+            for version in main current; do
+                lib="$ROOT/scripts/lib-dispatch-audit.sh"
+                [[ "$version" != main ]] || lib="$T/main/scripts/lib-dispatch-audit.sh"
+                run bash -eu -c '
+                    source "$1"
+                    source "$2"
+                    date() { printf "1700000000\n"; }
+                    _hold_receipt_fields() {
+                        printf '''{"final_prompt_sha256":"fixture-prompt","policy_hash":"fixture-policy","executed_profile_ref":"p1","policy_profile":"default"}\n'''
+                    }
+                    ROLE=validation ENGINE=claude MODEL=m1 REASONING_EFFORT=high
+                    PRODUCER_IDENTITY=fixture-producer STARTED_TS=1699999999
+                    HELD_MODE="$4"
+                    if [[ "$3" == unset ]]; then unset EXPERIMENT_ENTRY; else EXPERIMENT_ENTRY=""; fi
+                    _build_dispatch_run_receipt 0 > "$5"
+                ' _ "$lib" "$T/experiment-hook.sh" "$entry" "$held" "$T/$version.json" "$T/hold-fields.json"
+                [ "$status" -eq 0 ]
+            done
+            cmp -s "$T/main.json" "$T/current.json"
+        done
+    done
 }
