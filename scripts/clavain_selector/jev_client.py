@@ -26,6 +26,7 @@ import json
 import math
 import os
 import ssl
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -660,7 +661,7 @@ class JevClient:
         remaining = deadline.remaining_ms()
         if remaining < RETRY_MIN_REMAINING_MS:
             return False
-        if retry_after_ms is not None and retry_after_ms > remaining:
+        if retry_after_ms is not None and (retry_after_ms >= MAX_DEADLINE_MS or retry_after_ms > remaining):
             return False
         return True
 
@@ -670,7 +671,9 @@ def _retry_after_ms(value: str | None) -> int | None:
         return None
     try:
         seconds = float(value)
-        if not math.isfinite(seconds) or seconds < 0:
+        if not math.isfinite(seconds):
+            return MAX_DEADLINE_MS
+        if seconds < 0:
             return None
         return int(min(seconds, MAX_DEADLINE_MS / 1000) * 1000)
     except (ValueError, OverflowError, TypeError):
@@ -914,19 +917,55 @@ class Budget:
         self._path = base / "budget" / f"{digest}.json"
 
     def consume(self) -> FallbackReason | None:
-        fd, state = _read_locked_json(self._path)
+        return FallbackReason.BUDGET_EXHAUSTED if self.consume_all([self]) is not None else None
+
+    @staticmethod
+    def _read_state(path):
+        """Only a missing file starts a fresh budget; invalid evidence is exhausted."""
         try:
-            used = int(state.get(self._integration, 0))
-            if used >= self._limit:
-                return FallbackReason.BUDGET_EXHAUSTED
-            state[self._integration] = used + 1
-            _write_locked_json(fd, state)
-            fd = -1
+            fd = os.open(path, os.O_RDONLY)
+        except FileNotFoundError:
+            return {}
+        except OSError:
+            return None
+        try:
+            raw = bytearray()
+            while chunk := os.read(fd, 65536):
+                raw.extend(chunk)
+            state = json.loads(raw.decode("utf-8"))
+            if not isinstance(state, dict) or any(type(count) is not int or count < 0 for count in state.values()):
+                return None
+            return state
+        except (OSError, ValueError, UnicodeError):
             return None
         finally:
+            os.close(fd)
+
+    @staticmethod
+    def _write_state(path, state):
+        """Publish a complete durable replacement while holding the sidecar lock."""
+        fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+        try:
+            encoded = json.dumps(state).encode("utf-8")
+            offset = 0
+            while offset < len(encoded):
+                written = os.write(fd, encoded[offset:])
+                if written <= 0:
+                    raise OSError("budget state write made no progress")
+                offset += written
+            os.fsync(fd)
+            os.close(fd)
+            fd = -1
+            os.replace(name, path)
+            directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        finally:
             if fd >= 0:
-                fcntl.flock(fd, fcntl.LOCK_UN)
                 os.close(fd)
+            Path(name).unlink(missing_ok=True)
 
     @staticmethod
     def consume_all(budgets):
@@ -939,18 +978,21 @@ class Budget:
         opened = {}
         try:
             for path in sorted({b._path for b in budgets}):
-                opened[path] = list(_read_locked_json(path))
+                path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                # The lock inode must survive replacement of the state inode.
+                fd = os.open(str(path) + ".lock", os.O_RDWR | os.O_CREAT, 0o600)
+                opened[path] = [fd, None]
+                fcntl.flock(fd, fcntl.LOCK_EX)
+                opened[path][1] = Budget._read_state(path)
             for index, budget in enumerate(budgets):
                 state = opened[budget._path][1]
-                if int(state.get(budget._integration, 0)) >= budget._limit:
+                if state is None or state.get(budget._integration, 0) >= budget._limit:
                     return index
             for budget in budgets:
                 state = opened[budget._path][1]
                 state[budget._integration] = int(state.get(budget._integration, 0)) + 1
-            for item in opened.values():
-                fd, state = item
-                item[0] = -1
-                _write_locked_json(fd, state)
+            for path, (_, state) in opened.items():
+                Budget._write_state(path, state)
             return None
         finally:
             for fd, _ in opened.values():

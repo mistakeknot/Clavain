@@ -17,6 +17,8 @@
   accounting and explicit finite weights. Default structural collection keeps
   namespace-only qualification separate, with an inventory guard tying its
   exclusions to the explicit qualification runner.
+  Budget state uses atomic replacement and refuses unreadable or corrupt state;
+  non-finite Retry-After values veto retries at the existing deadline cap.
 
 - Governed dispatch can hold the final prompt for external manifest-digest approval,
   then submit those exact bytes once with bound decision and execution evidence.

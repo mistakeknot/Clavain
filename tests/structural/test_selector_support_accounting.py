@@ -28,7 +28,7 @@ def test_max_counter():
     assert hasattr(j, "valid_usage")
     assert j.valid_usage({"input_tokens": 2**40, "output_tokens": 0})
 
-@pytest.mark.parametrize("header", ["inf", "nan", "-1", "abc"])
+@pytest.mark.parametrize("header", ["-1", "abc"])
 def test_retry_header(header):
     assert j._retry_after_ms(header) is None
 
@@ -41,6 +41,18 @@ def call_fixture(packet, transport, **kwargs):
     log = j.AttemptLog()
     client = j.JevClient(credentials.SecretStr("dummy-qualification-value"), transport=transport, sleep=lambda delay: None, **kwargs)
     return call, log, client
+
+@pytest.mark.parametrize("header", ["inf", "nan"])
+def test_nonfinite_retry_after_vetoes_retry(request_packet, header):
+    sent = []
+    def transport(body, timeout, progress):
+        sent.append(1)
+        progress("response_read")
+        return j.RawReply(429, {"retry-after": header}, b"{}")
+    call, log, client = call_fixture(request_packet, transport)
+    client.call(call, log=log)
+    assert j._retry_after_ms(header) == j.MAX_DEADLINE_MS
+    assert len(sent) == log.to_fields()["attempts"] == 1
 
 @pytest.mark.parametrize("phase", ["connect", "request_sent", "response_read"])
 def test_exception_phase(request_packet, phase):

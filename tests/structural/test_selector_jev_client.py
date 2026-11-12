@@ -9,6 +9,7 @@ thread; each test scripts its own sequence of responses.
 from __future__ import annotations
 
 import copy
+import errno
 import hashlib
 import http.server
 import json
@@ -739,6 +740,91 @@ def test_budget(tmp_path):
         assert budget.consume() is None
     ninth = budget.consume()
     assert ninth == FallbackReason.BUDGET_EXHAUSTED
+
+
+def test_failed_daily_budget_write_cannot_reset_capacity(tmp_path, monkeypatch):
+    daily = Budget("utc-day:fixture", "support_check.daily", limit=2, state_dir=tmp_path)
+    def reserve(session):
+        return Budget.consume_all([
+            Budget(session, "support_check", limit=2, state_dir=tmp_path), daily,
+        ])
+    assert reserve("first") is None
+    real_write = jev_client.os.write
+    def disk_full(fd, data):
+        if b'"support_check.daily"' in data:
+            real_write(fd, b'{"')
+            raise OSError(errno.ENOSPC, "simulated full disk")
+        return real_write(fd, data)
+    with monkeypatch.context() as patch:
+        patch.setattr(jev_client.os, "write", disk_full)
+        with pytest.raises(OSError):
+            reserve("failed")
+    admitted = 1
+    for index in range(4):
+        admitted += reserve(f"later-{index}") is None
+    assert admitted <= 2, "a failed state write must never replenish the daily cap"
+
+
+@pytest.mark.parametrize("raw", [b"", b'{"selftest":', b"[]", b'{"selftest": -1}', b'{"selftest": true}', b'{"selftest": 0.5}'])
+def test_corrupt_budget_is_exhausted(tmp_path, raw):
+    budget = Budget("corrupt", "selftest", limit=2, state_dir=tmp_path)
+    budget._path.parent.mkdir(parents=True)
+    budget._path.write_bytes(raw)
+    assert budget.consume() == FallbackReason.BUDGET_EXHAUSTED
+    assert Budget.consume_all([budget]) == 0
+    assert budget._path.read_bytes() == raw
+
+
+def test_unreadable_budget_is_exhausted(tmp_path, monkeypatch):
+    budget = Budget("unreadable", "selftest", limit=2, state_dir=tmp_path)
+    assert budget.consume() is None
+    real_read = jev_client.os.read
+    def denied(fd, size):
+        if jev_client.os.fstat(fd).st_ino == budget._path.stat().st_ino:
+            raise PermissionError(errno.EACCES, "simulated unreadable state")
+        return real_read(fd, size)
+    monkeypatch.setattr(jev_client.os, "read", denied)
+    assert budget.consume() == FallbackReason.BUDGET_EXHAUSTED
+
+
+@pytest.mark.parametrize("operation", ["fsync", "replace"])
+def test_budget_atomic_publish_failure_preserves_state(tmp_path, monkeypatch, operation):
+    budget = Budget("atomic", "selftest", limit=2, state_dir=tmp_path)
+    assert budget.consume() is None
+    before = budget._path.read_bytes()
+    with monkeypatch.context() as patch:
+        def fail(*args):
+            raise OSError(errno.ENOSPC, "simulated publish failure")
+        patch.setattr(jev_client.os, operation, fail)
+        with pytest.raises(OSError):
+            budget.consume()
+    assert budget._path.read_bytes() == before
+    assert budget.consume() is None
+    assert budget.consume() == FallbackReason.BUDGET_EXHAUSTED
+
+
+def test_concurrent_sessions_share_daily_cap_across_atomic_replacements(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    def reserve(index):
+        return Budget.consume_all([
+            Budget(f"session-{index}", "support_check", limit=2, state_dir=tmp_path),
+            Budget("utc-day:fixture", "support_check.daily", limit=8, state_dir=tmp_path),
+        ])
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(reserve, range(24)))
+    assert results.count(None) == 8
+    assert all(result in (None, 1) for result in results)
+
+
+def test_budget_completes_short_writes_before_publish(tmp_path, monkeypatch):
+    budget = Budget("short-write", "selftest", limit=2, state_dir=tmp_path)
+    real_write = jev_client.os.write
+    monkeypatch.setattr(jev_client.os, "write", lambda fd, data: real_write(fd, data[:3]))
+    assert budget.consume() is None
+    assert json.loads(budget._path.read_text()) == {"selftest": 1}
+    assert budget.consume() is None
+    assert budget.consume() == FallbackReason.BUDGET_EXHAUSTED
+    assert not list(budget._path.parent.glob(".*.json.*"))
 
 
 # ---------------------------------------------------------------------------
