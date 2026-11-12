@@ -4,6 +4,8 @@
 # never changes the dispatch exit status.
 
 setup() {
+    # Each fixture selects its own policy and context, independent of its parent.
+    unset CLAVAIN_ROUTING_POLICY CLAVAIN_DECISION_CONTEXT CLAVAIN_SELECTED_ROOT
     load test_helper
     ROOT="$BATS_TEST_DIRNAME/../.."
     DISPATCH="$ROOT/scripts/dispatch.sh"
@@ -204,4 +206,10 @@ FAKE
     [ "$(jq -r .observed_model "$T/state/receipts.jsonl")" = gpt-6-astra ]
     [ "$(jq -r .observed_model_matches_requested "$T/state/receipts.jsonl")" = false ]
     [ "$(jq -r .observed_thread_id "$T/state/receipts.jsonl")" = "$tid" ]
+}
+
+@test "final prompt hash and isolation are additive schema one evidence" {
+    run governed
+    [ "$status" -eq 0 ]
+    jq -e '.schema_version == 1 and (.final_prompt_sha256 | test("^[a-f0-9]{64}$")) and .final_prompt_bytes > 0 and .tool_isolation.transport == "direct" and .context_gateway_mode == "off" and .context_gateway_invoked == true' "$T/state/receipts.jsonl" >/dev/null
 }
