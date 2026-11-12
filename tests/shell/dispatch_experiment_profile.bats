@@ -4,7 +4,7 @@ setup() {
     unset ANTHROPIC_AUTH_TOKEN CODEX_POOL_AUTH_TOKEN BB_ACCOUNT_POOL_PARENT_TOKEN CLAUDE_CODE_MESSAGING_TOKEN
     ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
     T="$(mktemp -d)"
-    export T REAL_IC="$(command -v ic)"
+    export T
     mkdir -p "$T/bin" "$T/repo"
     git -C "$T/repo" init -q
     git -C "$T/repo" -c user.name=test -c user.email=test@example.com commit -qm base --allow-empty
@@ -12,31 +12,77 @@ setup() {
     chmod 600 "$T/ctx"
     printf 'fixture prompt\n' > "$T/prompt"
     cat > "$T/bin/ic" <<'FAKE'
+#!/usr/bin/env python3
+import hashlib
+import json
+import os
+from pathlib import Path
+import sys
+
+args = sys.argv[1:]
+tmp = Path(os.environ["T"])
+with (tmp / "ic-argv.jsonl").open("a") as log:
+    log.write(json.dumps(args) + "\n")
+if args[:3] != ["--json", "route", "dispatch"]:
+    sys.exit(0)
+mode = os.environ.get("FAKE_ROUTE", "")
+if mode == "fixture":
+    print((tmp / "fixture-route").read_text(), end="")
+    sys.exit(0)
+
+def option(name, default=None):
+    for i, arg in enumerate(args):
+        if arg.startswith(name + "="):
+            return arg.split("=", 1)[1]
+        if arg == name:
+            return args[i + 1]
+    return default
+
+arms = {
+    "experiment-mk-d0h1j.1-sol-medium": ("codex", "gpt-6.1-sol", "medium"),
+    "experiment-mk-d0h1j.1-fable-high": ("claude", "claude-fable-5-2", "high"),
+}
+profile = option("--policy-profile")
+backend, model, effort = arms[profile]
+context = json.loads(Path(option("--context-file")).read_text())
+reasons = context.get("reasons", [])
+if any(reason != "difficult-verification" for reason in reasons):
+    effort = "high"
+producer = option("--producer-identity")
+aliases = {"opus": "claude-opus-5-5", "sol": "gpt-6.1-sol"}
+canonical = aliases.get(producer, producer)
+for prefix in ("anthropic/", "openai/"):
+    if canonical.startswith(prefix):
+        canonical = canonical[len(prefix):]
+ref = profile.replace("experiment-", "exp-", 1)
+route = {
+    "requested_role": option("--role"), "profile_ref": ref,
+    "profile": {"role": "cross-lab-review", "backend": backend, "model": model,
+                "model_identity": model, "reasoning_effort": effort, "service_tier": "standard"},
+    "policy_profile": profile, "policy_source": option("--policy"),
+    "policy_hash": hashlib.sha256(Path(option("--policy")).read_bytes()).hexdigest(),
+    "fallback_chain": [], "decision_context": context,
+    "effort_floors_exempted": [r for r in reasons if r == "difficult-verification"],
+    "producer_identity": producer, "producer_model": canonical,
+    "validator_relationship": option("--validator-relationship", "different-model"),
+    "classification_reasons": reasons, "frontier_required": False,
+    "review_requirement": "existing-gates", "excluded": [],
+}
+(tmp / "last-route").write_text(json.dumps(route) + "\n")
+if mode == "high": route["profile"]["reasoning_effort"] = "high"
+if mode == "model": route["profile"]["model"] = "other"
+if mode == "exemption": del route["effort_floors_exempted"]
+if mode == "two": route["fallback_chain"] = [{"profile_ref": "other", "profile": route["profile"]}]
+if mode == "producer": route["producer_identity"] = "other"
+if mode == "unknown": route["producer_model"] = "mystery-model-1"
+if mode == "empty": route["producer_model"] = ""
+if mode == "missing": del route["producer_model"]
+print(json.dumps(route))
+FAKE
+    cat > "$T/bin/bd" <<'FAKE'
 #!/usr/bin/env bash
-if [[ "$*" != *'route dispatch'* ]]; then exit 0; fi
-if [[ "${FAKE_ROUTE:-}" == fixture ]]; then cat "$T/fixture-route"; exit; fi
-args=("$@")
-raw_sol=false
-for ((i=0; i<${#args[@]}; i++)); do
-  if [[ "${args[$i]}" == --producer-identity=sol ]]; then args[$i]=--producer-identity=gpt-6.1-sol; raw_sol=true; fi
-done
-"$REAL_IC" "${args[@]}" > "$T/route.tmp" || exit $?
-if [[ "$raw_sol" == true ]]; then
-  jq '.producer_identity="sol"' "$T/route.tmp" > "$T/normalized"
-  cp "$T/normalized" "$T/route.tmp"
-fi
-cp "$T/route.tmp" "$T/last-route"
-case "${FAKE_ROUTE:-}" in
- high) jq '.profile.reasoning_effort="high"' "$T/route.tmp" ;;
- model) jq '.profile.model="other"' "$T/route.tmp" ;;
- exemption) jq 'del(.effort_floors_exempted)' "$T/route.tmp" ;;
- two) jq '.fallback_chain=[{profile_ref:"other",profile:.profile}]' "$T/route.tmp" ;;
- producer) jq '.producer_identity="other"' "$T/route.tmp" ;;
- unknown) jq '.producer_model="mystery-model-1"' "$T/route.tmp" ;;
- empty) jq '.producer_model=""' "$T/route.tmp" ;;
- missing) jq 'del(.producer_model)' "$T/route.tmp" ;;
- *) cat "$T/route.tmp" ;;
-esac
+printf '%s\n' "$@" >> "$T/bd-argv"
+exit 1
 FAKE
     cat > "$T/bin/claude" <<'FAKE'
 #!/usr/bin/env bash
@@ -83,7 +129,7 @@ outer() {
       --bead mk-d0h1j.1 --context-file "$T/ctx" -C "$T/repo" --prompt-file "$T/prompt" -o "$T/out" "$@"
 }
 route() {
-    ROUTE="$("$REAL_IC" --json route dispatch --policy="$ROOT/config/routing.yaml" --role=cross-lab-review \
+    ROUTE="$("$T/bin/ic" --json route dispatch --policy="$ROOT/config/routing.yaml" --role=cross-lab-review \
       --context-file="$T/ctx" --policy-profile="$PROFILE" --producer-identity="$PRODUCER")"
     CANDIDATE="$(jq -c '{profile_ref,profile}' <<< "$ROUTE")"
 }
