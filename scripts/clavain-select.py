@@ -134,7 +134,7 @@ def main_hook(args) -> int:
     return 0
 
 
-def main() -> int:
+def main(argv=None, *, _transport=None, _credential_loader=None) -> int:
     """Main entry point."""
     import argparse
 
@@ -147,7 +147,11 @@ def main() -> int:
     hook_parser.add_argument("--host", required=True, help="Host name (e.g., claude-code)")
     hook_parser.set_defaults(func=main_hook)
 
-    args = parser.parse_args()
+    subparsers.add_parser("support-json", help="Evaluation-only advisory support check; always apply the native result")
+    args = parser.parse_args(argv)
+    if args.subcommand == "support-json":
+        from clavain_selector import support
+        return support.run(sys.stdin, sys.stdout, env=os.environ, registry=_load_registry(), transport=_transport, credential_loader=_credential_loader)
 
     if not hasattr(args, "func"):
         parser.print_help()

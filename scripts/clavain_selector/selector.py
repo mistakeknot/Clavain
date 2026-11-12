@@ -86,7 +86,9 @@ def _native(reason: FallbackReason, *, mode: str = "shadow") -> adapters_base.Ou
     return adapters_base.Outcome(kind="native", mode=mode, fallback_reason=reason.value)
 
 
-def _bare_internal() -> SelectionResult:
+def _bare_internal(log=None) -> SelectionResult:
+    if log is not None:
+        _write_record_error({"selector": log.to_fields(), "fallback_reason": "internal_error"})
     return SelectionResult(None, None, FallbackReason.INTERNAL_ERROR, _native(FallbackReason.INTERNAL_ERROR))
 
 
@@ -177,6 +179,11 @@ def _write_record_error(record: Mapping[str, Any]) -> None:
             "point": record.get("point", "unknown"),
             "integration": record.get("integration", "unknown"),
         }
+        if "selector" in record:
+            line["selector"] = record["selector"]
+            line["fallback_reason"] = "internal_error"
+        if record.get("detail") == "interrupted":
+            line["detail"] = "interrupted"
         print(json.dumps(line, sort_keys=True, separators=(",", ":")), file=sys.stderr)
     except Exception:
         pass
@@ -228,6 +235,7 @@ def select(
     mode_flags: dict[str, Any] = {}
     egress_verdict = "not_run"
     selector_fields: dict[str, Any] = {}
+    attempt_log = jev_client.AttemptLog()
     result_fields: dict[str, Any] = {}
 
     def build_record(
@@ -256,7 +264,7 @@ def select(
             preparer=prepared.preparer,
             egress_rule_ids=egress_rule_ids,
             fallback_detail=detail,
-            selector=selector_fields,
+            selector={**selector_fields, **attempt_log.to_fields()},
             result=result_fields,
             validation=validation,
             flags=record_flags,
@@ -279,7 +287,7 @@ def select(
                 egress_rule_ids=egress_rule_ids,
             )
         except Exception:
-            return _bare_internal()
+            return _bare_internal(attempt_log)
         try:
             records.append_record(record)
         except Exception:
@@ -421,15 +429,26 @@ def select(
                 http_status=None,
                 latency_ms=0,
             )
-            breaker.record(timed_out)
             fields = jev_client.to_record_fields(timed_out, timed_out)
             selector_fields.update(fields["selector"])
             result_fields.update(fields["result"])
+            try:
+                breaker.record(timed_out)
+            except Exception as exc:
+                from clavain_selector.accounting import safe_class
+                return fallback(FallbackReason.INTERNAL_ERROR, detail="breaker_persist:" + safe_class(exc))
             return fallback(FallbackReason.TIMEOUT, detail=timed_out.detail.value)
 
         call = jev_client.JevCall.build(admitted, fit_questions=fit_questions, deadline=effective_deadline)
-        client_result = jev_client.JevClient(credential).call(call)
-        breaker.record(client_result)
+        client_result = jev_client.JevClient(credential).call(call, log=attempt_log)
+        fields = jev_client.to_record_fields(client_result, client_result)
+        selector_fields.update(fields["selector"])
+        result_fields.update(fields["result"])
+        try:
+            breaker.record(client_result)
+        except Exception as exc:
+            from clavain_selector.accounting import safe_class
+            return fallback(FallbackReason.INTERNAL_ERROR, detail="breaker_persist:" + safe_class(exc))
         if isinstance(client_result, jev_client.JevFailure):
             fields = jev_client.to_record_fields(client_result, client_result)
             selector_fields.update(fields["selector"])
@@ -552,4 +571,9 @@ def select(
         return SelectionResult(emitted_record, chosen, None, outcome)
     except Exception as exc:
         # Unexpected failures expose only the exception type, never the message.
-        return fallback(FallbackReason.INTERNAL_ERROR, detail=type(exc).__name__)
+        from clavain_selector.accounting import safe_class
+        return fallback(FallbackReason.INTERNAL_ERROR, detail=safe_class(exc))
+    except BaseException:
+        attempt_log.finalize_open()
+        _write_record_error({"selector": attempt_log.to_fields(), "fallback_reason": "internal_error", "detail": "interrupted"})
+        raise

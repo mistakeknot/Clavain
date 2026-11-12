@@ -25,7 +25,7 @@ EMPTY_REGISTRY: dict[str, Any] = {"schema_version": 1, "integrations": {}}
 _ALLOWED_ENTRY_KEYS = frozenset({
     "flag", "points", "active_allowed", "shadow_only", "floors", "fit_questions",
     "high_entropy", "deadline_ms", "session_budget", "authorize", "preparer",
-    "hooks", "owner_bead",
+    "hooks", "owner_bead", "enabled", "daily_budget",
 })
 
 _ALLOWED_AUTHORIZE_KEYS = frozenset({"allow_all", "allow_ids", "allow_id_prefixes", "deny_ids"})
@@ -84,6 +84,8 @@ def resolve_mode(integration: str, env: Mapping[str, str], registry: Mapping[str
     integrations = registry.get("integrations", {}) if isinstance(registry, Mapping) else {}
     entry = integrations.get(integration)
     if entry is None:
+        return ResolvedMode("off")
+    if entry.get("enabled", True) is not True:
         return ResolvedMode("off")
 
     flag_name = _flag_name(integration, registry)
@@ -181,6 +183,19 @@ def registry_errors(data: Any) -> tuple[RegistryError, ...]:
         bad_keys = set(entry.keys()) - _ALLOWED_ENTRY_KEYS
         if bad_keys:
             errors.append(RegistryError(integration, "", f"unknown key(s): {sorted(bad_keys)}"))
+        if "enabled" in entry and type(entry["enabled"]) is not bool:
+            errors.append(RegistryError(integration, "enabled", "enabled must be a bool"))
+        if integration == "support_check":
+            for key in ("session_budget", "daily_budget"):
+                value = entry.get(key)
+                minimum = 0 if entry.get("enabled") is False else 1
+                if type(value) is not int or value < minimum:
+                    errors.append(RegistryError(integration, key, "budget must be a nonnegative integer; zero requires disabled"))
+            value = entry.get("deadline_ms")
+            if type(value) is not int or not 1 <= value <= 5000:
+                errors.append(RegistryError(integration, "deadline_ms", "deadline must be in 1..5000"))
+            if entry.get("shadow_only") is not True or entry.get("active_allowed") is not False:
+                errors.append(RegistryError(integration, "shadow_only", "support checks must stay shadow only"))
         _check_authorize_block(integration, entry, errors)
         _check_hooks_block(integration, entry, errors)
         for hook in entry.get("hooks") or []:

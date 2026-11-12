@@ -150,7 +150,7 @@ def test_codex_fixture_reconciles():
 
 def test_selector_overhead_separate():
     selector_usage = [{"input_tokens": 500, "output_tokens": 50}, {"input_tokens": 300, "output_tokens": 20}]
-    result = ledger([CLAUDE_FIXTURE], "claude", selector_usage=selector_usage)
+    result = ledger([CLAUDE_FIXTURE], "claude", selector_accounting=[{"attempts": 1, "jev_usage": usage} for usage in selector_usage], selector_weights={"input_tokens": 1.0, "output_tokens": 5.0, "source": "fixture"})
     if result["status"] == "unavailable":
         import pytest
 

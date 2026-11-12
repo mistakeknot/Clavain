@@ -4,6 +4,12 @@
 
 ### Added
 
+- Default-off, evaluation-only three-label Jev support checks with pinned Git
+  source provenance and per-attempt usage accounting (mk-42j9.7.3). Live budget
+  values remain unset. Selector read-phase failures no longer retry, and
+  returned model names are recorded as hashes. Burn bounds require complete
+  accounting and explicit finite weights.
+
 - `/clavain:prototype` builds a disposable experiment for one design question,
   records observations and the answer, then removes or quarantines the code.
   Wayfind prototype tickets link to the command and retain their owner-pick

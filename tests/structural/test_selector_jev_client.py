@@ -240,7 +240,7 @@ def test_request_body_shape(fake_server):
     fake_server.script.append(_json_step(200, _response_json(battery)))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevOk)
 
     assert len(fake_server.captured_requests) == 1
@@ -269,7 +269,7 @@ def test_only_admitted_requests(fake_server):
     client = _client(fake_server)
 
     with pytest.raises(NotAdmitted):
-        client.call({"not": "a JevCall"})
+        client.call({"not": "a JevCall"}, log=jev_client.AttemptLog())
 
     request = make_request()
     admitted = _admit(request)
@@ -306,7 +306,7 @@ def test_deadline_socket_timeout_before_join_returns_is_timeout(fake_server, mon
         return real_join(self, timeout)
 
     monkeypatch.setattr(threading.Thread, "join", late_join)
-    result = _client(fake_server).call(call)
+    result = _client(fake_server).call(call, log=jev_client.AttemptLog())
 
     assert isinstance(result, JevFailure)
     assert result.reason == FallbackReason.TIMEOUT
@@ -321,7 +321,7 @@ def test_deadline(fake_server):
 
     client = _client(fake_server)
     started = time.monotonic()
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     elapsed_ms = (time.monotonic() - started) * 1000
 
     assert isinstance(result, JevFailure)
@@ -353,7 +353,7 @@ def test_blocked_resolution_does_not_block_caller(fake_server, monkeypatch):
 
     client = _client(fake_server)
     started = time.monotonic()
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     elapsed_ms = (time.monotonic() - started) * 1000
 
     assert isinstance(result, JevFailure)
@@ -382,7 +382,7 @@ def test_inflight_cap(fake_server):
     results = {}
     threads = []
     for name, call in (("a", call1), ("b", call2)):
-        t = threading.Thread(target=lambda n=name, c=call: results.__setitem__(n, client.call(c)))
+        t = threading.Thread(target=lambda n=name, c=call: results.__setitem__(n, client.call(c, log=jev_client.AttemptLog())))
         t.start()
         threads.append(t)
 
@@ -392,7 +392,7 @@ def test_inflight_cap(fake_server):
         time.sleep(0.01)
     assert jev_client._inflight_count == 2
 
-    result3 = client.call(call3)
+    result3 = client.call(call3, log=jev_client.AttemptLog())
     assert isinstance(result3, JevFailure)
     assert result3.reason == FallbackReason.TIMEOUT
     assert result3.detail == FailureDetail.INFLIGHT_CAP
@@ -415,7 +415,7 @@ def test_retry_policy_503_then_200(fake_server):
     fake_server.script.append(_json_step(200, _response_json(battery)))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevOk)
     assert result.attempts == 2
 
@@ -426,7 +426,7 @@ def test_retry_policy_503_insufficient_remaining_no_retry(fake_server):
     fake_server.script.append(_json_step(503, {"error": "unavailable"}))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevFailure)
     assert result.attempts == 1
 
@@ -438,7 +438,7 @@ def test_retry_policy_no_retry_on_client_errors(fake_server, status):
     fake_server.script.append(_json_step(status, {"error": "bad"}))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevFailure)
     assert result.attempts == 1
 
@@ -450,7 +450,7 @@ def test_retry_policy_no_retry_on_timeout(fake_server):
     fake_server.script.append(_sleep_step(3.0, _json_step(200, _response_json(battery)).__call__))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevFailure)
     assert result.reason == FallbackReason.TIMEOUT
     assert result.attempts == 1
@@ -463,7 +463,7 @@ def test_retry_policy_429_twice_is_rate_limited(fake_server):
     fake_server.script.append(_json_step(429, {"error": "slow down"}))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevFailure)
     assert result.reason == FallbackReason.RATE_LIMITED
     assert result.attempts == 2
@@ -481,7 +481,7 @@ def test_status_mapping_credential_rejected(fake_server, status):
     fake_server.script.append(_json_step(status, {"error": "denied"}))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevFailure)
     assert result.reason == FallbackReason.CREDENTIAL_REJECTED
 
@@ -492,7 +492,7 @@ def test_status_mapping_http_error(fake_server):
     fake_server.script.append(_json_step(500, {"error": "boom"}))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevFailure)
     assert result.reason == FallbackReason.HTTP_ERROR
 
@@ -509,7 +509,7 @@ def test_response_validation_oversize(fake_server):
     fake_server.script.append(_raw_step(200, raw))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevFailure)
     assert result.reason == FallbackReason.INVALID_RESPONSE
     assert result.detail == FailureDetail.OVERSIZE
@@ -521,7 +521,7 @@ def test_response_validation_bad_json(fake_server):
     fake_server.script.append(_raw_step(200, b"{not json"))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevFailure)
     assert result.reason == FallbackReason.INVALID_RESPONSE
     assert result.detail == FailureDetail.BAD_JSON
@@ -534,7 +534,7 @@ def test_response_validation_model_mismatch(fake_server):
     fake_server.script.append(_json_step(200, _response_json(battery, model="jev-1.14.0")))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevFailure)
     assert result.reason == FallbackReason.MODEL_MISMATCH
     assert result.model_returned == "jev-1.14.0"
@@ -549,7 +549,7 @@ def test_response_validation_missing_probability_key(fake_server):
     fake_server.script.append(_json_step(200, _response_json(battery, answers=answers)))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevFailure)
     assert result.reason == FallbackReason.INVALID_RESPONSE
     assert result.detail == FailureDetail.PROBABILITY_KEYS
@@ -566,7 +566,7 @@ def test_response_validation_probability_sum_wrong(fake_server):
     fake_server.script.append(_json_step(200, _response_json(battery, answers=answers)))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevFailure)
     assert result.reason == FallbackReason.INVALID_RESPONSE
     assert result.detail == FailureDetail.PROBABILITY_SUM
@@ -583,7 +583,7 @@ def test_response_validation_chosen_not_max(fake_server):
     fake_server.script.append(_json_step(200, _response_json(battery, answers=answers)))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevFailure)
     assert result.reason == FallbackReason.INVALID_RESPONSE
     assert result.detail == FailureDetail.CHOSEN_NOT_MAX
@@ -598,7 +598,7 @@ def test_response_validation_invalid_fit(fake_server):
     fake_server.script.append(_json_step(200, _response_json(battery, answers=answers)))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevFailure)
     assert result.reason == FallbackReason.INVALID_RESPONSE
     assert result.detail == FailureDetail.INVALID_FIT
@@ -615,7 +615,7 @@ def test_response_validation_escalate_chosen_is_jev_escalated(fake_server):
     fake_server.script.append(_json_step(200, _response_json(battery, answers=answers)))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevOk)
     floors = Floors(confidence=0.6, fit=0.5)
     outcome = apply_floors(result.response, floors, battery)
@@ -631,7 +631,7 @@ def test_response_validation_low_confidence(fake_server):
     fake_server.script.append(_json_step(200, _response_json(battery, answers=answers)))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevOk)
     floors = Floors(confidence=0.6, fit=0.5)
     outcome = apply_floors(result.response, floors, battery)
@@ -648,7 +648,7 @@ def test_response_validation_low_fit(fake_server):
     fake_server.script.append(_json_step(200, _response_json(battery, answers=answers)))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevOk)
     floors = Floors(confidence=0.6, fit=0.75)
     outcome = apply_floors(result.response, floors, battery)
@@ -670,7 +670,7 @@ def test_key_never_leaks(fake_server, capsys):
     fake_server.script.append(_json_step(200, _response_json(battery)))
 
     client = _client(fake_server)
-    outcomes = [client.call(call2) for call2 in (
+    outcomes = [client.call(call2, log=jev_client.AttemptLog()) for call2 in (
         _call(request, budget_ms=5000),
         _call(request, budget_ms=5000),
         _call(request, budget_ms=5000),
@@ -707,7 +707,7 @@ def test_breaker(fake_server, tmp_path, monkeypatch):
         assert breaker.check() is None
         call = _call(request, budget_ms=300)
         fake_server.script.append(_sleep_step(3.0, _json_step(200, _response_json(call.battery)).__call__))
-        result = client.call(call)
+        result = client.call(call, log=jev_client.AttemptLog())
         assert isinstance(result, JevFailure)
         breaker.record(result)
 
@@ -721,7 +721,7 @@ def test_breaker(fake_server, tmp_path, monkeypatch):
     assert breaker.check() is None  # one half-open probe allowed
     call = _call(request, budget_ms=5000)
     fake_server.script.append(_json_step(200, _response_json(call.battery)))
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevOk)
     breaker.record(result)
 
@@ -793,7 +793,7 @@ def test_typed_results(fake_server):
 
 def client_call_pair(fake_server, call):
     client = _client(fake_server)
-    return client.call(call)
+    return client.call(call, log=jev_client.AttemptLog())
 
 
 def test_typed_errors(fake_server):
@@ -802,7 +802,7 @@ def test_typed_errors(fake_server):
 
     client = _client(fake_server)
     with pytest.raises(NotAdmitted):
-        client.call("not a call")
+        client.call("not a call", log=jev_client.AttemptLog())
 
     request = make_request()
     admitted = _admit(request)
@@ -832,7 +832,7 @@ def test_response_types(fake_server):
     fake_server.script.append(_json_step(200, _response_json(battery)))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevOk)
     response = result.response
     assert isinstance(response, JevResponse)
@@ -854,7 +854,7 @@ def test_response_types_no_fit_questions(fake_server):
     fake_server.script.append(_json_step(200, _response_json(battery)))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevOk)
     assert result.response.fits == ()
 
@@ -917,7 +917,7 @@ def test_tie_break(fake_server):
     fake_server.script.append(_json_step(200, _response_json(battery, answers=answers)))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevOk)
     floors = Floors(confidence=0.6, fit=0.5)
     outcome = apply_floors(result.response, floors, battery)
@@ -940,7 +940,7 @@ def test_tie_break_gap_not_a_tie(fake_server):
     fake_server.script.append(_json_step(200, _response_json(battery, answers=answers)))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevOk)
     floors = Floors(confidence=0.6, fit=0.5)
     outcome = apply_floors(result.response, floors, battery)
@@ -961,7 +961,7 @@ def test_tie_break_with_escalate_is_abstention(fake_server):
     fake_server.script.append(_json_step(200, _response_json(battery, answers=answers)))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevOk)
     floors = Floors(confidence=0.6, fit=0.5)
     outcome = apply_floors(result.response, floors, battery)
@@ -983,7 +983,7 @@ def test_tie_break_permutation_invariant(fake_server):
         answers = _default_answers(battery, choice=canonical_ids[1], confidence=0.9, probabilities=probabilities)
         fake_server.script.append(_json_step(200, _response_json(battery, answers=answers)))
         client = _client(fake_server)
-        result = client.call(call)
+        result = client.call(call, log=jev_client.AttemptLog())
         assert isinstance(result, JevOk)
         floors = Floors(confidence=0.6, fit=0.5)
         outcomes.append(apply_floors(result.response, floors, battery))
@@ -1007,7 +1007,7 @@ def test_confidence_not_compared(fake_server):
     fake_server.script.append(_json_step(200, _response_json(battery, answers=answers)))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevOk)
     floors = Floors(confidence=0.6, fit=0.5)
     outcome = apply_floors(result.response, floors, battery)
@@ -1025,7 +1025,7 @@ def test_confidence_out_of_range_is_invalid_response(fake_server, bad_confidence
     fake_server.script.append(_json_step(200, _response_json(battery, answers=answers)))
 
     client = _client(fake_server)
-    result = client.call(call)
+    result = client.call(call, log=jev_client.AttemptLog())
     assert isinstance(result, JevFailure)
     assert result.reason == FallbackReason.INVALID_RESPONSE
     assert result.detail == FailureDetail.SCHEMA

@@ -1,0 +1,9 @@
+{
+  "basis_version": 1,
+  "attempts": 2,
+  "reported_attempts": 1,
+  "not_sent_attempts": 0,
+  "unknown_attempts": 1,
+  "known_total": {"input_tokens": 2, "output_tokens": 1},
+  "complete": false
+}
