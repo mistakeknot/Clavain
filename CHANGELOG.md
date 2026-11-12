@@ -13,9 +13,11 @@
 
 ### Added
 
-- Added opt-in, task-scoped routing experiment profiles with producer checks, launch expiry checks and strict receipts (mk-47vtm.10).
+- Added an opt-in, task-scoped Sol-medium advisory support/grouping profile with an Astra-producer exception, launch expiry checks and experimental receipts refused by ordinary review gates (mk-47vtm.10).
   Experiment launch admission is Linux-only and requires GNU `date`, `stat`,
-  and `sha256sum`.
+  and `sha256sum`. The Fable arm is deferred pending Intercore support (mk-6oib0).
+  Its throttle through 2026-11-14T02:00Z and pool-account limits remain operational
+  gates held by the executor; they are not encoded in this profile.
 
 - Default-off, evaluation-only three-label Jev support checks with pinned Git
   source provenance and per-attempt usage accounting (mk-42j9.7.3). Live budget

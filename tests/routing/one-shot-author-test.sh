@@ -37,7 +37,7 @@ d = cfg["dispatch"]
 assert d["roles"]["one-shot-author"] == "one-shot-fable"
 tiers = d["tiers"]
 holders = sorted(n for n, t in tiers.items() if t.get("model") == fable)
-assert holders == ["exp-mk-d0h1j.1-fable-high", "one-shot-fable"], f"fable tiers: {holders}"
+assert holders == ["one-shot-fable"], f"fable tiers: {holders}"
 assert tiers["one-shot-fable"]["role"] == "one-shot-author"
 reachable = {"one-shot-fable"}
 for role, head in d["roles"].items():

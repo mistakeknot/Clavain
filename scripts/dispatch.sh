@@ -2233,6 +2233,7 @@ _dispatch_tier_profile() {
 # Experiment admission is deliberately local to this packaged dispatcher.
 EXPERIMENT_VALIDATED=false
 EXPERIMENT_ENTRY=''
+EXPERIMENT_TASK_TYPE=''
 EXPERIMENT_LAUNCHED=false
 _experiment_now() { date -u +%s; }
 _experiment_refuse() { echo "Error: $*" >&2; exit 2; }
@@ -2256,7 +2257,7 @@ _experiment_receipt_fields() {
     return
   fi
   jq -cn --argjson route "$RESOLVED_ROUTE_JSON" --argjson entry "$EXPERIMENT_ENTRY" \
-    --arg profile "$CLAVAIN_POLICY_PROFILE" --arg ctx "$EXPERIMENT_CONTEXT_SHA256" \
+    --arg profile "$CLAVAIN_POLICY_PROFILE" --arg ctx "$EXPERIMENT_CONTEXT_SHA256" --arg task "$EXPERIMENT_TASK_TYPE" \
     --arg fresh "$EXPERIMENT_FRESH_SHA256" --arg producer "$EXPERIMENT_PRODUCER_MODEL" --arg lab "$EXPERIMENT_PRODUCER_LAB" \
     --arg run "$EXPERIMENT_RUN_ID" --arg checked "${EXPERIMENT_CHECKED_AT:-}" --arg launch "${EXPERIMENT_LAUNCH_CHECKED_AT:-}" \
     --argjson launched "$EXPERIMENT_LAUNCHED" '
@@ -2265,7 +2266,8 @@ _experiment_receipt_fields() {
      experiment_expires:$entry.expires,expires:$entry.expires,expiry_checked_at:$checked,
      decision_context_sha256:$ctx,fresh_route_sha256:$fresh,producer_model:$producer,producer_lab:$lab,
      run_id:$run,launch_checked_at:$launch,launched:$launched,
-     launch_admitted_before_expiry:$launched,evidence_mode:"strict"}'
+     launch_admitted_before_expiry:$launched,evidence_mode:"strict",
+     experimental:true,gate_review_eligible:false,experiment_task_type:$task}'
 }
 _experiment_start() {
   [[ "$EXPERIMENT_VALIDATED" == true ]] || return 0
@@ -2305,6 +2307,8 @@ _experiment_entry() {
   [[ "$ROLE" == "$(jq -r .role <<< "$EXPERIMENT_ENTRY")" && "$CLAVAIN_BEAD_ID" == "$(jq -r .bead <<< "$EXPERIMENT_ENTRY")" ]] ||
     _experiment_refuse 'experiment role or bead mismatch'
   [[ -n "$PRODUCER_IDENTITY" ]] || _experiment_refuse 'experiment requires producer identity'
+  [[ "$EXPERIMENT_TASK_TYPE" == "$(jq -r .task_type <<< "$EXPERIMENT_ENTRY")" ]] ||
+    _experiment_refuse 'experiment requires advisory support/grouping task type'
   [[ -f "${CLAVAIN_DECISION_CONTEXT:-}" ]] || _experiment_refuse 'experiment requires context snapshot'
   if [[ "$ROLE_RESOLVED" != true ]]; then
     local snapshot i
@@ -2327,7 +2331,7 @@ _experiment_entry() {
   EXPERIMENT_CONTEXT_SHA256="$(sha256sum "$CLAVAIN_DECISION_CONTEXT" | awk '{print $1}')"
   [[ "$ROLE_RESOLVED" == true ]] || return 0
   local flag count fresh candidate expected semantics producer_model arm_lab
-  for flag in --to --model --reasoning-effort --service-tier --resolved-profile-ref --resolved-profile-json --resolved-route-json; do
+  for flag in --to --model --reasoning-effort --service-tier --resolved-profile-ref --resolved-profile-json --resolved-route-json --experiment-task-type; do
     count="${EXPERIMENT_FLAG_COUNTS[$flag]:-0}"
     [[ "$count" == 1 ]] || _experiment_refuse "experiment requires exactly one $flag"
   done
@@ -2357,7 +2361,13 @@ _experiment_entry() {
   EXPERIMENT_PRODUCER_LAB="$(_dispatch_model_lab "$producer_model")"
   [[ -n "$EXPERIMENT_PRODUCER_LAB" ]] || _experiment_refuse 'experiment producer lab unknown'
   arm_lab="$(_dispatch_model_lab "$MODEL")"
-  [[ -n "$arm_lab" && "$arm_lab" != "$EXPERIMENT_PRODUCER_LAB" ]] || _experiment_refuse 'experiment same-lab producer refused'
+  if [[ "$CLAVAIN_POLICY_PROFILE" == experiment-mk-d0h1j.1-sol-medium &&
+        "$CLAVAIN_BEAD_ID" == mk-d0h1j.1 && "$EXPERIMENT_TASK_TYPE" == advisory-support-grouping &&
+        "$producer_model" == gpt-6-astra && "$MODEL" == gpt-6.1-sol ]]; then
+    : # Task-scoped advisory exception (mk-47vtm.10); never gate review evidence.
+  else
+    [[ -n "$arm_lab" && "$arm_lab" != "$EXPERIMENT_PRODUCER_LAB" ]] || _experiment_refuse 'experiment same-lab producer refused'
+  fi
   EXPERIMENT_FRESH_SHA256="$(printf '%s' "$semantics" | sha256sum | awk '{print $1}')"
   EXPERIMENT_VALIDATED=true
 }
@@ -2393,13 +2403,18 @@ while [[ $# -gt 0 ]]; do
   experiment_flag="$1"
   case "$experiment_flag" in --engine) experiment_flag=--to ;; -m) experiment_flag=--model ;; esac
   case "$experiment_flag" in
-    --to|--model|--reasoning-effort|--service-tier|--resolved-profile-ref|--resolved-profile-json|--resolved-route-json)
+    --to|--model|--reasoning-effort|--service-tier|--resolved-profile-ref|--resolved-profile-json|--resolved-route-json|--experiment-task-type)
       EXPERIMENT_FLAG_COUNTS[$experiment_flag]=$(( ${EXPERIMENT_FLAG_COUNTS[$experiment_flag]:-0}+1 ))
       if [[ "${EXPERIMENT_REQUESTED:-false}" == true && ${EXPERIMENT_FLAG_COUNTS[$experiment_flag]} -gt 1 ]]; then
         _experiment_refuse "experiment requires exactly one $experiment_flag"
       fi ;;
   esac
   case "$1" in
+    --experiment-task-type)
+      require_arg "$1" "${2:-}"
+      EXPERIMENT_TASK_TYPE="$2"
+      shift 2
+      ;;
     --help|-h)
       show_help
       ;;

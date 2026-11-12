@@ -246,7 +246,7 @@ rc=$?
 echo "PASS: tier resolution restores CLAVAIN_ROUTING_CONFIG discovery and degrades gracefully without pyyaml"
 
 # Experiment tiers cannot be reached through bare tiers or fallback traversal.
-for arm in sol-medium fable-high; do
+for arm in sol-medium; do
   tier="exp-mk-d0h1j.1-$arm"
   rc=0
   python3 "$ROOT/scripts/tier-fallback-chain.py" --policy "$ROOT/config/routing.yaml" --tier "$tier" >/dev/null 2>&1 || rc=$?
