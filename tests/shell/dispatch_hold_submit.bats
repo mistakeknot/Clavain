@@ -490,6 +490,18 @@ FAKE
         run invoke --to "$engine" --prompt-file "$T/prompt"
         [ "$status" = 0 ]
         cp "$T/received" "$T/new-prompt"; cp "$T/argv" "$T/new-argv"; cp "$T/cwd" "$T/new-cwd"
+        # Review prompts intentionally gain this paragraph; all other bytes
+        # must still match the pinned ordinary-dispatch baseline.
+        python3 - "$ROOT/scripts/review-role-preamble.md" "$engine" "$T/new-prompt" "$T/new-argv" <<'PY'
+import pathlib, sys
+instruction = pathlib.Path(sys.argv[1]).read_bytes().rstrip(b'\n') + b'\n\n'
+# Codex also carries the prompt in argv; Claude receives it on stdin.
+for name in sys.argv[3:4] if sys.argv[2] == 'claude' else sys.argv[3:]:
+    path = pathlib.Path(name)
+    text = path.read_bytes()
+    assert text.count(instruction) == 1
+    path.write_bytes(text.replace(instruction, b'', 1))
+PY
         tail -1 "$T/receipts" > "$T/new-receipt"
         current="$DISPATCH"; DISPATCH="$golden"
         run invoke --to "$engine" --prompt-file "$T/prompt"
