@@ -2359,7 +2359,6 @@ _experiment_entry() {
   [[ -n "$arm_lab" && "$arm_lab" != "$EXPERIMENT_PRODUCER_LAB" ]] || _experiment_refuse 'experiment same-lab producer refused'
   EXPERIMENT_FRESH_SHA256="$(printf '%s' "$semantics" | sha256sum | awk '{print $1}')"
   EXPERIMENT_VALIDATED=true
-  _experiment_tier_guard "$RESOLVED_PROFILE_REF"
 }
 
 # Inspect overrides before the parser can consume or reject them. The backend
@@ -2730,6 +2729,7 @@ fi
 
 _resolve_dispatch_bead
 _experiment_entry
+[[ -z "$RESOLVED_PROFILE_REF" ]] || _experiment_tier_guard "$RESOLVED_PROFILE_REF"
 [[ -z "$TIER" ]] || _experiment_tier_guard "$TIER"
 # Purely additive means: don't newly export what dispatch resolved for its
 # own bookkeeping (CLAVAIN_BEAD_SOURCE, CLAVAIN_BEAD_CONTEXT_RESOLVED stay

@@ -349,6 +349,8 @@ WRAP
 }
 @test "resolved child experiment tier requires a validated experiment profile" {
     route
-    run child --policy-profile default
-    refused
+    for profile in default ""; do
+        run child --policy-profile="$profile"
+        refused
+    done
 }
