@@ -14,6 +14,7 @@ setup() {
     cat > "$T/bin/ic" <<'FAKE'
 #!/usr/bin/env bash
 if [[ "$*" != *'route dispatch'* ]]; then exit 0; fi
+if [[ "${FAKE_ROUTE:-}" == fixture ]]; then cat "$T/fixture-route"; exit; fi
 "$REAL_IC" "$@" > "$T/route.tmp" || exit $?
 cp "$T/route.tmp" "$T/last-route"
 case "${FAKE_ROUTE:-}" in
@@ -315,4 +316,16 @@ WRAP
     [ "$status" -eq 0 ]
     [ "$(cat "$T/ctx")" = changed ]
     jq -se --arg hash "$before" 'all(.[]; .decision_context_sha256==$hash)' "$T/receipts"
+}
+
+@test "fresh canonical same-lab guard refuses aliases independently of resolver exclusion" {
+    for spec in 'sol-medium opus gpt-6.1-sol sol' 'sol-medium opus gpt-6.1-sol openai/gpt-6.1-sol' 'sol-medium opus gpt-6.1-sol gpt-6.1-sol' 'fable-high sol claude-opus-5-5 opus' 'fable-high sol claude-opus-5-5 anthropic/claude-opus-5-5' 'fable-high sol claude-opus-5-5 claude-opus-5-5'; do
+        read -r a p canonical raw <<< "$spec"
+        arm "$a" "$p"; route
+        ROUTE="$(jq -c --arg p "$raw" --arg m "$canonical" '.producer_identity=$p | .producer_model=$m' <<< "$ROUTE")"
+        printf '%s\n' "$ROUTE" > "$T/fixture-route"
+        PRODUCER="$raw" FAKE_ROUTE=fixture run child
+        refused
+        [[ "$output" == *"same-lab producer refused"* ]]
+    done
 }

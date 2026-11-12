@@ -26,7 +26,8 @@ string, fails loudly (exit 1) rather than being dropped silently — a typo'd
 fallback should never look like "no fallback was configured".
 
 Exit codes: 0 success, 1 unknown/malformed tier or fallback entry, 3 pyyaml
-is not installed (a distinct code so the caller can degrade to its own
+is not installed, 4 experiment tier without its matching --experiment-profile
+(a distinct code so the caller can degrade to its own
 non-python resolution instead of failing dispatch outright).
 """
 import argparse

@@ -2327,11 +2327,7 @@ _experiment_entry() {
   [[ "$ROLE_RESOLVED" == true ]] || return 0
   local flag count fresh candidate expected semantics producer_model arm_lab
   for flag in --to --model --reasoning-effort --service-tier --resolved-profile-ref --resolved-profile-json --resolved-route-json; do
-    count=0
-    for arg in "${ORIGINAL_ARGS[@]}"; do
-      [[ "$arg" != "$flag" ]] || count=$((count+1))
-      case "$flag:$arg" in --to:--engine|--model:-m) count=$((count+1)) ;; esac
-    done
+    count="${EXPERIMENT_FLAG_COUNTS[$flag]:-0}"
     [[ "$count" == 1 ]] || _experiment_refuse "experiment requires exactly one $flag"
   done
   expected="$(jq -c '.assert' <<< "$EXPERIMENT_ENTRY")"
@@ -2389,8 +2385,16 @@ _experiment_flags() {
 }
 _experiment_flags
 
+# Count consumed execution controls, including their parser aliases.
+declare -A EXPERIMENT_FLAG_COUNTS=()
 # Parse arguments
 while [[ $# -gt 0 ]]; do
+  experiment_flag="$1"
+  case "$experiment_flag" in --engine) experiment_flag=--to ;; -m) experiment_flag=--model ;; esac
+  case "$experiment_flag" in
+    --to|--model|--reasoning-effort|--service-tier|--resolved-profile-ref|--resolved-profile-json|--resolved-route-json)
+      EXPERIMENT_FLAG_COUNTS[$experiment_flag]=$(( ${EXPERIMENT_FLAG_COUNTS[$experiment_flag]:-0}+1 )) ;;
+  esac
   case "$1" in
     --help|-h)
       show_help
