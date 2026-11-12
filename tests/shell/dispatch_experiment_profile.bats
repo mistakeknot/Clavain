@@ -347,3 +347,8 @@ WRAP
         [[ "$output" == *"same-lab producer refused"* ]]
     done
 }
+@test "resolved child experiment tier requires a validated experiment profile" {
+    route
+    run child --policy-profile default
+    refused
+}
