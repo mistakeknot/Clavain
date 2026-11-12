@@ -15,7 +15,16 @@ setup() {
 #!/usr/bin/env bash
 if [[ "$*" != *'route dispatch'* ]]; then exit 0; fi
 if [[ "${FAKE_ROUTE:-}" == fixture ]]; then cat "$T/fixture-route"; exit; fi
-"$REAL_IC" "$@" > "$T/route.tmp" || exit $?
+args=("$@")
+raw_sol=false
+for ((i=0; i<${#args[@]}; i++)); do
+  if [[ "${args[$i]}" == --producer-identity=sol ]]; then args[$i]=--producer-identity=gpt-6.1-sol; raw_sol=true; fi
+done
+"$REAL_IC" "${args[@]}" > "$T/route.tmp" || exit $?
+if [[ "$raw_sol" == true ]]; then
+  jq '.producer_identity="sol"' "$T/route.tmp" > "$T/normalized"
+  cp "$T/normalized" "$T/route.tmp"
+fi
 cp "$T/route.tmp" "$T/last-route"
 case "${FAKE_ROUTE:-}" in
  high) jq '.profile.reasoning_effort="high"' "$T/route.tmp" ;;
@@ -191,7 +200,7 @@ refused() { [ "$status" -eq 2 ]; [ ! -e "$T/backend" ]; }
 
 package_fixture() {
     mkdir "$T/package"
-    cp -a "$ROOT/scripts" "$ROOT/config" "$T/package/"
+    cp -a "$ROOT/scripts" "$ROOT/config" "$ROOT/.claude-plugin" "$T/package/"
     DISPATCH="$T/package/scripts/dispatch.sh"
 }
 append_wrapper() {
