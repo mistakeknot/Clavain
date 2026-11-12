@@ -193,9 +193,11 @@ refused() { [ "$status" -eq 2 ]; [ ! -e "$T/backend" ]; }
     [ ! -e "$T/backend" ]
 }
 @test "capacity failure cannot add a candidate" {
+    sed -i '/printf.*turn.completed/i echo usage_limit_exceeded >&2' "$T/bin/codex"
     FAKE_EXIT=3 run outer
     [ "$status" -ne 0 ]
     [ "$(grep -cx exec "$T/backend")" -eq 1 ]
+    [[ "$output" == *"quota_exhausted"* ]]
 }
 
 package_fixture() {
