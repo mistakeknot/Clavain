@@ -245,6 +245,12 @@ in-tree epic over threshold)." if the list is empty.]
 
 ## Phase 3: Create Beads
 
+Cut each implementation bead as a thin end-to-end slice that can be demonstrated
+on its own and completed in one fresh session. Split larger features into slices
+before creating beads. Name each bead's blockers (or state none), and record
+blocking beads with `bd dep add <bead-id> <blocker-id>`. Schedule preparatory
+refactors first, with dependent slices blocked on them.
+
 **Dedup guard (REQUIRED):** Before each `bd create`, search for duplicates:
 - `bd search "<keyword1> <keyword2>" --status=open 2>/dev/null`
 - Clear match → reuse, report: `Reusing existing bead <id> for F<n>: <name>`
