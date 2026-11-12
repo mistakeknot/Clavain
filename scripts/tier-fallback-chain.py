@@ -25,10 +25,10 @@ names a tier absent from dispatch.tiers, or that isn't a plain tier-name
 string, fails loudly (exit 1) rather than being dropped silently — a typo'd
 fallback should never look like "no fallback was configured".
 
-Exit codes: 0 success, 1 unknown/malformed tier or fallback entry, 3 pyyaml
-is not installed, 4 experiment tier without its matching --experiment-profile
-(a distinct code so the caller can degrade to its own
-non-python resolution instead of failing dispatch outright).
+Exit codes: 0 success; 1 unknown/malformed tier or fallback entry;
+3 pyyaml is not installed (the caller may degrade to non-python resolution);
+4 experiment tier without its matching --experiment-profile, or an invalid
+experiment registry entry. Code 4 must not degrade to another resolver.
 """
 import argparse
 import json
@@ -49,6 +49,14 @@ def main() -> int:
     parser.add_argument("--experiment-profile")
     args = parser.parse_args()
     registry = json.loads((Path(__file__).resolve().parent.parent / "config/experiment-profiles.json").read_text())
+    if not isinstance(registry, dict) or any(
+        not isinstance(entry, dict)
+        or not isinstance(entry.get("tier"), str)
+        or not entry["tier"]
+        for entry in registry.values()
+    ):
+        print("tier-fallback-chain: experiment registry entries require non-empty tiers", file=sys.stderr)
+        return 4
 
     with open(args.policy, encoding="utf-8") as fh:
         policy = yaml.safe_load(fh) or {}

@@ -2239,7 +2239,8 @@ _experiment_refuse() { echo "Error: $*" >&2; exit 2; }
 _experiment_registry() { cat "$DISPATCH_SCRIPT_DIR/../config/experiment-profiles.json"; }
 _experiment_tier_guard() {
   local profile
-  profile="$(_experiment_registry | jq -r --arg t "$1" 'to_entries[] | select(.value.tier==$t) | .key')" || return 2
+  profile="$(_experiment_registry | jq -r --arg t "$1" 'to_entries[] | select(.value.tier==$t) | .key')" ||
+    _experiment_refuse 'experiment registry could not be read'
   [[ -z "$profile" ]] || {
     [[ "$ROLE_RESOLVED" == true && "$EXPERIMENT_VALIDATED" == true && "${CLAVAIN_POLICY_PROFILE:-}" == "$profile" ]] ||
       _experiment_refuse 'experiment tier requires validated profile'
