@@ -322,7 +322,7 @@ _hold_decision() {
   route_hash="$(jq -cS 'del(.headroom_evidence, .headroom_snapshot.snapshot_at, .headroom_reorder.snapshot_at)' <<< "${RESOLVED_ROUTE_JSON:-null}" | _hold_hash)"
   HELD_DECISION="$(jq -cn --arg role "$ROLE" --arg bead "${CLAVAIN_BEAD_ID:-}" --arg producer "$PRODUCER_IDENTITY" \
     --arg relationship "$VALIDATOR_RELATIONSHIP" --arg context "$context_hash" --arg route "$route_hash" \
-    --arg policy "$(jq -r '.policy_hash // ""' <<< "${RESOLVED_ROUTE_JSON:-null}")" --arg profile "${CLAVAIN_POLICY_PROFILE:-}" \
+    --arg policy "$(jq -r '.policy_hash // ""' <<< "${RESOLVED_ROUTE_JSON:-null}")" --arg profile "$(jq -r --arg caller "${CLAVAIN_POLICY_PROFILE:-}" '.policy_profile // $caller' <<< "${RESOLVED_ROUTE_JSON:-null}")" \
     '{role:$role,bead_id:$bead,producer_identity:$producer,validator_relationship:$relationship,decision_context_sha256:$context,resolved_route_sha256:$route,policy_hash:$policy,policy_profile:$profile}')"
 }
 

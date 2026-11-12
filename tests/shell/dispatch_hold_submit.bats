@@ -612,3 +612,9 @@ FAKE
     CLAVAIN_HELD_SUBMIT=1 run _run_candidate_with_policy "$T/bin/failure"
     [ "$status" = 1 ]; [ "$(wc -l < "$T/count")" = 1 ]; [ ! -e "$T/pool" ]
 }
+@test "4 actual resolved policy profile is recorded even without caller override" {
+    run hold --resolved-route-json "{\"policy_hash\":\"$POLICY_HASH\",\"policy_profile\":\"default\"}"
+    [ "$status" = 0 ]
+    [ "$(jq -r .decision.policy_profile "$T/holds/p.manifest.json")" = default ]
+    [ "$(jq -r .policy_profile "$T/receipts")" = default ]
+}
