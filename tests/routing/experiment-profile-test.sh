@@ -15,6 +15,7 @@ experiment_tiers = {e['tier'] for e in registry.values()}
 assert len(experiment_tiers) == len(registry)
 for name, e in registry.items():
     assert profiles[name] == {'scope': e['bead'], 'roles': {e['role']: e['tier']}}
+    assert e['producer_model']=='gpt-6-astra'
     t = tiers[e['tier']]
     assert t['fallbacks'] == []
     for key, field in [('backend','backend'), ('model','model'), ('reasoning_effort','effort'), ('service_tier','service_tier')]:
@@ -42,7 +43,7 @@ with tempfile.TemporaryDirectory() as tmp:
         args=['ic','--json','route','dispatch',f'--policy={path}',f'--role={role}',f'--context-file={context}']
         if profile: args.append(f'--policy-profile={profile}')
         if producer is None and role in {'plan-review','validation','cross-lab-review'}:
-            producer = 'gpt-6.1-sol' if role=='plan-review' else 'opus'
+            producer = 'gpt-6-astra' if profile else ('gpt-6.1-sol' if role=='plan-review' else 'opus')
         if producer: args.append(f'--producer-identity={producer}')
         result=subprocess.run(args, text=True, capture_output=True)
         if not ok:
@@ -65,10 +66,22 @@ with tempfile.TemporaryDirectory() as tmp:
         resolve('cross-lab-review',profile=name,reasons=['difficult-verification'],scope='mk-other',ok=False,error='requires scope')
         reasons=['difficult-verification','foundational-invariants']
         assert resolve('cross-lab-review',profile=name,reasons=reasons,scope=e['bead'])['profile']['reasoning_effort']=='high'
-    for producer in ['opus','anthropic/claude-opus-5-5']:
+    # Intercore canonicalizes identities; the launcher owns the narrower
+    # task-scoped producer restriction, including resolved-child rechecks.
+    source=(root/'scripts/dispatch.sh').read_text()
+    guard=tmp/'producer-guard.sh'
+    refusal=next(line for line in source.splitlines() if line.startswith('_experiment_refuse()'))
+    body=source.split('_experiment_producer_check() {',1)[1].split('\n}',1)[0]
+    guard.write_text(refusal+'\n_experiment_producer_check() {'+body+'\n}\n')
+    def admitted(route):
+        result=subprocess.run(['bash','-c','source "$1"; EXPERIMENT_ENTRY="$2"; _experiment_producer_check "$3"',
+                               '_',str(guard),json.dumps(registry['experiment-mk-d0h1j.1-sol-medium']),json.dumps(route)],capture_output=True,text=True)
+        return result.returncode==0
+    for producer in ['gpt-6-astra','openai/gpt-6-astra']:
         r=resolve('cross-lab-review',profile='experiment-mk-d0h1j.1-sol-medium',reasons=['difficult-verification'],scope='mk-d0h1j.1',producer=producer)
-        assert r['producer_model']=='claude-opus-5-5' and r['producer_identity']==producer
-    astra=resolve('cross-lab-review',profile='experiment-mk-d0h1j.1-sol-medium',reasons=['difficult-verification'],scope='mk-d0h1j.1',producer='gpt-6-astra')
-    assert astra['producer_model']=='gpt-6-astra'
+        assert r['producer_model']=='gpt-6-astra' and admitted(r)
+    for producer in ['opus','sonnet','kimi-code/k3']:
+        r=resolve('cross-lab-review',profile='experiment-mk-d0h1j.1-sol-medium',reasons=['difficult-verification'],scope='mk-d0h1j.1',producer=producer)
+        assert not admitted(r), producer
 print('PASS: experiment registry, reachability, default semantic golden, floors and canonical producers')
 PY

@@ -13,6 +13,7 @@
         "difficult-verification"
       ]
     },
-    "task_type": "advisory-support-grouping"
+    "task_type": "advisory-support-grouping",
+    "producer_model": "gpt-6-astra"
   }
 }

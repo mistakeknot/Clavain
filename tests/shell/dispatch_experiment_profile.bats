@@ -105,7 +105,7 @@ FAKE
     export PATH="$T/bin:$PATH" CLAVAIN_CONTEXT_GATEWAY_MODE=off CLAVAIN_BB_DIRECT_POOL=0
     export CLAVAIN_DISPATCH_RECEIPT_FILE="$T/receipts"
     DISPATCH="$ROOT/scripts/dispatch.sh"
-    arm sol-medium opus
+    arm sol-medium astra
 }
 teardown() { rm -rf "$T"; }
 arm() {
@@ -137,7 +137,7 @@ refused() { [ "$status" -eq 2 ]; [ ! -e "$T/backend" ]; }
     [[ "$output" == *"unregistered experiment"* ]]
 }
 @test "outer reaches Sol with exact effort and strict complete evidence" {
-    for spec in 'sol-medium opus' 'sol-medium anthropic/claude-opus-5-5'; do
+    for spec in 'sol-medium astra' 'sol-medium openai/gpt-6-astra'; do
         read -r a p <<< "$spec"; arm "$a" "$p"
         rm -f "$T/backend" "$T/receipts"
         run outer
@@ -198,7 +198,7 @@ refused() { [ "$status" -eq 2 ]; [ ! -e "$T/backend" ]; }
     done
 }
 @test "unknown empty and missing canonical producer refuse the Sol arm" {
-    for spec in 'sol-medium opus'; do
+    for spec in 'sol-medium astra'; do
         read -r a p <<< "$spec"; arm "$a" "$p"
         for mode in unknown empty missing; do
             FAKE_ROUTE="$mode" run outer; refused
@@ -369,15 +369,15 @@ WRAP
     jq -se --arg hash "$before" 'all(.[]; .decision_context_sha256==$hash)' "$T/receipts"
 }
 
-@test "fresh canonical same-lab guard refuses aliases independently of resolver exclusion" {
-    for spec in 'sol-medium opus gpt-6.1-sol sol' 'sol-medium opus gpt-6.1-sol openai/gpt-6.1-sol' 'sol-medium opus gpt-6.1-sol gpt-6.1-sol'; do
+@test "fresh canonical producer guard refuses non-Astra aliases independently of resolver exclusion" {
+    for spec in 'sol-medium astra gpt-6.1-sol sol' 'sol-medium astra gpt-6.1-sol openai/gpt-6.1-sol' 'sol-medium astra gpt-6.1-sol gpt-6.1-sol'; do
         read -r a p canonical raw <<< "$spec"
         arm "$a" "$p"; route
         ROUTE="$(jq -c --arg p "$raw" --arg m "$canonical" '.producer_identity=$p | .producer_model=$m' <<< "$ROUTE")"
         printf '%s\n' "$ROUTE" > "$T/fixture-route"
         PRODUCER="$raw" FAKE_ROUTE=fixture run child
         refused
-        [[ "$output" == *"same-lab producer refused"* ]]
+        [[ "$output" == *"producer refused"* ]]
     done
 }
 @test "resolved child experiment tier requires a validated experiment profile" {
@@ -443,7 +443,7 @@ WRAP
 @test "registry contains only the task-scoped advisory Sol arm" {
     jq -e 'keys==["experiment-mk-d0h1j.1-sol-medium"] and
       all(.[]; .bead=="mk-d0h1j.1" and .task_type=="advisory-support-grouping" and
-        .expires=="2026-12-31T00:00:00Z" and .assert.model=="gpt-6.1-sol")' "$ROOT/config/experiment-profiles.json"
+        .expires=="2026-12-31T00:00:00Z" and .assert.model=="gpt-6.1-sol" and .producer_model=="gpt-6-astra")' "$ROOT/config/experiment-profiles.json"
 }
 
 @test "Astra-only profile refuses other-lab producers in outer and resolved dispatch" {

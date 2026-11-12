@@ -1808,6 +1808,7 @@ _dispatch_role_profile() {
     resolved="$(jq -c --argjson advice "$advice" --argjson snapshot "$headroom" '
       .headroom_reorder=$advice.headroom_reorder | .headroom_snapshot=$snapshot' <<< "$resolved")" || return 1
   fi
+  _experiment_producer_check "$resolved"
   fallback_reason="$(jq -r '.fallback_reason // empty' <<< "$resolved")"
   VALIDATOR_RELATIONSHIP="$(jq -r '.validator_relationship // empty' <<< "$resolved")"
   producer_model="$(jq -r '.producer_model // empty' <<< "$resolved")"
@@ -2238,11 +2239,18 @@ EXPERIMENT_TASK_TYPE=''
 EXPERIMENT_LAUNCHED=false
 _experiment_now() { date -u +%s; }
 _experiment_refuse() { echo "Error: $*" >&2; exit 2; }
-_experiment_registry() { cat "$DISPATCH_SCRIPT_DIR/../config/experiment-profiles.json"; }
+_experiment_registry() { jq -ce 'if type=="object" and length>0 and all(.[]; type=="object" and (.tier|type=="string") and (.tier|length>0)) then . else error("invalid") end' "$DISPATCH_SCRIPT_DIR/../config/experiment-profiles.json" 2>/dev/null; }
+_experiment_producer_check() {
+  [[ -n "$EXPERIMENT_ENTRY" ]] || return 0
+  [[ "$(jq -r .producer_model <<< "$EXPERIMENT_ENTRY")" == gpt-6-astra ]] ||
+    _experiment_refuse 'experiment registry must require canonical Astra'
+  jq -e '.producer_model=="gpt-6-astra"' <<< "$1" >/dev/null ||
+    _experiment_refuse 'experiment producer refused: requires canonical gpt-6-astra'
+}
 _experiment_tier_guard() {
   local profile
   profile="$(_experiment_registry | jq -r --arg t "$1" 'to_entries[] | select(.value.tier==$t) | .key')" ||
-    _experiment_refuse 'experiment registry could not be read'
+    _experiment_refuse 'experiment registry missing or invalid'
   [[ -z "$profile" ]] || {
     [[ "$ROLE_RESOLVED" == true && "$EXPERIMENT_VALIDATED" == true && "${CLAVAIN_POLICY_PROFILE:-}" == "$profile" ]] ||
       _experiment_refuse 'experiment tier requires validated profile'
@@ -2299,7 +2307,9 @@ _experiment_semantics() {
 _experiment_entry() {
   [[ "${CLAVAIN_POLICY_PROFILE:-}" == experiment-* ]] || return 0
   [[ ${#EXTRA_ARGS[@]} == 0 ]] || _experiment_refuse 'experiment backend passthrough refused'
-  EXPERIMENT_ENTRY="$(_experiment_registry | jq -ce --arg p "$CLAVAIN_POLICY_PROFILE" '.[$p]')" ||
+  local registry
+  registry="$(_experiment_registry)" || _experiment_refuse 'experiment registry missing or invalid'
+  EXPERIMENT_ENTRY="$(jq -ce --arg p "$CLAVAIN_POLICY_PROFILE" '.[$p]' <<< "$registry")" ||
     _experiment_refuse 'unregistered experiment'
   EXPERIMENT_EXPIRES="$(jq -r .expires <<< "$EXPERIMENT_ENTRY")"
   [[ "$EXPERIMENT_EXPIRES" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || _experiment_refuse 'malformed experiment expires'
@@ -2356,6 +2366,7 @@ _experiment_entry() {
     .requested_role=="cross-lab-review" and
     (.effort_floors_exempted as $actual | all($e.require_exempted[]; . as $r | $actual|index($r)!=null)) and .policy_profile==$profile
     ' <<< "$fresh" >/dev/null || _experiment_refuse 'experiment producer or exemption mismatch'
+  _experiment_producer_check "$fresh"
   producer_model="$(jq -r '.producer_model // empty' <<< "$fresh")"
   [[ -n "$producer_model" ]] || _experiment_refuse 'experiment producer has no canonical model'
   EXPERIMENT_PRODUCER_MODEL="$producer_model"

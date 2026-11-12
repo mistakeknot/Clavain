@@ -216,7 +216,7 @@ FAKE
 
 @test "ordinary receipt bytes match main with experiment hooks loaded" {
     # Frozen main receipts were generated at the approved base, with the
-    # deterministic inputs below: 2169cd63494f0958532832603a817d233328af67.
+    # deterministic inputs below: 0e6ae170bc9ebad1e633072eb3516e639d712eba.
     # They also work in shallow CI checkouts without a main tracking ref.
     sed -n '/^_experiment_receipt_fields() {/,/^}/p' "$DISPATCH" > "$T/experiment-hook.sh"
     # Load the real experiment hook; cmp checks key order and newlines as

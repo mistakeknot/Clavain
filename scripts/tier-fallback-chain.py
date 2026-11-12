@@ -48,8 +48,12 @@ def main() -> int:
     parser.add_argument("--tier", required=True)
     parser.add_argument("--experiment-profile")
     args = parser.parse_args()
-    registry = json.loads((Path(__file__).resolve().parent.parent / "config/experiment-profiles.json").read_text())
-    if not isinstance(registry, dict) or any(
+    try:
+        registry = json.loads((Path(__file__).resolve().parent.parent / "config/experiment-profiles.json").read_text())
+    except (OSError, UnicodeError, ValueError):
+        print("tier-fallback-chain: experiment registry missing or invalid", file=sys.stderr)
+        return 4
+    if not isinstance(registry, dict) or not registry or any(
         not isinstance(entry, dict)
         or not isinstance(entry.get("tier"), str)
         or not entry["tier"]
