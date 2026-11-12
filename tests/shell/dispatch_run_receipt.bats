@@ -231,9 +231,8 @@ FAKE
                     source "$1"
                     source "$2"
                     date() { printf "1700000000\n"; }
-                    _hold_receipt_fields() {
-                        printf '''{"final_prompt_sha256":"fixture-prompt","policy_hash":"fixture-policy","executed_profile_ref":"p1","policy_profile":"default"}\n'''
-                    }
+                    HOLD_FIELDS="$6"
+                    _hold_receipt_fields() { cat "$HOLD_FIELDS"; }
                     ROLE=validation ENGINE=claude MODEL=m1 REASONING_EFFORT=high
                     PRODUCER_IDENTITY=fixture-producer STARTED_TS=1699999999
                     HELD_MODE="$4"
