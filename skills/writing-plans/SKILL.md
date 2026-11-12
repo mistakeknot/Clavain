@@ -9,6 +9,8 @@ Use an existing approved design when available. Read the relevant repository
 instructions, philosophy, source, prior solutions and task history. Do not restart
 a brainstorm when the user supplied a plan. Announce this skill once.
 
+Read the glossary before naming plan tasks: starting at the repo root, check `docs/glossary.md`, `GLOSSARY.md`, then `CONCEPTS.md` in each directory up to the workspace root; use the first file found, or continue if none exists.
+
 Follow the selected installation's `docs/canon/reasoning-routing.md`: record the
 accountable decision context, resolve planning and required independent review,
 and preserve frontier involvement while uncertainty changes the plan. Operational

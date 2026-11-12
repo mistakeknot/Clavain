@@ -106,7 +106,7 @@ When user selects Option 2, use `assets/critical-pattern-template.md` and number
 
 ### Step 8: Vocabulary Capture
 
-Follow [vocabulary-capture.md](./references/vocabulary-capture.md): update the nearest existing glossary, matching its format (or create `CONCEPTS.md` if none exists and the learning surfaced a qualifying term) using only add, refine, fold and scrub. Apply without prompting and include its one-line report in the decision menu.
+Starting at the repo root, check `docs/glossary.md`, `GLOSSARY.md`, then `CONCEPTS.md` in each directory, continuing through parent directories up to the workspace root. Use the first file found and match its format. Never start a second glossary beside an existing one. If none exists and the learning surfaced a qualifying term, create `docs/glossary.md` at the repo root (including `docs/` if needed), seeded with this learning's area only. Follow [vocabulary-capture.md](./references/vocabulary-capture.md) for add, refine, fold and scrub; apply without prompting and include its one-line report in the decision menu.
 
 ---
 

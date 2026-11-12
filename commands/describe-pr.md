@@ -13,6 +13,8 @@ Base branch: `$ARGUMENTS` or `main`.
 
 ## Step 1: Gather Context
 
+Read the glossary before writing PR text: starting at the repo root, check `docs/glossary.md`, `GLOSSARY.md`, then `CONCEPTS.md` in each directory up to the workspace root; use the first file found, or continue if none exists.
+
 ```bash
 BASE="${ARGUMENTS:-main}"
 git branch --show-current
