@@ -21,7 +21,11 @@ prd_path=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "prd" 2>/dev/null) || prd
 ```
 If `prd_path` exists, read it as primary input. If only `brainstorm_path`, read that. Pass as context to the skill.
 
-Invoke the clavain:writing-plans skill and follow it exactly as presented to you.
+Done when the available PRD or brainstorm has been read and passed to `clavain:writing-plans`.
+
+Invoke the clavain:writing-plans skill.
+
+Done when the plan is saved at the skill's required path.
 
 **After the plan is saved**, register the artifact and record the phase transition:
 ```bash
@@ -29,6 +33,8 @@ BEAD_ID=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" infer-bead "<plan_file_path>")
 clavain-cli set-artifact "$BEAD_ID" "plan" "<plan_file_path>" 2>/dev/null || true
 "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" advance-phase "$BEAD_ID" "planned" "Plan: <plan_file_path>" "<plan_file_path>"
 ```
+
+Done when artifact registration and the `planned` transition have been attempted, with failures reported.
 
 **Then extract and seal the acceptance criteria** (fc5.3 — the validator's rubric):
 
@@ -56,6 +62,8 @@ fi
 
 The seal (`.seal` sidecar) makes the criteria write-once: an escalation-triggered re-plan cannot silently rewrite the standard after seeing why execution failed. Re-sealing requires explicit `CLAVAIN_RESEAL=1`.
 
+Done when the criteria are extracted, registered and sealed, or the missing-rubric warning is reported.
+
 **Then review the plan before execution handoff (standing rule 2026-09-23):**
 use `/interflux:flux-drive <plan file>` by default. Use
 `/interflux:flux-melange <plan file> --goal="find what makes this plan fail and
@@ -66,6 +74,8 @@ asks. Bounded research gets one careful pass or `/interflux:flux-review`. Fold
 findings into the plan before dispatching executors; if the Acceptance Criteria
 change, re-seal explicitly with `CLAVAIN_RESEAL=1`. When interflux is unavailable,
 use the `/clavain:plan-review` fixed trio.
+
+Done when review findings are folded into the plan and changed acceptance criteria are explicitly re-sealed.
 
 **Breadth before convergence (mk-eef5l):** a plan or decision record that
 will go through repeated cross-lab review rounds gets one breadth review
