@@ -167,3 +167,31 @@ def test_env_source_refused(request_packet):
     (root/".env").write_text("dummy fixture\n")
     request_packet["sections"][0]["path"]=".env"
     assert egress.admit_support(request_packet).rule_ids == ("src.denylisted_path",)
+
+def test_non_repository_source_refused(request_packet,tmp_path):
+    root=tmp_path/"nongit"
+    root.mkdir()
+    request_packet["project_root"]=str(root)
+    result=egress.admit_support(request_packet)
+    assert isinstance(result,egress.Refusal)
+    assert result.outcome == "refused"
+    assert result.rule_ids == ("src.provenance_unavailable",)
+
+@pytest.mark.parametrize("object_kind", ["blob", "commit"])
+def test_replace_refs_cannot_substitute_revision_bytes(request_packet,object_kind):
+    root=Path(request_packet["project_root"])
+    original=git_fixture(request_packet,"rev-parse",request_packet["revision"]+":source.md")
+    text="Replacement bytes.\n"
+    (root/"source.md").write_text(text)
+    if object_kind == "commit":
+        original=request_packet["revision"]
+        git_fixture(request_packet,"add","source.md")
+        tree=git_fixture(request_packet,"write-tree")
+        replacement=git_fixture(request_packet,"commit-tree",tree,"-p",original,"-m","Fixture replacement")
+    else:
+        replacement=git_fixture(request_packet,"hash-object","-w","source.md")
+    git_fixture(request_packet,"replace",original,replacement)
+    request_packet["sections"][0].update(text=text,sha256=hashlib.sha256(text.encode()).hexdigest())
+    result=egress.admit_support(request_packet)
+    assert isinstance(result,egress.Refusal)
+    assert result.rule_ids == ("src.not_at_revision",)

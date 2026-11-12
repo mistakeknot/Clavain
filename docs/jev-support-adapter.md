@@ -23,6 +23,8 @@ specified HEAD revision. Paths are relative to the checkout, spans use inclusive
 one-based lines, and hashes cover the exact UTF-8 bytes including ending newlines.
 Symlinks and sources outside Git are refused. Checkout bytes must equal the Git
 blob; checkout filters and line-ending conversions can therefore cause refusal.
+Provenance Git children ignore local replacement refs, so those refs cannot
+substitute commit or blob bytes at the pinned revision.
 
 Receipts retain hashes and closed metadata, never claims, source text, raw
 provider model names, request IDs, exception messages, or Retry-After strings.

@@ -60,8 +60,8 @@ def validate_request(obj):
 
 def _git(root, *args, cap=MAX_SOURCE_BYTES + 1):
     # Read only bounded stdout and kill a child that exceeds size or time caps.
-    env = {"PATH": "/usr/bin:/bin", "GIT_OPTIONAL_LOCKS": "0", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_TERMINAL_PROMPT": "0", "HOME": "/nonexistent"}
-    child = subprocess.Popen(["git", "-C", str(root), *args], env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    env = {"PATH": "/usr/bin:/bin", "GIT_OPTIONAL_LOCKS": "0", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_TERMINAL_PROMPT": "0", "GIT_NO_REPLACE_OBJECTS": "1", "HOME": "/nonexistent"}
+    child = subprocess.Popen(["git", "--no-replace-objects", "-C", str(root), *args], env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     data = bytearray()
     deadline = time.monotonic() + 5
     try:
@@ -92,7 +92,7 @@ def _admit(request, key_literal=None):
         root = raw_root.resolve(strict=True)
         if not root.is_dir(): raise OSError()
         if _git(root, "rev-parse", "--show-toplevel").decode().strip() != str(root): raise OSError()
-    except (OSError, ValueError): raise AdmissionFailure("refused", "src.provenance_unavailable")
+    except (OSError, ValueError, AdmissionFailure): raise AdmissionFailure("refused", "src.provenance_unavailable")
     try:
         if _git(root, "cat-file", "-t", request["revision"]).strip() != b"commit" or _git(root, "rev-parse", "HEAD").decode().strip() != request["revision"]:
             raise AdmissionFailure("stale", "revision_mismatch")
