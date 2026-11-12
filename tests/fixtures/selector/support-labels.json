@@ -1,0 +1,8 @@
+{
+  "label_descriptions": {
+    "supported": "The cited source directly states or necessarily implies every material part of the claim, including its scope, timing and exceptions. No cited text contradicts it. Judge textual support only, not whether the design choice is good.",
+    "not_supported": "The cited source explicitly contradicts a material part of the claim or clearly states a different rule. Identify the conflicting part. Mere silence, a missing section or a plausible but unstated inference is unclear.",
+    "unclear": "The supplied cited source does not decide every material part of the claim because it is silent, incomplete, ambiguous or requires an unstated assumption. Identify what is missing or ambiguous. Do not use this label for transport or schema errors."
+  },
+  "abstain_below": 0.7
+}

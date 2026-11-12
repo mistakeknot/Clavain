@@ -1,0 +1,601 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "subreason",
+    "fallback_reason",
+    "label",
+    "confidence",
+    "probabilities",
+    "abstain_below",
+    "run_ref",
+    "case_ref",
+    "claim_sha256",
+    "label_descriptions_sha256",
+    "revision",
+    "project_root_sha256",
+    "request_sha256",
+    "model_returned_matches",
+    "model_returned_sha256",
+    "persist_error_class",
+    "schema",
+    "schema_version",
+    "adapter_version",
+    "wire_schema",
+    "decision_id",
+    "started_at",
+    "ended_at",
+    "outcome",
+    "section_sha256s",
+    "model_requested",
+    "rule_ids",
+    "effective_mode",
+    "active_denied",
+    "application",
+    "advisory",
+    "use",
+    "persisted",
+    "flag_value_unknown",
+    "attempt_records",
+    "jev_usage_accounting",
+    "attempts"
+  ],
+  "properties": {
+    "subreason": {},
+    "fallback_reason": {
+      "enum": [
+        null,
+        "flag_off",
+        "invalid_input",
+        "no_candidates",
+        "point_unreachable",
+        "stale_before_select",
+        "egress_refused",
+        "budget_exhausted",
+        "circuit_open",
+        "credential_unavailable",
+        "timeout",
+        "rate_limited",
+        "credential_rejected",
+        "http_error",
+        "invalid_response",
+        "model_mismatch",
+        "jev_escalated",
+        "low_confidence",
+        "low_fit",
+        "invalid_id",
+        "stale_revision",
+        "stale_read_set",
+        "expired",
+        "unmet_precondition",
+        "unauthorized",
+        "shadow_mode",
+        "record_unwritable",
+        "internal_error"
+      ]
+    },
+    "label": {
+      "enum": [
+        null,
+        "supported",
+        "not_supported",
+        "unclear"
+      ]
+    },
+    "confidence": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "probabilities": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "supported",
+            "not_supported",
+            "unclear"
+          ],
+          "properties": {
+            "supported": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "not_supported": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "unclear": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "abstain_below": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "run_ref": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "case_ref": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "claim_sha256": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "label_descriptions_sha256": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "revision": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "project_root_sha256": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "request_sha256": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "model_returned_matches": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "model_returned_sha256": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "persist_error_class": {
+      "enum": [
+        null,
+        "ValueError",
+        "TypeError",
+        "OSError",
+        "RuntimeError",
+        "TimeoutError",
+        "KeyError",
+        "AssertionError",
+        "UnicodeDecodeError",
+        "OverflowError",
+        "other",
+        "_PointMismatch",
+        "_ProvenanceModeError",
+        "_BindingMismatch"
+      ]
+    },
+    "schema": {
+      "const": "clavain.selector.support_check"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "adapter_version": {
+      "const": "1"
+    },
+    "wire_schema": {
+      "const": "clavain-support-v1"
+    },
+    "decision_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "ended_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "outcome": {},
+    "section_sha256s": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      }
+    },
+    "model_requested": {
+      "enum": [
+        null,
+        "jev-1.13.0"
+      ]
+    },
+    "rule_ids": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "cred.aws_key",
+          "cred.aws_secret",
+          "cred.github_token",
+          "cred.gitlab_token",
+          "cred.anthropic_key",
+          "cred.openai_style_key",
+          "cred.stripe_key",
+          "cred.google_api_key",
+          "cred.vault_token",
+          "cred.azure_account_key",
+          "cred.gcp_service_account",
+          "cred.slack_token",
+          "cred.private_key",
+          "cred.package_token",
+          "cred.netrc",
+          "cred.jwt",
+          "cred.assignment",
+          "cred.password_assignment",
+          "cred.bearer",
+          "cred.basic_auth",
+          "cred.cookie",
+          "cred.url_userinfo",
+          "cred.loaded_key",
+          "cred.high_entropy",
+          "src.provenance_unavailable",
+          "src.path_invalid",
+          "src.outside_project",
+          "src.symlink",
+          "src.denylisted_path",
+          "src.not_at_revision",
+          "src.target_changed",
+          "proj.unowned",
+          "size.over_limit"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "effective_mode": {
+      "enum": [
+        "off",
+        "shadow"
+      ]
+    },
+    "active_denied": {
+      "type": "boolean"
+    },
+    "application": {
+      "const": "native"
+    },
+    "advisory": {
+      "const": true
+    },
+    "use": {
+      "const": "evaluation_only"
+    },
+    "persisted": {
+      "type": "boolean"
+    },
+    "flag_value_unknown": {
+      "type": "boolean"
+    },
+    "attempt_records": {
+      "type": "array",
+      "items": {
+        "$ref": "jev-accounting.v1.schema.json#/$defs/attempt_record_v1"
+      }
+    },
+    "jev_usage_accounting": {
+      "$ref": "jev-accounting.v1.schema.json#/$defs/accounting_v1"
+    },
+    "attempts": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Evaluation only: always apply the native result. Labels may be compared offline and never change a review, gate, merge, or seat decision.",
+  "oneOf": [
+    {
+      "properties": {
+        "outcome": {
+          "const": "label"
+        },
+        "subreason": {
+          "enum": [
+            null
+          ]
+        },
+        "label": {
+          "enum": [
+            "supported",
+            "not_supported",
+            "unclear"
+          ]
+        }
+      }
+    },
+    {
+      "properties": {
+        "outcome": {
+          "const": "abstain"
+        },
+        "subreason": {
+          "enum": [
+            "below_threshold",
+            "tie"
+          ]
+        },
+        "label": {
+          "type": "null"
+        }
+      }
+    },
+    {
+      "properties": {
+        "outcome": {
+          "const": "disabled"
+        },
+        "subreason": {
+          "enum": [
+            "kill_switch",
+            "flag_off",
+            "flag_value_unknown",
+            "registry_missing"
+          ]
+        },
+        "label": {
+          "type": "null"
+        }
+      }
+    },
+    {
+      "properties": {
+        "outcome": {
+          "const": "invalid"
+        },
+        "subreason": {
+          "enum": [
+            "request_schema",
+            "response_schema",
+            "model_mismatch",
+            "usage"
+          ]
+        },
+        "label": {
+          "type": "null"
+        }
+      }
+    },
+    {
+      "properties": {
+        "outcome": {
+          "const": "refused"
+        },
+        "subreason": {
+          "enum": [
+            "cred.aws_key",
+            "cred.aws_secret",
+            "cred.github_token",
+            "cred.gitlab_token",
+            "cred.anthropic_key",
+            "cred.openai_style_key",
+            "cred.stripe_key",
+            "cred.google_api_key",
+            "cred.vault_token",
+            "cred.azure_account_key",
+            "cred.gcp_service_account",
+            "cred.slack_token",
+            "cred.private_key",
+            "cred.package_token",
+            "cred.netrc",
+            "cred.jwt",
+            "cred.assignment",
+            "cred.password_assignment",
+            "cred.bearer",
+            "cred.basic_auth",
+            "cred.cookie",
+            "cred.url_userinfo",
+            "cred.loaded_key",
+            "cred.high_entropy",
+            "src.provenance_unavailable",
+            "src.path_invalid",
+            "src.outside_project",
+            "src.symlink",
+            "src.denylisted_path",
+            "src.not_at_revision",
+            "src.target_changed",
+            "proj.unowned",
+            "size.over_limit"
+          ]
+        },
+        "label": {
+          "type": "null"
+        }
+      }
+    },
+    {
+      "properties": {
+        "outcome": {
+          "const": "stale"
+        },
+        "subreason": {
+          "enum": [
+            "revision_mismatch",
+            "claim_hash",
+            "span_text",
+            "span_hash",
+            "src.not_at_revision",
+            "src.target_changed"
+          ]
+        },
+        "label": {
+          "type": "null"
+        }
+      }
+    },
+    {
+      "properties": {
+        "outcome": {
+          "const": "unavailable"
+        },
+        "subreason": {
+          "enum": [
+            "credential_unavailable",
+            "circuit_open",
+            "budget_session",
+            "budget_daily"
+          ]
+        },
+        "label": {
+          "type": "null"
+        }
+      }
+    },
+    {
+      "properties": {
+        "outcome": {
+          "const": "provider_failure"
+        },
+        "subreason": {
+          "enum": [
+            "credential_rejected",
+            "http_429",
+            "http_redirect",
+            "http_4xx",
+            "http_5xx",
+            "http_other",
+            "connect_error",
+            "read_error"
+          ]
+        },
+        "label": {
+          "type": "null"
+        }
+      }
+    },
+    {
+      "properties": {
+        "outcome": {
+          "const": "timeout"
+        },
+        "subreason": {
+          "enum": [
+            "deadline",
+            "in_flight_cap",
+            "abandoned"
+          ]
+        },
+        "label": {
+          "type": "null"
+        }
+      }
+    },
+    {
+      "properties": {
+        "outcome": {
+          "const": "internal_error"
+        },
+        "subreason": {
+          "enum": [
+            "OSError",
+            "OverflowError",
+            "ValueError",
+            "TimeoutError",
+            "UnicodeDecodeError",
+            "RuntimeError",
+            "KeyError",
+            "AssertionError",
+            "TypeError",
+            "other",
+            "interrupted",
+            "_PointMismatch",
+            "_ProvenanceModeError",
+            "_BindingMismatch"
+          ]
+        },
+        "label": {
+          "type": "null"
+        }
+      }
+    }
+  ]
+}

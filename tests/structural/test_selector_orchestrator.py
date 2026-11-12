@@ -102,7 +102,7 @@ class _ClientOK:
     def __init__(self, credential):
         pass
 
-    def call(self, call):
+    def call(self, call, *, log):
         cids = tuple(cid for cid, _ in call.battery.select.criteria if cid != "escalate")
         chosen = cids[0] if cids else "a"
         probs = tuple((cid, 0.9 if cid == chosen else 0.1) for cid in cids) if cids else (("a", 0.9),)
@@ -332,7 +332,7 @@ def test_jev_failure_timeout(monkeypatch, tmp_path):
     class FailedClient:
         def __init__(self, credential):
             pass
-        def call(self, call):
+        def call(self, call, *, log):
             return jev_client.JevFailure(
                 reason=FallbackReason.TIMEOUT,
                 detail=jev_client.FailureDetail.DEADLINE,
@@ -351,7 +351,7 @@ def test_jev_failure_timeout(monkeypatch, tmp_path):
 def test_low_confidence_abstention(monkeypatch, tmp_path):
     """Low confidence causes abstention."""
     class LowConfClient(_ClientOK):
-        def call(self, call):
+        def call(self, call, *, log):
             cids = tuple(cid for cid, _ in call.battery.select.criteria)
             return jev_client.JevOk(
                 response=jev_client.JevResponse(
@@ -489,7 +489,7 @@ def test_rows9_and10_client_failures(monkeypatch, tmp_path, reason, detail):
     class FailedClient:
         def __init__(self, credential):
             pass
-        def call(self, call):
+        def call(self, call, *, log):
             return jev_client.JevFailure(
                 reason=reason,
                 detail=detail,
@@ -513,7 +513,7 @@ def test_row11_escalated_and_low_fit(monkeypatch, tmp_path):
         def __init__(self, credential):
             pass
 
-        def call(self, call):
+        def call(self, call, *, log):
             candidate_id = call.battery.select.criteria[0][0]
             probabilities = (
                 (candidate_id, 0.1 if self.answer == "escalate" else 0.9),
@@ -576,8 +576,8 @@ def test_row12_refingerprints_only_chosen_candidate(monkeypatch, tmp_path):
     )
 
     class MutatingClient(_ClientOK):
-        def call(self, call):
-            response = super().call(call)
+        def call(self, call, *, log):
+            response = super().call(call, log=log)
             path.write_text("after")
             return response
 
@@ -778,9 +778,9 @@ def test_record_question_hash_matches_call_battery(monkeypatch, tmp_path):
     seen = {}
 
     class CapturingClient(_ClientOK):
-        def call(self, call):
+        def call(self, call, *, log):
             seen["questions_sha256"] = call.battery.sha256
-            return super().call(call)
+            return super().call(call, log=log)
 
     monkeypatch.setattr(selector.jev_client, "JevClient", CapturingClient)
     result = _select(_operator(tmp_path), _registry(), FakeAdapter())
@@ -856,8 +856,8 @@ def test_row12_revalidation_rereads_clock(monkeypatch, tmp_path):
     monkeypatch.setattr(time, "monotonic_ns", lambda: real_monotonic_ns() + offset_ns[0])
 
     class SlowClient(_ClientOK):
-        def call(self, call):
-            response = super().call(call)
+        def call(self, call, *, log):
+            response = super().call(call, log=log)
             offset_ns[0] += 10_000 * 1_000_000
             return response
 
@@ -974,7 +974,7 @@ def _gate_order_case(monkeypatch, tmp_path, row):
             def __init__(self, credential):
                 pass
 
-            def call(self, call):
+            def call(self, call, *, log):
                 return jev_client.JevFailure(
                     reason=FallbackReason.INVALID_RESPONSE,
                     detail=jev_client.FailureDetail.BAD_JSON,
@@ -1104,8 +1104,8 @@ def test_external_scope_recheck_before_row12_fingerprint(monkeypatch, tmp_path):
     swapped = []
 
     class SwappingClient(_ClientOK):
-        def call(self, call):
-            response = super().call(call)
+        def call(self, call, *, log):
+            response = super().call(call, log=log)
             state.unlink()
             state.symlink_to(secret)
             swapped.append(True)

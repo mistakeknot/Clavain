@@ -1,6 +1,16 @@
 {
   "schema_version": 1,
   "integrations": {
+    "support_check": {
+      "flag": "CLAVAIN_SELECTOR_SUPPORT_CHECK",
+      "enabled": false,
+      "active_allowed": false,
+      "shadow_only": true,
+      "session_budget": 0,
+      "daily_budget": 0,
+      "deadline_ms": 5000,
+      "owner_bead": "mk-42j9.7.3"
+    },
     "selftest": {
       "flag": "CLAVAIN_SELECTOR_SELFTEST",
       "points": [
