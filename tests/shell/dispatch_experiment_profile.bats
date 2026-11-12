@@ -51,6 +51,10 @@ FAKE
 if [[ "$*" == *--version* ]]; then echo 'codex-cli 0.153.2'; exit; fi
 if [[ "${1:-}" != exec || "$*" == *--help* ]]; then echo '--ephemeral --json'; exit; fi
 printf '%s\n' "$@" >> "$T/backend"
+if [[ "${FAKE_CAPACITY:-0}" == 1 ]]; then
+  printf '{"type":"task_complete","error":{"codex_error_info":"usage_limit_exceeded"}}\n'
+  exit 3
+fi
 cat >/dev/null
 printf '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}\n'
 exit "${FAKE_EXIT:-0}"
@@ -193,8 +197,7 @@ refused() { [ "$status" -eq 2 ]; [ ! -e "$T/backend" ]; }
     [ ! -e "$T/backend" ]
 }
 @test "capacity failure cannot add a candidate" {
-    sed -i '/printf.*turn.completed/i echo usage_limit_exceeded >&2' "$T/bin/codex"
-    FAKE_EXIT=3 run outer
+    FAKE_CAPACITY=1 run outer
     [ "$status" -ne 0 ]
     [ "$(grep -cx exec "$T/backend")" -eq 1 ]
     [[ "$output" == *"quota_exhausted"* ]]
