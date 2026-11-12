@@ -2136,8 +2136,6 @@ _dispatch_tier_profile() {
       echo "Error: could not resolve tier '$tier' — pyyaml is unavailable and the legacy resolver is not loaded" >&2
       return 1
     fi
-    model="$(CLAVAIN_ROUTING_CONFIG="$policy" routing_resolve_dispatch_tier "$tier" 2>/dev/null)" || model=""
-    [[ -n "$model" ]] || { echo "Error: could not resolve tier '$tier' from routing.yaml (legacy resolver)" >&2; return 1; }
     local alias_target="$tier" alias_hops=0
     CLAVAIN_ROUTING_CONFIG="$policy" _routing_load_cache
     while [[ $alias_hops -lt 3 ]]; do
@@ -2147,6 +2145,8 @@ _dispatch_tier_profile() {
       [[ -n "$alias_target" ]] || break
       alias_hops=$((alias_hops+1))
     done
+    model="$(CLAVAIN_ROUTING_CONFIG="$policy" routing_resolve_dispatch_tier "$tier" 2>/dev/null)" || model=""
+    [[ -n "$model" ]] || { echo "Error: could not resolve tier '$tier' from routing.yaml (legacy resolver)" >&2; return 1; }
     _experiment_tier_guard "$model"
     resolved_args=(bash "${BASH_SOURCE[0]}" --to codex --model "$model")
     resolved_args+=("${TIER_PASSTHROUGH[@]}")

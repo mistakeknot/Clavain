@@ -332,7 +332,7 @@ WRAP
 }
 
 @test "fresh canonical same-lab guard refuses aliases independently of resolver exclusion" {
-    for spec in 'sol-medium opus gpt-6.1-sol sol' 'sol-medium opus gpt-6.1-sol openai/gpt-6.1-sol' 'sol-medium opus gpt-6.1-sol gpt-6.1-sol' 'fable-high sol claude-opus-5-5 opus' 'fable-high sol claude-opus-5-5 anthropic/claude-opus-5-5' 'fable-high sol claude-opus-5-5 claude-opus-5-5'; do
+    for spec in 'sol-medium opus gpt-6.1-sol sol' 'sol-medium opus gpt-6.1-sol openai/gpt-6.1-sol' 'sol-medium opus gpt-6.1-sol gpt-6.1-sol' 'fable-high gpt-6.1-sol claude-opus-5-5 opus' 'fable-high gpt-6.1-sol claude-opus-5-5 anthropic/claude-opus-5-5' 'fable-high gpt-6.1-sol claude-opus-5-5 claude-opus-5-5'; do
         read -r a p canonical raw <<< "$spec"
         arm "$a" "$p"; route
         ROUTE="$(jq -c --arg p "$raw" --arg m "$canonical" '.producer_identity=$p | .producer_model=$m' <<< "$ROUTE")"

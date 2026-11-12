@@ -37,7 +37,7 @@ with tempfile.TemporaryDirectory() as tmp:
     old = tmp/'main.yaml'
     old.write_bytes(subprocess.check_output(['git','show','origin/main:config/routing.yaml']))
     context = tmp/'context.json'
-    def resolve(role, path=policy, profile=None, reasons=(), scope=None, producer=None, ok=True):
+    def resolve(role, path=policy, profile=None, reasons=(), scope=None, producer=None, ok=True, error="unsupported_adapter"):
         context.write_text(json.dumps({'reasons':list(reasons),'rationale':'routing fixture', **({'scope':scope} if scope else {})}))
         args=['ic','--json','route','dispatch',f'--policy={path}',f'--role={role}',f'--context-file={context}']
         if profile: args.append(f'--policy-profile={profile}')
@@ -46,7 +46,7 @@ with tempfile.TemporaryDirectory() as tmp:
         if producer: args.append(f'--producer-identity={producer}')
         result=subprocess.run(args, text=True, capture_output=True)
         if not ok:
-            assert result.returncode != 0 and 'unsupported_adapter' in result.stdout+result.stderr, result
+            assert result.returncode != 0 and error in result.stdout+result.stderr, result
             return
         assert result.returncode == 0, result.stderr
         return json.loads(result.stdout)
@@ -62,8 +62,7 @@ with tempfile.TemporaryDirectory() as tmp:
         r=resolve('cross-lab-review',profile=name,reasons=['difficult-verification'],scope=e['bead'])
         assert r['profile_ref']==e['tier'] and r['profile']['reasoning_effort']==e['assert']['effort']
         assert r['effort_floors_exempted']==['difficult-verification'] and r['fallback_chain']==[]
-        r=resolve('cross-lab-review',profile=name,reasons=['difficult-verification'],scope='mk-other')
-        assert r['profile_ref']!=e['tier']
+        resolve('cross-lab-review',profile=name,reasons=['difficult-verification'],scope='mk-other',ok=False,error='requires scope')
         reasons=['difficult-verification','foundational-invariants']
         if e['assert']['backend']=='codex':
             assert resolve('cross-lab-review',profile=name,reasons=reasons,scope=e['bead'])['profile']['reasoning_effort']=='high'
