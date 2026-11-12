@@ -233,6 +233,344 @@ source "${DISPATCH_SCRIPT_DIR}/lib-review-receipt.sh"
 source "${DISPATCH_SCRIPT_DIR}/lib-ui-review-standards.sh"
 source "${DISPATCH_SCRIPT_DIR}/lib-bb.sh"
 
+# mk-47vtm.9: held prompts bind bytes, authority, and the actual launch spec.
+HOLD_PROMPT=""; SUBMIT_HELD=""; HELD_MANIFEST_SHA256=""; HELD_MAX_AGE=86400
+HELD_MANIFEST_JSON=""; HELD_MODE=false; HELD_CLAIMED=false
+HELD_STATE=""; HELD_OUTCOME=""; HELD_EXEC_SPEC=null; HELD_DECISION=null
+HELD_ARGV_SPEC=null; HELD_WORKDIR=""; HELD_WORKDIR_ID=""; HELD_WORKDIR_GIT=null
+FINAL_PROMPT_SHA256=""; FINAL_PROMPT_BYTES=0
+CONTEXT_GATEWAY_INVOKED=false; CONTEXT_GATEWAY_CHANGED_PROMPT=false
+HELD_LEAK_SCAN=""; CAPACITY_SUBSTITUTE_SOURCE="current_route"
+HELD_SKIPPED_CANDIDATES="${CLAVAIN_HELD_SKIPPED_CANDIDATES:-[]}"
+HELD_CAPACITY_FAILURE_CLASS="${CLAVAIN_HELD_CAPACITY_FAILURE_CLASS:-}"
+
+_hold_refuse() { echo "hold refused: $*" >&2; exit 2; }
+_hold_hash() { sha256sum | awk '{print $1}'; }
+_hold_nul_check() {
+  local f="$1" rc=0
+  [[ -f "$f" ]] || return 0
+  LC_ALL=C grep -qaP '\x00' "$f" 2>/dev/null || rc=$?
+  if [[ "$rc" == 2 ]]; then
+    tr -d '\000' < "$f" | cmp -s - "$f" && return 0
+    rc=0
+  fi
+  [[ "$rc" != 0 ]] || _hold_refuse "NUL byte in $(_token_leak_safe_text "$f")"
+}
+
+# Read a single authenticated copy; later filesystem edits cannot change the
+# approved metadata used for pinning or the prompt string sent to a backend.
+_hold_load_manifest() {
+  _hold_nul_check "$SUBMIT_HELD"
+  [[ "$HELD_MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]] || _hold_refuse 'manifest digest required'
+  HELD_MANIFEST_JSON="$(cat -- "$SUBMIT_HELD.manifest.json"; printf x)"
+  HELD_MANIFEST_JSON="${HELD_MANIFEST_JSON%x}"
+  [[ "$(printf '%s' "$HELD_MANIFEST_JSON" | _hold_hash)" == "$HELD_MANIFEST_SHA256" ]] || _hold_refuse 'manifest digest mismatch'
+  jq -e 'type=="object" and (.created_at|type=="number") and (.prompt_sha256|type=="string")' <<< "$HELD_MANIFEST_JSON" >/dev/null || _hold_refuse 'invalid manifest'
+  local created now
+  created="$(jq -r .created_at <<< "$HELD_MANIFEST_JSON")"; now="$(date +%s)"
+  (( created <= now && now - created <= HELD_MAX_AGE )) || _hold_refuse 'manifest expired or future dated'
+  [[ "$(jq -r .dispatch_sh_sha256 <<< "$HELD_MANIFEST_JSON")" == "$(sha256sum "$DISPATCH_SCRIPT_DIR/dispatch.sh" | awk '{print $1}')" ]] || _hold_refuse 'dispatch script changed'
+}
+
+_hold_entry() {
+  [[ -n "$HOLD_PROMPT$SUBMIT_HELD" ]] || return 0
+  HELD_MODE=true
+  [[ "$REVIEW_SCRATCH" != true ]] || _hold_refuse 'review-scratch selects a disposable clone after the hold point'
+  [[ -z "$HOLD_PROMPT" || -z "$SUBMIT_HELD" ]] || _hold_refuse 'hold and submit are exclusive'
+  [[ -n "$ROLE" ]] || _hold_refuse 'a governed role is required'
+  [[ -z "$VIA" && "$ENGINE" != auto && "$ENGINE" != flere && "$REVIEW_PACKET_MODE" != true && -z "$REVIEW_INPUT$REVIEW_PACKET" && "$DRY_RUN" != true ]] || _hold_refuse 'unsupported transport or mode'
+  (( ${#EXTRA_ARGS[@]} == 0 )) || _hold_refuse 'passthrough is not allowed'
+  [[ "$CLAUDE_UNSAFE" != true && "$KIMI_UNSAFE" != true ]] || _hold_refuse 'unsafe passthrough is not allowed'
+  [[ "$HELD_MAX_AGE" =~ ^[0-9]+$ ]] || _hold_refuse 'max age must be seconds'
+  # Gateway mode is frozen, never silently restored from the manifest.
+  [[ "$CONTEXT_GATEWAY_MODE" == off ]] || _hold_refuse 'context-gateway must be off'
+  local f
+  if [[ -n "$SUBMIT_HELD" ]]; then
+    [[ -z "$PROMPT_FILE$TEMPLATE_FILE$INJECT_DOCS${1:-}" && ${#IMAGES[@]} == 0 ]] || _hold_refuse 'submit refuses prompt sources'
+    _hold_load_manifest
+    export CLAVAIN_HELD_SUBMIT=1
+  else
+    for f in "$PROMPT_FILE" "$TEMPLATE_FILE" "$REVIEW_INPUT"; do [[ -z "$f" ]] || _hold_nul_check "$f"; done
+    case "$INJECT_DOCS" in claude|all) _hold_nul_check "$WORKDIR/CLAUDE.md" ;; esac
+    case "$INJECT_DOCS" in agents|all) _hold_nul_check "$WORKDIR/AGENTS.md" ;; esac
+  fi
+  # Only the outer entry snapshots. The self-exec child uses those exact bytes
+  # even when the original --context-file remains in its task arguments.
+  if [[ "${CLAVAIN_HELD_SNAPSHOT_OWNER:-}" == "$PPID" ]]; then
+    export CLAVAIN_DECISION_CONTEXT="$CLAVAIN_HELD_CONTEXT_SNAPSHOT"
+  elif [[ -n "${CLAVAIN_DECISION_CONTEXT:-}" ]]; then
+    [[ -r "$CLAVAIN_DECISION_CONTEXT" ]] || _hold_refuse 'unreadable decision context'
+    local snapshot
+    snapshot="$(umask 077; mktemp "${TMPDIR:-/tmp}/clavain-held-context.XXXXXX")"
+    cat -- "$CLAVAIN_DECISION_CONTEXT" > "$snapshot"
+    export CLAVAIN_HELD_CONTEXT_SNAPSHOT="$snapshot" CLAVAIN_HELD_SNAPSHOT_OWNER="$$"
+    export CLAVAIN_DECISION_CONTEXT="$snapshot"
+    trap 'rm -f -- "$CLAVAIN_HELD_CONTEXT_SNAPSHOT"' EXIT
+  fi
+}
+
+_hold_prompt_fingerprint() {
+  FINAL_PROMPT_SHA256="$(printf '%s' "$PROMPT" | _hold_hash)"
+  FINAL_PROMPT_BYTES="$(printf '%s' "$PROMPT" | wc -c | tr -d ' ')"
+}
+
+_hold_decision() {
+  local context_hash="" route_hash
+  [[ -z "${CLAVAIN_DECISION_CONTEXT:-}" ]] || context_hash="$(sha256sum "$CLAVAIN_DECISION_CONTEXT" | awk '{print $1}')"
+  # Exclude only forecast evidence locations and collection timestamps.
+  # Candidate order, exclusions, classification and forecast values stay bound.
+  route_hash="$(jq -cS 'del(.headroom_evidence, .headroom_snapshot.snapshot_at, .headroom_reorder.snapshot_at)' <<< "${RESOLVED_ROUTE_JSON:-null}" | _hold_hash)"
+  HELD_DECISION="$(jq -cn --arg role "$ROLE" --arg bead "${CLAVAIN_BEAD_ID:-}" --arg producer "$PRODUCER_IDENTITY" \
+    --arg relationship "$VALIDATOR_RELATIONSHIP" --arg context "$context_hash" --arg route "$route_hash" \
+    --arg policy "$(jq -r '.policy_hash // ""' <<< "${RESOLVED_ROUTE_JSON:-null}")" --arg profile "${CLAVAIN_POLICY_PROFILE:-}" \
+    '{role:$role,bead_id:$bead,producer_identity:$producer,validator_relationship:$relationship,decision_context_sha256:$context,resolved_route_sha256:$route,policy_hash:$policy,policy_profile:$profile}')"
+}
+
+_hold_spec() {
+  local bwrap=false allowed="" denied="" arg previous="" normalized
+  _kimi_bwrap_usable && bwrap=true
+  HELD_WORKDIR="$(realpath -e -- "${WORKDIR:-$PWD}")" || _hold_refuse 'working directory missing'
+  HELD_WORKDIR_ID="$(cd -P -- "$HELD_WORKDIR" && stat -c %d:%i .)" || _hold_refuse 'working directory unreadable'
+  local head dirty
+  if head="$(git -C "$HELD_WORKDIR" rev-parse HEAD 2>/dev/null)"; then
+    dirty="$(git -C "$HELD_WORKDIR" status --porcelain 2>/dev/null)"
+    HELD_WORKDIR_GIT="$(jq -cn --arg h "$head" --arg d "$dirty" '{head:$h,dirty:($d!="")}')"
+  fi
+  HELD_ARGV_SPEC='[]'
+  for arg in "${CMD[@]}"; do
+    case "$previous" in --allowedTools) allowed="$arg" ;; --disallowedTools) denied="$arg" ;; esac
+    previous="$arg"; normalized="$arg"
+    if [[ "$arg" == "$PROMPT" ]]; then normalized='<PROMPT>'
+    elif [[ "$arg" == "--prompt=$PROMPT" ]]; then normalized='--prompt=<PROMPT>'
+    else
+      local name path digest
+      for name in KIMI_AGENT PROMPT_STDIN_FILE; do
+        path="${!name:-}"
+        if [[ -n "$path" && "$normalized" == *"$path"* ]]; then
+          digest="$(sha256sum "$path" | awk '{print $1}')"
+          normalized="${normalized//"$path"/<$name:$digest>}"
+        fi
+      done
+    fi
+    HELD_ARGV_SPEC="$(jq -cn --argjson a "$HELD_ARGV_SPEC" --arg v "$normalized" '$a+[$v]')"
+  done
+  HELD_EXEC_SPEC="$(jq -cn --arg engine "$ENGINE" --arg model "$MODEL" --arg effort "$REASONING_EFFORT" \
+    --arg tier "$SERVICE_TIER" --argjson nt "$NO_TOOLS" --argjson unsafe "$CLAUDE_UNSAFE" \
+    --arg allowed "$allowed" --arg denied "$denied" --arg sandbox "$SANDBOX" \
+    --argjson kt "${KIMI_SEAT_TOOLS:-false}" --arg km "$KIMI_SANDBOX_MODE" --argjson bw "$bwrap" \
+    --arg transport "${DISPATCH_TRANSPORT:-direct}" --arg dir "$HELD_WORKDIR" --arg inode "$HELD_WORKDIR_ID" \
+    --arg argv "$(printf '%s' "$HELD_ARGV_SPEC" | _hold_hash)" \
+    '{engine:$engine,model:$model,effort:$effort,service_tier:$tier,no_tools:$nt,claude_unsafe:$unsafe,claude_allowed_tools:$allowed,claude_disallowed_tools:$denied,sandbox:$sandbox,kimi_seat_tools:$kt,kimi_sandbox_mode:$km,bwrap_usable:$bw,dispatch_transport:$transport,workdir_realpath:$dir,workdir_identity:$inode,argv_spec_sha256:$argv}')"
+}
+
+# Every state transition is fsynced before returning. Locking is supplied by
+# the caller; rename makes readers see the entire old or new state.
+_hold_write_state() {
+  local target="$1" state="$2"
+  python3 - "$target" "$state" "$$" "${ATTEMPT_ID:-}" <<'PY'
+import json,os,sys,tempfile,time
+path,state,pid,attempt=sys.argv[1:]
+parent=os.path.dirname(os.path.abspath(path))
+fd,tmp=tempfile.mkstemp(prefix='.held-state.',dir=parent)
+try:
+    with os.fdopen(fd,'w') as f:
+        json.dump(dict(state=state,pid=int(pid),attempt_id=attempt,timestamp=int(time.time())),f)
+        f.flush(); os.fsync(f.fileno())
+    os.replace(tmp,path)
+    d=os.open(parent,os.O_RDONLY|os.O_DIRECTORY)
+    try: os.fsync(d)
+    finally: os.close(d)
+finally:
+    if os.path.exists(tmp): os.unlink(tmp)
+PY
+}
+
+_hold_receipt_fields() {
+  jq -cn --arg hash "$FINAL_PROMPT_SHA256" --argjson bytes "$FINAL_PROMPT_BYTES" \
+    --argjson held "$HELD_MODE" --arg manifest "$HELD_MANIFEST_SHA256" --arg state "$HELD_STATE" \
+    --arg mode "$CONTEXT_GATEWAY_MODE" --argjson invoked "$CONTEXT_GATEWAY_INVOKED" --argjson changed "$CONTEXT_GATEWAY_CHANGED_PROMPT" \
+    --arg ref "$RESOLVED_PROFILE_REF" --arg fallback "$FALLBACK_REASON" --arg capacity "$HELD_CAPACITY_FAILURE_CLASS" \
+    --argjson substitute "${CAPACITY_SUBSTITUTE_JSON:-null}" --arg source "$CAPACITY_SUBSTITUTE_SOURCE" \
+    --argjson decision "$HELD_DECISION" --argjson spec "$HELD_EXEC_SPEC" --argjson isolation "${TOOL_ISOLATION:-null}" \
+    --arg dir "$HELD_WORKDIR" --arg inode "$HELD_WORKDIR_ID" --argjson git "$HELD_WORKDIR_GIT" --arg leak "$HELD_LEAK_SCAN" \
+    '{final_prompt_sha256:$hash,final_prompt_bytes:$bytes,prompt_hold:$held,held_manifest_sha256:$manifest,manifest_sha256:$manifest,hold_state:$state,context_gateway_mode:$mode,context_gateway_invoked:$invoked,context_gateway_changed_prompt:$changed,executed_profile_ref:$ref,fallback_reason:$fallback,capacity_failure_class:$capacity,capacity_substitute:$substitute,capacity_substitute_source:$source,exec_spec:$spec,tool_isolation:$isolation,workdir_realpath:$dir,workdir_identity:$inode,workdir_git:$git}
+      + (($decision // {}) | with_entries(if .value=="" then .value=null else . end)) + (if $leak!="" then {leak_scan:$leak} else {} end)'
+}
+
+_hold_isolation() {
+  local free=false mechanism proven=false evidence
+  case "$ENGINE" in
+    claude)
+      mechanism='Bash allowed; edits disallowed'
+      [[ "$CLAUDE_UNSAFE" != true ]] || mechanism='tools enabled'
+      if [[ "$NO_TOOLS" == true ]]; then free=true; proven=true; mechanism='--tools empty; disallowedTools; strict MCP; skills disabled'; fi
+      evidence='command flags; --tools help probe for no-tools' ;;
+    codex) mechanism="sandbox=$SANDBOX"; evidence='sandbox requested; tool freedom unproven' ;;
+    kimi) mechanism='agent tools: []'; evidence='agent configuration; no refusal canary recorded'
+      [[ "${KIMI_SEAT_TOOLS:-false}" != true ]] || mechanism="$KIMI_SANDBOX_MODE" ;;
+    *) mechanism='transport configuration'; evidence='unproven' ;;
+  esac
+  if [[ "${VIA:-}" == bb || "${VIA:-}" == zaka ]]; then
+    free=false; proven=false; mechanism="${VIA} seat configuration"; evidence='transport tool isolation unproven'
+  fi
+  TOOL_ISOLATION="$(jq -cn --arg t "${DISPATCH_TRANSPORT:-${VIA:-direct}}" --argjson f "$free" --arg m "$mechanism" --argjson p "$proven" --arg e "$evidence" '{transport:$t,tool_free:$f,mechanism:$m,proven:$p,evidence:$e}')"
+}
+
+_finalize_hold() {
+  umask 077
+  local target="$HOLD_PROMPT" parent prompt_tmp="" manifest_tmp="" argv_tmp="" state_tmp="" manifest
+  parent="$(dirname -- "$target")"
+  [[ -d "$parent" && ! -L "$parent" ]] || { echo 'hold publication parent missing or symlinked' >&2; exit 4; }
+  local mode
+  mode="$(stat -c %a "$parent")"
+  (( (8#$mode & 0022) == 0 )) || { echo 'hold publication parent is writable by others' >&2; exit 4; }
+  local p
+  for p in "$target" "$target.manifest.json" "$target.state"; do
+    [[ ! -e "$p" && ! -L "$p" ]] || { HELD_OUTCOME=hold_publish_failed; _write_dispatch_run_receipt 4 || true; exit 4; }
+  done
+  trap 'rm -f -- "$prompt_tmp" "$manifest_tmp" "$argv_tmp" "$state_tmp" "${PROMPT_STDIN_FILE:-}" "${KIMI_AGENT:-}" "${TOKEN_LEAK_HITS:-}"; if [[ "${CLAVAIN_HELD_SNAPSHOT_OWNER:-}" == "$$" ]]; then rm -f -- "${CLAVAIN_HELD_CONTEXT_SNAPSHOT:-}"; fi' EXIT
+  prompt_tmp="$(mktemp "$parent/.hold-prompt.XXXXXX")"
+  manifest_tmp="$(mktemp "$parent/.hold-manifest.XXXXXX")"
+  argv_tmp="$(mktemp "$parent/.hold-argv.XXXXXX")"
+  state_tmp="$(mktemp "$parent/.hold-state.XXXXXX")"
+  printf '%s' "$PROMPT" > "$prompt_tmp"
+  printf '%s' "$HELD_ARGV_SPEC" > "$argv_tmp"
+  manifest="$(jq -cn --argjson spec "$HELD_EXEC_SPEC" --argjson decision "$HELD_DECISION" \
+    --argjson created "$(date +%s)" --arg hash "$FINAL_PROMPT_SHA256" --argjson bytes "$FINAL_PROMPT_BYTES" \
+    --arg script "$(sha256sum "$DISPATCH_SCRIPT_DIR/dispatch.sh" | awk '{print $1}')" \
+    --arg ref "$RESOLVED_PROFILE_REF" --arg fallback "$FALLBACK_REASON" --arg fc "$HELD_CAPACITY_FAILURE_CLASS" \
+    --argjson cs "${CAPACITY_SUBSTITUTE_JSON:-null}" --argjson skipped "$HELD_SKIPPED_CANDIDATES" --argjson git "$HELD_WORKDIR_GIT" \
+    '{schema_version:1,created_at:$created,prompt_sha256:$hash,prompt_bytes:$bytes,dispatch_sh_sha256:$script,exec_spec:$spec,decision:$decision,executed_profile_ref:$ref,fallback_reason:$fallback,capacity_failure_class:$fc,capacity_substitute_json:$cs,skipped_candidates:$skipped,workdir_git:$git}')"
+  printf '%s' "$manifest" > "$manifest_tmp"
+  local saved_found="$TOKEN_LEAK_FOUND" saved_error="$TOKEN_LEAK_ERROR" saved_dirty="$TOKEN_LEAK_DIRTY" found error
+  TOKEN_LEAK_FOUND=false; TOKEN_LEAK_ERROR=false; TOKEN_LEAK_DIRTY=false
+  _token_leak_capture
+  HELD_LEAK_SCAN=no_tokens
+  (( ${#TOKEN_LEAK_TOKENS[@]} == 0 )) || HELD_LEAK_SCAN=clean
+  _token_leak_scan "$prompt_tmp" "$manifest_tmp" "$argv_tmp"
+  found="$TOKEN_LEAK_FOUND"; error="$TOKEN_LEAK_ERROR"
+  [[ "$saved_found" != true ]] || TOKEN_LEAK_FOUND=true
+  [[ "$saved_error" != true ]] || TOKEN_LEAK_ERROR=true
+  [[ "$saved_dirty" != true ]] || TOKEN_LEAK_DIRTY=true
+  if [[ "$found" == true ]]; then echo 'leak scan hit' >&2; exit 3; fi
+  if [[ "$error" == true ]]; then echo 'leak scan could not run' >&2; exit 3; fi
+  HELD_MANIFEST_SHA256="$(printf '%s' "$manifest" | _hold_hash)"
+  HELD_OUTCOME=held; HELD_STATE=held
+  _prepare_role_audit || exit 4
+  _write_dispatch_run_receipt 0 || { echo 'hold receipt could not be recorded' >&2; exit 4; }
+  if ! _hold_write_state "$state_tmp" held; then
+    HELD_OUTCOME=hold_publish_failed; _write_dispatch_run_receipt 4 || true
+    exit 4
+  fi
+  local linked_state=false linked_prompt=false linked_manifest=false
+  if ln -- "$state_tmp" "$target.state"; then linked_state=true
+    if ln -- "$prompt_tmp" "$target"; then linked_prompt=true
+      if ln -- "$manifest_tmp" "$target.manifest.json"; then linked_manifest=true; fi
+    fi
+  fi
+  if [[ "$linked_manifest" == true ]]; then
+    python3 - "$parent" "$target" "$target.manifest.json" <<'PY_SYNC' || linked_manifest=false
+import os,sys
+for path in sys.argv[2:]:
+    fd=os.open(path,os.O_RDONLY)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+fd=os.open(sys.argv[1],os.O_RDONLY|os.O_DIRECTORY)
+try: os.fsync(fd)
+finally: os.close(fd)
+PY_SYNC
+  fi
+  if [[ "$linked_manifest" != true ]]; then
+    # Only remove a manifest this invocation linked, never a racing writer's.
+    [[ ! "$target.manifest.json" -ef "$manifest_tmp" ]] || rm -f -- "$target.manifest.json"
+    [[ "$linked_prompt" != true ]] || rm -f -- "$target"
+    [[ "$linked_state" != true ]] || rm -f -- "$target.state"
+    HELD_OUTCOME=hold_publish_failed; _write_dispatch_run_receipt 4 || true
+    exit 4
+  fi
+  unset ANTHROPIC_AUTH_TOKEN CODEX_POOL_AUTH_TOKEN
+  printf '%s\n%s\nmanifest_sha256=%s\nprompt_sha256=%s\n' "$target" "$target.manifest.json" "$HELD_MANIFEST_SHA256" "$FINAL_PROMPT_SHA256"
+  exit 0
+}
+
+_hold_boundary() {
+  [[ "$HELD_MODE" == true || ( -n "$ROLE" && "$ROLE_RESOLVED" == true ) ]] || return 0
+  _hold_prompt_fingerprint
+  _hold_isolation
+  if [[ -n "$ROLE" && "$ROLE_RESOLVED" == true ]]; then _hold_decision; fi
+  [[ "$HELD_MODE" == true ]] || return 0
+  [[ "$REVIEW_SCRATCH" != true ]] || _hold_refuse 'review-scratch selects a disposable clone after the hold point'
+  [[ "${KIMI_SEAT_TOOLS:-false}" != true ]] || _hold_refuse 'tool-enabled kimi seat prepares its launch after the hold point'
+  _hold_spec
+  _hold_decision
+  [[ -z "$HOLD_PROMPT" ]] || _finalize_hold
+  [[ "$RESOLVED_PROFILE_REF" == "$(jq -r .executed_profile_ref <<< "$HELD_MANIFEST_JSON")" ]] || _hold_refuse 'executed profile changed'
+  local held_spec held_decision
+  held_spec="$(jq -cS .exec_spec <<< "$HELD_MANIFEST_JSON")"
+  held_decision="$(jq -cS .decision <<< "$HELD_MANIFEST_JSON")"
+  [[ "$held_spec" == "$(jq -cS . <<< "$HELD_EXEC_SPEC")" ]] || _hold_refuse 'execution spec changed'
+  [[ "$held_decision" == "$(jq -cS . <<< "$HELD_DECISION")" ]] || _hold_refuse 'governing decision changed'
+  local contract=false substitute
+  [[ "$PROMPT" != *'preferred other-lab reviewer was out of capacity (a capacity-substitute'* ]] || contract=true
+  substitute="$(jq -c .capacity_substitute_json <<< "$HELD_MANIFEST_JSON")"
+  if [[ "$substitute" == null ]]; then [[ "$contract" == false ]] || _hold_refuse 'capacity contract mismatch'
+  else [[ "$contract" == true ]] || _hold_refuse 'capacity contract mismatch'; fi
+  CAPACITY_SUBSTITUTE_JSON="$substitute"; CAPACITY_SUBSTITUTE_SOURCE=held_manifest
+  HELD_CAPACITY_FAILURE_CLASS="$(jq -r '.capacity_failure_class // ""' <<< "$HELD_MANIFEST_JSON")"
+  # Checkout snapshots and post-run validation must inspect the same directory
+  # as the verified launch, even if the caller's symlink is retargeted.
+  WORKDIR="$HELD_WORKDIR"
+}
+
+_hold_claim() {
+  [[ -n "$SUBMIT_HELD" ]] || return 0
+  command -v flock >/dev/null 2>&1 || _hold_refuse 'flock required'
+  local state
+  [[ ! -L "$SUBMIT_HELD.lock" ]] || _hold_refuse 'symlinked state lock'
+  local old_umask
+  old_umask="$(umask)"; umask 077
+  exec {HELD_LOCK_FD}>>"$SUBMIT_HELD.lock"
+  umask "$old_umask"
+  flock "$HELD_LOCK_FD" || _hold_refuse 'cannot lock hold'
+  state="$(jq -r .state "$SUBMIT_HELD.state")" || _hold_refuse 'missing hold state'
+  case "$state" in
+    held) ;;
+    claimed) _hold_refuse outcome_unknown ;;
+    *) _hold_refuse 'hold already consumed' ;;
+  esac
+  _hold_write_state "$SUBMIT_HELD.state" claimed || _hold_refuse 'claim could not be recorded'
+  HELD_CLAIMED=true; HELD_STATE=claimed
+  flock -u "$HELD_LOCK_FD"
+}
+
+_hold_complete_state() {
+  flock "$HELD_LOCK_FD" || return 1
+  local rc=0
+  _hold_write_state "$SUBMIT_HELD.state" "$1" || rc=$?
+  flock -u "$HELD_LOCK_FD"
+  return "$rc"
+}
+
+_hold_before_launch() {
+  _hold_claim
+  if [[ -n "$SUBMIT_HELD" && "${CLAVAIN_TEST_MODE:-0}" == 1 && -n "${CLAVAIN_TEST_PRELAUNCH_HOOK:-}" ]]; then
+    source "$CLAVAIN_TEST_PRELAUNCH_HOOK"
+  fi
+}
+
+_hold_launch() {
+  if [[ -n "$SUBMIT_HELD" ]]; then
+    (
+      cd -P -- "$HELD_WORKDIR" || { _hold_complete_state completed:refused; exit 2; }
+      [[ "$(stat -c %d:%i .)" == "$HELD_WORKDIR_ID" ]] || {
+        _hold_complete_state completed:refused
+        exit 2
+      }
+      exec "$@"
+    )
+  else exec "$@"; fi
+}
+
 _bb_role_sandbox_allowed() {
   local role="$1" sandbox="$2" entry
   for entry in "${BB_ROLE_SANDBOX_ALLOWLIST[@]}"; do
@@ -805,6 +1143,15 @@ _dispatch_cleanup_state() {
   if [[ -n "${KIMI_FINAL_FILE:-}" && "$(basename "$KIMI_FINAL_FILE")" == clavain-kimi-final.* ]]; then
     rm -f "$KIMI_FINAL_FILE" 2>/dev/null || true
   fi
+  if [[ "$HELD_CLAIMED" == true ]]; then
+    HELD_STATE="$(jq -r .state "$SUBMIT_HELD.state")"
+    if [[ "$HELD_STATE" == completed:refused ]]; then
+      HELD_OUTCOME=refused_workdir_changed; _rc=2
+    else
+      HELD_STATE="completed:$_rc"
+      _hold_complete_state "$HELD_STATE" || _rc=75
+    fi
+  fi
   # Governed per-run receipt, best-effort. A signal before the write only sets
   # _sig_rc; the record is built after the status is final, and INT/TERM are
   # ignored just for the short append, so the receipt and the exit status agree.
@@ -821,7 +1168,9 @@ _dispatch_cleanup_state() {
       trap '' INT TERM
       [[ "${_sig_rc:-$_rc}" == "$_used" ]] && break
     done
-    [[ -z "$_line" ]] || _append_dispatch_run_receipt "$_line" 2>/dev/null || true
+    if [[ -z "$_line" ]] || ! _append_dispatch_run_receipt "$_line" 2>/dev/null; then
+      if [[ "$HELD_CLAIMED" == true ]]; then echo 'evidence not recorded' >&2; _rc=75; fi
+    fi
     [[ -z "$_sig_rc" ]] || _rc="$_sig_rc"
   fi
   # mk-ouz83: the receipts above were written after the scan; scan them (and
@@ -832,6 +1181,7 @@ _dispatch_cleanup_state() {
   [[ -z "$TOKEN_LEAK_HITS" ]] || rm -f "$TOKEN_LEAK_HITS" 2>/dev/null || true
   # The EXIT trap exits with this, so the status matches the committed receipt.
   DISPATCH_FINAL_RC="$_rc"
+  if [[ "${CLAVAIN_HELD_SNAPSHOT_OWNER:-}" == "$$" ]]; then rm -f -- "${CLAVAIN_HELD_CONTEXT_SNAPSHOT:-}"; fi
   rm -f "$STATE_FILE" "${STATE_FILE}.tmp" 2>/dev/null || true
   if [[ -n "${INTERBAND_DISPATCH_FILE:-}" ]]; then
     rm -f "$INTERBAND_DISPATCH_FILE" "${INTERBAND_DISPATCH_FILE}.tmp" 2>/dev/null || true
@@ -891,6 +1241,10 @@ Options:
   --bead <ID>                   Attribute receipts to a bead (overrides environment and
                                   the interstat session map; IDs use A-Z, a-z, 0-9, _ . : -)
   --policy <PATH>              Select routing.yaml independently of task directory
+  --hold-prompt <PATH>         Publish final prompt and authenticated manifest; do not launch
+  --submit-held <PATH>         Submit approved bytes once (repeat the original role invocation)
+  --held-manifest-sha256 <HEX>  Approved manifest digest, required for submit
+  --held-max-age <SECONDS>     Manifest TTL (default 86400)
   --context-file <PATH>        Structured reasoning decision context
   --policy-profile <NAME>      Declared policy overlay (pilot requires campaign scope)
   --producer-identity <ID>      Producer backend/model identity for validator audit records
@@ -1223,7 +1577,7 @@ _run_candidate_with_policy() {
     # quota_exhausted gets, then walks to the profile's declared fallback (mk
     # ruling 2026-09-25, mk-nh6v). The provider's own client already retried
     # the request before reporting this failure class.
-    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 && ( "$failure_class" == quota_exhausted || "$failure_class" == rate_limited ) && "$pool_retry" == 0 ]] && _bb_pool_available "$candidate_backend"; then
+    if [[ "${CLAVAIN_HELD_SUBMIT:-0}" != 1 && "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 && ( "$failure_class" == quota_exhausted || "$failure_class" == rate_limited ) && "$pool_retry" == 0 ]] && _bb_pool_available "$candidate_backend"; then
       pool_retry=1
       echo "dispatch: ${failure_class//_/ }; retrying the same profile through the account pool before model fallback" >&2
       continue
@@ -1483,6 +1837,9 @@ _dispatch_role_profile() {
     [[ -n "$candidate" ]] || continue
     candidate_count=$((candidate_count + 1))
     profile_ref="$(jq -r '.profile_ref // empty' <<< "$candidate")"
+    if [[ -n "$SUBMIT_HELD" && "$profile_ref" != "$(jq -r .executed_profile_ref <<< "$HELD_MANIFEST_JSON")" ]]; then
+      continue
+    fi
     backend="$(jq -r '.profile.backend // empty' <<< "$candidate")"
     model="$(jq -r '.profile.model // empty' <<< "$candidate")"
     effort="$(jq -r '.profile.reasoning_effort // empty' <<< "$candidate")"
@@ -1500,12 +1857,14 @@ _dispatch_role_profile() {
     if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "$backend" != codex && "$backend" != claude ]]; then
       fallback_reason="usage_reporting_unavailable"
       capacity_failure_class="$fallback_reason"
+      HELD_SKIPPED_CANDIDATES="$(jq -cn --argjson s "$HELD_SKIPPED_CANDIDATES" --arg ref "$profile_ref" --arg c "$capacity_failure_class" '$s+[{profile_ref:$ref,failure_class:$c}]')"
       echo "dispatch: '$profile_ref' cannot report usage for this approved token budget; trying its declared fallback" >&2
       continue
     fi
     if [[ "$backend" == "codex" && -n "$minimum" ]] && ! _codex_version_at_least "$minimum"; then
       fallback_reason="insufficient_codex_version"
       capacity_failure_class="$fallback_reason"
+      HELD_SKIPPED_CANDIDATES="$(jq -cn --argjson s "$HELD_SKIPPED_CANDIDATES" --arg ref "$profile_ref" --arg c "$capacity_failure_class" '$s+[{profile_ref:$ref,failure_class:$c}]')"
       echo "dispatch: profile '$profile_ref' requires Codex >= $minimum; trying its declared fallback" >&2
       continue
     fi
@@ -1534,6 +1893,10 @@ _dispatch_role_profile() {
     # the only reachable reviewer, but the review is provisional, not a real
     # cross-lab check — see B1's reviewer paragraph and B3's re-check filing
     # below.
+    if [[ -n "$SUBMIT_HELD" ]]; then
+      fallback_reason="$(jq -r '.fallback_reason // ""' <<< "$HELD_MANIFEST_JSON")"
+      capacity_failure_class="$(jq -r '.capacity_failure_class // ""' <<< "$HELD_MANIFEST_JSON")"
+    fi
     capacity_substitute=null
     if [[ ( "$role" == plan-review || "$role" == validation || "$role" == cross-lab-review ) && -n "$capacity_failure_class" ]]; then
       candidate_model_identity="$(jq -r '.profile.model_identity // .profile.model' <<< "$candidate")"
@@ -1549,8 +1912,12 @@ _dispatch_role_profile() {
       fi
     fi
 
+    if [[ -n "$SUBMIT_HELD" ]]; then
+      capacity_substitute="$(jq -c .capacity_substitute_json <<< "$HELD_MANIFEST_JSON")"
+      HELD_SKIPPED_CANDIDATES="$(jq -c .skipped_candidates <<< "$HELD_MANIFEST_JSON")"
+    fi
     resolved_args=(
-      env "CLAVAIN_BEAD_ID=$CLAVAIN_BEAD_ID" "CLAVAIN_BEAD_SOURCE=$CLAVAIN_BEAD_SOURCE"
+      env "CLAVAIN_HELD_CAPACITY_FAILURE_CLASS=$capacity_failure_class" "CLAVAIN_HELD_SKIPPED_CANDIDATES=$HELD_SKIPPED_CANDIDATES" "CLAVAIN_BEAD_ID=$CLAVAIN_BEAD_ID" "CLAVAIN_BEAD_SOURCE=$CLAVAIN_BEAD_SOURCE"
       CLAVAIN_BEAD_CONTEXT_RESOLVED=1
       "DISPATCH_BEAD_ID_CALLER_EXPORTED=$DISPATCH_BEAD_ID_CALLER_EXPORTED"
       bash "${BASH_SOURCE[0]}"
@@ -1578,17 +1945,20 @@ _dispatch_role_profile() {
     fi
     # A started budgeted candidate may have spent tokens, even on an access or
     # transport failure. Only its supervisor can admit another invocation.
+    [[ -z "$SUBMIT_HELD" ]] || return "$rc"
     [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]] || return "$rc"
     case "$CLAVAIN_LAST_FAILURE_CLASS" in
       quota_exhausted|rate_limited|model_unavailable|account_access_absent)
         fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
         capacity_failure_class="$CLAVAIN_LAST_FAILURE_CLASS"
+        HELD_SKIPPED_CANDIDATES="$(jq -cn --argjson s "$HELD_SKIPPED_CANDIDATES" --arg ref "$profile_ref" --arg c "$capacity_failure_class" '$s+[{profile_ref:$ref,failure_class:$c}]')"
         capacity_failed_seats+="$backend/$model"$'\n'
         echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
         ;;
       insufficient_codex_version|unsupported_adapter)
         fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
         capacity_failure_class="$CLAVAIN_LAST_FAILURE_CLASS"
+        HELD_SKIPPED_CANDIDATES="$(jq -cn --argjson s "$HELD_SKIPPED_CANDIDATES" --arg ref "$profile_ref" --arg c "$capacity_failure_class" '$s+[{profile_ref:$ref,failure_class:$c}]')"
         echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
         ;;
       *)
@@ -1598,6 +1968,7 @@ _dispatch_role_profile() {
     esac
   done <<< "$candidates"
 
+  [[ -z "$SUBMIT_HELD" ]] || _hold_refuse 'held profile unavailable in current route'
   [[ "$candidate_count" -gt 0 ]] || echo "Error: role '$role' has no executable profiles" >&2
   return "$rc"
 }
@@ -2040,6 +2411,16 @@ while [[ $# -gt 0 ]]; do
       TEMPLATE_FILE="$2"
       shift 2
       ;;
+    --hold-prompt|--submit-held|--held-manifest-sha256|--held-max-age)
+      require_arg "$1" "${2:-}"
+      case "$1" in
+        --hold-prompt) HOLD_PROMPT="$2" ;;
+        --submit-held) SUBMIT_HELD="$2" ;;
+        --held-manifest-sha256) HELD_MANIFEST_SHA256="$2" ;;
+        --held-max-age) HELD_MAX_AGE="$2" ;;
+      esac
+      shift 2
+      ;;
     --dry-run)
       DRY_RUN=true
       shift
@@ -2113,6 +2494,8 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+_hold_entry "${1:-}"
 
 # Replayed resolved decisions are a separate governed entry point. Derive the
 # role from the decision, never from a caller's --role alone. Keep all parsing
@@ -2380,6 +2763,10 @@ if [[ -n "$PHASE" ]]; then
   echo "Phase context: $PHASE" >&2
 fi
 
+if [[ -n "$SUBMIT_HELD" ]]; then
+  PROMPT="$(cat -- "$SUBMIT_HELD"; printf x)"; PROMPT="${PROMPT%x}"
+  [[ "$(printf '%s' "$PROMPT" | _hold_hash)" == "$(jq -r .prompt_sha256 <<< "$HELD_MANIFEST_JSON")" ]] || _hold_refuse 'prompt hash mismatch'
+else
 # Resolve prompt: positional arg, --prompt-file, or error
 PROMPT="${1:-}"
 # A seat that cannot read its plan has nothing to replay: fail before any
@@ -2406,7 +2793,11 @@ if [[ -n "$PROMPT_FILE" ]]; then
     echo "Error: Prompt file not found: $PROMPT_FILE" >&2
     exit 1
   fi
-  PROMPT="$(cat "$PROMPT_FILE")"
+  if [[ -n "$HOLD_PROMPT" ]]; then
+    PROMPT="$(cat "$PROMPT_FILE"; printf x)"; PROMPT="${PROMPT%x}"
+  else
+    PROMPT="$(cat "$PROMPT_FILE")"
+  fi
   if [[ -z "$PROMPT" ]]; then
     echo "Error: Prompt file is empty: $PROMPT_FILE" >&2
     exit 1
@@ -2548,6 +2939,8 @@ ${PROMPT}"
   fi
 fi
 
+fi # submit skips all source assembly
+
 # NOTE: Codex v0.100.0+ uses Landlock+seccomp as the default Linux sandbox,
 # NOT bwrap. The previous bwrap auto-bypass was removed because it disabled
 # a working sandbox. If Landlock is unavailable (kernel < 5.13), Codex falls
@@ -2646,6 +3039,8 @@ _apply_context_gateway() {
   local harness="generic"
   local enriched=""
   local gateway_status=0
+  local gateway_before="$PROMPT"
+  CONTEXT_GATEWAY_INVOKED=true
 
   if [[ "$VIA" == "zaka" && "$ENGINE_SET" != true ]]; then
     harness="claude"
@@ -2667,6 +3062,7 @@ _apply_context_gateway() {
       --harness "$harness" \
       --mode "$CONTEXT_GATEWAY_MODE")"; then
     PROMPT="$enriched"
+    [[ "$PROMPT" == "$gateway_before" ]] || CONTEXT_GATEWAY_CHANGED_PROMPT=true
     return 0
   else
     gateway_status=$?
@@ -2680,14 +3076,14 @@ _apply_context_gateway() {
 # hashed and bound to a producer receipt; the context gateway's enrichment/
 # compaction would silently expand or alter that evidence, defeating the
 # packet's whole purpose. Never route packet-mode prompts through it.
-if [[ "$REVIEW_PACKET_MODE" != true && ( "$ENGINE" != "auto" || "$VIA" == "zaka" ) ]]; then
+if [[ -z "$SUBMIT_HELD" && !( -n "$HOLD_PROMPT" && "$CONTEXT_GATEWAY_MODE" == off ) && "$REVIEW_PACKET_MODE" != true && ( "$ENGINE" != "auto" || "$VIA" == "zaka" ) ]]; then
   _apply_context_gateway
 fi
 
 # Governed children must receive the same contract even when user-scope
 # instructions are intentionally excluded (Claude review seats do this).
 # Add it after context compaction, with the immutable resolved decision.
-if [[ "$ROLE_RESOLVED" == true ]]; then
+if [[ "$ROLE_RESOLVED" == true && -z "$SUBMIT_HELD" ]]; then
   case "$ENGINE" in
     codex|claude|claude-code|kimi)
       contract_host="${ENGINE/claude-code/claude}"
@@ -2761,6 +3157,14 @@ single line \"None.\" instead of a list."
       exit 1
       ;;
   esac
+fi
+
+# Early transports also receive final-prompt and isolation evidence. Direct
+# builders refresh it once their flags and pool transport have been settled.
+if [[ -n "$ROLE" && "$ROLE_RESOLVED" == true ]]; then
+  _hold_prompt_fingerprint
+  _hold_isolation
+  _hold_decision
 fi
 
 # ─── Compound Autonomy Guard (rsj.1.8) ──────────────────────────────────────
@@ -3415,7 +3819,7 @@ else
 
   if [[ -n "$SCRATCH_CODEX_CD" ]]; then
     CMD+=(-C "$SCRATCH_CODEX_CD")
-  elif [[ -n "$WORKDIR" ]]; then
+  elif [[ -n "$WORKDIR" && "$HELD_MODE" != true ]]; then
     CMD+=(-C "$WORKDIR")
   fi
   # uv's sync step builds a network client, and under the codex sandbox that
@@ -3510,6 +3914,7 @@ with tempfile.TemporaryDirectory(dir=p) as d:
   fi
 
   CMD+=("$PROMPT")
+  [[ "$HELD_MODE" != true ]] || CMD+=(--json)
   if [[ -n "$SCRATCH_CODEX_TMPDIR" && "$DRY_RUN" != true ]]; then
     # TMPDIR only for the codex process, not for dispatch's own temp files.
     # No inherited GIT_* variable reaches codex either: a stale GIT_DIR,
@@ -3521,6 +3926,8 @@ with tempfile.TemporaryDirectory(dir=p) as d:
     CMD=(env "${SCRATCH_ENV_SCRUB[@]+"${SCRATCH_ENV_SCRUB[@]}"}" "TMPDIR=$SCRATCH_CODEX_TMPDIR" "${CMD[@]}")
   fi
 fi
+
+_hold_boundary
 
 # Dry run: print command and exit
 if [[ "$DRY_RUN" == true ]]; then
@@ -5379,6 +5786,8 @@ if [[ -n "$ROLE" && "$ROLE_RESOLVED" == true && -n "$OUTPUT" ]]; then
   rm -f "${OUTPUT}.recheck.md"
 fi
 
+
+
 if [[ "$VIA" == bb ]]; then
   # Keep the existing admission/audit setup above and finalizers below intact.
   set +e
@@ -5430,12 +5839,16 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
     SEAT_SNAPSHOT_BEFORE="$(_seat_snapshot "${WORKDIR:-.}")"
   fi
   RUN_DIR="$WORKDIR"
+  [[ -z "$SUBMIT_HELD" ]] || RUN_DIR="$HELD_WORKDIR"
   RUN_CMD=("${CMD[@]}")
   if [[ "$KIMI_SEAT_TOOLS" == true ]]; then
     command -v jq >/dev/null 2>&1 || { echo "Error: dispatch: the kimi review seat needs jq to read its final message" >&2; exit 1; }
     _kimi_seat_prepare || exit 1
     RUN_DIR="$KIMI_RUN_DIR"
     RUN_CMD=("${KIMI_RUN_CMD[@]}")
+    for _a in "${RUN_CMD[@]}"; do [[ "$_a" != --prompt=* ]] || PROMPT="${_a#--prompt=}"; done
+    _hold_prompt_fingerprint
+    _hold_isolation
     echo "dispatch: kimi seat runs in a disposable copy ($KIMI_SANDBOX_MODE)" >&2
   elif [[ "$ENGINE" == "kimi" && -n "$KIMI_SANDBOX_MODE" ]]; then
     echo "dispatch: kimi seat sandbox: $KIMI_SANDBOX_MODE" >&2
@@ -5446,21 +5859,22 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   if [[ ${#SEAT_ENV_UNSET[@]} -gt 0 ]]; then
     RUN_CMD=(env "${SEAT_ENV_UNSET[@]}" "${RUN_CMD[@]}")
   fi
+  _hold_before_launch
   set +e
   # kimi carries its prompt in argv; claude reads it from PROMPT_STDIN_FILE
   # (see the claude CMD build). /dev/null for kimi so neither engine ever
   # inherits the orchestrator's stdin.
   if [[ -n "$OUTPUT" ]]; then
     if [[ -n "$RUN_DIR" ]]; then
-      ( cd "$RUN_DIR" && "${RUN_CMD[@]}" ) < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | _render_backend_response | tee "$OUTPUT"
+      ( if [[ -n "$SUBMIT_HELD" ]]; then _hold_launch "${RUN_CMD[@]}"; else cd "$RUN_DIR" && "${RUN_CMD[@]}"; fi ) < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | _render_backend_response | tee "$OUTPUT"
     else
-      "${RUN_CMD[@]}" < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | _render_backend_response | tee "$OUTPUT"
+      _hold_launch "${RUN_CMD[@]}" < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | _render_backend_response | tee "$OUTPUT"
     fi
   else
     if [[ -n "$RUN_DIR" ]]; then
-      ( cd "$RUN_DIR" && "${RUN_CMD[@]}" ) < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | _render_backend_response
+      ( if [[ -n "$SUBMIT_HELD" ]]; then _hold_launch "${RUN_CMD[@]}"; else cd "$RUN_DIR" && "${RUN_CMD[@]}"; fi ) < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | _render_backend_response
     else
-      "${RUN_CMD[@]}" < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | _render_backend_response
+      _hold_launch "${RUN_CMD[@]}" < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | _render_backend_response
     fi
   fi
   KIMI_EXIT="${PIPESTATUS[0]}"
@@ -5577,7 +5991,8 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   exit "$KIMI_EXIT"
 elif [[ "$HAS_GAWK" == true ]]; then
   # Add --json to capture JSONL stream, pipe through parser
-  CMD+=(--json)
+  [[ "$HELD_MODE" == true ]] || CMD+=(--json)
+  _hold_before_launch
 
   # Capture stderr while still mirroring to the terminal so the user sees errors live
   # AND dispatch can inspect them for verdict synthesis.
@@ -5585,10 +6000,10 @@ elif [[ "$HAS_GAWK" == true ]]; then
   # us run verdict override + cleanup before exiting with the captured code.
   set +e
   if [[ -n "${CLAVAIN_REVIEW_EVENTS:-}" ]]; then
-    "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS" | tee -a "$CLAVAIN_REVIEW_EVENTS" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
+    _hold_launch "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS" | tee -a "$CLAVAIN_REVIEW_EVENTS" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
     CODEX_EXIT="${PIPESTATUS[0]}"
   else
-    "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
+    _hold_launch "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
     CODEX_EXIT="${PIPESTATUS[0]}"
   fi
   _token_leak_scan_all  # mk-ouz83: before stderr is mirrored
@@ -5624,6 +6039,7 @@ elif [[ "$HAS_GAWK" == true ]]; then
 else
   # Fallback: no gawk, run without JSONL parsing (no live statusline updates)
   echo "Note: gawk not found — running without live statusline updates" >&2
+  _hold_before_launch
   set +e
   if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
     if [[ -z "${CLAVAIN_REVIEW_EVENTS:-}" ]]; then
@@ -5632,12 +6048,12 @@ else
     fi
     # The Go supervisor parses raw JSONL independently of optional GNU awk.
     # Stock macOS awk must not prevent budget-governed execution.
-    CMD+=(--json)
-    "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS" | tee -a "$CLAVAIN_REVIEW_EVENTS"
+    [[ "$HELD_MODE" == true ]] || CMD+=(--json)
+    _hold_launch "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS" | tee -a "$CLAVAIN_REVIEW_EVENTS"
     CODEX_EXIT="${PIPESTATUS[0]}"
   else
-    CMD+=(--json)
-    "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS"
+    [[ "$HELD_MODE" == true ]] || CMD+=(--json)
+    _hold_launch "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS"
     CODEX_EXIT="${PIPESTATUS[0]}"
   fi
   _token_leak_scan_all  # mk-ouz83: before stderr is mirrored

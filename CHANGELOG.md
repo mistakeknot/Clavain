@@ -4,6 +4,10 @@
 
 ### Added
 
+- Governed dispatch can hold the final prompt for external manifest-digest approval,
+  then submit those exact bytes once with bound decision and execution evidence.
+  Receipts include final prompt hashes and transport tool isolation (mk-47vtm.9).
+
 - `/clavain:prototype` builds a disposable experiment for one design question,
   records observations and the answer, then removes or quarantines the code.
   Wayfind prototype tickets link to the command and retain their owner-pick
