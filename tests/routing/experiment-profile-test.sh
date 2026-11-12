@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 python3 - <<'PY'
-import hashlib, json, pathlib, subprocess, tempfile, yaml
+import copy, hashlib, json, pathlib, subprocess, tempfile, yaml
 root = pathlib.Path.cwd()
 policy = root / 'config/routing.yaml'
 cfg = yaml.safe_load(policy.read_text())
@@ -67,7 +67,16 @@ with tempfile.TemporaryDirectory() as tmp:
         if e['assert']['backend']=='codex':
             assert resolve('cross-lab-review',profile=name,reasons=reasons,scope=e['bead'])['profile']['reasoning_effort']=='high'
         else:
-            resolve('cross-lab-review',profile=name,reasons=reasons,scope=e['bead'],ok=False)
+            # With no fallback the resolver emits only the aggregate refusal.
+            resolve('cross-lab-review',profile=name,reasons=reasons,scope=e['bead'],ok=False,error='no eligible model')
+            # A resolver-only fixture makes the excluded Fable reason visible;
+            # production experiment tiers still have no fallback at all.
+            fixture=copy.deepcopy(cfg)
+            fixture['dispatch']['tiers'][e['tier']]['fallbacks']=['crosslab-sol']
+            diagnostic=tmp/'diagnostic.yaml'
+            diagnostic.write_text(yaml.safe_dump(fixture))
+            diagnostic_route=resolve('cross-lab-review',path=diagnostic,profile=name,reasons=reasons,scope=e['bead'])
+            assert any(x['profile_ref']==e['tier'] and x['reason']=='unsupported_adapter' for x in diagnostic_route['excluded']), diagnostic_route['excluded']
     for producer in ['opus','anthropic/claude-opus-5-5']:
         r=resolve('cross-lab-review',profile='experiment-mk-d0h1j.1-sol-medium',reasons=['difficult-verification'],scope='mk-d0h1j.1',producer=producer)
         assert r['producer_model']=='claude-opus-5-5' and r['producer_identity']==producer
