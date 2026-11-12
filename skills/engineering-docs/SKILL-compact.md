@@ -36,7 +36,7 @@ If similar issues exist, add bidirectional links. If 3+ similar issues, add patt
 
 ### Step 7: Vocabulary Capture
 
-Update the nearest existing glossary (`docs/glossary.md`, `GLOSSARY.md`, `CONCEPTS.md`, checking parent directories up to the workspace root), matching its format. Only if none exists and the learning surfaced a qualifying term, create `CONCEPTS.md` seeded with this learning's area only. Mutations: add, refine, fold, and scrub entries this run touched; entries carry no paths or config values. Apply silently and report `Vocabulary (<file>): not present | scanned, no qualifying terms | updated — N added, N refined, N folded, N scrubbed`. Rules: `references/vocabulary-capture.md`.
+Starting at the repo root, check `docs/glossary.md`, `GLOSSARY.md`, then `CONCEPTS.md` in each directory, continuing through parent directories up to the workspace root. Use the first file found and match its format. Never start a second glossary beside an existing one. If none exists and the learning surfaced a qualifying term, create `docs/glossary.md` at the repo root (including `docs/` if needed), seeded with this learning's area only. Mutations: add, refine, fold, and scrub entries this run touched; entries carry no paths or config values. Apply silently and report `Vocabulary (<file>): not present | scanned, no qualifying terms | updated — N added, N refined, N folded, N scrubbed`. Rules: `references/vocabulary-capture.md`.
 
 ### Step 8: Decision Menu
 
