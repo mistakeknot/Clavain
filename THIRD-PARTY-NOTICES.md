@@ -8,7 +8,8 @@ require.
 
 Source: https://github.com/mattpocock/skills
 
-Used in: `commands/wayfind.md`, `scripts/wayfind.py`, `commands/grill-me.md`.
+Used in: `commands/wayfind.md`, `scripts/wayfind.py`, `commands/grill-me.md`,
+`commands/prototype.md`.
 
 MIT License
 

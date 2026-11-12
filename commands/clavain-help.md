@@ -28,6 +28,7 @@ description: Show Clavain commands organized by daily drivers first, then by wor
 | `/clavain:strategy` | PRD creation + beads tracking |
 | `/clavain:recall` | Search all knowledge systems |
 | `/clavain:debate` | Claude ↔ Codex debate before implementing |
+| `/clavain:prototype` | Answer one design question with disposable code; record the answer and retire the experiment |
 
 ### Plan
 | `/clavain:write-plan` | Implementation plan |
