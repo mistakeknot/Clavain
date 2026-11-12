@@ -3084,6 +3084,17 @@ fi
 # instructions are intentionally excluded (Claude review seats do this).
 # Add it after context compaction, with the immutable resolved decision.
 if [[ "$ROLE_RESOLVED" == true && -z "$SUBMIT_HELD" ]]; then
+  case "$ROLE" in
+    plan-review|validation|cross-lab-review)
+      review_preamble="$(cat "$DISPATCH_SCRIPT_DIR/review-role-preamble.md")"
+      # Packets already carry this instruction; preserve one copy.
+      if [[ "$PROMPT" != *"$review_preamble"* ]]; then
+        PROMPT="$review_preamble
+
+$PROMPT"
+      fi
+      ;;
+  esac
   case "$ENGINE" in
     codex|claude|claude-code|kimi)
       contract_host="${ENGINE/claude-code/claude}"
