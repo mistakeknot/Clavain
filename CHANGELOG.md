@@ -14,7 +14,9 @@
   source provenance and per-attempt usage accounting (mk-42j9.7.3). Live budget
   values remain unset. Selector read-phase failures no longer retry, and
   returned model names are recorded as hashes. Burn bounds require complete
-  accounting and explicit finite weights.
+  accounting and explicit finite weights. Default structural collection keeps
+  namespace-only qualification separate, with an inventory guard tying its
+  exclusions to the explicit qualification runner.
 
 - Governed dispatch can hold the final prompt for external manifest-digest approval,
   then submit those exact bytes once with bound decision and execution evidence.

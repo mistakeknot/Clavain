@@ -49,6 +49,9 @@ Run `scripts/qualify-support-adapter.sh` for dummy-only tests in a network
 namespace with no active interfaces. The runner fails if isolation is unavailable.
 These tests fail outside that namespace. Run the existing selector client,
 records, burn, flags, and egress regression tests separately; those use loopback
-sockets. When running the remaining structural suite outside the namespace,
-exclude the five `test_selector_support*.py` qualification modules and report
-their separately executed counts.
+sockets. Default structural directory collection excludes only the five
+namespace modules through one `collect_ignore` list. A structural coverage test
+checks that every module using the namespace fixture is both ignored by default
+and named in the qualification runner, while every ordinary selector module
+still collects. The runner selects its files explicitly, so its namespace guard
+remains mandatory. Report qualification and ordinary-suite counts separately.
