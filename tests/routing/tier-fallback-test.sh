@@ -262,3 +262,17 @@ PYFIX
 rc=0
 python3 "$ROOT/scripts/tier-fallback-chain.py" --policy "$TMP_ROOT/experiment-fallback.yaml" --tier ordinary >/dev/null 2>&1 || rc=$?
 [[ "$rc" == 4 ]] || fail "fallback walk admitted experiment tier"
+# Exercise the dispatcher too, including the pyyaml-free legacy alias path.
+: > "$FAKE_CODEX_LOG"; : > "$FAKE_CLAUDE_LOG"
+rc=0
+bash "$ROOT/scripts/dispatch.sh" --policy "$TMP_ROOT/experiment-fallback.yaml" --tier ordinary -C "$TMP_ROOT/work" fixture >/dev/null 2>&1 || rc=$?
+[[ "$rc" != 0 && ! -s "$FAKE_CODEX_LOG" && ! -s "$FAKE_CLAUDE_LOG" ]] || fail "dispatcher reached fallback experiment"
+python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT/experiment-alias.yaml" <<'PYFIX'
+import sys
+text=open(sys.argv[1]).read()
+text=text.replace('  fallback:\n', '  fallback:\n    experiment-alias: exp-mk-d0h1j.1-sol-medium\n', 1)
+open(sys.argv[2],'w').write(text)
+PYFIX
+rc=0
+PATH="$TMP_ROOT/bin-noyaml:$PATH" bash "$ROOT/scripts/dispatch.sh" --policy "$TMP_ROOT/experiment-alias.yaml" --tier experiment-alias -C "$TMP_ROOT/work" fixture >/dev/null 2>&1 || rc=$?
+[[ "$rc" != 0 && ! -s "$FAKE_CODEX_LOG" && ! -s "$FAKE_CLAUDE_LOG" ]] || fail "legacy alias reached experiment"

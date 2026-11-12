@@ -82,7 +82,7 @@ refused() { [ "$status" -eq 2 ]; [ ! -e "$T/backend" ]; }
     [[ "$output" == *"unregistered experiment"* ]]
 }
 @test "outer reaches each backend with exact effort and strict complete evidence" {
-    for spec in 'sol-medium opus' 'fable-high sol'; do
+    for spec in 'sol-medium opus' 'fable-high sol' 'sol-medium anthropic/claude-opus-5-5' 'fable-high openai/gpt-6.1-sol'; do
         read -r a p <<< "$spec"; arm "$a" "$p"
         rm -f "$T/backend" "$T/receipts"
         run outer
@@ -109,6 +109,12 @@ refused() { [ "$status" -eq 2 ]; [ ! -e "$T/backend" ]; }
         run child "$flag" medium
         refused
     done
+    run child --reasoning-effort high
+    refused
+    run child --engine codex
+    refused
+    run child -m gpt-6.1-sol
+    refused
     run child -c model_reasoning_effort=high
     refused
 }

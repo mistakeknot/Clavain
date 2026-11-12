@@ -2328,7 +2328,10 @@ _experiment_entry() {
   local flag count fresh candidate expected semantics producer_model arm_lab
   for flag in --to --model --reasoning-effort --service-tier --resolved-profile-ref --resolved-profile-json --resolved-route-json; do
     count=0
-    for arg in "${ORIGINAL_ARGS[@]}"; do [[ "$arg" != "$flag" ]] || count=$((count+1)); done
+    for arg in "${ORIGINAL_ARGS[@]}"; do
+      [[ "$arg" != "$flag" ]] || count=$((count+1))
+      case "$flag:$arg" in --to:--engine|--model:-m) count=$((count+1)) ;; esac
+    done
     [[ "$count" == 1 ]] || _experiment_refuse "experiment requires exactly one $flag"
   done
   expected="$(jq -c '.assert' <<< "$EXPERIMENT_ENTRY")"
