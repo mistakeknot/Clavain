@@ -155,7 +155,9 @@ _role_audit_context() {
   local ic_version=""
   case "${ROLE:-}" in
     plan-review|validation|cross-lab-review)
-      command -v _dispatch_ic_version >/dev/null 2>&1 && ic_version="$(_dispatch_ic_version 2>/dev/null || true)"
+      if command -v _dispatch_ic_version >/dev/null 2>&1; then
+        _dispatch_ic_version ic_version 2>/dev/null || true
+      fi
       ;;
   esac
   # A reused output path may still contain a previous attempt's sidecar.
