@@ -129,7 +129,7 @@ verdict_final_class() {
 # different lines (mk-0qjva).
 #   verdict_strict_word FILE
 verdict_strict_word() {
-  local out="${1-}" last rc
+  local out="${1-}" last rc word
   [[ -f "$out" ]] || { echo 'review verdict: output file missing' >&2; return 1; }
   # Continue only on grep status 1 (no delimiter found); a match or any scan
   # error rejects. NUL bytes are rejected first: shell capture would drop them.
@@ -143,18 +143,25 @@ verdict_strict_word() {
     echo 'review verdict: cannot scan output for delimiters' >&2
     return 1
   fi
+  rc=0
   last="$(awk '
     { sub(/\r$/, "") }
     $0 ~ /[^[:space:]]/ { last = $0; lastok = (blank || NR == 1); blank = 0; next }
     { blank = 1 }
-    END { if (!lastok) exit 2; print last }' "$out")" || {
-      echo 'review verdict: final VERDICT must be preceded by a blank line (or begin the file)' >&2
-      return 1
-    }
-  verdict_label_word "$last" || {
+    END { print last; if (!lastok) exit 2 }' "$out")" || rc=$?
+  if ! LC_ALL=C grep -qiE '^([*][*]|__)?VERDICT[[:space:]]*:' "$out"; then
+    echo 'review verdict: no VERDICT label line found' >&2
+    return 1
+  fi
+  word="$(verdict_label_word "$last")" || {
     echo 'review verdict: VERDICT must be the last non-blank line with a recognized label format' >&2
     return 1
   }
+  [[ $rc -eq 0 ]] || {
+    echo 'review verdict: final VERDICT must be preceded by a blank line (or begin the file)' >&2
+    return 1
+  }
+  printf '%s\n' "$word"
 }
 
 # Receipt-equivalent class of FILE: PASS, PASS_WITH_NOTES, FAIL, UNKNOWN, or
@@ -162,7 +169,7 @@ verdict_strict_word() {
 #   verdict_strict_class FILE
 verdict_strict_class() {
   local w
-  if w="$(verdict_strict_word "${1-}")"; then
+  if w="$(verdict_strict_word "${1-}" 2>/dev/null)"; then
     verdict_word_class "$w"
   else
     echo NONE

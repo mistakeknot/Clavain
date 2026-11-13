@@ -40,6 +40,16 @@ teardown() { rm -rf "$T"; }
     run _review_receipt_write "$OUT" 0
     [ "$status" -ne 0 ]
     [[ "$output" == *"preceded by a blank line"* ]]
+    printf 'Findings\n\nVERDICT: PASS\nmore prose\n' > "$OUT"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"VERDICT must be the last non-blank line"* ]]
+    for body in '' $'Overall fine.\nThanks.'; do
+        printf '%s\n' "$body" > "$OUT"
+        run _review_receipt_write "$OUT" 0
+        [ "$status" -ne 0 ]
+        [[ "$output" == *"no VERDICT label line found"* ]]
+    done
 }
 
 @test "cross-lab prompt explicitly forbids fences and HTML comment delimiters everywhere" {
