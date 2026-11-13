@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Fixed
+
+- The Claude usage meter accepts the ephemeral 5m/1h cache-creation fields
+  (`cache_creation.ephemeral_*_input_tokens` and
+  `cacheCreationEphemeral{5m,1h}InputTokens`) as a breakdown of the cache
+  creation total. They are validated, must not exceed it and are never added, so
+  packaged Claude reviews no longer end `failed`; unknown token fields are still
+  rejected (mk-nthkv).
+
 ### Changed
 
 - Review roles always receive tool-denial and URL-fetch boundaries, including
