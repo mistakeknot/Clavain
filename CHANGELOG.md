@@ -7,6 +7,12 @@ previously documented under 0.6.332 after that version was installed.
 
 ### Fixed
 
+- The Claude usage meter accepts the ephemeral 5m/1h cache-creation fields
+  (`cache_creation.ephemeral_*_input_tokens` and
+  `cacheCreationEphemeral{5m,1h}InputTokens`) as a breakdown of the cache
+  creation total. They are validated, must not exceed it and are never added, so
+  packaged Claude reviews no longer end `failed`; unknown token fields are still
+  rejected (PR #187, mk-nthkv).
 - Review audit receipts retain `ic_version` by passing the output variable
   required by the version helper. Routing, held-prompt, cancellation and
   receipt-lock fixtures now isolate caller state and synchronize their
@@ -53,15 +59,6 @@ previously documented under 0.6.332 after that version was installed.
   fixtures, characterization coverage and a longer CI timeout (PRs #135,
   #137, #139, #162, #164, #167, #169).
 
-### Fixed
-
-- The Claude usage meter accepts the ephemeral 5m/1h cache-creation fields
-  (`cache_creation.ephemeral_*_input_tokens` and
-  `cacheCreationEphemeral{5m,1h}InputTokens`) as a breakdown of the cache
-  creation total. They are validated, must not exceed it and are never added, so
-  packaged Claude reviews no longer end `failed`; unknown token fields are still
-  rejected (mk-nthkv).
-
 ### Changed
 
 - Packaged review dispatch refuses another review after three failed rounds
@@ -75,14 +72,15 @@ previously documented under 0.6.332 after that version was installed.
   guards. The new one-shot-author role selects Fable 5.2 with Opus/Astra
   fallbacks (PRs #110, #114, #115, #170, #172).
 - Review roles always receive tool-denial and URL-fetch boundaries, including
-  dispatches without a review packet (mk-6lv1a).
+  dispatches without a review packet (PR #181, mk-6lv1a).
 
-- The experiment tiers and profiles change the `routing.yaml` SHA256; the next
-  release carries the updated policy hash in managed contracts (mk-47vtm.10).
+- The experiment tiers and profiles change the `routing.yaml` SHA256; this
+  release carries the updated policy hash in managed contracts (PRs #179, #180,
+  mk-47vtm.10).
 
 - Pruned role boilerplate and redundant wording in five planning, execution and
   review skills and three authoring/execution commands; added step completion criteria
-  while retaining review, evidence and authority gates (mk-7k5v0.3).
+  while retaining review, evidence and authority gates (PR #176, mk-7k5v0.3).
 
 ### Added
 
@@ -95,7 +93,7 @@ previously documented under 0.6.332 after that version was installed.
   gates held by the executor; they are not encoded in this profile.
 
 - Default-off, evaluation-only three-label Jev support checks with pinned Git
-  source provenance and per-attempt usage accounting (mk-42j9.7.3). Live budget
+  source provenance and per-attempt usage accounting (PR #178, mk-42j9.7.3). Live budget
   values remain unset. Selector read-phase failures no longer retry, and
   returned model names are recorded as hashes. Burn bounds require complete
   accounting and explicit finite weights. Default structural collection keeps
@@ -106,13 +104,14 @@ previously documented under 0.6.332 after that version was installed.
 
 - Governed dispatch can hold the final prompt for external manifest-digest approval,
   then submit those exact bytes once with bound decision and execution evidence.
-  Receipts include final prompt hashes and transport tool isolation (mk-47vtm.9).
+  Receipts include final prompt hashes and transport tool isolation (PR #177,
+  mk-47vtm.9).
 
 - `/clavain:prototype` builds a disposable experiment for one design question,
   records observations and the answer, then removes or quarantines the code.
   Wayfind prototype tickets link to the command and retain their owner-pick
   resolution gate. Includes command registration, help and discovery coverage
-  (mk-7k5v0.5).
+  (PR #175, mk-7k5v0.5).
 
 ## 0.6.332
 
