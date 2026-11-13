@@ -24,6 +24,38 @@ setup() {
 }
 teardown() { rm -rf "$T"; }
 
+@test "strict format failures name the rejected rule" {
+    _review_receipt_prepare "$R"
+    for marker in '```' '~~~' '<!--' '-->'; do
+        printf '%s\n\nVERDICT: PASS\n' "$marker" > "$OUT"
+        run _review_receipt_write "$OUT" 0
+        [ "$status" -ne 0 ]
+        [[ "$output" == *"fence or HTML comment delimiter found"* ]]
+    done
+    printf 'VERDICT: PASS\n\nmore prose\n' > "$OUT"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"VERDICT must be the last non-blank line"* ]]
+    printf 'findings\nVERDICT: PASS\n' > "$OUT"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"preceded by a blank line"* ]]
+    printf 'Findings\n\nVERDICT: PASS\nmore prose\n' > "$OUT"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"VERDICT must be the last non-blank line"* ]]
+    for body in '' $'Overall fine.\nThanks.'; do
+        printf '%s\n' "$body" > "$OUT"
+        run _review_receipt_write "$OUT" 0
+        [ "$status" -ne 0 ]
+        [[ "$output" == *"no VERDICT label line found"* ]]
+    done
+}
+
+@test "cross-lab prompt explicitly forbids fences and HTML comment delimiters everywhere" {
+    grep -q 'Do not use code fences or HTML comment delimiters anywhere in your output' "$DISPATCH"
+}
+
 @test "prepare derives the diff hash from the raw git diff bytes" {
     _review_receipt_prepare "$R"
     want="$(git -C "$R" diff --no-ext-diff --no-renames --binary "$BASE" "$HEAD_SHA" | sha256sum | cut -d' ' -f1)"
