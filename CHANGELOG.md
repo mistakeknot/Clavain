@@ -53,6 +53,15 @@ previously documented under 0.6.332 after that version was installed.
   fixtures, characterization coverage and a longer CI timeout (PRs #135,
   #137, #139, #162, #164, #167, #169).
 
+### Fixed
+
+- The Claude usage meter accepts the ephemeral 5m/1h cache-creation fields
+  (`cache_creation.ephemeral_*_input_tokens` and
+  `cacheCreationEphemeral{5m,1h}InputTokens`) as a breakdown of the cache
+  creation total. They are validated, must not exceed it and are never added, so
+  packaged Claude reviews no longer end `failed`; unknown token fields are still
+  rejected (mk-nthkv).
+
 ### Changed
 
 - Packaged review dispatch refuses another review after three failed rounds

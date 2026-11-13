@@ -1,4 +1,5 @@
 """Exercise budgeted dispatch with a real child process and synthetic provider events."""
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -145,6 +146,101 @@ def test_invalid_thinking_breakdown_blocks_success(tmp_path, thinking, location)
         stream[-1]["modelUsage"][MODEL]["thinkingTokens"] = thinking
     else:
         stream[-1]["usage"]["output_tokens_details"] = {"thinking_tokens": thinking}
+    proc, _, records = dispatch(tmp_path, stream)
+    assert proc.returncode != 0
+    assert records[-1]["terminal"] and not records[-1]["complete"]
+
+
+def load_counts():
+    spec = importlib.util.spec_from_file_location("claude_usage_under_test", ROOT / "scripts/claude_usage.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.counts
+
+
+STREAM_USAGE = {"input_tokens": 2, "cache_creation_input_tokens": 100, "cache_read_input_tokens": 7,
+                "output_tokens": 3, "cache_creation": {"ephemeral_5m_input_tokens": 40,
+                                                       "ephemeral_1h_input_tokens": 60}}
+MODEL_USAGE = {"inputTokens": 2, "outputTokens": 3, "cacheReadInputTokens": 7, "cacheCreationInputTokens": 100,
+               "cacheCreationEphemeral5mInputTokens": 40, "cacheCreationEphemeral1hInputTokens": 60}
+
+
+def test_ephemeral_cache_breakdown_accepted_without_double_counting():
+    counts = load_counts()
+    expected = {"input_tokens": 2, "output_tokens": 3, "cache_read_input_tokens": 7,
+                "cache_creation_input_tokens": 100}
+    assert counts(STREAM_USAGE) == expected
+    assert counts(MODEL_USAGE, model=True) == expected
+    # Breakdown alone (no 5m/1h fields) yields the identical total.
+    plain = {k: v for k, v in STREAM_USAGE.items() if k != "cache_creation"}
+    assert counts(plain) == counts(STREAM_USAGE)
+
+
+def test_ephemeral_cache_breakdown_may_be_partial_or_zero():
+    counts = load_counts()
+    usage = {**STREAM_USAGE, "cache_creation": {"ephemeral_5m_input_tokens": 0,
+                                                "ephemeral_1h_input_tokens": 100}}
+    assert counts(usage)["cache_creation_input_tokens"] == 100
+    model = {k: v for k, v in MODEL_USAGE.items() if k != "cacheCreationEphemeral5mInputTokens"}
+    assert counts(model, model=True)["cache_creation_input_tokens"] == 100
+
+
+@pytest.mark.parametrize("form", ["stream", "model"])
+def test_ephemeral_cache_breakdown_exceeding_total_is_rejected(form):
+    counts = load_counts()
+    if form == "stream":
+        usage = {**STREAM_USAGE, "cache_creation": {"ephemeral_5m_input_tokens": 41,
+                                                    "ephemeral_1h_input_tokens": 60}}
+    else:
+        usage = {**MODEL_USAGE, "cacheCreationEphemeral5mInputTokens": 41}
+    with pytest.raises(ValueError, match="exceeds total"):
+        counts(usage, model=form == "model")
+
+
+@pytest.mark.parametrize("form", ["stream", "model"])
+@pytest.mark.parametrize("bad", [-1, True, 1.5, None, "3", (1 << 53) + 1])
+def test_invalid_ephemeral_cache_breakdown_value_is_rejected(form, bad):
+    counts = load_counts()
+    if form == "stream":
+        usage = {**STREAM_USAGE, "cache_creation": {"ephemeral_5m_input_tokens": bad}}
+    else:
+        usage = {**MODEL_USAGE, "cacheCreationEphemeral1hInputTokens": bad}
+    with pytest.raises(ValueError, match="invalid token field"):
+        counts(usage, model=form == "model")
+
+
+def test_unknown_cache_or_token_fields_still_rejected():
+    counts = load_counts()
+    with pytest.raises(ValueError, match="unknown cache creation field"):
+        counts({**STREAM_USAGE, "cache_creation": {"ephemeral_24h_input_tokens": 1}})
+    with pytest.raises(ValueError, match="invalid cache creation breakdown"):
+        counts({**STREAM_USAGE, "cache_creation": 5})
+    with pytest.raises(ValueError, match="unknown token field: cacheCreationEphemeral24hInputTokens"):
+        counts({**MODEL_USAGE, "cacheCreationEphemeral24hInputTokens": 1}, model=True)
+    with pytest.raises(ValueError, match="unknown token field: mysteryTokens"):
+        counts({**MODEL_USAGE, "mysteryTokens": 1}, model=True)
+    # The camel breakdown names are not valid in the snake_case stream form.
+    with pytest.raises(ValueError, match="unknown token field"):
+        counts({**STREAM_USAGE, "cacheCreationEphemeral5mInputTokens": 1})
+
+
+@pytest.mark.requires_ic
+def test_ephemeral_cache_breakdown_in_both_forms_does_not_change_budget(tmp_path):
+    stream = events()
+    stream[-1]["usage"]["cache_creation"] = {"ephemeral_5m_input_tokens": 5,
+                                             "ephemeral_1h_input_tokens": 15}
+    stream[-1]["modelUsage"][MODEL].update(cacheCreationEphemeral5mInputTokens=5,
+                                           cacheCreationEphemeral1hInputTokens=15)
+    proc, output, records = dispatch(tmp_path, stream)
+    assert proc.returncode == 0, proc.stderr
+    assert records[-1]["complete"] and records[-1]["budget_tokens"] == 69
+    assert "STATUS: pass" in Path(str(output) + ".verdict").read_text()
+
+
+@pytest.mark.requires_ic
+def test_ephemeral_cache_breakdown_over_total_blocks_success(tmp_path):
+    stream = events()
+    stream[-1]["modelUsage"][MODEL].update(cacheCreationEphemeral5mInputTokens=21)
     proc, _, records = dispatch(tmp_path, stream)
     assert proc.returncode != 0
     assert records[-1]["terminal"] and not records[-1]["complete"]

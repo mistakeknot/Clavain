@@ -23,6 +23,10 @@ import uuid
 FIELDS = ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
 CAMEL = ("inputTokens", "outputTokens", "cacheReadInputTokens", "cacheCreationInputTokens")
 MAX_LINE = 8 << 20
+# Cache-creation TTL breakdown: a subset of the cache creation total, never an
+# additional category. Stream usage nests it under "cache_creation".
+CAMEL_CACHE_BREAKDOWN = ("cacheCreationEphemeral5mInputTokens", "cacheCreationEphemeral1hInputTokens")
+STREAM_CACHE_BREAKDOWN = ("ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens")
 
 
 def counts(value, *, model=False, output_required=True):
@@ -31,7 +35,7 @@ def counts(value, *, model=False, output_required=True):
     keys = CAMEL if model else FIELDS
     for key, number in value.items():
         if (key.endswith("_tokens") or key.endswith("Tokens")) and key not in keys:
-            if key not in (("maxOutputTokens", "thinkingTokens") if model else ()) and isinstance(number, (int, float)):
+            if key not in (("maxOutputTokens", "thinkingTokens") + CAMEL_CACHE_BREAKDOWN if model else ()) and isinstance(number, (int, float)):
                 raise ValueError("unknown token field: " + key)
     result = {}
     for key, canonical in zip(keys, FIELDS):
@@ -55,6 +59,25 @@ def counts(value, *, model=False, output_required=True):
             raise ValueError("unknown output token detail: " + key)
         if type(number) is not int or number < 0 or number > result["output_tokens"]:
             raise ValueError("invalid thinking token subset")
+    # The 5m/1h cache-creation split is likewise a breakdown of
+    # cache_creation_input_tokens. Validate it, require it to fit inside the
+    # total, and never add it to the total.
+    if model:
+        breakdown = {key: value[key] for key in CAMEL_CACHE_BREAKDOWN if key in value}
+    elif "cache_creation" in value:
+        breakdown = value["cache_creation"]
+        if not isinstance(breakdown, dict):
+            raise ValueError("invalid cache creation breakdown")
+        for key in breakdown:
+            if key not in STREAM_CACHE_BREAKDOWN:
+                raise ValueError("unknown cache creation field: " + key)
+    else:
+        breakdown = {}
+    for key, number in breakdown.items():
+        if type(number) is not int or number < 0 or number > (1 << 53):
+            raise ValueError("invalid token field: " + key)
+    if sum(breakdown.values()) > result["cache_creation_input_tokens"]:
+        raise ValueError("cache creation breakdown exceeds total")
     return result
 
 
