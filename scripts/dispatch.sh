@@ -3087,8 +3087,8 @@ if [[ "$ROLE_RESOLVED" == true && -z "$SUBMIT_HELD" ]]; then
   case "$ROLE" in
     plan-review|validation|cross-lab-review)
       review_preamble="$(cat "$DISPATCH_SCRIPT_DIR/review-role-preamble.md")"
-      # Packets already carry this instruction; preserve one copy.
-      if [[ "$PROMPT" != *"$review_preamble"* ]]; then
+      # Only a standalone instruction counts; quoted diff lines do not.
+      if ! grep -Fxq -- "$review_preamble" <<< "$PROMPT"; then
         PROMPT="$review_preamble
 
 $PROMPT"
