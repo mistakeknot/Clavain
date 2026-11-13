@@ -130,19 +130,31 @@ verdict_final_class() {
 #   verdict_strict_word FILE
 verdict_strict_word() {
   local out="${1-}" last rc
-  [[ -f "$out" ]] || return 1
+  [[ -f "$out" ]] || { echo 'review verdict: output file missing' >&2; return 1; }
   # Continue only on grep status 1 (no delimiter found); a match or any scan
   # error rejects. NUL bytes are rejected first: shell capture would drop them.
   LC_ALL=C tr -d '\000' <"$out" | cmp -s - "$out"
-  [[ "${PIPESTATUS[0]}" -eq 0 && "${PIPESTATUS[1]}" -eq 0 ]] || return 1
+  [[ "${PIPESTATUS[0]}" -eq 0 && "${PIPESTATUS[1]}" -eq 0 ]] || { echo 'review verdict: NUL byte found or output unreadable' >&2; return 1; }
   LC_ALL=C grep -qE '```|~~~|<!--|-->' "$out"; rc=$?
-  [[ $rc -eq 1 ]] || return 1
+  if [[ $rc -eq 0 ]]; then
+    echo 'review verdict: fence or HTML comment delimiter found; none allowed anywhere in output' >&2
+    return 1
+  elif [[ $rc -ne 1 ]]; then
+    echo 'review verdict: cannot scan output for delimiters' >&2
+    return 1
+  fi
   last="$(awk '
     { sub(/\r$/, "") }
     $0 ~ /[^[:space:]]/ { last = $0; lastok = (blank || NR == 1); blank = 0; next }
     { blank = 1 }
-    END { if (lastok) print last }' "$out")" || return 1
-  verdict_label_word "$last"
+    END { if (!lastok) exit 2; print last }' "$out")" || {
+      echo 'review verdict: final VERDICT must be preceded by a blank line (or begin the file)' >&2
+      return 1
+    }
+  verdict_label_word "$last" || {
+    echo 'review verdict: VERDICT must be the last non-blank line with a recognized label format' >&2
+    return 1
+  }
 }
 
 # Receipt-equivalent class of FILE: PASS, PASS_WITH_NOTES, FAIL, UNKNOWN, or

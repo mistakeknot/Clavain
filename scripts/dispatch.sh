@@ -3364,6 +3364,8 @@ error-handling, test-gap, spec-or-doc-mismatch, performance, style-naming,
 process-gate (CI, hooks, instruction files), other. Use other when none fits; do
 not guess. Keep the summary to one line and name the file and line when known.
 
+Do not use code fences or HTML comment delimiters anywhere in your output.
+Use indented code examples instead. Keep the verdict consistent with your findings.
 End your output with a blank line and then, as the very last line, exactly one
 of: \"VERDICT: PASS\", \"VERDICT: PASS WITH NOTES\" or \"VERDICT: FAIL\". No other
 verdict word (not APPROVE or CLEAN) is accepted: any other word is recorded
