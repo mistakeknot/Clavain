@@ -3,11 +3,12 @@
 # self-test paths; this suite never invokes a real codex/kimi/claude backend.
 # Sylveste-d3m phase 1: also covers executor shadow mode and the parity corpus log.
 set -u
+unset CLAVAIN_ROUTING_POLICY CLAVAIN_DECISION_CONTEXT CLAVAIN_POLICY_PROFILE CLAVAIN_SELECTED_ROOT
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT" || exit 1
 
-WORK_ROOT="$(mktemp -d)"
+WORK_ROOT="$(mktemp -d)" || exit 1
 trap 'rm -rf "$WORK_ROOT"' EXIT
 git init -q "$WORK_ROOT"
 

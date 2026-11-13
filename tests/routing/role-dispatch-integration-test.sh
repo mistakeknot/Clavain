@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Real Intercore resolver + SQLite audit store, fake model backend. No paid calls.
 set -euo pipefail
+unset CLAVAIN_ROUTING_POLICY CLAVAIN_DECISION_CONTEXT CLAVAIN_POLICY_PROFILE CLAVAIN_SELECTED_ROOT
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 command -v ic >/dev/null
-TMP_ROOT="$(mktemp -d)"
+TMP_ROOT="$(mktemp -d)" || exit 1
 trap 'rm -rf "$TMP_ROOT"' EXIT
 mkdir -p "$TMP_ROOT/bin" "$TMP_ROOT/work"
 git init -q "$TMP_ROOT/work"

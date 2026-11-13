@@ -2,7 +2,7 @@
 # Real resolver and SQLite ledger; fixture is the documented Zaka status wire shape.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-TEST_ROOT="$(mktemp -d)"
+TEST_ROOT="$(mktemp -d)" || exit 1
 trap 'rm -rf "$TEST_ROOT"' EXIT
 mkdir -p "$TEST_ROOT/bin" "$TEST_ROOT/work"
 export FIXTURE_REAL_IC="$(command -v ic)" FIXTURE_DB="$TEST_ROOT/work/intercore.db"
