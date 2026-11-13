@@ -252,7 +252,7 @@ _review_receipt_write() {
   fi
   [[ "${CAPACITY_SUBSTITUTE_JSON:-}" == "" ]] || { echo "review receipt: not written (capacity substitute review)" >&2; return 1; }
   local verdict verdict_raw
-  verdict="$(_review_receipt_verdict "$out")" || { echo "review receipt: not written (no usable VERDICT line in review output; the last line must be 'VERDICT: PASS', 'VERDICT: PASS WITH NOTES' (a trailing period is allowed) or start with 'VERDICT: FAIL' or 'VERDICT: BLOCK' with an optional explanation)" >&2; return 1; }
+  verdict="$(_review_receipt_verdict "$out")" || { echo 'review receipt: not written (invalid review output format; see rule above)' >&2; return 1; }
   verdict_raw="$(_review_receipt_clean_word "$(_review_receipt_verdict_word "$out")")"
 
   # Additive fields (schema_version stays 1; verdict logic is untouched). One
