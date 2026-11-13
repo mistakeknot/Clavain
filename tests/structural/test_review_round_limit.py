@@ -1,8 +1,11 @@
 """Receipt-backed review budget; dummy evidence only, no model calls."""
 import json
+import fcntl
 import os
 from pathlib import Path
 import subprocess
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -13,7 +16,7 @@ def receipt(bead="test-1", verdict="FAIL", role="cross-lab-review", attempt="a")
                 dispatch_id="d", outcome="completed")
 
 
-def invoke(tmp_path, rows, role="cross-lab-review", bead="test-1"):
+def invoke(tmp_path, rows, role="cross-lab-review", bead="test-1", child=False):
     ledger = tmp_path / "runs.jsonl"
     ledger.write_text("".join(json.dumps(r) + "\n" for r in rows))
     bindir = tmp_path / "bin"
@@ -23,8 +26,13 @@ def invoke(tmp_path, rows, role="cross-lab-review", bead="test-1"):
     env = dict(os.environ, CLAVAIN_DISPATCH_RECEIPT_FILE=str(ledger),
                PATH=str(bindir) + os.pathsep + os.environ["PATH"],
                CLAVAIN_REVIEW_RECEIPT_DIR=str(tmp_path / "reviews"))
+    bead_args = ["--bead", bead]
+    if child:
+        env.update(CLAVAIN_BEAD_ID=bead, CLAVAIN_BEAD_CONTEXT_RESOLVED="1",
+                   CLAVAIN_ROUTING_PRECHECK="0")
+        bead_args = ["--role-resolved"]
     return subprocess.run(["bash", str(ROOT / "scripts/dispatch.sh"),
-                           "--role", role, "--bead", bead, "--producer-identity", "gpt-6.1-sol",
+                           "--role", role, *bead_args, "--producer-identity", "gpt-6.1-sol",
                            "--prompt", "dummy"], env=env, capture_output=True, text=True)
 
 
@@ -98,13 +106,102 @@ def test_two_failures_allow_resolver_and_non_review_roles_ignore_budget(tmp_path
         receipt(attempt=str(i)) for i in range(3)], role="planning").stderr
 
 
-def test_corrupt_history_fails_closed_without_echoing_contents(tmp_path):
+def test_corrupt_receipt_is_skipped_without_echoing_contents(tmp_path):
     directory = tmp_path / "reviews" / "dummy__repo"
     directory.mkdir(parents=True)
     (directory / "7-head.json").write_text("dummy-invalid-json")
     result = invoke(tmp_path, [])
-    assert result.returncode == 26
+    assert result.returncode == 1
+    assert "skipped 1 malformed review history record" in result.stderr
     assert "dummy-invalid-json" not in result.stderr
+
+
+@pytest.mark.parametrize("valid_count, expected", [(2, 0), (3, 25)])
+def test_bad_ledger_rows_do_not_poison_other_beads_or_hide_valid_failures(tmp_path, valid_count, expected):
+    ledger = tmp_path / "runs.jsonl"
+    rows = [json.dumps(receipt(attempt=str(i))) for i in range(valid_count)]
+    ledger.write_bytes((rows[0] + '\n{"dummy-torn":\n' + '\n'.join(rows[1:]) +
+                        '\n[]\n' + json.dumps(dict(receipt(), attempt_id=[])) + '\n' +
+                        json.dumps(dict(receipt(), role=[])) + '\n').encode() + b'\xff\n')
+    result = subprocess.run(["python3", str(ROOT / "scripts/review-round-limit.py"),
+                             "test-1", str(ledger), str(tmp_path / "reviews")],
+                            capture_output=True, text=True)
+    assert result.returncode == expected
+    assert "skipped 5 malformed review history records" in result.stderr
+    assert "dummy-torn" not in result.stderr
+
+
+def test_reader_waits_for_writer_lock_before_reading_partial_append(tmp_path):
+    ledger = tmp_path / "runs.jsonl"
+    rows = [json.dumps(receipt(attempt=str(i))) for i in range(3)]
+    ledger.write_text('\n'.join(rows[:2]) + '\n' + rows[2][:12])
+    with (tmp_path / "runs.jsonl.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        proc = subprocess.Popen(["python3", str(ROOT / "scripts/review-round-limit.py"),
+                                 "test-1", str(ledger), str(tmp_path / "reviews")],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            with pytest.raises(subprocess.TimeoutExpired):
+                proc.communicate(timeout=0.3)
+            with ledger.open("a") as stream:
+                stream.write(rows[2][12:] + '\n')
+            fcntl.flock(lock, fcntl.LOCK_UN)
+            _, stderr = proc.communicate(timeout=5)
+            assert proc.returncode == 25
+            assert "malformed" not in stderr
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.communicate()
+
+
+def test_summary_symlink_still_fails_closed(tmp_path):
+    directory = tmp_path / "reviews" / "round-limits"
+    directory.mkdir(parents=True)
+    target = tmp_path / "dummy-target"
+    target.write_text("dummy unchanged")
+    (directory / "test-1.md").symlink_to(target)
+    assert invoke(tmp_path, [receipt(attempt=str(i)) for i in range(3)]).returncode == 26
+    assert target.read_text() == "dummy unchanged"
+
+
+@pytest.mark.parametrize("marker", [
+    {"experimental": True}, {"gate_review_eligible": False}, {"experiment_arm": "dummy"},
+    {"policy_profile": "experiment-dummy"}, {"resolved_route": {"policy_profile": "experiment-dummy"}},
+])
+def test_marked_experiment_receipts_do_not_use_ordinary_budget(tmp_path, marker):
+    rows = [receipt(attempt=str(i)) for i in range(2)]
+    rows += [dict(receipt(attempt="experiment"), **marker)]
+    directory = tmp_path / "reviews" / "dummy__repo"
+    directory.mkdir(parents=True)
+    (directory / "7-head.json").write_text(json.dumps(dict(
+        receipt(attempt="experiment-pr"), kind="cross-lab-review-receipt", verdict="BLOCK", **marker)))
+    result = invoke(tmp_path, rows)
+    assert result.returncode == 1
+    assert "could not resolve dispatch role" in result.stderr
+
+
+def test_resolved_child_rejects_invalid_nonempty_bead(tmp_path):
+    result = invoke(tmp_path, [], bead="../dummy", child=True)
+    assert result.returncode == 1
+    assert "invalid CLAVAIN_BEAD_ID in resolved child" in result.stderr
+
+
+@pytest.mark.parametrize("bead", ["", "test-1"])
+def test_resolved_child_preserves_empty_or_valid_attribution(tmp_path, bead):
+    result = invoke(tmp_path, [], bead=bead, child=True)
+    assert result.returncode == 1
+    # It passes bead validation and reaches the later governed-contract gate.
+    assert "requires an immutable policy hash" in result.stderr
+
+
+def test_receipt_directory_default_handles_unset_home():
+    result = subprocess.run(["bash", "-u", "-c",
+                             'source "$1"; unset HOME XDG_STATE_HOME CLAVAIN_REVIEW_RECEIPT_DIR; _review_receipt_dir',
+                             "_", str(ROOT / "scripts/lib-review-receipt.sh")],
+                            capture_output=True, text=True)
+    assert result.returncode == 0
+    assert result.stdout.strip() == "/nonexistent/.local/state/clavain/reviews"
 
 
 def test_no_ids_count_individual_receipts_and_summary_write_error_is_closed(tmp_path):

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Count failed review receipts across heads; refuse before another seat starts."""
 import json
+import fcntl
 import os
 from pathlib import Path
 import sys
@@ -10,11 +11,22 @@ REVIEW_ROLES = {"cross-lab-review", "plan-review", "validation"}
 
 def check(bead, ledger, reviews):
     failures = set()
+    malformed = 0
 
     def consider(row, source):
-        if not isinstance(row, dict) or row.get("schema_version") != 1:
+        if row.get("schema_version") != 1:
             return
-        if row.get("bead_id") != bead or row.get("role") not in REVIEW_ROLES:
+        for field in ("bead_id", "role", "kind", "dispatch_id", "attempt_id", "verdict_class", "verdict"):
+            if row.get(field) is not None and not isinstance(row[field], str):
+                raise ValueError("invalid receipt field")
+        role = row.get("role")
+        if not isinstance(role, str) or row.get("bead_id") != bead or role not in REVIEW_ROLES:
+            return
+        route = row.get("resolved_route")
+        profiles = [row.get("policy_profile"), route.get("policy_profile") if isinstance(route, dict) else None]
+        if (row.get("experimental") is True or row.get("gate_review_eligible") is False
+                or row.get("experiment_arm") is not None
+                or any(isinstance(p, str) and p.startswith("experiment-") for p in profiles)):
             return
         kind = row.get("kind")
         if kind == "dispatch-run-receipt":
@@ -29,15 +41,33 @@ def check(bead, ledger, reviews):
             key = (row.get("dispatch_id"), row.get("attempt_id"))
             failures.add(key if all(key) else (source,))
 
+    def consume(raw, source):
+        nonlocal malformed
+        try:
+            row = json.loads(raw)
+            if not isinstance(row, dict):
+                raise ValueError("invalid receipt object")
+            consider(row, source)
+        except (ValueError, RecursionError):
+            malformed += 1
+
     if ledger.exists():
-        with ledger.open() as stream:
-            for n, line in enumerate(stream):
-                if line.strip():
-                    consider(json.loads(line), f"{ledger}:{n + 1}")
+        # Cooperate with _append_dispatch_run_receipt's exclusive flock. Hold
+        # a shared lock for the whole read so a live append cannot be torn.
+        fd = os.open(f"{ledger}.lock", os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_SH)
+            with ledger.open("rb") as stream:
+                for n, line in enumerate(stream):
+                    if line.strip():
+                        consume(line, f"{ledger}:{n + 1}")
     if reviews.exists():
         for path in sorted(reviews.glob("*/*.json")):
             if path.is_file() and not path.is_symlink():
-                consider(json.loads(path.read_text()), str(path))
+                consume(path.read_bytes(), str(path))
+    if malformed:
+        suffix = "s" if malformed != 1 else ""
+        print(f"dispatch: skipped {malformed} malformed review history record{suffix}; counted only well-formed receipts", file=sys.stderr)
     if len(failures) < 3:
         return 0
     directory = reviews / "round-limits"

@@ -30,7 +30,7 @@ _review_receipt_requested() {
 }
 
 _review_receipt_dir() {
-  printf '%s\n' "${CLAVAIN_REVIEW_RECEIPT_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/clavain/reviews}"
+  printf '%s\n' "${CLAVAIN_REVIEW_RECEIPT_DIR:-${XDG_STATE_HOME:-${HOME:-/nonexistent}/.local/state}/clavain/reviews}"
 }
 
 # Experiment evidence cannot satisfy an ordinary review gate (mk-47vtm.10).
