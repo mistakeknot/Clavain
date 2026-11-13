@@ -155,7 +155,9 @@ _role_audit_context() {
   local ic_version=""
   case "${ROLE:-}" in
     plan-review|validation|cross-lab-review)
-      command -v _dispatch_ic_version >/dev/null 2>&1 && ic_version="$(_dispatch_ic_version 2>/dev/null || true)"
+      if command -v _dispatch_ic_version >/dev/null 2>&1; then
+        _dispatch_ic_version ic_version 2>/dev/null || true
+      fi
       ;;
   esac
   # A reused output path may still contain a previous attempt's sidecar.
@@ -325,6 +327,14 @@ _ic_stderr_reason() {
 # Prints the receipt JSON line for the given exit status.
 _build_dispatch_run_receipt() {
   local exit_code="$1" ended_ts ctx_hash="" tokens_in="" tokens_out="" outcome=completed line
+  local review_verdict_class=""
+  # Never infer review failure from a provider exit code or a stale output.
+  if [[ "${DISPATCH_RESULT_READY:-false}" == true && -f "${OUTPUT:-}" ]]; then
+    case "${ROLE:-}" in
+      cross-lab-review) review_verdict_class="$(verdict_strict_class "$OUTPUT")" ;;
+      plan-review|validation) review_verdict_class="$(verdict_final_class "$OUTPUT")" ;;
+    esac
+  fi
   ended_ts="$(date +%s)"
   if [[ -n "${CLAVAIN_DECISION_CONTEXT:-}" && -f "$CLAVAIN_DECISION_CONTEXT" ]]; then
     ctx_hash="$(sha256sum "$CLAVAIN_DECISION_CONTEXT" 2>/dev/null | awk '{print $1}')"
@@ -359,6 +369,7 @@ _build_dispatch_run_receipt() {
       --arg thread "${BB_THREAD_ID:-}" --arg session "${DISPATCH_SESSION_ID:-}" \
       --arg dispatch "${DISPATCH_ID:-}" --arg attempt "${ATTEMPT_ID:-}" \
       --arg tin "$tokens_in" --arg tout "$tokens_out" --arg outcome "$outcome" \
+      --arg verdict_class "$review_verdict_class" \
       --argjson rc "$exit_code" --argjson s "${STARTED_TS:-$ended_ts}" --argjson e "$ended_ts" '
       def nn: if . == "" then null else . end;
       {schema_version: 1, kind: "dispatch-run-receipt",
@@ -370,6 +381,7 @@ _build_dispatch_run_receipt() {
        started_at: ($s|todate), ended_at: ($e|todate), exit_code: $rc, outcome: $outcome,
        tokens_in: (if $tin == "" then null else ($tin|tonumber) end),
        tokens_out: (if $tout == "" then null else ($tout|tonumber) end)}
+      + (if $verdict_class != "" then {verdict_class:$verdict_class} else {} end)
       + $observed
       + ($usage | {usage_status, usage_basis, usage_note, tokens_in, tokens_out, tokens_cached_in,
                    tokens_cache_write_in, tokens_reasoning_out} | with_entries(select(.value != null)))')"

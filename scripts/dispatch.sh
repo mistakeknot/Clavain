@@ -1338,9 +1338,13 @@ _resolve_dispatch_bead() {
     CLAVAIN_BEAD_ID="$DISPATCH_BEAD_FLAG"
     BEAD_SOURCE="flag"
   elif [[ "$ROLE_RESOLVED" == true && "${CLAVAIN_BEAD_CONTEXT_RESOLVED:-}" == 1 ]]; then
+    if [[ -n "$DISPATCH_BEAD_ENV" ]] && ! _valid_dispatch_bead "$DISPATCH_BEAD_ENV"; then
+      echo "Error: invalid CLAVAIN_BEAD_ID in resolved child" >&2
+      exit 1
+    fi
     # The parent already resolved bead context for this dispatch and passed
-    # it through explicitly (see the --role-resolved self-exec below). Trust
-    # its label unconditionally, including "none" or an invalid-* label with
+    # it through explicitly (see the --role-resolved self-exec below). Preserve
+    # its source label, including "none" or an invalid-* label with
     # an empty id — re-deriving here would lose exactly the honesty the
     # invalid-* labels exist to preserve.
     CLAVAIN_BEAD_ID="$DISPATCH_BEAD_ENV"
@@ -2756,6 +2760,17 @@ if [[ -n "$TIER" && "$ENGINE" != kimi && "${CLAVAIN_ROUTING_PRECHECK:-}" != "" &
 fi
 
 _resolve_dispatch_bead
+# Review budgets belong to beads, never PR heads. Check both the outer call
+# and resolved children, before role resolution or any provider launch.
+case "${ROLE:-}" in
+  cross-lab-review|plan-review|validation)
+    if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+      python3 "$DISPATCH_SCRIPT_DIR/review-round-limit.py" "$CLAVAIN_BEAD_ID" \
+        "${CLAVAIN_DISPATCH_RECEIPT_FILE:-${XDG_STATE_HOME:-${HOME:-/nonexistent}/.local/state}/clavain/dispatch-receipts.jsonl}" \
+        "$(_review_receipt_dir)" || exit "$?"
+    fi
+    ;;
+esac
 _experiment_entry
 [[ -z "$RESOLVED_PROFILE_REF" ]] || _experiment_tier_guard "$RESOLVED_PROFILE_REF"
 [[ -z "$TIER" ]] || _experiment_tier_guard "$TIER"

@@ -249,6 +249,12 @@ def test_zaka_rejected_before_any_model_call(tmp_path):
 @pytest.mark.requires_ic
 def test_group_cancellation_retains_usage_and_error_verdict_after_wrapper_exit(tmp_path):
     proc, output, records = dispatch(tmp_path, events()[:2], cancel=True)
+    # The shell wrapper can exit before the accounting child flushes its final
+    # row. Observe that durable row rather than assuming the child was reaped.
+    deadline = time.monotonic() + 10
+    while records and not records[-1]["terminal"] and time.monotonic() < deadline:
+        time.sleep(.05)
+        records = [json.loads(line) for line in (tmp_path / "usage.jsonl").read_text().splitlines()]
     assert proc.returncode != 0
     assert records[-1]["terminal"] and not records[-1]["complete"]
     assert records[-1]["budget_tokens"] == 60

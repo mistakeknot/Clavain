@@ -38,12 +38,14 @@ teardown() { rm -rf "$T"; }
 }
 
 @test "write produces a 0600 self-contained receipt" {
+    CLAVAIN_BEAD_ID=test-1
     _review_receipt_prepare "$R"
     run _review_receipt_write "$OUT" 0
     [ "$status" -eq 0 ]
     f="$T/reviews/o__r/7-$HEAD_SHA.json"
     [ "$(stat -c %a "$f")" = 600 ]
     [ "$(jq -r .role "$f")" = cross-lab-review ]
+    [ "$(jq -r .bead_id "$f")" = test-1 ]
     [ "$(jq -r .verdict "$f")" = PASS ]
     [ "$(jq -r .head_sha "$f")" = "$HEAD_SHA" ]
     [ "$(jq -r .diff_sha256 "$f")" = "$RR_DIFF_SHA256" ]
