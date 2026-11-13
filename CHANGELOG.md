@@ -56,6 +56,8 @@ previously documented under 0.6.332 after that version was installed.
   Sonnet 5.5 high as fallback; pool headroom checks include freshness and pacing
   guards. The new one-shot-author role selects Fable 5.2 with Opus/Astra
   fallbacks (PRs #110, #114, #115, #170, #172).
+- Review roles always receive tool-denial and URL-fetch boundaries, including
+  dispatches without a review packet (mk-6lv1a).
 
 - The experiment tiers and profiles change the `routing.yaml` SHA256; the next
   release carries the updated policy hash in managed contracts (mk-47vtm.10).
