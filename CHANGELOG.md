@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Review roles always receive tool-denial and URL-fetch boundaries, including
+  dispatches without a review packet (mk-6lv1a).
+
 - The experiment tiers and profiles change the `routing.yaml` SHA256; the next
   release carries the updated policy hash in managed contracts (mk-47vtm.10).
 
