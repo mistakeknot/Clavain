@@ -63,6 +63,26 @@ teardown() { rm -rf "$T"; }
     [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.2.json")" = BLOCK ]
 }
 
+@test "blocked same-head addendum fails dispatch loudly with its existing path" {
+    _review_receipt_prepare "$R"
+    _review_receipt_write "$OUT" 0
+    first="$T/reviews/o__r/7-$HEAD_SHA.json"
+    before="$(sha256sum "$first")"
+    existing="${first%.json}.2.json"
+    ln -s "$first" "$existing"
+    source <(awk '/^_dispatch_cleanup_state\(\)/ { emit=1 } emit { print; if ($0 == "}") exit }' "$DISPATCH")
+    _review_scratch_cleanup() { :; }
+    _token_leak_scan_all() { :; }; _token_leak_conclude() { return 0; }
+    ROLE_RESOLVED=true ROLE=cross-lab-review OUTPUT="$OUT" STATE_FILE="$T/state"
+    finish_dispatch() { true; _dispatch_cleanup_state; return "$DISPATCH_FINAL_RC"; }
+    run finish_dispatch
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"existing receipt path is a symlink or non-regular file: $existing"* ]]
+    [ "$(sha256sum "$first")" = "$before" ]
+    [ -L "$existing" ]
+    [ ! -e "${first%.json}.3.json" ]
+}
+
 @test "verdict mapping: notes pass, FAIL blocks, unknown words are UNKNOWN, no verdict line fails" {
     _review_receipt_prepare "$R"
     printf 'x\n\n**VERDICT: PASS WITH NOTES**\n' > "$OUT"
@@ -405,6 +425,7 @@ _reject_passing_suffix() {
     for i in $(seq 2 999); do : > "$d/7-$HEAD_SHA.$i.json"; done
     run _review_receipt_write "$OUT" 0
     [ "$status" -ne 0 ]
+    [[ "$output" == *"receipt sequence limit (999) reached; existing receipt: $d/7-$HEAD_SHA.999.json"* ]]
     [ ! -e "$d/7-$HEAD_SHA.1000.json" ]
     [ -z "$(ls -A "$d" | grep '^\.new\.')" ]
 }
