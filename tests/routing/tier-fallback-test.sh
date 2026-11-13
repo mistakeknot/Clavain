@@ -244,3 +244,35 @@ rc=$?
 [[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6.1-sol" ]] || fail "N3: pyyaml-missing degradation expected the legacy resolver to still reach gpt-6.1-sol, got: $(cat "$FAKE_CODEX_LOG")"
 
 echo "PASS: tier resolution restores CLAVAIN_ROUTING_CONFIG discovery and degrades gracefully without pyyaml"
+
+# Experiment tiers cannot be reached through bare tiers or fallback traversal.
+for arm in sol-medium; do
+  tier="exp-mk-d0h1j.1-$arm"
+  rc=0
+  python3 "$ROOT/scripts/tier-fallback-chain.py" --policy "$ROOT/config/routing.yaml" --tier "$tier" >/dev/null 2>&1 || rc=$?
+  [[ "$rc" == 4 ]] || fail "experiment tier admitted without profile"
+  python3 "$ROOT/scripts/tier-fallback-chain.py" --policy "$ROOT/config/routing.yaml" --tier "$tier" --experiment-profile "experiment-mk-d0h1j.1-$arm" >/dev/null || fail "matching profile refused"
+done
+python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT/experiment-fallback.yaml" <<'PYFIX'
+import sys, yaml
+p=yaml.safe_load(open(sys.argv[1]))
+p['dispatch']['tiers']['ordinary']={'backend':'codex','model':'gpt-6.1-sol','fallbacks':['exp-mk-d0h1j.1-sol-medium']}
+yaml.safe_dump(p,open(sys.argv[2],'w'))
+PYFIX
+rc=0
+python3 "$ROOT/scripts/tier-fallback-chain.py" --policy "$TMP_ROOT/experiment-fallback.yaml" --tier ordinary >/dev/null 2>&1 || rc=$?
+[[ "$rc" == 4 ]] || fail "fallback walk admitted experiment tier"
+# Exercise the dispatcher too, including the pyyaml-free legacy alias path.
+: > "$FAKE_CODEX_LOG"; : > "$FAKE_CLAUDE_LOG"
+rc=0
+bash "$ROOT/scripts/dispatch.sh" --policy "$TMP_ROOT/experiment-fallback.yaml" --tier ordinary -C "$TMP_ROOT/work" fixture >/dev/null 2>&1 || rc=$?
+[[ "$rc" != 0 && ! -s "$FAKE_CODEX_LOG" && ! -s "$FAKE_CLAUDE_LOG" ]] || fail "dispatcher reached fallback experiment"
+python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT/experiment-alias.yaml" <<'PYFIX'
+import sys
+text=open(sys.argv[1]).read()
+text=text.replace('  fallback:\n', '  fallback:\n    experiment-alias: exp-mk-d0h1j.1-sol-medium\n', 1)
+open(sys.argv[2],'w').write(text)
+PYFIX
+rc=0
+PATH="$TMP_ROOT/bin-noyaml:$PATH" bash "$ROOT/scripts/dispatch.sh" --policy "$TMP_ROOT/experiment-alias.yaml" --tier experiment-alias -C "$TMP_ROOT/work" fixture >/dev/null 2>&1 || rc=$?
+[[ "$rc" != 0 && ! -s "$FAKE_CODEX_LOG" && ! -s "$FAKE_CLAUDE_LOG" ]] || fail "legacy alias reached experiment"

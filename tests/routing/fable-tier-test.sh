@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # mk-3b8z acceptance: Fable 5.1 is retired and Opus 5.5 took every Fable seat.
+# Registered experiment profiles do not alter this legacy path.
 # A legacy `fable` tier from any bash-resolver input (phase, complexity override,
 # safety floor) must leave the resolver as opus, never above it.
 set -euo pipefail

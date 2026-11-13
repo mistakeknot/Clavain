@@ -213,3 +213,42 @@ FAKE
     [ "$status" -eq 0 ]
     jq -e '.schema_version == 1 and (.final_prompt_sha256 | test("^[a-f0-9]{64}$")) and .final_prompt_bytes > 0 and .tool_isolation.transport == "direct" and .context_gateway_mode == "off" and .context_gateway_invoked == true' "$T/state/receipts.jsonl" >/dev/null
 }
+
+@test "ordinary receipt bytes match main with experiment hooks loaded" {
+    # Frozen main receipts were generated at the approved base, with the
+    # deterministic inputs below: 0e6ae170bc9ebad1e633072eb3516e639d712eba.
+    # They also work in shallow CI checkouts without a main tracking ref.
+    sed -n '/^_experiment_receipt_fields() {/,/^}/p' "$DISPATCH" > "$T/experiment-hook.sh"
+    # Load the real experiment hook; cmp checks key order and newlines as
+    # well as values against the main-generated receipt bytes.
+    printf '%s\n' '{"final_prompt_sha256":"fixture-prompt","policy_hash":"fixture-policy","executed_profile_ref":"p1","policy_profile":"default"}' > "$T/hold-fields.json"
+    for entry in empty unset; do
+        for held in false true; do
+            for version in main current; do
+                if [[ "$version" == main ]]; then
+                    cp "$ROOT/tests/fixtures/dispatch-receipt-main-held-$held.jsonl" "$T/main.json"
+                    continue
+                fi
+                lib="$ROOT/scripts/lib-dispatch-audit.sh"
+                run bash -eu -c '
+                    source "$1"
+                    source "$2"
+                    date() { printf "1700000000\n"; }
+                    HOLD_FIELDS="$6"
+                    _hold_receipt_fields() { cat "$HOLD_FIELDS"; }
+                    ROLE=validation ENGINE=claude MODEL=m1 REASONING_EFFORT=high
+                    PRODUCER_IDENTITY=fixture-producer STARTED_TS=1699999999
+                    DISPATCH_ID=fixture-dispatch ATTEMPT_ID=fixture-attempt
+                    CLAVAIN_BEAD_ID=mk-fixture BB_THREAD_ID="" DISPATCH_SESSION_ID=""
+                    CLAVAIN_DECISION_CONTEXT="" CLAVAIN_REQUIRE_USAGE=0 CLAVAIN_REVIEW_EVENTS=""
+                    SUMMARY_FILE="" PROVIDER_EVENTS="" VIA="" DISPATCH_RESULT_READY=false
+                    HELD_MODE="$4"
+                    if [[ "$3" == unset ]]; then unset EXPERIMENT_ENTRY; else EXPERIMENT_ENTRY=""; fi
+                    _build_dispatch_run_receipt 0 > "$5"
+                ' _ "$lib" "$T/experiment-hook.sh" "$entry" "$held" "$T/$version.json" "$T/hold-fields.json"
+                [ "$status" -eq 0 ]
+            done
+            cmp -s "$T/main.json" "$T/current.json"
+        done
+    done
+}

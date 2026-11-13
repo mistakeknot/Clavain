@@ -13,7 +13,8 @@ should not be trusted at face value:
                                        apart from an unrecognised word that an
                                        older parser mapped to BLOCK)
 
-PASS and PASS WITH NOTES receipts get no note. Neither does an UNKNOWN receipt
+Experimental receipts are always marked gate-ineligible, regardless of verdict.
+Ordinary PASS and PASS WITH NOTES receipts get no note. Neither does an UNKNOWN receipt
 (the writer already records an unrecognised word as UNKNOWN), nor a BLOCK
 receipt that carries a "verdict_raw" FAIL or BLOCK word: the writer stored the
 word it read, so that BLOCK is verified (mk-0qjva). Idempotent: a note whose content
@@ -34,6 +35,7 @@ from pathlib import Path
 STATE = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "clavain"
 
 REASONS = {
+    "experimental-ineligible": "Experimental evidence cannot satisfy an ordinary gate review, regardless of its stored verdict.",
     "approve-unrecognised": "Stored verdict 'approve' is not an accepted review verdict word (accepted: PASS, PASS WITH NOTES, FAIL); it must not count as an approval or a block.",
     "null-verdict": "The receipt has no usable verdict value.",
     "block-unverified": "Stored verdict is BLOCK but the receipt holds no review text; an older parser also stored unrecognised verdict words as BLOCK, so a genuine FAIL cannot be confirmed from the receipt alone.",
@@ -48,6 +50,13 @@ VERIFIED_BLOCK_RAW = re.compile(r"^(fail|block)($|[\s:;.,(])", re.IGNORECASE)
 def classify(doc: object) -> str | None:
     if not isinstance(doc, dict):
         return "null-verdict"
+    route = doc.get("resolved_route")
+    nested_profile = route.get("policy_profile") if isinstance(route, dict) else None
+    profiles = (doc.get("policy_profile"), nested_profile)
+    if (doc.get("experimental") is True or doc.get("gate_review_eligible") is False
+            or doc.get("experiment_arm") is not None
+            or any(isinstance(p, str) and p.startswith("experiment-") for p in profiles)):
+        return "experimental-ineligible"
     verdict = doc.get("verdict")
     if verdict is None or (isinstance(verdict, str) and not verdict.strip()):
         return "null-verdict"

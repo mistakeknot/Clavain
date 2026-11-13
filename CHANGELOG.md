@@ -4,11 +4,22 @@
 
 ### Changed
 
+- The experiment tiers and profiles change the `routing.yaml` SHA256; the next
+  release carries the updated policy hash in managed contracts (mk-47vtm.10).
+
 - Pruned role boilerplate and redundant wording in five planning, execution and
   review skills and three authoring/execution commands; added step completion criteria
   while retaining review, evidence and authority gates (mk-7k5v0.3).
 
 ### Added
+
+- Added an opt-in, task-scoped Sol-medium advisory support/grouping profile for Astra-authored findings only, launch expiry checks and experimental receipts refused by ordinary review gates (mk-47vtm.10).
+  Other producers are refused, and receipt reclassification flags experiment evidence
+  as gate-ineligible regardless of its stored verdict. Missing or invalid experiment
+  registries fail with a one-line error. Experiment launch admission is Linux-only and requires GNU `date`, `stat`,
+  and `sha256sum`. The Fable arm is deferred pending Intercore support (mk-6oib0).
+  Its throttle through 2026-11-14T02:00Z and pool-account limits remain operational
+  gates held by the executor; they are not encoded in this profile.
 
 - Default-off, evaluation-only three-label Jev support checks with pinned Git
   source provenance and per-attempt usage accounting (mk-42j9.7.3). Live budget

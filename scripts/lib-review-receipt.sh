@@ -33,9 +33,28 @@ _review_receipt_dir() {
   printf '%s\n' "${CLAVAIN_REVIEW_RECEIPT_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/clavain/reviews}"
 }
 
+# Experiment evidence cannot satisfy an ordinary review gate (mk-47vtm.10).
+_review_receipt_gate_eligible() {
+  jq -e '.experimental != true and .gate_review_eligible != false and .experiment_arm == null and
+    ([.policy_profile, .resolved_route.policy_profile] | map(select(type=="string")) |
+      any(startswith("experiment-")) | not)' "$1" >/dev/null 2>&1
+}
+
+_review_receipt_experiment_run() {
+  [[ "${CLAVAIN_POLICY_PROFILE:-}" == experiment-* || -n "${EXPERIMENT_ENTRY:-}" ]] && return 0
+  jq -e '.experimental == true or .gate_review_eligible == false or .experiment_arm != null or
+    ([.policy_profile, .resolved_route.policy_profile] | map(select(type=="string")) |
+      any(startswith("experiment-")))' \
+    <<< "${RESOLVED_ROUTE_JSON:-null}" >/dev/null 2>&1
+}
+
 # Validates the flags and derives the head tree, expected merge tree and diff
 # hash from the -C checkout. Returns 1 with a message on any problem.
 _review_receipt_prepare() {
+  if _review_receipt_experiment_run; then
+    echo 'Error: experimental evidence is refused as an ordinary gate review receipt' >&2
+    return 1
+  fi
   local workdir="$1"
   local missing=""
   [[ -n "${RR_REPO:-}" ]] || missing+=" --repo"
@@ -189,6 +208,7 @@ _review_receipt_lab() {
 _review_receipt_effective() {
   local given="$1" first scope want n pf best=""
   [[ -f "$given" && ! -L "$given" ]] || return 1
+  _review_receipt_gate_eligible "$given" || return 1
   first="$given"
   if [[ "$given" =~ ^(.*)\.[0-9]+\.json$ ]]; then first="${BASH_REMATCH[1]}.json"; fi
   scope="$(jq -r '[.base_sha, .diff_sha256] | join(" ")' "$given" 2>/dev/null)" || return 1
@@ -200,6 +220,7 @@ _review_receipt_effective() {
     if (( n == 1 )); then pf="$first"; else pf="${first%.json}.$n.json"; fi
     [[ -f "$pf" && ! -L "$pf" ]] || continue
     if [[ "$(jq -r '[.base_sha, .diff_sha256] | join(" ")' "$pf" 2>/dev/null)" == "$scope" ]]; then
+      _review_receipt_gate_eligible "$pf" || return 1
       best="$pf"; break
     fi
   done
@@ -211,6 +232,10 @@ _review_receipt_effective() {
 # verdict word is not in the vocabulary is written as UNKNOWN and returns 3. Reviewer identity,
 # producer identity and policy hash come from the run, never from flags.
 _review_receipt_write() {
+  if _review_receipt_experiment_run; then
+    echo 'review receipt: experimental evidence refused as an ordinary gate review receipt' >&2
+    return 1
+  fi
   local out="$1" rc="$2"
   [[ "$rc" == 0 ]] || { echo "review receipt: not written (dispatch exit $rc)" >&2; return 1; }
   [[ -n "${PRODUCER_IDENTITY:-}" ]] || { echo "review receipt: not written (no producer identity)" >&2; return 1; }
