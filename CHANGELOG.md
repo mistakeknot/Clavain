@@ -7,6 +7,10 @@ previously documented under 0.6.332 after that version was installed.
 
 ### Fixed
 
+- Review audit receipts retain `ic_version` by passing the output variable
+  required by the version helper. Routing, held-prompt, cancellation and
+  receipt-lock fixtures now isolate caller state and synchronize their
+  assertions with the events they check (PRs #184, #185).
 - Claude dispatch children no longer inherit host-session identity variables,
   allowing subscription login in nested host sessions. Structured
   `authentication_failed` events and recognized authentication stderr endings
@@ -51,6 +55,11 @@ previously documented under 0.6.332 after that version was installed.
 
 ### Changed
 
+- Packaged review dispatch refuses another review after three failed rounds
+  on one bead, counted across heads and the review roles. Copies of an attempt
+  count once; PASS and neutral rounds do not reset the count, and experimental
+  evidence is excluded. Refusal writes one summary with the park, redesign or
+  accept-a-limit options, before a new seat starts (PR #186, mk-i16ab.6).
 - Planning now selects Opus 5.5 first, with Astra as cross-lab reviewer and
   fallback. Routine and deep execution select GPT-6.1 Sol at high effort with
   Sonnet 5.5 high as fallback; pool headroom checks include freshness and pacing
