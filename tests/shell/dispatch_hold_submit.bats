@@ -135,6 +135,7 @@ submit() { invoke --submit-held "$T/holds/p" --held-manifest-sha256 "$(sha256sum
     [ "$status" = 4 ]; [ ! -e "$T/holds/p" ]
 }
 @test "8 no tokens records no_tokens and never overwrites existing artifacts" {
+    unset ANTHROPIC_AUTH_TOKEN CODEX_POOL_AUTH_TOKEN
     real_python="$(command -v python3)"
     cat > "$T/bin/python3" <<'FAKE'
 #!/bin/bash

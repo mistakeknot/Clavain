@@ -7,6 +7,10 @@ set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT" || exit 1
 
+WORK_ROOT="$(mktemp -d)"
+trap 'rm -rf "$WORK_ROOT"' EXIT
+git init -q "$WORK_ROOT"
+
 fail() {
   echo "FAIL: $1" >&2
   exit 1
@@ -33,21 +37,21 @@ unmapped_order="$(bash -c 'source scripts/lib-routing.sh; routing_resolve_execut
 [[ "$tag_order" == "kimi codex" ]] || fail "tagging order was '$tag_order'"
 [[ "$unmapped_order" == "codex" ]] || fail "unmapped order was '$unmapped_order'"
 
-safe="$(bash scripts/dispatch.sh --dry-run --to kimi -C /tmp "hello" 2>&1)" \
+safe="$(bash scripts/dispatch.sh --dry-run --to kimi -C "$WORK_ROOT" "hello" 2>&1)" \
   || fail "safe kimi dry-run failed"
 contains "$safe" "--agent-file"
 contains "$safe" "--prompt=hello"
 
-unsafe="$(bash scripts/dispatch.sh --dry-run --to kimi --kimi-unsafe -C /tmp "hello" 2>&1)" \
+unsafe="$(bash scripts/dispatch.sh --dry-run --to kimi --kimi-unsafe -C "$WORK_ROOT" "hello" 2>&1)" \
   || fail "unsafe kimi dry-run failed"
 contains "$unsafe" "-p"
 not_contains "$unsafe" "--agent-file"
 
-tagging="$(bash scripts/dispatch.sh --dry-run --to auto --class tagging -C /tmp "hi" 2>&1)" \
+tagging="$(bash scripts/dispatch.sh --dry-run --to auto --class tagging -C "$WORK_ROOT" "hi" 2>&1)" \
   || fail "auto tagging dry-run failed"
-reasoning="$(bash scripts/dispatch.sh --dry-run --to auto --class reasoning -C /tmp "hi" 2>&1)" \
+reasoning="$(bash scripts/dispatch.sh --dry-run --to auto --class reasoning -C "$WORK_ROOT" "hi" 2>&1)" \
   || fail "auto reasoning dry-run failed"
-bogus="$(bash scripts/dispatch.sh --dry-run --to auto --class bogus -C /tmp "hi" 2>&1)" \
+bogus="$(bash scripts/dispatch.sh --dry-run --to auto --class bogus -C "$WORK_ROOT" "hi" 2>&1)" \
   || fail "auto bogus dry-run failed"
 contains "$tagging" "kimi"
 contains "$reasoning" "codex exec"
@@ -73,7 +77,7 @@ shadow_tag="$(CLAVAIN_EXECUTOR_ROUTING_MODE=shadow CLAVAIN_EXECUTOR_SHADOW_LOG="
 [[ ! -s "$shadow_log" ]] || fail "the resolver must not write the corpus; dispatch.sh is the single logging site"
 
 rm -f "$shadow_log"
-shadow_dispatch="$(CLAVAIN_EXECUTOR_ROUTING_MODE=shadow CLAVAIN_EXECUTOR_SHADOW_LOG="$shadow_log" bash scripts/dispatch.sh --dry-run --to auto --class tagging -C /tmp "hi" 2>&1)" \
+shadow_dispatch="$(CLAVAIN_EXECUTOR_ROUTING_MODE=shadow CLAVAIN_EXECUTOR_SHADOW_LOG="$shadow_log" bash scripts/dispatch.sh --dry-run --to auto --class tagging -C "$WORK_ROOT" "hi" 2>&1)" \
   || fail "shadow tagging dry-run failed"
 contains "$shadow_dispatch" "codex exec"
 not_contains "$shadow_dispatch" "--agent-file"
@@ -93,7 +97,7 @@ enforce_tag="$(CLAVAIN_EXECUTOR_ROUTING_MODE=enforce bash -c 'source scripts/lib
 [[ "$enforce_tag" == "kimi codex" ]] || fail "enforce tagging order was '$enforce_tag'"
 
 rm -f "$shadow_log"
-fast="$(CLAVAIN_EXECUTOR_SHADOW_LOG="$shadow_log" bash scripts/dispatch.sh --dry-run --to auto --class interserve-fast -C /tmp "hi" 2>&1)" \
+fast="$(CLAVAIN_EXECUTOR_SHADOW_LOG="$shadow_log" bash scripts/dispatch.sh --dry-run --to auto --class interserve-fast -C "$WORK_ROOT" "hi" 2>&1)" \
   || fail "auto interserve-fast dry-run failed"
 contains "$fast" "codex exec"
 not_contains "$fast" "kimi"
@@ -104,8 +108,8 @@ python3 -c "import json,sys; [json.loads(l) for l in open('$shadow_log')]; print
 
 default_log="$HOME/.clavain/executor-routing-shadow.jsonl"
 before_lines=0; [[ -f "$default_log" ]] && before_lines="$(wc -l < "$default_log" | tr -d ' ')"
-bash scripts/dispatch.sh --dry-run --to auto --class interserve-deep -C /tmp "hi" >/dev/null 2>&1 || fail "auto interserve-deep dry-run failed"
-CLAVAIN_EXECUTOR_ROUTING_MODE=shadow bash scripts/dispatch.sh --dry-run --to auto --class tagging -C /tmp "hi" >/dev/null 2>&1 || fail "shadow dry-run failed"
+bash scripts/dispatch.sh --dry-run --to auto --class interserve-deep -C "$WORK_ROOT" "hi" >/dev/null 2>&1 || fail "auto interserve-deep dry-run failed"
+CLAVAIN_EXECUTOR_ROUTING_MODE=shadow bash scripts/dispatch.sh --dry-run --to auto --class tagging -C "$WORK_ROOT" "hi" >/dev/null 2>&1 || fail "shadow dry-run failed"
 after_lines=0; [[ -f "$default_log" ]] && after_lines="$(wc -l < "$default_log" | tr -d ' ')"
 [[ "$before_lines" == "$after_lines" ]] || fail "dry-run must not write the default corpus log (enforce or shadow)"
 
