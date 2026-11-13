@@ -351,10 +351,13 @@ WRAP
     [ ! -e "$T/backend" ]
 }
 @test "receipt lock timeout refuses strict launch" {
-    ( exec 8>>"$T/receipts.lock"; flock 8; touch "$T/locked"; sleep 12 ) &
+    ( exec 8>>"$T/receipts.lock"; flock 8; touch "$T/locked"
+      while [[ -d "$T" && ! -e "$T/unlock" ]]; do sleep 0.05; done ) &
     holder=$!
-    for _ in $(seq 1 50); do [ -f "$T/locked" ] && break; sleep 0.02; done
+    for _ in $(seq 1 200); do [ -f "$T/locked" ] && break; sleep 0.05; done
+    [ -f "$T/locked" ]
     run outer
+    touch "$T/unlock"
     wait "$holder"
     [ "$status" -eq 4 ]
     [ ! -e "$T/backend" ]

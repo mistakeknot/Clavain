@@ -2,9 +2,12 @@
 # Real resolver and SQLite ledger; fixture is the documented Zaka status wire shape.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-TEST_ROOT="$(mktemp -d)"
+TEST_ROOT="$(mktemp -d)" || exit 1
 trap 'rm -rf "$TEST_ROOT"' EXIT
 mkdir -p "$TEST_ROOT/bin" "$TEST_ROOT/work"
+export FIXTURE_REAL_IC="$(command -v ic)" FIXTURE_DB="$TEST_ROOT/work/intercore.db"
+printf '#!/usr/bin/env bash\ncd "$(dirname "$FIXTURE_DB")" || exit 1\nexec "$FIXTURE_REAL_IC" --db="$FIXTURE_DB" "$@"\n' > "$TEST_ROOT/bin/ic"
+chmod +x "$TEST_ROOT/bin/ic"
 export FIXTURE="$TEST_ROOT/status.json"
 printf '#!/usr/bin/env bash\ncat "$FIXTURE"\n' > "$TEST_ROOT/bin/zaka"
 chmod +x "$TEST_ROOT/bin/zaka"
@@ -13,7 +16,7 @@ export PATH="$TEST_ROOT/bin:$PATH"
 # mk-mhuo2.1: unelevated deep-execution resolves to Sol at high (deep-exec-sol);
 # the Zaka fixture below is a Codex/Astra turn, so resolve an elevated context.
 printf '%s\n' '{"reasons":["broad-consequences"],"rationale":"elevated deep-execution so the Astra seat resolves"}' > "$TEST_ROOT/context.json"
-route="$(cd "$ROOT" && ic route dispatch --role=deep-execution --context-file="$TEST_ROOT/context.json" --json)"
+route="$(cd "$ROOT" && ic route dispatch --policy="$ROOT/config/routing.yaml" --role=deep-execution --context-file="$TEST_ROOT/context.json" --json)"
 jq -n --argjson route "$route" --arg cwd "$TEST_ROOT/work" --arg events "$TEST_ROOT/events.jsonl" '
   {session:"as-123456789012345678901234",transport:"app-server",thread_id:"thread-1",turn_id:"turn-1",
    phase:"completed",turn_status:"completed",pending_requests:[],event_log:$events,updated_at:"2026-09-05T00:00:00Z",
@@ -57,7 +60,8 @@ mv -f "$TEST_ROOT/next.json" "$FIXTURE"
 rc=0
 bash "$ROOT/scripts/collect-zaka.sh" as-123456789012345678901234 >/dev/null || rc=$?
 [[ "$rc" == 3 ]]
-export REAL_IC="$(command -v ic)"
+export REAL_IC="$TEST_ROOT/bin/ic-base"
+cp "$TEST_ROOT/bin/ic" "$REAL_IC"
 printf '#!/usr/bin/env bash\n[[ "$*" != *"route record"* ]] || exit 99\nexec "$REAL_IC" "$@"\n' > "$TEST_ROOT/bin/ic"
 chmod +x "$TEST_ROOT/bin/ic"
 jq '.phase="error" | .turn_id="turn-unrecordable" | .error="HTTP 400 configuration rejected" | .pending_requests=[]' "$FIXTURE" > "$TEST_ROOT/next.json"
