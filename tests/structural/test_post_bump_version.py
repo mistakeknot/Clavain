@@ -10,6 +10,9 @@ def test_post_bump_updates_prd_to_target_version(tmp_path: Path) -> None:
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     (tmp_path / "scripts").mkdir()
     (tmp_path / "docs").mkdir()
+    wiki = tmp_path / "docs" / "wiki" / "src" / "introduction.md"
+    wiki.parent.mkdir(parents=True)
+    wiki.write_text("Current plugin version: **0.1.0** (from `.claude-plugin/plugin.json`).\n")
     shutil.copy2(ROOT / "scripts" / "post-bump.sh", tmp_path / "scripts" / "post-bump.sh")
     prd = tmp_path / "docs" / "PRD.md"
     prd.write_text("# Test\n\n**Version:** 0.1.0\n", encoding="utf-8")
@@ -27,3 +30,4 @@ def test_post_bump_updates_prd_to_target_version(tmp_path: Path) -> None:
     )
 
     assert "**Version:** 0.1.1" in prd.read_text(encoding="utf-8")
+    assert "Current plugin version: **0.1.1**" in wiki.read_text(encoding="utf-8")

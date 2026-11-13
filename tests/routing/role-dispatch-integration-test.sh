@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Real Intercore resolver + SQLite audit store, fake model backend. No paid calls.
 set -euo pipefail
+unset CLAVAIN_ROUTING_POLICY CLAVAIN_DECISION_CONTEXT CLAVAIN_POLICY_PROFILE CLAVAIN_SELECTED_ROOT
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 command -v ic >/dev/null
-TMP_ROOT="$(mktemp -d)"
+TMP_ROOT="$(mktemp -d)" || exit 1
 trap 'rm -rf "$TMP_ROOT"' EXIT
 mkdir -p "$TMP_ROOT/bin" "$TMP_ROOT/work"
 git init -q "$TMP_ROOT/work"
@@ -36,7 +37,7 @@ CLAVAIN_RUN_ID=integration-run CLAVAIN_BEAD_ID=integration-bead DISPATCH_SESSION
 records="$(route_records --limit=10)"
 jq -e 'length == 2 and all(.[]; .dispatch_id != null and .session_id == "integration-parent" and (.policy_hash | length == 64))' <<< "$records" >/dev/null
 jq -e 'all(.[]; .run_id == "integration-run" and .bead_id == "integration-bead" and (.context_json | fromjson | .run_id == "integration-run" and .bead_id == "integration-bead"))' <<< "$records" >/dev/null
-jq -e '[.[] | .context_json | fromjson] | all(.[]; .resolved_profile.profile.model == "gpt-6-astra" and .resolved_profile.profile.model_identity == "gpt-6-astra" and .resolved_route.fallback_chain[0].profile.model == "gpt-6-sol") and ([.[].state] | sort == ["completed","started"]) and ([.[].attempt_id] | unique | length == 1)' <<< "$records" >/dev/null
+jq -e '[.[] | .context_json | fromjson] | all(.[]; .resolved_profile.profile.model == "gpt-6.1-sol" and .resolved_profile.profile.model_identity == "gpt-6.1-sol" and .resolved_route.fallback_chain[0].profile.model == "claude-sonnet-5-5") and ([.[].state] | sort == ["completed","started"]) and ([.[].attempt_id] | unique | length == 1)' <<< "$records" >/dev/null
 jq -e '[.[] | .context_json | fromjson | select(.state == "started")] | length == 1 and all(.[]; .result.verdict == "")' <<< "$records" >/dev/null || { echo 'FAIL: started record inherited a prior verdict' >&2; exit 1; }
 jq -e '[.[] | .context_json | fromjson | select(.state == "completed")] | length == 1 and all(.[]; .result.verdict | contains("STATUS: pass"))' <<< "$records" >/dev/null
 # A later successful process that fails to write its report must not inherit
