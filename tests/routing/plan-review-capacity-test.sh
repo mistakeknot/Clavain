@@ -17,13 +17,15 @@
 #     fails closed and the agent runs the declared adversarial Opus review by
 #     hand (a routable seat for that review is still to be added).
 set -euo pipefail
+unset CLAVAIN_ROUTING_POLICY CLAVAIN_DECISION_CONTEXT CLAVAIN_POLICY_PROFILE CLAVAIN_SELECTED_ROOT
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 command -v ic >/dev/null 2>&1 || { echo "SKIP: ic not on PATH" >&2; exit 0; }
 command -v jq >/dev/null 2>&1 || { echo "SKIP: jq not on PATH" >&2; exit 0; }
 
-TMP_ROOT="$(cd "$(mktemp -d)" && pwd -P)"
+TMP_ROOT="$(mktemp -d)" || exit 1
+TMP_ROOT="$(cd "$TMP_ROOT" && pwd -P)" || exit 1
 trap 'rm -rf "$TMP_ROOT"' EXIT
 mkdir -p "$TMP_ROOT/bin" "$TMP_ROOT/work"
 git -C "$TMP_ROOT/work" init -q
