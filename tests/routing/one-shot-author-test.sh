@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# mk-f0z9d: the one-shot-author role routes to Fable 5.2 and nowhere else.
-# Fable is frontier-eligible but holds only this seat; a Fable-produced artifact
+# mk-f0z9d: one-shot-author is the only default Fable 5.2 role.
+# Fable is frontier-eligible; registered experiments are opt-in; a Fable-produced artifact
 # is reviewed cross-lab by default. Resolve with real ic; never dispatch.
 set -euo pipefail
 

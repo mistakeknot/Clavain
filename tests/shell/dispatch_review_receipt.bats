@@ -804,3 +804,32 @@ _reject_passing_suffix() {
     grep -q 'as UNKNOWN, which is neither a pass nor a block' "$DISPATCH"
     ! grep -q 'fails the dispatch without a receipt' "$DISPATCH"
 }
+
+@test "experiment profiles cannot prepare or write ordinary gate reviews" {
+    for profile in experiment-mk-d0h1j.1-sol-medium experiment-other; do
+        CLAVAIN_POLICY_PROFILE="$profile" run _review_receipt_prepare "$R"
+        [ "$status" -ne 0 ]
+        CLAVAIN_POLICY_PROFILE="$profile" run _review_receipt_write "$OUT" 0
+        [ "$status" -ne 0 ]
+        [[ "$output" == *"experimental"* ]]
+    done
+    for marker in '{"policy_profile":"experiment-other"}' '{"experimental":true}' '{"gate_review_eligible":false}' '{"experiment_arm":"experiment-other"}' '{"policy_profile":"default","resolved_route":{"policy_profile":"experiment-other"}}'; do
+        RESOLVED_ROUTE_JSON="$marker" run _review_receipt_write "$OUT" 0
+        [ "$status" -ne 0 ]
+        [[ "$output" == *"experimental"* ]]
+    done
+    [ ! -d "$T/reviews" ]
+}
+@test "experimental receipts cannot be selected as an ordinary effective review" {
+    _review_receipt_prepare "$R"
+    _review_receipt_write "$OUT" 0
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    for marker in '{"experimental":true}' '{"gate_review_eligible":false}' '{"policy_profile":"experiment-other"}' '{"experiment_arm":"experiment-other"}' '{"resolved_route":{"policy_profile":"experiment-other"}}' '{"policy_profile":"default","resolved_route":{"policy_profile":"experiment-other"}}'; do
+        jq --argjson marker "$marker" '.+$marker' "$f" > "$T/marked.json"
+        run _review_receipt_effective "$T/marked.json"
+        [ "$status" -ne 0 ]
+        cp "$T/marked.json" "$T/reviews/o__r/7-$HEAD_SHA.2.json"
+        run _review_receipt_effective "$f"
+        [ "$status" -ne 0 ]
+    done
+}

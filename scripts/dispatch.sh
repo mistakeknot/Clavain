@@ -1157,7 +1157,8 @@ _dispatch_cleanup_state() {
   # ignored just for the short append, so the receipt and the exit status agree.
   # A failed write never changes the exit status.
   if [[ "${RUN_RECEIPT_ARMED:-false}" == true && "${RUN_RECEIPT_WRITTEN:-false}" != true \
-        && -n "${ROLE:-}" && "${ROLE_RESOLVED:-}" == true ]]; then
+        && -n "${ROLE:-}" && "${ROLE_RESOLVED:-}" == true \
+        && ( -z "${EXPERIMENT_ENTRY:-}" || "${EXPERIMENT_STARTED:-false}" == true ) ]]; then
     RUN_RECEIPT_WRITTEN=true
     local _sig_rc="" _used="" _line=""
     trap '_sig_rc=130' INT
@@ -1169,7 +1170,7 @@ _dispatch_cleanup_state() {
       [[ "${_sig_rc:-$_rc}" == "$_used" ]] && break
     done
     if [[ -z "$_line" ]] || ! _append_dispatch_run_receipt "$_line" 2>/dev/null; then
-      if [[ "$HELD_CLAIMED" == true ]]; then echo 'evidence not recorded' >&2; _rc=75; fi
+      if [[ "$HELD_CLAIMED" == true || -n "${EXPERIMENT_ENTRY:-}" ]]; then echo 'evidence not recorded' >&2; _rc=75; fi
     fi
     [[ -z "$_sig_rc" ]] || _rc="$_sig_rc"
   fi
@@ -1247,6 +1248,7 @@ Options:
   --held-max-age <SECONDS>     Manifest TTL (default 86400)
   --context-file <PATH>        Structured reasoning decision context
   --policy-profile <NAME>      Declared policy overlay (pilot requires campaign scope)
+  --experiment-task-type <TYPE>  Sol experiment requires advisory-support-grouping; never a gate review
   --producer-identity <ID>      Producer backend/model identity for validator audit records
   --repo OWNER/NAME --repo-id ID --pr N --head SHA --base SHA
                                 Write a review receipt (cross-lab-review only; all five
@@ -1744,6 +1746,7 @@ _dispatch_role_profile() {
       context_note=" (the decision context was rejected: it has an unknown key or invalid JSON; see the error above)"
     fi
     rm -f "$route_err"
+    [[ -z "$EXPERIMENT_ENTRY" ]] || _experiment_refuse 'experiment resolution refused'
     echo "Error: Intercore could not resolve dispatch role '$role'$context_note" >&2
     return 1
   fi
@@ -1805,6 +1808,7 @@ _dispatch_role_profile() {
     resolved="$(jq -c --argjson advice "$advice" --argjson snapshot "$headroom" '
       .headroom_reorder=$advice.headroom_reorder | .headroom_snapshot=$snapshot' <<< "$resolved")" || return 1
   fi
+  _experiment_producer_check "$resolved"
   fallback_reason="$(jq -r '.fallback_reason // empty' <<< "$resolved")"
   VALIDATOR_RELATIONSHIP="$(jq -r '.validator_relationship // empty' <<< "$resolved")"
   producer_model="$(jq -r '.producer_model // empty' <<< "$resolved")"
@@ -2119,6 +2123,7 @@ _dispatch_tier_profile() {
   fi
   policy="${policy:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
 
+  _experiment_tier_guard "$tier"
   candidates="$(python3 "$DISPATCH_SCRIPT_DIR/tier-fallback-chain.py" --policy "$policy" --tier "$tier")"
   chain_rc=$?
   if [[ $chain_rc -eq 3 ]]; then
@@ -2133,8 +2138,18 @@ _dispatch_tier_profile() {
       echo "Error: could not resolve tier '$tier' — pyyaml is unavailable and the legacy resolver is not loaded" >&2
       return 1
     fi
+    local alias_target="$tier" alias_hops=0
+    CLAVAIN_ROUTING_CONFIG="$policy" _routing_load_cache
+    while [[ $alias_hops -lt 3 ]]; do
+      _experiment_tier_guard "$alias_target"
+      [[ -z "${_ROUTING_DISPATCH_TIER[$alias_target]:-}" ]] || break
+      alias_target="${_ROUTING_DISPATCH_FALLBACK[$alias_target]:-}"
+      [[ -n "$alias_target" ]] || break
+      alias_hops=$((alias_hops+1))
+    done
     model="$(CLAVAIN_ROUTING_CONFIG="$policy" routing_resolve_dispatch_tier "$tier" 2>/dev/null)" || model=""
     [[ -n "$model" ]] || { echo "Error: could not resolve tier '$tier' from routing.yaml (legacy resolver)" >&2; return 1; }
+    _experiment_tier_guard "$model"
     resolved_args=(bash "${BASH_SOURCE[0]}" --to codex --model "$model")
     resolved_args+=("${TIER_PASSTHROUGH[@]}")
     _run_candidate_with_policy "${resolved_args[@]}"
@@ -2147,6 +2162,7 @@ _dispatch_tier_profile() {
   while IFS= read -r candidate; do
     [[ -n "$candidate" ]] || continue
     candidate_count=$((candidate_count + 1))
+    _experiment_tier_guard "$(jq -r .tier <<< "$candidate")"
     role="$(jq -r '.role // empty' <<< "$candidate")"
     backend="$(jq -r '.backend // empty' <<< "$candidate")"
     model="$(jq -r '.model // empty' <<< "$candidate")"
@@ -2216,9 +2232,201 @@ _dispatch_tier_profile() {
   return "$rc"
 }
 
+# Experiment admission is deliberately local to this packaged dispatcher.
+EXPERIMENT_VALIDATED=false
+EXPERIMENT_ENTRY=''
+EXPERIMENT_TASK_TYPE=''
+EXPERIMENT_LAUNCHED=false
+_experiment_now() { date -u +%s; }
+_experiment_refuse() { echo "Error: $*" >&2; exit 2; }
+_experiment_registry() { jq -ce 'if type=="object" and length>0 and all(.[]; type=="object" and (.tier|type=="string") and (.tier|length>0)) then . else error("invalid") end' "$DISPATCH_SCRIPT_DIR/../config/experiment-profiles.json" 2>/dev/null; }
+_experiment_producer_check() {
+  [[ -n "$EXPERIMENT_ENTRY" ]] || return 0
+  [[ "$(jq -r .producer_model <<< "$EXPERIMENT_ENTRY")" == gpt-6-astra ]] ||
+    _experiment_refuse 'experiment registry must require canonical Astra'
+  jq -e '.producer_model=="gpt-6-astra"' <<< "$1" >/dev/null ||
+    _experiment_refuse 'experiment producer refused: requires canonical gpt-6-astra'
+}
+_experiment_tier_guard() {
+  local profile
+  profile="$(_experiment_registry | jq -r --arg t "$1" 'to_entries[] | select(.value.tier==$t) | .key')" ||
+    _experiment_refuse 'experiment registry missing or invalid'
+  [[ -z "$profile" ]] || {
+    [[ "$ROLE_RESOLVED" == true && "$EXPERIMENT_VALIDATED" == true && "${CLAVAIN_POLICY_PROFILE:-}" == "$profile" ]] ||
+      _experiment_refuse 'experiment tier requires validated profile'
+  }
+}
+_experiment_expiry_check() {
+  EXPERIMENT_CHECKED_AT="$(_experiment_now)"
+  [[ "$EXPERIMENT_CHECKED_AT" -lt "$EXPERIMENT_EXPIRES_TS" ]]
+}
+_experiment_receipt_fields() {
+  if [[ -z "$EXPERIMENT_ENTRY" ]]; then
+    printf '%s\n' '{"policy_profile":null,"policy_hash":null,"executed_profile_ref":null,"effort_floors_exempted":null,"scope":null,"experiment_arm":null,"experiment_expires":null,"expiry_checked_at":null,"fresh_route_sha256":null,"producer_model":null,"producer_lab":null,"launch_checked_at":null,"launched":null,"evidence_mode":"best-effort"}'
+    return
+  fi
+  jq -cn --argjson route "$RESOLVED_ROUTE_JSON" --argjson entry "$EXPERIMENT_ENTRY" \
+    --arg profile "$CLAVAIN_POLICY_PROFILE" --arg ctx "$EXPERIMENT_CONTEXT_SHA256" --arg task "$EXPERIMENT_TASK_TYPE" \
+    --arg fresh "$EXPERIMENT_FRESH_SHA256" --arg producer "$EXPERIMENT_PRODUCER_MODEL" --arg lab "$EXPERIMENT_PRODUCER_LAB" \
+    --arg run "$EXPERIMENT_RUN_ID" --arg checked "${EXPERIMENT_CHECKED_AT:-}" --arg launch "${EXPERIMENT_LAUNCH_CHECKED_AT:-}" \
+    --argjson launched "$EXPERIMENT_LAUNCHED" '
+    {policy_profile:$profile,policy_hash:$route.policy_hash,executed_profile_ref:$route.profile_ref,
+     effort_floors_exempted:$route.effort_floors_exempted,scope:$entry.bead,experiment_arm:$profile,
+     experiment_expires:$entry.expires,expires:$entry.expires,expiry_checked_at:$checked,
+     decision_context_sha256:$ctx,fresh_route_sha256:$fresh,producer_model:$producer,producer_lab:$lab,
+     run_id:$run,launch_checked_at:$launch,launched:$launched,
+     launch_admitted_before_expiry:$launched,evidence_mode:"strict",
+     experimental:true,gate_review_eligible:false,experiment_task_type:$task}'
+}
+_experiment_start() {
+  [[ "$EXPERIMENT_VALIDATED" == true ]] || return 0
+  EXPERIMENT_RUN_ID="$(_dispatch_audit_id)"
+  local line rc=0
+  line="$(_build_dispatch_run_receipt 0 | jq -c '.outcome="started" | del(.ended_at,.exit_code,.launched,.launch_admitted_before_expiry)')" || exit 4
+  _append_dispatch_run_receipt "$line" || rc=$?
+  if [[ "$rc" == 2 ]]; then _experiment_refuse 'experiment expired before launch'; fi
+  [[ "$rc" == 0 ]] || { echo 'experiment started evidence not recorded' >&2; exit 4; }
+  EXPERIMENT_STARTED=true
+}
+_experiment_launch_check() {
+  [[ "$EXPERIMENT_VALIDATED" == true ]] || return 0
+  if ! _experiment_expiry_check; then
+    EXPERIMENT_LAUNCH_CHECKED_AT="$EXPERIMENT_CHECKED_AT"
+    EXPERIMENT_OUTCOME=refused_expired
+    _experiment_refuse 'experiment expired before launch'
+  fi
+  EXPERIMENT_LAUNCH_CHECKED_AT="$EXPERIMENT_CHECKED_AT"
+  EXPERIMENT_LAUNCHED=true
+}
+_experiment_semantics() {
+  jq -cS '{requested_role,policy_profile,policy_hash,profile_ref,
+    profile:(.profile|{backend,model,reasoning_effort,service_tier}),
+    fallback_chain,effort_floors_exempted,
+    decision_context:(.decision_context|{reasons,scope})}'
+}
+_experiment_entry() {
+  [[ "${CLAVAIN_POLICY_PROFILE:-}" == experiment-* ]] || return 0
+  [[ ${#EXTRA_ARGS[@]} == 0 ]] || _experiment_refuse 'experiment backend passthrough refused'
+  local registry
+  registry="$(_experiment_registry)" || _experiment_refuse 'experiment registry missing or invalid'
+  EXPERIMENT_ENTRY="$(jq -ce --arg p "$CLAVAIN_POLICY_PROFILE" '.[$p]' <<< "$registry")" ||
+    _experiment_refuse 'unregistered experiment'
+  EXPERIMENT_EXPIRES="$(jq -r .expires <<< "$EXPERIMENT_ENTRY")"
+  [[ "$EXPERIMENT_EXPIRES" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || _experiment_refuse 'malformed experiment expires'
+  EXPERIMENT_EXPIRES_TS="$(date -u -d "$EXPERIMENT_EXPIRES" +%s)" || _experiment_refuse 'malformed experiment expires'
+  _experiment_expiry_check || _experiment_refuse 'experiment expired before launch'
+  [[ "$ROLE" == "$(jq -r .role <<< "$EXPERIMENT_ENTRY")" && "$CLAVAIN_BEAD_ID" == "$(jq -r .bead <<< "$EXPERIMENT_ENTRY")" ]] ||
+    _experiment_refuse 'experiment role or bead mismatch'
+  [[ -n "$PRODUCER_IDENTITY" ]] || _experiment_refuse 'experiment requires producer identity'
+  [[ "$EXPERIMENT_TASK_TYPE" == "$(jq -r .task_type <<< "$EXPERIMENT_ENTRY")" ]] ||
+    _experiment_refuse 'experiment requires advisory support/grouping task type'
+  [[ -f "${CLAVAIN_DECISION_CONTEXT:-}" ]] || _experiment_refuse 'experiment requires context snapshot'
+  if [[ "$ROLE_RESOLVED" != true ]]; then
+    local snapshot i
+    snapshot="$(mktemp)" || exit 4
+    chmod 600 "$snapshot" || exit 4
+    cat "$CLAVAIN_DECISION_CONTEXT" > "$snapshot" || exit 4
+    export CLAVAIN_DECISION_CONTEXT="$snapshot"
+    # Replace explicit context paths as well as the inherited path.
+    for ((i=0; i<${#ROLE_PASSTHROUGH[@]}; i++)); do
+      case "${ROLE_PASSTHROUGH[$i]}" in
+        --context-file) ROLE_PASSTHROUGH[$((i+1))]="$snapshot" ;;
+        --context-file=*) ROLE_PASSTHROUGH[$i]="--context-file=$snapshot" ;;
+      esac
+    done
+  fi
+  [[ "$(stat -c %a "$CLAVAIN_DECISION_CONTEXT")" == 600 ]] || _experiment_refuse 'experiment snapshot must be 0600'
+  jq -e --arg bead "$CLAVAIN_BEAD_ID" '.scope==$bead and (.reasons|type=="array") and
+    ([.reasons[] | select(. != "difficult-verification")]|length==0)' "$CLAVAIN_DECISION_CONTEXT" >/dev/null ||
+    _experiment_refuse 'experiment context scope or reasons mismatch'
+  EXPERIMENT_CONTEXT_SHA256="$(sha256sum "$CLAVAIN_DECISION_CONTEXT" | awk '{print $1}')"
+  [[ "$ROLE_RESOLVED" == true ]] || return 0
+  local flag count fresh candidate expected semantics producer_model arm_lab
+  for flag in --to --model --reasoning-effort --service-tier --resolved-profile-ref --resolved-profile-json --resolved-route-json --experiment-task-type; do
+    count="${EXPERIMENT_FLAG_COUNTS[$flag]:-0}"
+    [[ "$count" == 1 ]] || _experiment_refuse "experiment requires exactly one $flag"
+  done
+  expected="$(jq -c '.assert' <<< "$EXPERIMENT_ENTRY")"
+  jq -e --arg ref "$RESOLVED_PROFILE_REF" --arg backend "$ENGINE" --arg model "$MODEL" --arg effort "$REASONING_EFFORT" --arg service "$SERVICE_TIER" \
+    --argjson expected "$expected" --argjson entry "$EXPERIMENT_ENTRY" '
+    .profile_ref==$ref and $ref==$entry.tier and .profile.backend==$backend and .profile.model==$model and
+    .profile.reasoning_effort==$effort and .profile.service_tier==$service and
+    $backend==$expected.backend and $model==$expected.model and $effort==$expected.effort and $service==$expected.service_tier
+    ' <<< "$RESOLVED_PROFILE_JSON" >/dev/null || _experiment_refuse 'experiment candidate mismatch'
+  jq -e --argjson c "$RESOLVED_PROFILE_JSON" '.fallback_chain==[] and {profile_ref,profile}==$c' <<< "$RESOLVED_ROUTE_JSON" >/dev/null ||
+    _experiment_refuse 'experiment requires one matching candidate'
+  local -a cmd=(ic --json route dispatch --policy="${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
+    --role="$ROLE" --context-file="$CLAVAIN_DECISION_CONTEXT" --policy-profile="$CLAVAIN_POLICY_PROFILE" --producer-identity="$PRODUCER_IDENTITY")
+  [[ -z "$VALIDATOR_RELATIONSHIP" ]] || cmd+=(--validator-relationship="$VALIDATOR_RELATIONSHIP")
+  fresh="$("${cmd[@]}")" || _experiment_refuse 'experiment fresh resolution failed'
+  semantics="$(_experiment_semantics <<< "$fresh")" || _experiment_refuse 'experiment invalid fresh route'
+  [[ "$semantics" == "$(_experiment_semantics <<< "$RESOLVED_ROUTE_JSON")" ]] || _experiment_refuse 'experiment route is stale for this context'
+  jq -e --arg p "$PRODUCER_IDENTITY" --arg v "$VALIDATOR_RELATIONSHIP" --argjson e "$expected" --arg profile "$CLAVAIN_POLICY_PROFILE" '
+    .producer_identity==$p and ($v=="" or .validator_relationship==$v) and
+    .requested_role=="cross-lab-review" and
+    (.effort_floors_exempted as $actual | all($e.require_exempted[]; . as $r | $actual|index($r)!=null)) and .policy_profile==$profile
+    ' <<< "$fresh" >/dev/null || _experiment_refuse 'experiment producer or exemption mismatch'
+  _experiment_producer_check "$fresh"
+  producer_model="$(jq -r '.producer_model // empty' <<< "$fresh")"
+  [[ -n "$producer_model" ]] || _experiment_refuse 'experiment producer has no canonical model'
+  EXPERIMENT_PRODUCER_MODEL="$producer_model"
+  EXPERIMENT_PRODUCER_LAB="$(_dispatch_model_lab "$producer_model")"
+  [[ -n "$EXPERIMENT_PRODUCER_LAB" ]] || _experiment_refuse 'experiment producer lab unknown'
+  arm_lab="$(_dispatch_model_lab "$MODEL")"
+  if [[ "$CLAVAIN_POLICY_PROFILE" == experiment-mk-d0h1j.1-sol-medium &&
+        "$CLAVAIN_BEAD_ID" == mk-d0h1j.1 && "$EXPERIMENT_TASK_TYPE" == advisory-support-grouping &&
+        "$producer_model" == gpt-6-astra && "$MODEL" == gpt-6.1-sol ]]; then
+    : # Task-scoped advisory exception (mk-47vtm.10); never gate review evidence.
+  else
+    [[ -n "$arm_lab" && "$arm_lab" != "$EXPERIMENT_PRODUCER_LAB" ]] || _experiment_refuse 'experiment same-lab producer refused'
+  fi
+  EXPERIMENT_FRESH_SHA256="$(printf '%s' "$semantics" | sha256sum | awk '{print $1}')"
+  EXPERIMENT_VALIDATED=true
+}
+
+# Inspect overrides before the parser can consume or reject them. The backend
+# passthrough allowlist for experiments is empty, including equals spellings.
+_experiment_flags() {
+  local profile="${CLAVAIN_POLICY_PROFILE:-}" resolved=false arg i
+  for ((i=0; i<${#ORIGINAL_ARGS[@]}; i++)); do
+    case "${ORIGINAL_ARGS[$i]}" in
+      --policy-profile) profile="${ORIGINAL_ARGS[$((i+1))]:-}" ;;
+      --policy-profile=*) profile="${ORIGINAL_ARGS[$i]#*=}" ;;
+      --role-resolved) resolved=true ;;
+    esac
+  done
+  [[ "$profile" == experiment-* ]] || return 0
+  EXPERIMENT_REQUESTED=true
+  for arg in "${ORIGINAL_ARGS[@]}"; do
+    case "$arg" in
+      -c|-c?*|--config|--config=*|-p|-p?*|--profile|--profile=*|--add-dir|--add-dir=*|-a|-a?*|--output-schema|--output-schema=*|--claude-unsafe|--yolo|--dangerously-*|--via|--via=*|--capacity-substitute|--capacity-substitute=*)
+        _experiment_refuse 'experiment backend override refused' ;;
+      --to|--engine|-m|--model|--tier|--reasoning-effort|--service-tier)
+        [[ "$resolved" == true ]] || _experiment_refuse 'experiment execution override refused' ;;
+    esac
+  done
+}
+_experiment_flags
+
+# Count consumed execution controls, including their parser aliases.
+declare -A EXPERIMENT_FLAG_COUNTS=()
 # Parse arguments
 while [[ $# -gt 0 ]]; do
+  experiment_flag="$1"
+  case "$experiment_flag" in --engine) experiment_flag=--to ;; -m) experiment_flag=--model ;; esac
+  case "$experiment_flag" in
+    --to|--model|--reasoning-effort|--service-tier|--resolved-profile-ref|--resolved-profile-json|--resolved-route-json|--experiment-task-type)
+      EXPERIMENT_FLAG_COUNTS[$experiment_flag]=$(( ${EXPERIMENT_FLAG_COUNTS[$experiment_flag]:-0}+1 ))
+      if [[ "${EXPERIMENT_REQUESTED:-false}" == true && ${EXPERIMENT_FLAG_COUNTS[$experiment_flag]} -gt 1 ]]; then
+        _experiment_refuse "experiment requires exactly one $experiment_flag"
+      fi ;;
+  esac
   case "$1" in
+    --experiment-task-type)
+      require_arg "$1" "${2:-}"
+      EXPERIMENT_TASK_TYPE="$2"
+      shift 2
+      ;;
     --help|-h)
       show_help
       ;;
@@ -2548,6 +2756,9 @@ if [[ -n "$TIER" && "$ENGINE" != kimi && "${CLAVAIN_ROUTING_PRECHECK:-}" != "" &
 fi
 
 _resolve_dispatch_bead
+_experiment_entry
+[[ -z "$RESOLVED_PROFILE_REF" ]] || _experiment_tier_guard "$RESOLVED_PROFILE_REF"
+[[ -z "$TIER" ]] || _experiment_tier_guard "$TIER"
 # Purely additive means: don't newly export what dispatch resolved for its
 # own bookkeeping (CLAVAIN_BEAD_SOURCE, CLAVAIN_BEAD_CONTEXT_RESOLVED stay
 # shell-local), but don't take away a export the caller already had — restore
@@ -5870,6 +6081,7 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   if [[ ${#SEAT_ENV_UNSET[@]} -gt 0 ]]; then
     RUN_CMD=(env "${SEAT_ENV_UNSET[@]}" "${RUN_CMD[@]}")
   fi
+  _experiment_start
   _hold_before_launch
   set +e
   # kimi carries its prompt in argv; claude reads it from PROMPT_STDIN_FILE
@@ -5877,14 +6089,18 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   # inherits the orchestrator's stdin.
   if [[ -n "$OUTPUT" ]]; then
     if [[ -n "$RUN_DIR" ]]; then
+      _experiment_launch_check
       ( if [[ -n "$SUBMIT_HELD" ]]; then _hold_launch "${RUN_CMD[@]}"; else cd "$RUN_DIR" && "${RUN_CMD[@]}"; fi ) < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | _render_backend_response | tee "$OUTPUT"
     else
+      _experiment_launch_check
       _hold_launch "${RUN_CMD[@]}" < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | _render_backend_response | tee "$OUTPUT"
     fi
   else
     if [[ -n "$RUN_DIR" ]]; then
+      _experiment_launch_check
       ( if [[ -n "$SUBMIT_HELD" ]]; then _hold_launch "${RUN_CMD[@]}"; else cd "$RUN_DIR" && "${RUN_CMD[@]}"; fi ) < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | _render_backend_response
     else
+      _experiment_launch_check
       _hold_launch "${RUN_CMD[@]}" < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | _render_backend_response
     fi
   fi
@@ -6003,6 +6219,7 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
 elif [[ "$HAS_GAWK" == true ]]; then
   # Add --json to capture JSONL stream, pipe through parser
   [[ "$HELD_MODE" == true ]] || CMD+=(--json)
+  _experiment_start
   _hold_before_launch
 
   # Capture stderr while still mirroring to the terminal so the user sees errors live
@@ -6011,9 +6228,11 @@ elif [[ "$HAS_GAWK" == true ]]; then
   # us run verdict override + cleanup before exiting with the captured code.
   set +e
   if [[ -n "${CLAVAIN_REVIEW_EVENTS:-}" ]]; then
+    _experiment_launch_check
     _hold_launch "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS" | tee -a "$CLAVAIN_REVIEW_EVENTS" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
     CODEX_EXIT="${PIPESTATUS[0]}"
   else
+    _experiment_launch_check
     _hold_launch "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
     CODEX_EXIT="${PIPESTATUS[0]}"
   fi
@@ -6050,6 +6269,7 @@ elif [[ "$HAS_GAWK" == true ]]; then
 else
   # Fallback: no gawk, run without JSONL parsing (no live statusline updates)
   echo "Note: gawk not found — running without live statusline updates" >&2
+  _experiment_start
   _hold_before_launch
   set +e
   if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
@@ -6060,10 +6280,12 @@ else
     # The Go supervisor parses raw JSONL independently of optional GNU awk.
     # Stock macOS awk must not prevent budget-governed execution.
     [[ "$HELD_MODE" == true ]] || CMD+=(--json)
+    _experiment_launch_check
     _hold_launch "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS" | tee -a "$CLAVAIN_REVIEW_EVENTS"
     CODEX_EXIT="${PIPESTATUS[0]}"
   else
     [[ "$HELD_MODE" == true ]] || CMD+=(--json)
+    _experiment_launch_check
     _hold_launch "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS"
     CODEX_EXIT="${PIPESTATUS[0]}"
   fi
