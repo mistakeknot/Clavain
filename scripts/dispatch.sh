@@ -2756,6 +2756,17 @@ if [[ -n "$TIER" && "$ENGINE" != kimi && "${CLAVAIN_ROUTING_PRECHECK:-}" != "" &
 fi
 
 _resolve_dispatch_bead
+# Review budgets belong to beads, never PR heads. Check both the outer call
+# and resolved children, before role resolution or any provider launch.
+case "${ROLE:-}" in
+  cross-lab-review|plan-review|validation)
+    if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+      python3 "$DISPATCH_SCRIPT_DIR/review-round-limit.py" "$CLAVAIN_BEAD_ID" \
+        "${CLAVAIN_DISPATCH_RECEIPT_FILE:-${XDG_STATE_HOME:-$HOME/.local/state}/clavain/dispatch-receipts.jsonl}" \
+        "$(_review_receipt_dir)" || exit "$?"
+    fi
+    ;;
+esac
 _experiment_entry
 [[ -z "$RESOLVED_PROFILE_REF" ]] || _experiment_tier_guard "$RESOLVED_PROFILE_REF"
 [[ -z "$TIER" ]] || _experiment_tier_guard "$TIER"

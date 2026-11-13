@@ -286,6 +286,7 @@ _review_receipt_write() {
     --arg merge_tree "$RR_MERGE_TREE" --arg stat "$RR_DIFF_STAT" --arg dsha "$RR_DIFF_SHA256" \
     --arg producer "$PRODUCER_IDENTITY" --arg reviewer "$reviewer" --arg verdict "$verdict" --arg verdict_raw "$verdict_raw" \
     --arg temp_root "${REVIEW_CODEX_TMPDIR:-}" \
+    --arg bead "${CLAVAIN_BEAD_ID:-}" \
     --arg policy "$policy_hash" --arg did "${DISPATCH_ID:-}" --arg aid "${ATTEMPT_ID:-}" \
     --arg rel "${VALIDATOR_RELATIONSHIP:-}" --arg sandbox "$sandbox_mode" --arg scratch_tree "$scratch_tree" --slurpfile fxs <(printf '%s' "$fx_json") --slurpfile cp <(printf '%s' "${RR_CHANGED_PATHS_JSON:-}") --arg now "$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)" '
     def nn: if . == "" then null else . end;
@@ -296,7 +297,7 @@ _review_receipt_write() {
      producer_identity: $producer, reviewer_identity: $reviewer, validator_relationship: ($rel|nn),
      verdict: $verdict, verdict_raw: $verdict_raw, policy_hash: $policy, sandbox: ($sandbox|nn),
      temp_root: ($temp_root|nn),
-     dispatch_id: ($did|nn), attempt_id: ($aid|nn), created_at: $now,
+     bead_id: ($bead|nn), dispatch_id: ($did|nn), attempt_id: ($aid|nn), created_at: $now,
      findings: (($fx.findings // [])[:200]),
      findings_source: (if $fx.source == "unknown" then "unknown" elif $fx.source == "conflict" then "conflict" else "body" end),
      findings_total: (if $fx.source == "unknown" then null else $fx.total end),
