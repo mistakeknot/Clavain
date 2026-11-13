@@ -1,8 +1,61 @@
 # Changelog
 
-## Unreleased
+## 0.6.333
+
+Summary of changes since the 0.6.332 version commit. Some changes were
+previously documented under 0.6.332 after that version was installed.
+
+### Fixed
+
+- Claude dispatch children no longer inherit host-session identity variables,
+  allowing subscription login in nested host sessions. Structured
+  `authentication_failed` events and recognized authentication stderr endings
+  are classified as account access failures for fallback (PRs #155, #171).
+- Dispatch now scrubs secret-named environment variables with exact,
+  provider-specific authentication exceptions. Codex preflight children drop
+  bearer tokens; token leak checks cover routing and provider artifacts and
+  fail closed on unreadable evidence. Provider stderr mirrors and audit error
+  messages receive stricter redaction (PRs #150–#153, #156, #160, #163, #166).
+- Kimi tool-enabled reviews use sandbox containment and credential-location
+  masks, fall back to toolless operation when containment is unavailable, and
+  refuse unsafe review-role overrides. Verdict parsing accepts only the
+  complete allowed verdict tokens (PRs #142, #151).
+- Review receipts and live orchestration cross-check verdict words against
+  exit codes. Receipt readers handle aliases, numbering gaps, sidecar conflicts,
+  and bounded findings; cancellation records an error verdict. Review-round
+  accepts the documented block/verdict ordering (PRs #123–#125, #132, #143,
+  #165, #168 and mk-47vtm.1).
+- Scratch review mode isolates temporary state and inherited Git configuration;
+  read-only BB review seats are admitted and receipts record observed models
+  (PRs #128, #130, #131, #147).
+- Fallback mutexes use exclusive creation. Suppression baselines have a
+  deterministic count ratchet. Factory-stream arguments, script help and
+  zero-count reports are corrected (PRs #133, #134, #157–#159, #161).
+- Release bumps keep the wiki version figure synchronized with the manifest
+  (mk-2npah).
+
+### Workflow and evaluation
+
+- Added the full-stop skill and PR review footer, UI review standards for
+  relevant diffs, a vet-before-install checklist for outside skills, and basic
+  UI motion/state guidance (PRs #109, #112, #127, #136).
+- Added offline skill-routing evaluation/scoring and a guest-only behavioral
+  harness, plus paired skill evaluation with observed model identities and
+  per-attempt metrics (PRs #116–#120, #149).
+- Handoff and resume now look up current reference state and write a dated
+  facts block, preserving unresolved lookups (PRs #146, #148).
+- Added a stale managed-instruction contract check. Intercore cleanup now
+  prunes old routing decisions. Structural and shell checks gained hermetic
+  fixtures, characterization coverage and a longer CI timeout (PRs #135,
+  #137, #139, #162, #164, #167, #169).
 
 ### Changed
+
+- Planning now selects Opus 5.5 first, with Astra as cross-lab reviewer and
+  fallback. Routine and deep execution select GPT-6.1 Sol at high effort with
+  Sonnet 5.5 high as fallback; pool headroom checks include freshness and pacing
+  guards. The new one-shot-author role selects Fable 5.2 with Opus/Astra
+  fallbacks (PRs #110, #114, #115, #170, #172).
 
 - The experiment tiers and profiles change the `routing.yaml` SHA256; the next
   release carries the updated policy hash in managed contracts (mk-47vtm.10).
