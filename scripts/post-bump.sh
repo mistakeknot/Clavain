@@ -84,4 +84,12 @@ if [[ -n "$TARGET_VERSION" && "$TARGET_VERSION" != "--check" && "${DRY_RUN:-}" !
         mv -f "$TMP" "$PRD"
         trap - EXIT
     fi
+    WIKI="$REPO_ROOT/docs/wiki/src/introduction.md"
+    if [[ -f "$WIKI" ]]; then
+        TMP="${WIKI}.tmp.$$"
+        trap 'rm -f "$TMP"' EXIT
+        sed -E "s/^(Current plugin version: )\*\*[^*]+\*\*/\1**${TARGET_VERSION}**/" "$WIKI" > "$TMP"
+        mv -f "$TMP" "$WIKI"
+        trap - EXIT
+    fi
 fi
