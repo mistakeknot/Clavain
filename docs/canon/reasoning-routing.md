@@ -42,6 +42,44 @@ Quota, authentication, permission, timeout, and infrastructure failures are oper
 
 ## Handoff and escalation
 
+Packaged dispatch enforces a cumulative three-failure review budget per bead
+(source: bead `mk-i16ab.6`). Before starting `cross-lab-review`, `plan-review`,
+or `validation`, it counts failed review receipts for the resolved `--bead`
+across all PR heads and these roles. The shared verdict classifier maps FAIL
+and its BLOCK alias to FAIL; PR receipts store BLOCK, while run receipts now
+store `verdict_class`. PASS, PASS WITH NOTES, UNKNOWN and absent verdicts do
+not count. PASS does **not** reset earlier failures; superseded failed receipts
+still count as rounds that happened. Provider errors alone are not failures.
+Matching dispatch/attempt IDs deduplicate a run receipt and its PR receipt.
+Receipts marked `experimental: true`, `gate_review_eligible: false`, with a
+non-null `experiment_arm`, or with an `experiment-*` policy profile (top-level
+or in `resolved_route`) are excluded from the ordinary budget.
+
+At three failures, another dispatch exits **25** before resolving or starting
+a seat, with a message pointing to one private summary at
+`<review-receipt-dir>/round-limits/<bead>.md`. Exclusive creation preserves that
+first summary on repeated or concurrent refusals. It offers exactly three
+options: park, redesign on a frontier seat, or accept a stated limit. Record
+the choice and consequences on the bead; the summary grants no merge approval
+and no automatic reset. There is no override environment flag.
+
+History comes from `CLAVAIN_DISPATCH_RECEIPT_FILE` (default
+`$XDG_STATE_HOME/clavain/dispatch-receipts.jsonl`) and
+`CLAVAIN_REVIEW_RECEIPT_DIR` (default `$XDG_STATE_HOME/clavain/reviews`);
+`XDG_STATE_HOME` defaults to `$HOME/.local/state`. Keep these shared across
+dispatches to preserve the budget. Legacy receipts without a bead or verdict
+cannot be attributed retroactively and do not count; dispatch without a bead
+cannot enforce a per-bead budget. Resolved children validate nonempty bead IDs
+with the same character restriction as `--bead`; empty attribution stays empty.
+Missing history means no recorded failures. The ledger reader holds a shared
+lock on the writer's `<ledger>.lock` for the whole read, preventing torn reads
+of live appends. Malformed records (including an old torn final line) are
+skipped individually; stderr reports their count without echoing their contents.
+Only well-formed receipts count. Unreadable history or lock, or failure to write
+the summary (including a summary symlink), exits **26** without launching a
+seat. The check uses completed receipts available at
+admission: already-running concurrent reviews are not cancelled or reserved.
+
 Two demonstrated capability, verdict, or criteria failures request escalation; a disproven premise escalates immediately. Exit codes do not classify failure. Handoff carries decisions, constraints, verification, and escalation conditions; do not end `investigation_active` while investigation remains. Retain relevant playtests, experiments, user evidence, and production canaries. Structural tests lack empirical acceptance.
 
 ## Host delivery and evidence
