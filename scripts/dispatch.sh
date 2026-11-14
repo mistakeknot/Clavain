@@ -3926,11 +3926,11 @@ elif [[ "$ENGINE" == "claude" ]]; then
   else
   # dontAsk denies every tool that is not allowed up front, so without an
   # explicit allowance the seat cannot run one command and its "replay" is a
-  # hand trace. Bash is allowed; the file-mutating tools stay
+  # hand trace. Bash and Read/Glob/Grep are allowed; the file-mutating tools stay
   # disallowed and the checkout is snapshotted around the run (see
   # _seat_snapshot): a run that changes it is an error verdict, not a ruling.
   if [[ "$CLAUDE_UNSAFE" != true ]]; then
-    CMD+=(--allowedTools "Bash")
+    CMD+=(--allowedTools "Bash,Read,Glob,Grep")
     if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
       CMD+=(--disallowedTools "Edit,Write,NotebookEdit,Agent,Task,Skill")
     else
