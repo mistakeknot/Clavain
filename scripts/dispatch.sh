@@ -2765,9 +2765,13 @@ _resolve_dispatch_bead
 case "${ROLE:-}" in
   cross-lab-review|plan-review|validation)
     if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+      round_limit_args=()
+      # The outer call checks before resolution; only the resolved child
+      # consumes the one-use decision, including across capacity fallbacks.
+      [[ "$ROLE_RESOLVED" == true ]] || round_limit_args+=(--check-only)
       python3 "$DISPATCH_SCRIPT_DIR/review-round-limit.py" "$CLAVAIN_BEAD_ID" \
         "${CLAVAIN_DISPATCH_RECEIPT_FILE:-${XDG_STATE_HOME:-${HOME:-/nonexistent}/.local/state}/clavain/dispatch-receipts.jsonl}" \
-        "$(_review_receipt_dir)" || exit "$?"
+        "$(_review_receipt_dir)" --head "${RR_HEAD:-}" "${round_limit_args[@]}" || exit "$?"
     fi
     ;;
 esac

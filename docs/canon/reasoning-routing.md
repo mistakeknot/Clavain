@@ -63,6 +63,47 @@ options: park, redesign on a frontier seat, or accept a stated limit. Record
 the choice and consequences on the bead; the summary grants no merge approval
 and no automatic reset. There is no override environment flag.
 
+### One-use stated-limit decision
+
+Proposed authority: **vizier only**. The authority records the consequences on
+the bead and writes `<review-receipt-dir>/round-limits/decisions/<bead>.json`
+with `scripts/review-round-decision.py --reviews-dir <review-receipt-dir>
+--bead <bead> --head <40-hex-commit> --accepted-failures <current-count>
+--ruling <recorded-decision>`. All four decision arguments are explicit. The
+writer creates a fresh unique ID and UTC timestamp and refuses to overwrite an
+existing decision. Retain consumed decisions and markers for audit; a later
+recorded decision requires archiving the old JSON while retaining its marker.
+
+The authority creates and holds a random key at
+`$XDG_STATE_HOME/clavain/review-round-decision.key` (default
+`$HOME/.local/state/clavain/review-round-decision.key`), a regular file owned by
+the current uid with mode **0600**. The writer never generates a key. This is
+an integrity and procedure control, **not a defence against a same-uid agent
+that can read the key**. The authority label is procedural, not OS isolation.
+`CLAVAIN_REVIEW_ROUND_TEST_KEY_FILE` overrides the key path for tests only;
+use dummy keys exclusively, never production keys or credentials in tests.
+
+Schema version 1 contains `decision_id`, `bead`, `head`, `accepted_failures`,
+`authority` (`vizier`), `ruling`, `decided_at` (ISO 8601 with timezone), and
+`mac`. HMAC-SHA256 covers every field except `mac`, encoded as UTF-8 JSON with
+sorted keys, no whitespace (`separators=(",", ":")`), and `ensure_ascii=True`.
+The decision must be a regular, non-symlink file owned by the current uid,
+with no group/other write bits. It applies only to the exact head supplied by
+dispatch's receipt `--head` and the exact current failed-round count. No head
+means no decision can apply. A successful check atomically creates a
+`<SHA256(decision_id)>.consumed` marker with exclusive creation in the same
+directory; retain the marker even if dispatch later fails. It permits one
+additional round only. The next failure changes the count and requires a new
+recorded decision. Concurrent claimants cannot both succeed.
+
+Dispatch's outer preflight uses `--check-only` to validate without consuming;
+the resolved child repeats the gate and claims before starting a seat.
+Capacity fallback children each check again, so a consumed decision cannot
+start a second candidate. Missing, inapplicable, tampered, unsafe or consumed
+decisions retain exit **25** and a short reason. Malformed JSON and unreadable
+input retain exit **26**. Failure counting, review roles and experiment
+exclusions are unchanged.
+
 History comes from `CLAVAIN_DISPATCH_RECEIPT_FILE` (default
 `$XDG_STATE_HOME/clavain/dispatch-receipts.jsonl`) and
 `CLAVAIN_REVIEW_RECEIPT_DIR` (default `$XDG_STATE_HOME/clavain/reviews`);

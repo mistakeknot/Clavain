@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Count failed review receipts across heads; refuse before another seat starts."""
+import argparse
 import json
 import fcntl
 import os
 from pathlib import Path
 import sys
 
+from review_round_decision import DecisionRefused, claim
+
 REVIEW_ROLES = {"cross-lab-review", "plan-review", "validation"}
 
 
-def check(bead, ledger, reviews):
+def check(bead, ledger, reviews, head=None, check_only=False):
     failures = set()
     malformed = 0
 
@@ -70,6 +73,15 @@ def check(bead, ledger, reviews):
         print(f"dispatch: skipped {malformed} malformed review history record{suffix}; counted only well-formed receipts", file=sys.stderr)
     if len(failures) < 3:
         return 0
+    try:
+        decision_id = claim(reviews, bead, head, len(failures), check_only=check_only)
+    except DecisionRefused as error:
+        print(f"dispatch: review round decision refused: {error}", file=sys.stderr)
+    else:
+        if check_only:
+            return 0
+        print(f"dispatch: accepting one extra review round for {bead} head {head} decision {decision_id}", file=sys.stderr)
+        return 0
     directory = reviews / "round-limits"
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     summary = directory / f"{bead}.md"
@@ -95,8 +107,15 @@ def check(bead, ledger, reviews):
 
 if __name__ == "__main__":
     try:
-        sys.exit(check(sys.argv[1], Path(sys.argv[2]), Path(sys.argv[3])))
-    except (OSError, ValueError, TypeError):
+        parser = argparse.ArgumentParser(description=__doc__)
+        parser.add_argument("bead")
+        parser.add_argument("ledger", type=Path)
+        parser.add_argument("reviews", type=Path)
+        parser.add_argument("--head")
+        parser.add_argument("--check-only", action="store_true", help="outer dispatch preflight; resolved child must claim")
+        args = parser.parse_args()
+        sys.exit(check(args.bead, args.ledger, args.reviews, args.head, args.check_only))
+    except (OSError, ValueError, TypeError, RecursionError):
         # No input bytes or exception text: receipts may contain private data.
         print("dispatch: cannot verify review round history or write summary (exit 26)", file=sys.stderr)
         sys.exit(26)
