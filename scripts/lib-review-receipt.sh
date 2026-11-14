@@ -329,9 +329,14 @@ _review_receipt_write() {
     # predecessor scan below runs once per attempt and not once per occupied
     # slot. A symlink (dangling included) or non-regular entry is refused.
     while [[ -e "$cand" || -L "$cand" ]]; do
-      if [[ -L "$cand" || ! -f "$cand" || $n -ge 999 ]]; then
+      if [[ -L "$cand" || ! -f "$cand" ]]; then
         rm -f "$tmpf"
-        echo "review receipt: not written ($cand is not a regular file or unwritable)" >&2
+        echo "review receipt: not written (existing receipt path is a symlink or non-regular file: $cand)" >&2
+        return 1
+      fi
+      if (( n >= 999 )); then
+        rm -f "$tmpf"
+        echo "review receipt: not written (receipt sequence limit (999) reached; existing receipt: $cand)" >&2
         return 1
       fi
       n=$((n + 1)); cand="${file%.json}.$n.json"
