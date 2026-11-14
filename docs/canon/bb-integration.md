@@ -128,6 +128,21 @@ login. Older BB servers return only provider-wide availability. Native pooled
 routes inherited for the same provider keep working on those servers, while
 cross-provider borrowing waits for the thread-scoped response.
 
+**Pool route without a pool token** (mk-wyvz6). A thread can carry the exact
+BB pool route for this server (`ANTHROPIC_BASE_URL` for Claude,
+`CODEX_OPENAI_BASE_URL` for Codex) while the matching bearer variable
+(`ANTHROPIC_AUTH_TOKEN`, `CODEX_POOL_AUTH_TOKEN`) is unset or empty. Requests
+to the route without a bearer only return 401, so dispatch drops that route
+variable from the per-candidate child, prints one line on stderr (it names the
+provider and no environment value) and uses the provider's own non-pooled
+login. No `env -u ...` prefix is needed in front of `dispatch.sh` for this
+state. No eligibility probe is made, no token is borrowed and no different
+account is selected. The fallback is deliberately narrow: it applies only to
+the exact pool route with an absent token. A token that is present and rejected
+(401 or 403), an invalid origin, a malformed response and TLS or DNS failures
+keep their terminal handling, as does an endpoint that is not the pool route.
+`CLAVAIN_BB_DIRECT_POOL=0` also gets this fallback.
+
 **Cross-provider dispatch.** BB contributes the pool route and its machine
 bearer only for the parent thread's provider. When the target provider is
 currently eligible, a Codex attempt can borrow the bearer from a Claude

@@ -7,6 +7,12 @@ previously documented under 0.6.332 after that version was installed.
 
 ### Fixed
 
+- `dispatch.sh` falls back to the non-pooled login when a thread has the BB
+  pool route but no pool token (mk-wyvz6). The stale `ANTHROPIC_BASE_URL` (Claude)
+  or `CODEX_OPENAI_BASE_URL` (Codex) is dropped from the child with a one-line
+  stderr notice, so a Claude review seat no longer needs an `env -u` prefix. A
+  present token that is rejected, and every other eligibility failure, stay
+  terminal. See `docs/canon/bb-integration.md`.
 - Review output format failures identify the rejected rule, and dispatch prompts
   spell out the fence and HTML comment restrictions. Trailing negative verdicts
   retain their reviewer summary, while receipt collisions distinguish unsafe

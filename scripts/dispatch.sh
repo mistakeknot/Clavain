@@ -3886,6 +3886,7 @@ elif [[ "$ENGINE" == "claude" ]]; then
       exit 1
     fi
     if _bb_claude_pooled; then _token_leak_capture; unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL; fi
+    _bb_drop_tokenless_pool_route claude
   fi
   # Claude headless one-shot: claude -p "<prompt>". Added for the review
   # seat in orchestrated delegation (goal 7d610151): an independent
@@ -4006,6 +4007,7 @@ else
       exit 1
     fi
     if _bb_codex_pooled; then _token_leak_capture; unset CODEX_POOL_AUTH_TOKEN CODEX_OPENAI_BASE_URL; fi
+    _bb_drop_tokenless_pool_route codex
   fi
   # mk-47vtm.2: the pooled alias (if any) is built, so a Codex run no longer
   # needs ANTHROPIC_AUTH_TOKEN. Remove it before the sandbox preflight and the
