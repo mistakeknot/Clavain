@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.6.334
+
+Summary of changes merged since 0.6.333.
+
+### Added
+
+- Review-round limit: one authenticated, single-use decision file can permit
+  one further cross-lab review round for a named bead, exact review head and
+  exact failed-round count. The gate verifies ownership, permissions and an
+  HMAC over the decision, then atomically claims a consumption marker; reuse,
+  tampering, mismatched counts or heads and unsafe files keep the refusal. The
+  existing three-round threshold, counting and experiment exclusions are
+  unchanged. It is a procedural integrity control for the local account, not an
+  authority boundary (PR #192, mk-aptba).
+
+### Fixed
+
+- Claude review seats using `dontAsk` now also allow the read-only Read, Glob
+  and Grep tools; mutation tools stay denied (PR #191, mk-les9r).
+- The pool eligibility probe returns exit code 4 for timeouts, transport errors
+  and HTTP 5xx; dispatch retries twice with a short backoff, then selects the
+  non-pooled path. Invalid origins, TLS and DNS failures, missing tokens,
+  malformed responses and HTTP 4xx remain terminal (PR #193, mk-gzfpf.11.1).
+
 ## 0.6.333
 
 Summary of changes since the 0.6.332 version commit. Some changes were
