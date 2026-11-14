@@ -22,6 +22,28 @@ setup() {
 }
 teardown() { rm -rf "$T"; }
 
+check_trailing_verdict() {
+    source "$HELPERS"
+    ROLE=implementation
+    printf 'Review findings below.\n\n%s\n\nVERDICT: %s\n' "${3:-Findings: none}" "$1" > "$OUTPUT"
+    _extract_verdict "$OUTPUT" 2>/dev/null
+    grep -q "^STATUS: $2$" "$VERDICT_FILE"
+    grep -q "^SUMMARY: .*${1}" "$VERDICT_FILE"
+    ! grep -q 'No verdict line' "$VERDICT_FILE"
+}
+
+@test "trailing fallback recognizes BLOCK and retains the ruling with findings" {
+    check_trailing_verdict BLOCK warn '### [P2] [logic-correctness] dummy defect'
+}
+
+@test "trailing fallback recognizes FAIL and retains the ruling with findings" {
+    check_trailing_verdict FAIL warn '### [P2] [logic-correctness] dummy defect'
+}
+
+@test "trailing fallback retains PASS" { check_trailing_verdict PASS pass; }
+@test "trailing fallback retains PASS WITH NOTES without losing NOTES" { check_trailing_verdict 'PASS WITH NOTES' pass; }
+@test "trailing fallback retains CLEAN" { check_trailing_verdict CLEAN pass; }
+
 @test "word class: PASS, PASS WITH NOTES (space, hyphen, underscore), FAIL and BLOCK" {
     [ "$(verdict_word_class PASS)" = PASS ]
     [ "$(verdict_word_class 'pass.')" = PASS ]
