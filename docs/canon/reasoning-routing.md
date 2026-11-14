@@ -63,6 +63,66 @@ options: park, redesign on a frontier seat, or accept a stated limit. Record
 the choice and consequences on the bead; the summary grants no merge approval
 and no automatic reset. There is no override environment flag.
 
+### One-use stated-limit decision
+
+Proposed authority: **vizier only**. The authority records the consequences on
+the bead and writes `<review-receipt-dir>/round-limits/decisions/<bead>.json`
+with `python3 scripts/review-round-decision.py --reviews-dir <review-receipt-dir>
+--bead <bead> --head <lowercase-40-hex-commit> --accepted-failures <current-count>
+--ruling <recorded-decision>`. All four decision arguments are explicit. The
+writer creates the decisions directory with mode 0700, creates a fresh unique
+ID and UTC timestamp, and publishes complete JSON by an atomic rename from a
+0600 temporary file. A writer lock prevents concurrent writers from replacing
+an existing decision. It refuses to overwrite an existing decision. Retain
+consumed decisions and markers for audit; a later
+recorded decision requires archiving the old JSON while retaining its marker.
+
+The authority creates and holds a random key at
+`~/.local/state/clavain/review-round-decision.key`, where `~` is resolved from
+the current uid's account database home directory, not from `HOME` or
+`XDG_STATE_HOME`. The key must be a regular file owned by the current uid with
+mode **0600**. The writer never generates a key. No production key-path
+argument or environment override exists; in particular,
+`CLAVAIN_REVIEW_ROUND_TEST_KEY_FILE` is ignored. Tests inject dummy key readers
+in-process using test wrappers only. The statement “no override environment
+flag” applies to this decision path as well.
+
+The whole control is a **procedural integrity control against mistakes for
+anything running as the same uid**, not an authority boundary against such a
+process. That process can alter or delete FAIL receipts, remove consumption
+markers, redirect receipt storage, or read/replace the key without satisfying
+the procedure. Receipt-directory and history environment settings still select
+the budget evidence; changing them does not grant permission to evade a gate.
+Pinning the key path removes key-path environment redirection, but does not
+isolate the key from a process sharing the account. The authority label is
+procedural, not OS isolation.
+
+Schema version 1 contains `decision_id`, `bead`, `head`, `accepted_failures`,
+`authority` (`vizier`), `ruling`, `decided_at` (ISO 8601 with timezone), and
+`mac`. HMAC-SHA256 covers every field except `mac`, encoded as UTF-8 JSON with
+sorted keys, no whitespace (`separators=(",", ":")`), and `ensure_ascii=True`.
+Both writer and gate require a lowercase 40-hex head. The decision must be a
+regular, non-symlink file owned by the current uid,
+with no group/other write bits. It applies only to the exact head supplied by
+dispatch's receipt `--head` and the exact current failed-round count. No head
+means no decision can apply. A successful check atomically creates a
+`<SHA256(decision_id)>.consumed` marker with exclusive creation in the same
+directory; retain the marker even if dispatch later fails. It permits one
+additional cross-lab-review round only: plan-review and validation dispatches
+cannot supply the receipt head and cannot use this decision. The next failure
+changes the count and requires a new
+recorded decision. Concurrent claimants cannot both succeed.
+
+Dispatch's outer preflight uses `--check-only` to validate without consuming;
+the resolved child repeats the gate and claims before starting a seat.
+A capacity failure on the primary seat still consumes the decision. Capacity
+fallback children each check again, so a consumed decision cannot start a
+second candidate; another attempt requires a new recorded decision. Missing,
+inapplicable, tampered, unsafe or consumed
+decisions retain exit **25** and a short reason. Malformed JSON and unreadable
+input retain exit **26**. Failure counting, review roles and experiment
+exclusions are unchanged.
+
 History comes from `CLAVAIN_DISPATCH_RECEIPT_FILE` (default
 `$XDG_STATE_HOME/clavain/dispatch-receipts.jsonl`) and
 `CLAVAIN_REVIEW_RECEIPT_DIR` (default `$XDG_STATE_HOME/clavain/reviews`);
