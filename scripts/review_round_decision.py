@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import pwd
 import stat
 from datetime import datetime
 
@@ -26,7 +27,7 @@ def validate(data):
         raise DecisionRefused("unsupported decision schema")
     if not identifier(data["bead"]) or not identifier(data["decision_id"]):
         raise DecisionRefused("invalid decision identity")
-    if not isinstance(data["head"], str) or not re.fullmatch(r"[0-9a-fA-F]{40}", data["head"]):
+    if not isinstance(data["head"], str) or not re.fullmatch(r"[0-9a-f]{40}", data["head"]):
         raise DecisionRefused("invalid decision head")
     if type(data["accepted_failures"]) is not int or data["accepted_failures"] < 3:
         raise DecisionRefused("invalid accepted failure count")
@@ -62,11 +63,9 @@ def secure_read(path, *, key=False):
 
 
 def key_bytes():
-    # Explicit test-only override: callers must use dummy keys, never credentials.
-    path = os.environ.get("CLAVAIN_REVIEW_ROUND_TEST_KEY_FILE")
-    if not path:
-        state = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state")))
-        path = state / "clavain/review-round-decision.key"
+    # Pin the authority key to the account home, independent of receipt-path
+    # redirection or caller-controlled HOME/XDG_STATE_HOME settings.
+    path = Path(pwd.getpwuid(os.getuid()).pw_dir) / ".local/state/clavain/review-round-decision.key"
     key = secure_read(Path(path), key=True)
     if not key:
         raise DecisionRefused("empty decision key")
@@ -90,7 +89,7 @@ def claim(reviews, bead, head, failures, *, check_only=False):
         raise DecisionRefused("no recorded decision") from None
     data = json.loads(raw)
     validate(data)
-    if not head or not re.fullmatch(r"[0-9a-fA-F]{40}", head):
+    if not head or not re.fullmatch(r"[0-9a-f]{40}", head):
         raise DecisionRefused("no exact review head")
     if data["bead"] != bead or data["head"] != head:
         raise DecisionRefused("decision bead or head mismatch")
@@ -102,11 +101,11 @@ def claim(reviews, bead, head, failures, *, check_only=False):
     marker = directory / (hashlib.sha256(data["decision_id"].encode()).hexdigest() + ".consumed")
     if check_only:
         if os.path.lexists(marker):
-            raise DecisionRefused("decision already consumed")
+            raise DecisionRefused("decision already consumed; a new decision is needed (including after a capacity failure)")
         return data["decision_id"]
     try:
         fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError:
-        raise DecisionRefused("decision already consumed") from None
+        raise DecisionRefused("decision already consumed; a new decision is needed (including after a capacity failure)") from None
     os.close(fd)
     return data["decision_id"]
