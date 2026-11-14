@@ -502,6 +502,15 @@ for name in sys.argv[3:4] if sys.argv[2] == 'claude' else sys.argv[3:]:
     text = path.read_bytes()
     assert text.count(instruction) == 1
     path.write_bytes(text.replace(instruction, b'', 1))
+# Normalize only the intentional read-tool expansion in Claude's argv.
+if sys.argv[2] == 'claude':
+    path = pathlib.Path(sys.argv[4])
+    args = path.read_bytes().split(b'\0')
+    assert args.count(b'--allowedTools') == 1
+    index = args.index(b'--allowedTools') + 1
+    assert args[index] == b'Bash,Read,Glob,Grep'
+    args[index] = b'Bash'
+    path.write_bytes(b'\0'.join(args))
 PY
         tail -1 "$T/receipts" > "$T/new-receipt"
         current="$DISPATCH"; DISPATCH="$golden"
