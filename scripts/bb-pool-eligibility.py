@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""Read bb's current per-thread pool decision without exposing its bearer."""
+"""Read bb's current per-thread pool decision without exposing its bearer.
+
+Exit codes: 0 eligible, 1 ineligible, 2 configuration error, 3 legacy
+provider-wide eligibility, 4 transient timeout/transport/server failure.
+"""
+from http.client import HTTPException
 import json
 import os
 import sys
 from urllib.parse import urlencode, urlsplit
+from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
@@ -51,9 +57,17 @@ def main() -> int:
                 type(availability.get(provider)) is not bool):
             raise ValueError("invalid bb eligibility response")
         return 0 if availability[provider] else 1
+    except HTTPError as error:
+        status = 4 if 500 <= error.code < 600 else 2
+    except (URLError, OSError, HTTPException):
+        status = 4
     except Exception:
+        status = 2
+    if status == 4:
+        print(f"Error: transient bb account-pool eligibility probe failure for {provider}", file=sys.stderr)
+    else:
         print(f"Error: cannot establish current bb account-pool eligibility for {provider}", file=sys.stderr)
-        return 2
+    return status
 
 
 if __name__ == "__main__":

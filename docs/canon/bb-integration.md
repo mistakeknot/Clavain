@@ -128,6 +128,16 @@ login. Older BB servers return only provider-wide availability. Native pooled
 routes inherited for the same provider keep working on those servers, while
 cross-provider borrowing waits for the thread-scoped response.
 
+The eligibility probe returns 4 for timeouts, transport errors and HTTP 5xx.
+The shared dispatch helper retries these failures twice with a 0.2 second
+backoff, then emits a stderr notice and uses the non-pooled provider path.
+`CLAVAIN_BB_POOL_PROBE_RETRIES` accepts 0–2 and
+`CLAVAIN_BB_POOL_PROBE_BACKOFF` accepts 0–1 seconds, including fractions.
+Invalid overrides remain configuration errors. Exit codes 0 (eligible),
+1 (ineligible), 2 (configuration error) and 3 (legacy availability) retain
+their meanings. Invalid origins, missing tokens, malformed responses and
+HTTP 4xx remain terminal configuration errors without retries.
+
 **Cross-provider dispatch.** BB contributes the pool route and its machine
 bearer only for the parent thread's provider. When the target provider is
 currently eligible, a Codex attempt can borrow the bearer from a Claude

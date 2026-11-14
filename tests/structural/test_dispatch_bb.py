@@ -451,13 +451,16 @@ def test_unverified_bb_enrollment_fails_before_claude_login(tmp_path):
     assert (tmp_path/'failure').read_text().strip() == 'terminal_configuration'
 
 
-def test_pool_eligibility_timeout_fails_before_claude_login(tmp_path):
+def test_pool_eligibility_timeout_falls_back_to_claude_login(tmp_path):
     assert run_dispatch(tmp_path, pool=True, engine='claude', env_override={
         'ANTHROPIC_AUTH_TOKEN': None, 'ANTHROPIC_BASE_URL': None,
         'BB_ELIGIBILITY_DELAY': '6',
-    }) != 0
-    assert not (tmp_path/'call').exists()
-    assert (tmp_path/'failure').read_text().strip() == 'terminal_configuration'
+        'CLAVAIN_BB_POOL_PROBE_RETRIES': '0',
+    }) == 0
+    assert (tmp_path/'call').exists()
+    call = json.loads((tmp_path/'call').read_text())
+    assert call['base_url'] is None
+    assert (tmp_path/'failure').read_text() == ''
 
 
 def test_pool_redirect_is_not_followed(tmp_path):

@@ -46,11 +46,28 @@ _bb_native_pooled() {
 # reads current bb eligibility and can report an enrollment or transport error.
 _bb_pool_available() {
   [[ "${CLAVAIN_BB_DIRECT_POOL:-1}" == 1 ]] || return 1
-  local provider="${1:-codex}" dir status=0
+  local provider="${1:-codex}" dir status=0 attempt=0
   _bb_pool_candidate "$provider" || return 1
   _clavain_in_bb || { echo "Error: cannot verify bb host enrollment for pooled $provider dispatch" >&2; return 2; }
   dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  python3 "$dir/bb-pool-eligibility.py" "$provider" || status=$?
+  local retries="${CLAVAIN_BB_POOL_PROBE_RETRIES:-2}"
+  local backoff="${CLAVAIN_BB_POOL_PROBE_BACKOFF:-0.2}"
+  # Keep overrides bounded: at most two retries and one second per backoff.
+  if [[ ! "$retries" =~ ^[012]$ || ! "$backoff" =~ ^(0(\.[0-9]+)?|1(\.0+)?)$ ]]; then
+    echo "Error: invalid bb pool probe retry settings" >&2
+    return 2
+  fi
+  while true; do
+    status=0
+    python3 "$dir/bb-pool-eligibility.py" "$provider" || status=$?
+    [[ "$status" == 4 ]] || break
+    if (( attempt >= retries )); then
+      echo "Warning: transient bb pool eligibility failure for $provider after $((attempt + 1)) attempts; falling back to non-pooled dispatch" >&2
+      return 1
+    fi
+    attempt=$((attempt + 1))
+    sleep "$backoff"
+  done
   if [[ "$status" == 3 ]]; then
     _bb_native_pooled "$provider" && return 0
     echo "Error: this bb server cannot verify cross-provider pool eligibility for $provider" >&2
