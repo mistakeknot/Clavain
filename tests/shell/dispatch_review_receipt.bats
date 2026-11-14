@@ -24,6 +24,38 @@ setup() {
 }
 teardown() { rm -rf "$T"; }
 
+@test "strict format failures name the rejected rule" {
+    _review_receipt_prepare "$R"
+    for marker in '```' '~~~' '<!--' '-->'; do
+        printf '%s\n\nVERDICT: PASS\n' "$marker" > "$OUT"
+        run _review_receipt_write "$OUT" 0
+        [ "$status" -ne 0 ]
+        [[ "$output" == *"fence or HTML comment delimiter found"* ]]
+    done
+    printf 'VERDICT: PASS\n\nmore prose\n' > "$OUT"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"VERDICT must be the last non-blank line"* ]]
+    printf 'findings\nVERDICT: PASS\n' > "$OUT"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"preceded by a blank line"* ]]
+    printf 'Findings\n\nVERDICT: PASS\nmore prose\n' > "$OUT"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"VERDICT must be the last non-blank line"* ]]
+    for body in '' $'Overall fine.\nThanks.'; do
+        printf '%s\n' "$body" > "$OUT"
+        run _review_receipt_write "$OUT" 0
+        [ "$status" -ne 0 ]
+        [[ "$output" == *"no VERDICT label line found"* ]]
+    done
+}
+
+@test "cross-lab prompt explicitly forbids fences and HTML comment delimiters everywhere" {
+    grep -q 'Do not use code fences or HTML comment delimiters anywhere in your output' "$DISPATCH"
+}
+
 @test "prepare derives the diff hash from the raw git diff bytes" {
     _review_receipt_prepare "$R"
     want="$(git -C "$R" diff --no-ext-diff --no-renames --binary "$BASE" "$HEAD_SHA" | sha256sum | cut -d' ' -f1)"
@@ -61,6 +93,26 @@ teardown() { rm -rf "$T"; }
     [ "$status" -eq 0 ]
     [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.json")" = PASS ]
     [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.2.json")" = BLOCK ]
+}
+
+@test "blocked same-head addendum fails dispatch loudly with its existing path" {
+    _review_receipt_prepare "$R"
+    _review_receipt_write "$OUT" 0
+    first="$T/reviews/o__r/7-$HEAD_SHA.json"
+    before="$(sha256sum "$first")"
+    existing="${first%.json}.2.json"
+    ln -s "$first" "$existing"
+    source <(awk '/^_dispatch_cleanup_state\(\)/ { emit=1 } emit { print; if ($0 == "}") exit }' "$DISPATCH")
+    _review_scratch_cleanup() { :; }
+    _token_leak_scan_all() { :; }; _token_leak_conclude() { return 0; }
+    ROLE_RESOLVED=true ROLE=cross-lab-review OUTPUT="$OUT" STATE_FILE="$T/state"
+    finish_dispatch() { true; _dispatch_cleanup_state; return "$DISPATCH_FINAL_RC"; }
+    run finish_dispatch
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"existing receipt path is a symlink or non-regular file: $existing"* ]]
+    [ "$(sha256sum "$first")" = "$before" ]
+    [ -L "$existing" ]
+    [ ! -e "${first%.json}.3.json" ]
 }
 
 @test "verdict mapping: notes pass, FAIL blocks, unknown words are UNKNOWN, no verdict line fails" {
@@ -405,6 +457,7 @@ _reject_passing_suffix() {
     for i in $(seq 2 999); do : > "$d/7-$HEAD_SHA.$i.json"; done
     run _review_receipt_write "$OUT" 0
     [ "$status" -ne 0 ]
+    [[ "$output" == *"receipt sequence limit (999) reached; existing receipt: $d/7-$HEAD_SHA.999.json"* ]]
     [ ! -e "$d/7-$HEAD_SHA.1000.json" ]
     [ -z "$(ls -A "$d" | grep '^\.new\.')" ]
 }

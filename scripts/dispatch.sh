@@ -3364,6 +3364,8 @@ error-handling, test-gap, spec-or-doc-mismatch, performance, style-naming,
 process-gate (CI, hooks, instruction files), other. Use other when none fits; do
 not guess. Keep the summary to one line and name the file and line when known.
 
+Do not use code fences or HTML comment delimiters anywhere in your output.
+Use indented code examples instead. Keep the verdict consistent with your findings.
 End your output with a blank line and then, as the very last line, exactly one
 of: \"VERDICT: PASS\", \"VERDICT: PASS WITH NOTES\" or \"VERDICT: FAIL\". No other
 verdict word (not APPROVE or CLEAN) is accepted: any other word is recorded
@@ -5112,7 +5114,7 @@ _extract_verdict() {
         # structured block) the LAST non-blank line is the one remaining
         # legitimate verdict source: agents that narrate first and close
         # with "VERDICT: PASS" (claude result text) end this way. Only an
-        # exact PASS/CLEAN token on that final line counts, and only when
+        # recognized verdict on that final line counts, and only when
         # no trailing block exists and the line is outside a code fence —
         # mid-body lines, quoted fences and recaps followed by further prose
         # are never consulted (mk P1-2).
@@ -5126,10 +5128,13 @@ _extract_verdict() {
             fi
             if [[ "$_last_class" == PASS || "$_last_class" == PASS_WITH_NOTES ]]; then
                 status="pass"
-                summary="Validator replay PASS."
+                summary="Reviewer verdict: $_last_word."
+            elif [[ "$_last_class" == FAIL ]]; then
+                status="warn"
+                summary="Reviewer verdict: $_last_word; not a pass."
             elif [[ "${last_line^^}" =~ ^VERDICT[[:space:]]*:[[:space:]]*CLEAN[[:space:]]*$ ]]; then
                 status="pass"
-                summary="Agent reports clean completion."
+                summary="Agent reports CLEAN completion."
             fi
         fi
     elif [[ "$verdict_word_upper" =~ ^BLOCK$ ]]; then
