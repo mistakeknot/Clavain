@@ -39,14 +39,26 @@ EOF
     export FAKE_BODY="$1"
 }
 
-@test "seat: Bash allowed, mutation tools disallowed, plan directory readable" {
+@test "seat: Bash and read-only tools allowed, mutation tools disallowed, plan directory readable" {
     run bash "$DISPATCH" --dry-run --to claude --model claude-opus-5-5 --plan "$T/plans/plan.md" -C "$T/repo" "prompt"
     [ "$status" -eq 0 ]
     [[ "$output" == *"--permission-mode dontAsk"* ]]
-    [[ "$output" == *"--allowedTools Bash"* ]]
+    [[ "$output" == *'--allowedTools Bash\,Read\,Glob\,Grep '* ]]
     # the dry-run printer quotes with %q, which escapes the commas
     [[ "$output" == *"--disallowedTools Edit"*"Write"*"NotebookEdit"* ]]
     [[ "$output" == *"--add-dir $T/plans"* ]]
+}
+
+@test "seat: read-only tools reach the Claude argv without allowing mutation tools" {
+    fake_claude $'VERDICT: PASS\nCRITERION: none'
+    PATH="$T/bin:$PATH" run bash "$DISPATCH" \
+        --to claude --model m -C "$T/repo" -o "$T/out.md" "prompt"
+    [ "$status" -eq 0 ]
+    run cat "$T/claude.argv"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"--permission-mode dontAsk "* ]]
+    [[ "$output" == *"--allowedTools Bash,Read,Glob,Grep "* ]]
+    [[ "$output" == *"--disallowedTools Edit,Write,NotebookEdit "* ]]
 }
 
 @test "seat: --claude-unsafe allows the mutation tools instead" {
