@@ -133,6 +133,14 @@ The shared dispatch helper retries these failures twice with a 0.2 second
 backoff, then emits a stderr notice and uses the non-pooled provider path.
 TLS errors (including certificate verification failures) and DNS resolution
 errors remain terminal, including when wrapped in nested transport errors.
+Origins are validated before connecting: a host is required, whitespace and
+control characters are rejected, and an explicit port must be numeric and in
+the range 1–65535. An empty explicit port is invalid.
+Remote disconnects, connection resets/refusals and known network errors remain
+transient. Malformed HTTP status lines, other protocol parse errors and
+unrecognized transport exceptions are terminal. TLS/DNS errors and truncated
+HTTP responses can result from real network faults; these still fail closed
+instead of selecting another provider login.
 `CLAVAIN_BB_POOL_PROBE_RETRIES` accepts 0–2 and
 `CLAVAIN_BB_POOL_PROBE_BACKOFF` accepts `0`, `0.<digits>`, `1` or
 `1.<zeros>` seconds; for example, `0.5` is accepted but `.5` is rejected.

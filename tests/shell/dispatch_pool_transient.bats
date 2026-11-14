@@ -6,6 +6,7 @@ setup() {
     git -C "$T" init -q
     mkdir -p "$T/bin"
     export PROBE_COUNT="$T/count" PROBE_SCENARIO=success
+    export PROBE_OPEN_COUNT="$T/open-count"
     export REAL_PYTHON="$(command -v python3)" PROBE_FIXTURE="$ROOT/tests/fixtures/pool-probe.py"
     cat > "$T/bin/python3" <<'SH'
 #!/usr/bin/env bash
@@ -34,12 +35,80 @@ dispatch() {
 }
 
 @test "probe timeouts and transport failures have distinct transient status" {
-    for scenario in timeout wrapped-timeout transport refused http500 http503; do
+    for scenario in timeout wrapped-timeout transport refused disconnect wrapped-disconnect network-unreachable http500 http503; do
         export PROBE_SCENARIO="$scenario"
         run python3 "$ROOT/scripts/bb-pool-eligibility.py" claude
         [ "$status" -eq 4 ]
         [[ "$output" == *"transient"* ]]
         [[ "$output" != *dummy* ]]
+    done
+}
+
+@test "invalid origin ports are terminal before opening a connection" {
+    for port in bad -1 0 65536 '' 1.2; do
+        export BB_SERVER_URL="http://127.0.0.1:$port"
+        export ANTHROPIC_BASE_URL="$BB_SERVER_URL/api/v1/plugins/account-pool/http"
+        run python3 "$ROOT/scripts/bb-pool-eligibility.py" claude
+        [ "$status" -eq 2 ]
+        [ ! -f "$PROBE_OPEN_COUNT" ]
+    done
+}
+
+@test "valid port boundaries retain eligibility" {
+    for port in 1 65535; do
+        export BB_SERVER_URL="http://127.0.0.1:$port"
+        export ANTHROPIC_BASE_URL="$BB_SERVER_URL/api/v1/plugins/account-pool/http"
+        run python3 "$ROOT/scripts/bb-pool-eligibility.py" claude
+        [ "$status" -eq 0 ]
+    done
+    [ "$(cat "$PROBE_OPEN_COUNT")" -eq 2 ]
+}
+
+@test "invalid origin hosts are rejected before opening a connection" {
+    for origin in 'https://' 'https://127.0.0.1 bad' $'https://127.0.0.1\t' 'https://[broken'; do
+        export BB_SERVER_URL="$origin"
+        export ANTHROPIC_BASE_URL="$BB_SERVER_URL/api/v1/plugins/account-pool/http"
+        run python3 "$ROOT/scripts/bb-pool-eligibility.py" claude
+        [ "$status" -eq 2 ]
+        [ ! -f "$PROBE_OPEN_COUNT" ]
+    done
+}
+
+@test "invalid ports do not retry or fall back in either dispatch path" {
+    for port in bad 0 65536; do
+        export BB_SERVER_URL="http://127.0.0.1:$port"
+        export ANTHROPIC_BASE_URL="$BB_SERVER_URL/api/v1/plugins/account-pool/http"
+        export CODEX_OPENAI_BASE_URL="$ANTHROPIC_BASE_URL/v1"
+        for provider in claude codex; do
+            echo 0 > "$PROBE_COUNT"
+            dispatch "$provider"
+            [ "$status" -ne 0 ]
+            [ "$(cat "$PROBE_COUNT")" -eq 1 ]
+            [ "$(cat "$T/failure")" == terminal_configuration ]
+            [ ! -f "$PROBE_OPEN_COUNT" ]
+            [[ "$output" != *"falling back"* ]]
+        done
+    done
+}
+
+@test "protocol garbage and unrecognized transport errors fail closed" {
+    for scenario in protocol-garbage wrapped-protocol invalid-url incomplete-read unknown-url nontransport-oserror; do
+        export PROBE_SCENARIO="$scenario"
+        run python3 "$ROOT/scripts/bb-pool-eligibility.py" claude
+        [ "$status" -eq 2 ]
+        [[ "$output" != *transient* ]]
+    done
+}
+
+@test "protocol mismatch is terminal in both dispatch paths" {
+    export PROBE_SCENARIO=protocol-garbage
+    for provider in claude codex; do
+        echo 0 > "$PROBE_COUNT"
+        dispatch "$provider"
+        [ "$status" -ne 0 ]
+        [ "$(cat "$PROBE_COUNT")" -eq 1 ]
+        [ "$(cat "$T/failure")" == terminal_configuration ]
+        [[ "$output" != *"falling back"* ]]
     done
 }
 

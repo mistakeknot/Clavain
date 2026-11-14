@@ -1,4 +1,6 @@
 """Run the real probe with deterministic dummy transport responses."""
+import errno
+from http.client import BadStatusLine, IncompleteRead, InvalidURL, RemoteDisconnected
 import io
 import json
 import os
@@ -23,6 +25,8 @@ if scenario == 'missing-token':
 class Opener:
     def open(self, request, timeout):
         assert timeout == 5
+        opened = Path(os.environ['PROBE_OPEN_COUNT'])
+        opened.write_text(str(int(opened.read_text()) + 1 if opened.exists() else 1))
         if scenario == 'timeout' or (scenario == 'recover' and attempt < 3):
             raise TimeoutError('dummy timeout')
         if scenario == 'transport':
@@ -39,6 +43,15 @@ class Opener:
             'nested-dns': URLError(URLError(socket.gaierror(socket.EAI_NONAME, 'dummy DNS'))),
             'direct-tls': ssl.SSLError('dummy TLS'),
             'direct-dns': socket.gaierror(socket.EAI_NONAME, 'dummy DNS'),
+            'disconnect': RemoteDisconnected('dummy disconnect'),
+            'wrapped-disconnect': URLError(URLError(RemoteDisconnected('dummy disconnect'))),
+            'network-unreachable': OSError(errno.ENETUNREACH, 'dummy network'),
+            'protocol-garbage': BadStatusLine('dummy garbage'),
+            'wrapped-protocol': URLError(BadStatusLine('dummy garbage')),
+            'invalid-url': InvalidURL('dummy URL'),
+            'incomplete-read': IncompleteRead(b'', 5),
+            'unknown-url': URLError('dummy unknown'),
+            'nontransport-oserror': OSError(errno.EINVAL, 'dummy argument'),
         }
         if scenario in errors:
             raise errors[scenario]
