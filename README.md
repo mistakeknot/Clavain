@@ -10,21 +10,19 @@ plan, builds and tests the feature, and gathers review findings for you to inspe
 
 ## What you get
 
+Clavain includes 28 skills, 6 agents, and 66 commands.
+
 - A guided path from feature idea to tested, reviewed code.
 - Standalone commands for planning, debugging, review, and finishing a change.
 - Written plans and review findings you can inspect in your repository.
 - Optional second opinions from other models through companion plugins.
 
-Clavain runs on Claude Code, Codex, Hermes, and Kimi Code; Claude Code is the
-primary path. See [other host setups](docs/install.md). It is an opinionated personal workflow, useful both as a daily
-tool and as a reference for building your own. Read the
-[background and design principles](docs/background.md) for its goals and limits.
+Clavain runs on Claude Code, Codex, Hermes, and Kimi Code; Claude Code is the primary path. See [other host setups](docs/install.md). It is an opinionated personal workflow, useful both as a daily
+tool and as a reference for building your own. Read the [background and design principles](docs/background.md) for its goals and limits.
 
 ## Install
 
-**Recommended: the full Claude Code install.** This installs Clavain and its
-companions and configures MCP servers (tools the agent can call). It also
-configures environment settings and resolves conflicting plugins; review the
+**Recommended: the full Claude Code install.** This installs Clavain and its companions and configures MCP servers (tools the agent can call). It also configures environment settings and resolves conflicting plugins; review the
 installer's proposed changes.
 
 Have these ready **before** running the installer:
@@ -35,12 +33,8 @@ Have these ready **before** running the installer:
   in its module. Use the module requirement when choosing a Go toolchain.
 - Git and a project you can work in.
 
-**Required companions:** `context7` (library documentation) and
-`explanatory-output-style` (explanations in agent output).
-**Recommended companions:** `interphase` (phase tracking), `interflux` (review),
-`intertest` (testing discipline), and `interpeer` (second opinions).
-The full installer handles companions; plugin-only installation requires setup.
-See the [companion reference](docs/component-reference.md#the-agent-rig) for the
+**Required companions:** `context7` (library documentation) and `explanatory-output-style` (explanations in agent output). **Recommended companions:** `interphase` (phase tracking), `interflux` (review),
+`intertest` (testing discipline), and `interpeer` (second opinions). The full installer handles companions; plugin-only installation requires setup. See the [companion reference](docs/component-reference.md#the-agent-rig) for the
 larger ecosystem and conflicts.
 
 Run in your terminal:
@@ -49,15 +43,13 @@ Run in your terminal:
 npx @gensysven/agent-rig install mistakeknot/Clavain
 ```
 
-Restart Claude Code in your project directory. Verify the installation inside
-Claude Code:
+Restart Claude Code in your project directory. Verify the installation inside Claude Code:
 
 ```text
 /clavain:clavain-doctor
 ```
 
-Resolve any reported missing tools or companions before starting a sprint.
-Then run `/clavain:clavain-help` to confirm the command menu is available.
+Resolve any reported missing tools or companions before starting a sprint. Then run `/clavain:clavain-help` to confirm the command menu is available.
 [Installation troubleshooting](docs/troubleshooting.md) covers marketplace and
 stale plugin-cache errors.
 
@@ -115,6 +107,18 @@ optional Codex delegation, and authorization setup. The
 [component reference](docs/component-reference.md) lists skills, agents, commands,
 hooks, customization, and routing. Advanced permission handoffs are covered in
 [scoped delegation tokens](docs/delegation-tokens.md).
+
+### Skills (28)
+
+[Workflow playbooks](docs/component-reference.md#all-skills-28).
+
+### Agents (6)
+
+[Specialist agents](docs/component-reference.md#all-agents-6).
+
+### Commands (66)
+
+[Command inventory](docs/component-reference.md#all-commands-66).
 
 ## Other install options
 
