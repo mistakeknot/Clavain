@@ -1,5 +1,14 @@
 # Background
 
+Clavain is the OS layer of [Sylveste](https://github.com/mistakeknot/Sylveste),
+an autonomous software development agency platform. It compounds project
+knowledge through saved lessons, context freshness checks, domain-aware agents,
+and session evidence.
+
+Before installing, ask your coding agent to review the plugin against how you
+like to work. In Claude Code, run `/insights` first so the review can draw on
+your actual usage patterns.
+
 ## Who this Is for
 
 Clavain serves three concentric circles, inner circle first:

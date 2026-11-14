@@ -1,4 +1,4 @@
-## Scoped delegation with tokens (v2)
+# Scoped delegation with tokens (v2)
 
 Auto-proceed authz v1.5 answers "is this op allowed right now?" by reading policy. v2 adds a second layer — opaque, signed, time-boxed **tokens** — that let a vetted agent grant scoped permission to another agent, or to a one-shot command, without loosening policy for anyone else. Tokens short-circuit the policy check when they match; policy still governs every token-less op.
 

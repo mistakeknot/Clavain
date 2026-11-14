@@ -52,7 +52,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/setup` | Bootstrap the modpack: install plugins, disable conflicts, verify servers |
 | `/wayfind` | Chart or work a multi-session decision map in beads; hands a cleared map to `/strategy` |
 | `/prototype` | Build disposable code for one design question, record the answer, then remove or quarantine the experiment |
-| `/waymap` | Chart or work a project's Now / Next / Later roadmap in beads as capped bets; renders `roadmap.md` |
+| `/waymap` | Chart or work a project's Now / Next / Later roadmap in beads as capped bets; renders `docs/roadmap.md` |
 | `/grill-me` | Interview the user round by round over a plan's decision tree until it is settled; `--docs` records a glossary and decision records |
 | `/blast-radius` | Find what a change could break outside the diff and prove the one fact it is safe because of by running real code |
 | `/retro` | Read a session, a PR or a week of merged PRs and propose ranked environment changes (checks first, standards lines second); proposes only |
@@ -87,7 +87,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/land` | Run landing checklist for trunk-based handoff |
 | `/triage` | Categorize and prioritize findings |
 | `/resolve` | Resolve findings from any source (auto-detects TODOs, PR comments, or todo files) |
-| `/remontoire` | Operate Remontoire on the canonical signing host: status, shadow, proposal, decisions, resume, receipts |
+| `/remontoire` | Operate Remontoire on its scheduler host: status, shadow, proposal, decisions, resume, receipts |
 | `/create-agent-skill` | Create new skills or agents |
 | `/generate-command` | Generate new commands |
 | `/heal-skill` | Fix broken skills |
@@ -107,7 +107,7 @@ Remontoire is a separate L2 portfolio agency, not a Clavain fleet worker.
 Clavain provides only its operator facade; Remontoire and Intercore remain the
 owners of cycle behavior and durable state.
 
-Normal use is exception-driven. Remontoire runs its scheduled cycles on the canonical signing host,
+Normal use is exception-driven. Remontoire runs its scheduled cycles on its scheduler host,
 and Claude Code or Codex stays silent at session start unless the latest cycle
 needs a principal decision, an explicit resume, receipt recovery, or diagnosis.
 Completed experiments do not create startup noise. Their ready promotion beads
@@ -196,7 +196,7 @@ Clavain replaces these plugins with its own opinionated equivalents. Keeping bot
 
 Clavain is opinionated but not rigid. A few things worth knowing:
 
-**Reviewers are auto-selected.** `flux-drive` picks from 7 core review agents based on the document profile. Each agent auto-detects language and project conventions. Additional specialists (plan-reviewer, data-migration-expert, and intercraft's agent-native-reviewer) are available for direct use via `/review` and `/quality-gates`.
+**Reviewers are auto-selected.** `flux-drive` picks from 7 core review agents based on the document profile. Each agent auto-detects language and project conventions. Additional specialists (plan-reviewer, data-migration-expert, and intercraft's agent-native-reviewer) are available for direct use via `/clavain:clavain-review` and `/quality-gates`.
 
 **Skills can be overridden.** If you disagree with how `test-driven-development` works, you can create your own skill with the same name in a local plugin that loads after Clavain. Last-loaded wins.
 

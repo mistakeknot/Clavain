@@ -15,8 +15,8 @@ implementation, tests, and review before preparing the change to ship.
 - Written plans and review findings you can inspect in your repository.
 - Optional second opinions from other models through companion plugins.
 
-Clavain is built primarily for Claude Code. A [Codex setup](docs/README.codex.md)
-is also available. It is an opinionated personal workflow, useful both as a daily
+Clavain runs on Claude Code, Codex, Hermes, and Kimi Code; Claude Code is the
+primary path. See [other host setups](docs/install.md). It is an opinionated personal workflow, useful both as a daily
 tool and as a reference for building your own. Read the
 [background and design principles](docs/background.md) for its goals and limits.
 

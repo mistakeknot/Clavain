@@ -1,4 +1,4 @@
-## Troubleshooting
+# Troubleshooting
 
 For full plugin and marketplace documentation, see the [official Claude Code plugin guide](https://code.claude.com/docs/en/discover-plugins).
 

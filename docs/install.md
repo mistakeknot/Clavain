@@ -27,7 +27,11 @@ Quick path:
 curl -fsSL https://raw.githubusercontent.com/mistakeknot/Clavain/main/.codex/agent-install.sh | bash -s -- --update --json
 ```
 
-Then restart Codex.
+The script clones Clavain into `~/.codex/clavain` by default. When an existing
+checkout is found, `--update` runs `git pull --ff-only` before installation.
+The URL above executes the current `main` script; inspect it before running it.
+This default path also runs the companion installer and its backup-first legacy
+artifact cleanup described below. Then restart Codex.
 
 The default Codex bootstrap now installs the recommended Interverse companion set as well, not just Clavain itself.
 
@@ -66,6 +70,23 @@ claude --plugin-dir .
 ```
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for development checks.
+
+## Kimi Code
+
+The rig declares a Kimi platform in [agent-rig.json](../agent-rig.json).
+The [Kimi installer](../scripts/install-kimi.sh) provides `install`, `update`,
+`doctor`, and `uninstall` actions for skill discovery, manifests, hooks, and MCP
+setup. It currently assumes the Sylveste `os/Clavain` directory layout; inspect
+its paths before using it from a standalone clone.
+
+## Hermes
+
+The [Hermes adapter](../adapters/hermes/plugin.yaml) has a dedicated activation
+script, [sync-hermes-adapter.py](../scripts/sync-hermes-adapter.py).
+Follow the [Hermes setup procedure](canon/reasoning-routing-operations.md#host-delivery-and-evidence)
+using the selected Hermes virtualenv's Python with PyYAML and an existing profile.
+The script supports `--dry-run` and `--check`; it links the adapter into that
+profile and enables Clavain in the native plugin allowlist.
 
 ## Full Sylveste platform
 
