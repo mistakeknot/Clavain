@@ -29,6 +29,8 @@ curl -fsSL https://raw.githubusercontent.com/mistakeknot/Clavain/main/.codex/age
 
 The script clones Clavain into `~/.codex/clavain` by default. When an existing
 checkout is found, `--update` runs `git pull --ff-only` before installation.
+If that pull fails, the script ignores the failure (`|| true`) and proceeds
+with the existing checkout.
 The URL above executes the current `main` script; inspect it before running it.
 This default path also runs the companion installer and its backup-first legacy
 artifact cleanup described below. Then restart Codex.
@@ -86,7 +88,10 @@ script, [sync-hermes-adapter.py](../scripts/sync-hermes-adapter.py).
 Follow the [Hermes setup procedure](canon/reasoning-routing-operations.md#host-delivery-and-evidence)
 using the selected Hermes virtualenv's Python with PyYAML and an existing profile.
 The script supports `--dry-run` and `--check`; it links the adapter into that
-profile and enables Clavain in the native plugin allowlist.
+profile and edits its plugin lists: it adds Clavain to `plugins.enabled` and
+removes it from `plugins.disabled` when that list exists. See the
+[canon procedure](canon/reasoning-routing-operations.md#host-delivery-and-evidence)
+for the profile changes and setup checks.
 
 ## Full Sylveste platform
 

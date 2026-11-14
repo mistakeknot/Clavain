@@ -2,11 +2,11 @@
 
 [![Tests](https://github.com/mistakeknot/Clavain/actions/workflows/test.yml/badge.svg)](https://github.com/mistakeknot/Clavain/actions/workflows/test.yml)
 
-Clavain helps your coding agent plan, build, test, and review software, with reusable workflows that keep the work organized and ready for you to inspect.
+Turn a feature request into a reviewed code change with Clavain, a collection of guided workflows for coding agents.
 
-For example, install Clavain, open your project in Claude Code, and run
-`/clavain:sprint "add CSV export"`. It walks through requirements, a plan,
-implementation, tests, and review before preparing the change to ship.
+After installing, open your project in Claude Code and run
+`/clavain:sprint "add CSV export"`. Clavain helps clarify the request, writes a
+plan, builds and tests the feature, and gathers review findings for you to inspect.
 
 ## What you get
 
