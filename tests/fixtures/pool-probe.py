@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import Path
 import runpy
+import socket
+import ssl
 import sys
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
@@ -25,6 +27,21 @@ class Opener:
             raise TimeoutError('dummy timeout')
         if scenario == 'transport':
             raise URLError(ConnectionResetError('dummy reset'))
+        if scenario == 'refused':
+            raise ConnectionRefusedError('dummy refusal')
+        if scenario == 'wrapped-timeout':
+            raise URLError(TimeoutError('dummy timeout'))
+        errors = {
+            'tls-cert': URLError(ssl.SSLCertVerificationError('dummy certificate')),
+            'tls': URLError(ssl.SSLError('dummy TLS')),
+            'dns': URLError(socket.gaierror(socket.EAI_NONAME, 'dummy DNS')),
+            'nested-tls': URLError(URLError(ssl.SSLError('dummy TLS'))),
+            'nested-dns': URLError(URLError(socket.gaierror(socket.EAI_NONAME, 'dummy DNS'))),
+            'direct-tls': ssl.SSLError('dummy TLS'),
+            'direct-dns': socket.gaierror(socket.EAI_NONAME, 'dummy DNS'),
+        }
+        if scenario in errors:
+            raise errors[scenario]
         if scenario.startswith('http'):
             raise HTTPError(request.full_url, int(scenario[4:]), 'dummy', {}, None)
         if scenario == 'malformed':

@@ -128,15 +128,22 @@ login. Older BB servers return only provider-wide availability. Native pooled
 routes inherited for the same provider keep working on those servers, while
 cross-provider borrowing waits for the thread-scoped response.
 
-The eligibility probe returns 4 for timeouts, transport errors and HTTP 5xx.
+The eligibility probe returns 4 for timeouts, connection failures and HTTP 5xx.
 The shared dispatch helper retries these failures twice with a 0.2 second
 backoff, then emits a stderr notice and uses the non-pooled provider path.
+TLS errors (including certificate verification failures) and DNS resolution
+errors remain terminal, including when wrapped in nested transport errors.
 `CLAVAIN_BB_POOL_PROBE_RETRIES` accepts 0–2 and
-`CLAVAIN_BB_POOL_PROBE_BACKOFF` accepts 0–1 seconds, including fractions.
+`CLAVAIN_BB_POOL_PROBE_BACKOFF` accepts `0`, `0.<digits>`, `1` or
+`1.<zeros>` seconds; for example, `0.5` is accepted but `.5` is rejected.
 Invalid overrides remain configuration errors. Exit codes 0 (eligible),
 1 (ineligible), 2 (configuration error) and 3 (legacy availability) retain
 their meanings. Invalid origins, missing tokens, malformed responses and
-HTTP 4xx remain terminal configuration errors without retries.
+HTTP 4xx remain terminal configuration errors without retries. This deliberately
+includes HTTP 408 and 429, preserving the existing treatment of client errors.
+With defaults, an eligibility check can take about 15.4 seconds (three 5 second
+timeouts and two 0.2 second backoffs). This delay can occur in both the parent
+quota-retry availability check and the child dispatch probe.
 
 **Cross-provider dispatch.** BB contributes the pool route and its machine
 bearer only for the parent thread's provider. When the target provider is

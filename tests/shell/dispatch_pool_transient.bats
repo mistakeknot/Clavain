@@ -34,12 +34,62 @@ dispatch() {
 }
 
 @test "probe timeouts and transport failures have distinct transient status" {
-    for scenario in timeout transport http500 http503; do
+    for scenario in timeout wrapped-timeout transport refused http500 http503; do
         export PROBE_SCENARIO="$scenario"
         run python3 "$ROOT/scripts/bb-pool-eligibility.py" claude
         [ "$status" -eq 4 ]
         [[ "$output" == *"transient"* ]]
         [[ "$output" != *dummy* ]]
+    done
+}
+
+@test "TLS probe failures are terminal including nested reasons" {
+    for scenario in tls-cert tls nested-tls direct-tls; do
+        export PROBE_SCENARIO="$scenario"
+        run python3 "$ROOT/scripts/bb-pool-eligibility.py" claude
+        [ "$status" -eq 2 ]
+        [[ "$output" != *transient* ]]
+        [[ "$output" != *dummy* ]]
+    done
+}
+
+@test "DNS probe failures are terminal including nested reasons" {
+    for scenario in dns nested-dns direct-dns; do
+        export PROBE_SCENARIO="$scenario"
+        run python3 "$ROOT/scripts/bb-pool-eligibility.py" claude
+        [ "$status" -eq 2 ]
+        [[ "$output" != *transient* ]]
+        [[ "$output" != *dummy* ]]
+    done
+}
+
+@test "TLS and DNS dispatch failures neither retry nor fall back" {
+    for scenario in tls-cert dns nested-tls nested-dns; do
+        export PROBE_SCENARIO="$scenario"
+        for provider in claude codex; do
+            echo 0 > "$PROBE_COUNT"
+            dispatch "$provider"
+            [ "$status" -ne 0 ]
+            [ "$(cat "$PROBE_COUNT")" -eq 1 ]
+            [ "$(cat "$T/failure")" == terminal_configuration ]
+            [[ "$output" != *"falling back"* ]]
+        done
+    done
+}
+
+@test "bad retry and backoff overrides return configuration status without probing" {
+    for invalid in 3 -1 garbage; do
+        export CLAVAIN_BB_POOL_PROBE_RETRIES="$invalid"
+        run bash -c 'source "$1"; _bb_pool_available claude' _ "$ROOT/scripts/lib-bb.sh"
+        [ "$status" -eq 2 ]
+        [ ! -f "$PROBE_COUNT" ]
+    done
+    export CLAVAIN_BB_POOL_PROBE_RETRIES=2
+    for invalid in -0.1 2 1.1 .5 0.5oops; do
+        export CLAVAIN_BB_POOL_PROBE_BACKOFF="$invalid"
+        run bash -c 'source "$1"; _bb_pool_available claude' _ "$ROOT/scripts/lib-bb.sh"
+        [ "$status" -eq 2 ]
+        [ ! -f "$PROBE_COUNT" ]
     done
 }
 
@@ -70,7 +120,7 @@ dispatch() {
 }
 
 @test "configuration errors remain terminal without retries" {
-    for scenario in invalid-origin missing-token malformed http401 http403 http404; do
+    for scenario in invalid-origin missing-token malformed http401 http403 http404 http408 http429; do
         for provider in claude codex; do
             echo 0 > "$PROBE_COUNT"
             export PROBE_SCENARIO="$scenario"

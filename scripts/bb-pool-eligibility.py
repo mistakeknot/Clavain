@@ -7,6 +7,8 @@ provider-wide eligibility, 4 transient timeout/transport/server failure.
 from http.client import HTTPException
 import json
 import os
+import socket
+import ssl
 import sys
 from urllib.parse import urlencode, urlsplit
 from urllib.error import HTTPError, URLError
@@ -16,6 +18,17 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, *_args):
         return None
+
+
+def transport_failure_status(error) -> int:
+    """TLS and DNS failures must not select a different provider login."""
+    seen = set()
+    while error is not None and id(error) not in seen:
+        if isinstance(error, (ssl.SSLError, socket.gaierror)):
+            return 2
+        seen.add(id(error))
+        error = getattr(error, "reason", None)
+    return 4
 
 
 def main() -> int:
@@ -59,8 +72,8 @@ def main() -> int:
         return 0 if availability[provider] else 1
     except HTTPError as error:
         status = 4 if 500 <= error.code < 600 else 2
-    except (URLError, OSError, HTTPException):
-        status = 4
+    except (URLError, OSError, HTTPException) as error:
+        status = transport_failure_status(error)
     except Exception:
         status = 2
     if status == 4:
