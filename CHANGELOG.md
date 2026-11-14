@@ -15,6 +15,12 @@ Summary of changes merged since 0.6.333.
   unchanged. It is a procedural integrity control for the local account, not an
   authority boundary (PR #192, mk-aptba).
 
+### Documentation
+
+- The README is rewritten to explain Clavain, how to install it and how to try
+  it, and the docs are reorganized into separate install, workflow and
+  troubleshooting guides (PR #194).
+
 ### Fixed
 
 - Claude review seats using `dontAsk` now also allow the read-only Read, Glob
