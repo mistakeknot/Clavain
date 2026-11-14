@@ -1,27 +1,90 @@
 # Changelog
 
-## Unreleased
+## 0.6.333
+
+Summary of changes since the 0.6.332 version commit. Some changes were
+previously documented under 0.6.332 after that version was installed.
 
 ### Fixed
 
+- Review output format failures identify the rejected rule, and dispatch prompts
+  spell out the fence and HTML comment restrictions. Trailing negative verdicts
+  retain their reviewer summary, while receipt collisions distinguish unsafe
+  paths from the sequence limit (PRs #188, #189, #190).
 - The Claude usage meter accepts the ephemeral 5m/1h cache-creation fields
   (`cache_creation.ephemeral_*_input_tokens` and
   `cacheCreationEphemeral{5m,1h}InputTokens`) as a breakdown of the cache
   creation total. They are validated, must not exceed it and are never added, so
   packaged Claude reviews no longer end `failed`; unknown token fields are still
-  rejected (mk-nthkv).
+  rejected (PR #187, mk-nthkv).
+- Review audit receipts retain `ic_version` by passing the output variable
+  required by the version helper. Routing, held-prompt, cancellation and
+  receipt-lock fixtures now isolate caller state and synchronize their
+  assertions with the events they check (PRs #184, #185).
+- Claude dispatch children no longer inherit host-session identity variables,
+  allowing subscription login in nested host sessions. Structured
+  `authentication_failed` events and recognized authentication stderr endings
+  are classified as account access failures for fallback (PRs #155, #171).
+- Dispatch now scrubs secret-named environment variables with exact,
+  provider-specific authentication exceptions. Codex preflight children drop
+  bearer tokens; token leak checks cover routing and provider artifacts and
+  fail closed on unreadable evidence. Provider stderr mirrors and audit error
+  messages receive stricter redaction (PRs #150–#153, #156, #160, #163, #166).
+- Kimi tool-enabled reviews use sandbox containment and credential-location
+  masks, fall back to toolless operation when containment is unavailable, and
+  refuse unsafe review-role overrides. Verdict parsing accepts only the
+  complete allowed verdict tokens (PRs #142, #151).
+- Review receipts and live orchestration cross-check verdict words against
+  exit codes. Receipt readers handle aliases, numbering gaps, sidecar conflicts,
+  and bounded findings; cancellation records an error verdict. Review-round
+  accepts the documented block/verdict ordering (PRs #123–#125, #132, #143,
+  #165, #168 and mk-47vtm.1).
+- Scratch review mode isolates temporary state and inherited Git configuration;
+  read-only BB review seats are admitted and receipts record observed models
+  (PRs #128, #130, #131, #147).
+- Fallback mutexes use exclusive creation. Suppression baselines have a
+  deterministic count ratchet. Factory-stream arguments, script help and
+  zero-count reports are corrected (PRs #133, #134, #157–#159, #161).
+- Release bumps keep the wiki version figure synchronized with the manifest
+  (mk-2npah).
+
+### Workflow and evaluation
+
+- Added the full-stop skill and PR review footer, UI review standards for
+  relevant diffs, a vet-before-install checklist for outside skills, and basic
+  UI motion/state guidance (PRs #109, #112, #127, #136).
+- Added offline skill-routing evaluation/scoring and a guest-only behavioral
+  harness, plus paired skill evaluation with observed model identities and
+  per-attempt metrics (PRs #116–#120, #149).
+- Handoff and resume now look up current reference state and write a dated
+  facts block, preserving unresolved lookups (PRs #146, #148).
+- Added a stale managed-instruction contract check. Intercore cleanup now
+  prunes old routing decisions. Structural and shell checks gained hermetic
+  fixtures, characterization coverage and a longer CI timeout (PRs #135,
+  #137, #139, #162, #164, #167, #169).
 
 ### Changed
 
+- Packaged review dispatch refuses another review after three failed rounds
+  on one bead, counted across heads and the review roles. Copies of an attempt
+  count once; PASS and neutral rounds do not reset the count, and experimental
+  evidence is excluded. Refusal writes one summary with the park, redesign or
+  accept-a-limit options, before a new seat starts (PR #186, mk-i16ab.6).
+- Planning now selects Opus 5.5 first, with Astra as cross-lab reviewer and
+  fallback. Routine and deep execution select GPT-6.1 Sol at high effort with
+  Sonnet 5.5 high as fallback; pool headroom checks include freshness and pacing
+  guards. The new one-shot-author role selects Fable 5.2 with Opus/Astra
+  fallbacks (PRs #110, #114, #115, #170, #172).
 - Review roles always receive tool-denial and URL-fetch boundaries, including
-  dispatches without a review packet (mk-6lv1a).
+  dispatches without a review packet (PR #181, mk-6lv1a).
 
-- The experiment tiers and profiles change the `routing.yaml` SHA256; the next
-  release carries the updated policy hash in managed contracts (mk-47vtm.10).
+- The experiment tiers and profiles change the `routing.yaml` SHA256; this
+  release carries the updated policy hash in managed contracts (PRs #179, #180,
+  mk-47vtm.10).
 
 - Pruned role boilerplate and redundant wording in five planning, execution and
   review skills and three authoring/execution commands; added step completion criteria
-  while retaining review, evidence and authority gates (mk-7k5v0.3).
+  while retaining review, evidence and authority gates (PR #176, mk-7k5v0.3).
 
 ### Added
 
@@ -34,7 +97,7 @@
   gates held by the executor; they are not encoded in this profile.
 
 - Default-off, evaluation-only three-label Jev support checks with pinned Git
-  source provenance and per-attempt usage accounting (mk-42j9.7.3). Live budget
+  source provenance and per-attempt usage accounting (PR #178, mk-42j9.7.3). Live budget
   values remain unset. Selector read-phase failures no longer retry, and
   returned model names are recorded as hashes. Burn bounds require complete
   accounting and explicit finite weights. Default structural collection keeps
@@ -45,13 +108,14 @@
 
 - Governed dispatch can hold the final prompt for external manifest-digest approval,
   then submit those exact bytes once with bound decision and execution evidence.
-  Receipts include final prompt hashes and transport tool isolation (mk-47vtm.9).
+  Receipts include final prompt hashes and transport tool isolation (PR #177,
+  mk-47vtm.9).
 
 - `/clavain:prototype` builds a disposable experiment for one design question,
   records observations and the answer, then removes or quarantines the code.
   Wayfind prototype tickets link to the command and retain their owner-pick
   resolution gate. Includes command registration, help and discovery coverage
-  (mk-7k5v0.5).
+  (PR #175, mk-7k5v0.5).
 
 ## 0.6.332
 
