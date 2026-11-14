@@ -7,6 +7,10 @@ previously documented under 0.6.332 after that version was installed.
 
 ### Fixed
 
+- Review output format failures identify the rejected rule, and dispatch prompts
+  spell out the fence and HTML comment restrictions. Trailing negative verdicts
+  retain their reviewer summary, while receipt collisions distinguish unsafe
+  paths from the sequence limit (PRs #188, #189, #190).
 - The Claude usage meter accepts the ephemeral 5m/1h cache-creation fields
   (`cache_creation.ephemeral_*_input_tokens` and
   `cacheCreationEphemeral{5m,1h}InputTokens`) as a breakdown of the cache
