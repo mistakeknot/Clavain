@@ -72,7 +72,17 @@ _bb_drop_tokenless_pool_route() {
     claude) unset ANTHROPIC_BASE_URL ;;
     codex) unset CODEX_OPENAI_BASE_URL ;;
   esac
-  echo "dispatch: the bb account-pool route is set for $1 but no pool token is available; using the non-pooled $1 login" >&2
+  # A Claude child that still has ANTHROPIC_API_KEY (kept for the seat by
+  # SEAT_KEEP_CLAUDE) authenticates with that metered key, not the subscription
+  # login, so the notice says which one applies. Only "set" or "not set" is
+  # tested and printed, never the value.
+  if [[ "$1" == claude && -n "${ANTHROPIC_API_KEY:-}" ]]; then
+    echo "dispatch: the bb account-pool route is set for claude but no pool token is available; ANTHROPIC_API_KEY is set, so the claude child will use that API key (metered) instead of the subscription login" >&2
+  elif [[ "$1" == claude ]]; then
+    echo "dispatch: the bb account-pool route is set for claude but no pool token is available; ANTHROPIC_API_KEY is not set, so the claude child will use the non-pooled subscription login" >&2
+  else
+    echo "dispatch: the bb account-pool route is set for $1 but no pool token is available; using the non-pooled $1 login" >&2
+  fi
 }
 
 # Environment-side-effect free: the retry loop calls this from the parent role

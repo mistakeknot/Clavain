@@ -161,7 +161,13 @@ to the route without a bearer only return 401, so dispatch drops that route
 variable from the per-candidate child, prints one line on stderr (it names the
 provider and no environment value) and uses the provider's own non-pooled
 login. No `env -u ...` prefix is needed in front of `dispatch.sh` for this
-state. No eligibility probe is made, no token is borrowed and no different
+state. For Claude the notice also says whether `ANTHROPIC_API_KEY` is set
+(it prints only "set" or "not set", never the value). A Claude child that still
+has `ANTHROPIC_API_KEY` set authenticates with that metered API key, because
+the seat environment keeps it, and not with the subscription login; the notice
+then says so. Without the key the child uses the subscription login. Unset
+`ANTHROPIC_API_KEY` before dispatch if the subscription login is required.
+No eligibility probe is made, no token is borrowed and no different
 account is selected. The fallback is deliberately narrow: it applies only to
 the exact pool route with an absent token. A token that is present and rejected
 (401 or 403), an invalid origin, a malformed response and TLS or DNS failures

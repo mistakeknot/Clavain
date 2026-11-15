@@ -10,7 +10,9 @@ previously documented under 0.6.332 after that version was installed.
 - `dispatch.sh` falls back to the non-pooled login when a thread has the BB
   pool route but no pool token (mk-wyvz6). The stale `ANTHROPIC_BASE_URL` (Claude)
   or `CODEX_OPENAI_BASE_URL` (Codex) is dropped from the child with a one-line
-  stderr notice, so a Claude review seat no longer needs an `env -u` prefix. A
+  stderr notice, so a Claude review seat no longer needs an `env -u` prefix. The
+  Claude notice says whether `ANTHROPIC_API_KEY` is set, because a child that
+  keeps it uses that metered key instead of the subscription login. A
   present token that is rejected, and every other eligibility failure, stay
   terminal. See `docs/canon/bb-integration.md`.
 - Review output format failures identify the rejected rule, and dispatch prompts

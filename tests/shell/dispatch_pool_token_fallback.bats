@@ -53,7 +53,7 @@ SH
     cat > "$T/bin/claude" <<'SH'
 #!/usr/bin/env bash
 cat > /dev/null
-{ echo "ran"; for v in ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN; do
+{ echo "ran"; for v in ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY; do
     if [ -n "${!v+x}" ]; then echo "$v=set"; else echo "$v=unset"; fi
   done; } > "$FAKE_LOG"
 if [ -n "${ANTHROPIC_BASE_URL:-}" ]; then echo "base_is_pool_route=$([ "$ANTHROPIC_BASE_URL" = "$POOL_ROUTE" ] && echo yes || echo no)" >> "$FAKE_LOG"; fi
@@ -86,7 +86,7 @@ SH
     export CLAVAIN_CONTEXT_GATEWAY_MODE=off CLAVAIN_BB_DIRECT_POOL=1
     export BB_CLI="$T/bin/bb" BB_THREAD_ID=thr_fixture BB_SERVER_URL="$ORIGIN"
     export CLAVAIN_DISPATCH_FAILURE_FILE="$T/failure"
-    unset CLAVAIN_BEAD_ID ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL \
+    unset CLAVAIN_BEAD_ID ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_API_KEY \
           CODEX_POOL_AUTH_TOKEN CODEX_OPENAI_BASE_URL
 }
 
@@ -96,7 +96,8 @@ teardown() {
     rm -rf "$T"
 }
 
-NOTICE_CLAUDE='dispatch: the bb account-pool route is set for claude but no pool token is available; using the non-pooled claude login'
+NOTICE_CLAUDE='dispatch: the bb account-pool route is set for claude but no pool token is available; ANTHROPIC_API_KEY is not set, so the claude child will use the non-pooled subscription login'
+NOTICE_CLAUDE_KEY='dispatch: the bb account-pool route is set for claude but no pool token is available; ANTHROPIC_API_KEY is set, so the claude child will use that API key (metered) instead of the subscription login'
 NOTICE_CODEX='dispatch: the bb account-pool route is set for codex but no pool token is available; using the non-pooled codex login'
 
 # bats' run captures the command's stderr itself, so redirect inside the child.
@@ -139,14 +140,14 @@ run_codex() { ERRF="$T/err" run bash -c 'exec bash "$@" 2> "$ERRF"' _ "$DISPATCH
     [ ! -e "$T/seen.log" ]
     [ "$(cat "$T/failure")" = terminal_configuration ]
     [ -s "$T/hits" ]
-    ! grep -qF 'using the non-pooled' "$T/err"
+    ! grep -qF 'no pool token is available' "$T/err"
 }
 
 @test "claude: token unset and no pool route -> unchanged, no notice" {
     run_claude
     [ "$status" -eq 0 ]
     grep -qx 'ANTHROPIC_BASE_URL=unset' "$T/seen.log"
-    ! grep -qF 'using the non-pooled' "$T/err"
+    ! grep -qF 'no pool token is available' "$T/err"
     [ ! -s "$T/hits" ]
 }
 
@@ -156,14 +157,14 @@ run_codex() { ERRF="$T/err" run bash -c 'exec bash "$@" 2> "$ERRF"' _ "$DISPATCH
     [ "$status" -eq 0 ]
     grep -qx 'ANTHROPIC_BASE_URL=set' "$T/seen.log"
     grep -qx 'base_is_pool_route=no' "$T/seen.log"
-    ! grep -qF 'using the non-pooled' "$T/err"
+    ! grep -qF 'no pool token is available' "$T/err"
 }
 
 @test "claude: notice names no environment value" {
     export ANTHROPIC_BASE_URL="$ROUTE" CLAUDE_X_NOTE="$DUMMY" BB_ACCOUNT_POOL_PARENT_TOKEN="$DUMMY"
     run_claude
     [ "$status" -eq 0 ]
-    grep -F 'using the non-pooled' "$T/err" > "$T/notice"
+    grep -F 'no pool token is available' "$T/err" > "$T/notice"
     [ "$(cat "$T/notice")" = "$NOTICE_CLAUDE" ]
     ! grep -qF "$PORT" "$T/notice"
     ! grep -qF thr_fixture "$T/notice"
@@ -189,22 +190,68 @@ run_codex() { ERRF="$T/err" run bash -c 'exec bash "$@" 2> "$ERRF"' _ "$DISPATCH
     [ ! -e "$T/seen.log" ]
     [ "$(cat "$T/failure")" = terminal_configuration ]
     [ -s "$T/hits" ]
-    ! grep -qF 'using the non-pooled' "$T/err"
+    ! grep -qF 'no pool token is available' "$T/err"
 }
 
 @test "codex: token unset and no pool route -> unchanged, no notice" {
     run_codex
     [ "$status" -eq 0 ]
     grep -qx 'pool_config=no' "$T/seen.log"
-    ! grep -qF 'using the non-pooled' "$T/err"
+    ! grep -qF 'no pool token is available' "$T/err"
 }
 
 @test "codex: notice names no environment value" {
     export CODEX_OPENAI_BASE_URL="$ROUTE/v1"
     run_codex
     [ "$status" -eq 0 ]
-    grep -F 'using the non-pooled' "$T/err" > "$T/notice"
+    grep -F 'no pool token is available' "$T/err" > "$T/notice"
     [ "$(cat "$T/notice")" = "$NOTICE_CODEX" ]
     ! grep -qF "$PORT" "$T/notice"
     ! grep -qF thr_fixture "$T/notice"
+}
+
+@test "claude: pool route set, token unset, API key set -> notice says the metered key is used, value never printed" {
+    export ANTHROPIC_BASE_URL="$ROUTE" ANTHROPIC_API_KEY="$DUMMY"
+    run_claude
+    [ "$status" -eq 0 ]
+    grep -qx 'ANTHROPIC_BASE_URL=unset' "$T/seen.log"
+    # The child really does keep the key, which is why the notice must say so.
+    grep -qx 'ANTHROPIC_API_KEY=set' "$T/seen.log"
+    grep -qxF "$NOTICE_CLAUDE_KEY" "$T/err"
+    ! grep -qF "$DUMMY" "$T/err"
+    ! grep -qF "$DUMMY" "$T/out.md"
+    [[ "$output" != *"$DUMMY"* ]]
+    ! grep -qF 'will use the non-pooled subscription login' "$T/err"
+}
+
+@test "claude: pool route set, token unset, API key not set -> notice says subscription login" {
+    export ANTHROPIC_BASE_URL="$ROUTE"
+    run_claude
+    [ "$status" -eq 0 ]
+    grep -qx 'ANTHROPIC_API_KEY=unset' "$T/seen.log"
+    grep -qxF "$NOTICE_CLAUDE" "$T/err"
+    grep -qF 'ANTHROPIC_API_KEY is not set' "$T/err"
+    ! grep -qF 'metered' "$T/err"
+}
+
+@test "claude: whitespace-only token is present, so a 401 stays terminal, no fallback" {
+    export ANTHROPIC_BASE_URL="$ROUTE" ANTHROPIC_AUTH_TOKEN=" "
+    run_claude
+    [ "$status" -ne 0 ]
+    [ ! -e "$T/seen.log" ]
+    [ "$(cat "$T/failure")" = terminal_configuration ]
+    ! grep -qF 'no pool token is available' "$T/err"
+}
+
+# Without BB_SERVER_URL the exact pool route cannot be recognised, so the
+# narrow match declines: existing behaviour is unchanged (the variable is left
+# alone, nothing is probed, no notice). It is not a fallback case.
+@test "claude: pool route set but BB_SERVER_URL unset -> not matched, unchanged, no notice" {
+    export ANTHROPIC_BASE_URL="$ROUTE"
+    unset BB_SERVER_URL
+    run_claude
+    [ "$status" -eq 0 ]
+    grep -qx 'ANTHROPIC_BASE_URL=set' "$T/seen.log"
+    ! grep -qF 'no pool token is available' "$T/err"
+    [ ! -s "$T/hits" ]
 }
