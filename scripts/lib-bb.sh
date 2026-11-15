@@ -41,6 +41,50 @@ _bb_native_pooled() {
   esac
 }
 
+# mk-wyvz6: a thread can inherit the exact bb pool route without the bearer
+# that goes with it (the route variable survives, the token variable does not).
+# Sending requests to the route without a bearer only produces a 401, so the
+# provider's own non-pooled login is the correct transport. This is narrow on
+# purpose: it matches only the exact pool route for this bb server with an
+# ABSENT (unset or empty) token. A present token, a different endpoint, a
+# missing server URL or a failed eligibility probe never match, so they keep
+# their existing terminal handling. It reads only whether a variable is empty;
+# it never expands, prints or logs a value.
+_bb_pool_route_without_token() {
+  local server_url="${BB_SERVER_URL:-}"
+  [[ -n "$server_url" ]] || return 1
+  case "$1" in
+    claude) [[ -z "${ANTHROPIC_AUTH_TOKEN:-}" &&
+      "${ANTHROPIC_BASE_URL:-}" == "${server_url%/}/api/v1/plugins/account-pool/http" ]] ;;
+    codex) [[ -z "${CODEX_POOL_AUTH_TOKEN:-}" &&
+      "${CODEX_OPENAI_BASE_URL:-}" == "${server_url%/}/api/v1/plugins/account-pool/http/v1" ]] ;;
+    *) return 1 ;;
+  esac
+}
+
+# Call only after _bb_pool_available returned 1 for this provider. Drops the
+# stale route variable from the (per-candidate) dispatch shell so the child
+# falls back to its own login, and says so on stderr. The notice carries no
+# environment values. Selects no account and borrows no token.
+_bb_drop_tokenless_pool_route() {
+  _bb_pool_route_without_token "$1" || return 0
+  case "$1" in
+    claude) unset ANTHROPIC_BASE_URL ;;
+    codex) unset CODEX_OPENAI_BASE_URL ;;
+  esac
+  # A Claude child that still has ANTHROPIC_API_KEY (kept for the seat by
+  # SEAT_KEEP_CLAUDE) authenticates with that metered key, not the subscription
+  # login, so the notice says which one applies. Only "set" or "not set" is
+  # tested and printed, never the value.
+  if [[ "$1" == claude && -n "${ANTHROPIC_API_KEY:-}" ]]; then
+    echo "dispatch: the bb account-pool route is set for claude but no pool token is available; ANTHROPIC_API_KEY is set, so the claude child will use that API key (metered) instead of the subscription login" >&2
+  elif [[ "$1" == claude ]]; then
+    echo "dispatch: the bb account-pool route is set for claude but no pool token is available; ANTHROPIC_API_KEY is not set, so the claude child will use the non-pooled subscription login" >&2
+  else
+    echo "dispatch: the bb account-pool route is set for $1 but no pool token is available; using the non-pooled $1 login" >&2
+  fi
+}
+
 # Environment-side-effect free: the retry loop calls this from the parent role
 # shell, and anything exported there would reach later candidates. The check
 # reads current bb eligibility and can report an enrollment or transport error.

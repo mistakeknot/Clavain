@@ -153,6 +153,27 @@ With defaults, an eligibility check can take about 15.4 seconds (three 5 second
 timeouts and two 0.2 second backoffs). This delay can occur in both the parent
 quota-retry availability check and the child dispatch probe.
 
+**Pool route without a pool token** (mk-wyvz6). A thread can carry the exact
+BB pool route for this server (`ANTHROPIC_BASE_URL` for Claude,
+`CODEX_OPENAI_BASE_URL` for Codex) while the matching bearer variable
+(`ANTHROPIC_AUTH_TOKEN`, `CODEX_POOL_AUTH_TOKEN`) is unset or empty. Requests
+to the route without a bearer only return 401, so dispatch drops that route
+variable from the per-candidate child, prints one line on stderr (it names the
+provider and no environment value) and uses the provider's own non-pooled
+login. No `env -u ...` prefix is needed in front of `dispatch.sh` for this
+state. For Claude the notice also says whether `ANTHROPIC_API_KEY` is set
+(it prints only "set" or "not set", never the value). A Claude child that still
+has `ANTHROPIC_API_KEY` set authenticates with that metered API key, because
+the seat environment keeps it, and not with the subscription login; the notice
+then says so. Without the key the child uses the subscription login. Unset
+`ANTHROPIC_API_KEY` before dispatch if the subscription login is required.
+No eligibility probe is made, no token is borrowed and no different
+account is selected. The fallback is deliberately narrow: it applies only to
+the exact pool route with an absent token. A token that is present and rejected
+(401 or 403), an invalid origin, a malformed response and TLS or DNS failures
+keep their terminal handling, as does an endpoint that is not the pool route.
+`CLAVAIN_BB_DIRECT_POOL=0` also gets this fallback.
+
 **Cross-provider dispatch.** BB contributes the pool route and its machine
 bearer only for the parent thread's provider. When the target provider is
 currently eligible, a Codex attempt can borrow the bearer from a Claude
