@@ -2,7 +2,7 @@
 
 `config/routing.yaml` is the routing policy. It has these top-level sections:
 `executor_routing`, `subagents`, `reasoning`, `dispatch`, `complexity`,
-`calibration`, `delegation` and `local_models` (**8** sections).
+`calibration`, `delegation`, `local_models` and `decision_models` (**9** sections).
 
 The reasoning section names the frontier models (`gpt-6-astra`,
 `claude-opus-5-5`, `claude-fable-5-2`), five frontier reasons for elevating a task, and a
