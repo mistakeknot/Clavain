@@ -153,6 +153,30 @@ With defaults, an eligibility check can take about 15.4 seconds (three 5 second
 timeouts and two 0.2 second backoffs). This delay can occur in both the parent
 quota-retry availability check and the child dispatch probe.
 
+**Claude with a scrubbed pool token** (mk-69t4d). When the exact pool route
+and server URL remain but the bearer is empty or unset, an enrolled CLI with
+pool-exec support selects `transport=pool-exec`. `BB_CLI` takes precedence over
+PATH. The server injects credentials; dispatch never retrieves them.
+Settings isolation on this route is enforced by the host: its fixed restricted
+template passes empty setting sources and `--restricted` ignores user, project
+and local settings, so the caller does not send `--setting-sources`.
+
+The command uses `claude -p --restricted --permission-mode dontAsk
+--tools=Read,Glob,Grep --prompt-file <file>` with stream-json and verbose output.
+The prompt is a direct child of the caller cwd. Dispatch stages an external
+plan and git diff, diffstat, recent log and file list beneath that cwd. Callers
+must stage any additional review packets and test/lint logs beneath cwd and
+reference them in the prompt. No add-dir or Bash permission is granted. Reviews
+requiring live commands must use a non-pooled route. Execution, tools-empty,
+held and budgeted dispatches are refused on this restricted route.
+
+Profile/old-host refusal fails as terminal configuration with a clear notice;
+it never silently selects a local account. Other failures retain their existing
+classification. The stderr transport trailer stays out of response/output files.
+Nonempty tokens retain direct pooled behavior. The pooled opt-out disables this
+route too; without CLI support the fallback below still applies. Fake CLI tests
+cover the caller contract; live acceptance requires the updated BB installation.
+
 **Pool route without a pool token** (mk-wyvz6). A thread can carry the exact
 BB pool route for this server (`ANTHROPIC_BASE_URL` for Claude,
 `CODEX_OPENAI_BASE_URL` for Codex) while the matching bearer variable

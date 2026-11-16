@@ -4,7 +4,9 @@
 # host. A process that controls those can forge the answer, so this gate selects
 # a transport; it is not an authorization boundary. It never grants a bearer the
 # process does not already hold: the borrowed Codex token is the process's own
-# ANTHROPIC_AUTH_TOKEN. CLAVAIN_BB_DIRECT_POOL=0 disables pooled transport.
+# ANTHROPIC_AUTH_TOKEN. With a scrubbed Claude token, pool exec instead lets
+# the enrolled BB server inject credentials into its child, never this shell.
+# CLAVAIN_BB_DIRECT_POOL=0 disables both pooled transports.
 _clavain_in_bb() {
   local dir
   dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -31,6 +33,19 @@ _bb_pool_candidate() {
     } ;;
     *) return 1 ;;
   esac
+}
+
+# The CLI enforces pool eligibility and injects credentials on the server host.
+# Probe support without reading credentials; an execution failure never falls
+# back to a local account. Respect the same enrollment and opt-out gates.
+_bb_claude_pool_exec_available() {
+  [[ "${CLAVAIN_BB_DIRECT_POOL:-1}" == 1 ]] || return 1
+  _bb_pool_route_without_token claude || return 1
+  command -v "${BB_CLI:-bb}" >/dev/null 2>&1 || return 1
+  "${BB_CLI:-bb}" pool exec --help >/dev/null 2>&1 || return 2
+  # The pool route is already configured: an unverifiable enrollment must stop
+  # the run (status 3), never fall through to a local login.
+  _clavain_in_bb || return 3
 }
 
 _bb_native_pooled() {
