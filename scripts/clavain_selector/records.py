@@ -305,13 +305,21 @@ def _ensure_dir(path: Path) -> None:
         raise RecordUnwritable(f"could not create directory {path}: {exc}") from exc
 
 
-def _append_line(path: Path, line: str) -> None:
-    _ensure_dir(path.parent)
+def _append_line(path: Path, line: str, *, parent_fd: int | None = None) -> None:
+    if parent_fd is None:
+        _ensure_dir(path.parent)
     try:
-        fd = os.open(str(path), os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+        flags = os.O_APPEND | os.O_CREAT | os.O_WRONLY
+        if parent_fd is not None:
+            flags |= os.O_NOFOLLOW | os.O_NONBLOCK
+        fd = os.open(str(path) if parent_fd is None else path.name, flags, 0o600, dir_fd=parent_fd)
     except OSError as exc:
         raise RecordUnwritable(f"could not open {path}: {exc}") from exc
     try:
+        if parent_fd is not None:
+            import stat
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise RecordUnwritable('record target must be regular')
         try:
             os.fchmod(fd, 0o600)
         except OSError:
@@ -342,13 +350,38 @@ def _append_line(path: Path, line: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def append_record(record: Mapping[str, Any], *, record_dir: str | Path | None = None) -> Path:
+def append_record(record: Mapping[str, Any], *, record_dir: str | Path | None = None,
+                  project_root: str | Path | None = None) -> Path:
     """Append one decision record as a JSONL line; returns the file written."""
     resolved_dir = _resolve_record_dir(record_dir)
     created_at = record.get("created_at")
     when = _parse_iso(created_at) if created_at else dt.datetime.now(dt.timezone.utc)
     path = resolved_dir / _day_filename(when)
-    _append_line(path, json.dumps(record, sort_keys=True, ensure_ascii=True))
+    line = json.dumps(record, sort_keys=True, ensure_ascii=True)
+    if project_root is None:
+        _append_line(path, line)
+    else:
+        # Project-owned logs use pinned directory descriptors. No component
+        # below the project may follow a symlink, even during concurrent swaps.
+        root = Path(project_root).resolve()
+        if resolved_dir.absolute() != root / '.clavain' / 'decisions':
+            raise RecordUnwritable('unexpected project record directory')
+        descriptors = []
+        try:
+            descriptors.append(os.open(root, os.O_RDONLY | os.O_DIRECTORY))
+            for component in ('.clavain', 'decisions'):
+                try:
+                    os.mkdir(component, mode=0o700, dir_fd=descriptors[-1])
+                except FileExistsError:
+                    pass
+                descriptors.append(os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                           dir_fd=descriptors[-1]))
+            _append_line(path, line, parent_fd=descriptors[-1])
+        except OSError as exc:
+            raise RecordUnwritable('unsafe project record path') from exc
+        finally:
+            for fd in reversed(descriptors):
+                os.close(fd)
     return path
 
 

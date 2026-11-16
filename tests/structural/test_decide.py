@@ -63,6 +63,7 @@ def test_invalid_native_and_unsupported_backend(tmp_path):
 def test_jev_bands_and_abstention(tmp_path, monkeypatch, confidence, choice, expected):
     from clavain_selector import decide as d
     monkeypatch.setenv('CLAVAIN_STATE_DIR', str(tmp_path / 'state'))
+    monkeypatch.setattr(d.flags, 'load_registry', lambda _: {'integrations': {'decision_models': {'enabled': True, 'daily_budget': 8}}})
     monkeypatch.setattr(d.egress, 'project_owner', lambda _: 'mistakeknot')
     monkeypatch.setattr(d.credentials, 'load', lambda: d.credentials.SecretStr('synthetic-key'))
     class Client:
@@ -76,7 +77,8 @@ def test_jev_bands_and_abstention(tmp_path, monkeypatch, confidence, choice, exp
     obj['egress_allowed'] = True
     result = d.decide(obj, dict(mode='shadow', backend='jev'), tmp_path)
     assert result['fallback'] and result['reason'] == expected
-    assert result['choice'] == choice
+    assert result['choice'] == 'plan'
+    assert result['shadow_choice'] == choice
     assert result['confidence'] == confidence
 
 
@@ -95,6 +97,7 @@ def test_secret_state_never_reaches_client_or_log(tmp_path, monkeypatch):
 def test_provider_timeout_keeps_native(tmp_path, monkeypatch):
     from clavain_selector import decide as d
     monkeypatch.setenv('CLAVAIN_STATE_DIR', str(tmp_path / 'state'))
+    monkeypatch.setattr(d.flags, 'load_registry', lambda _: {'integrations': {'decision_models': {'enabled': True, 'daily_budget': 8}}})
     monkeypatch.setattr(d.egress, 'project_owner', lambda _: 'mistakeknot')
     monkeypatch.setattr(d.credentials, 'load', lambda: d.credentials.SecretStr('synthetic-key'))
     class Client:
@@ -106,3 +109,55 @@ def test_provider_timeout_keeps_native(tmp_path, monkeypatch):
     obj['egress_allowed'] = True
     result = d.decide(obj, dict(mode='shadow', backend='jev'), tmp_path)
     assert result['fallback'] and result['choice'] == 'plan' and result['reason'] == 'timeout'
+
+
+def test_global_kill_is_inert(tmp_path, monkeypatch):
+    from clavain_selector import decide as d
+    monkeypatch.setenv('CLAVAIN_SELECTOR', ' OFF ')
+    monkeypatch.setattr(d.egress, 'admit', lambda *a, **kw: pytest.fail('egress ran'))
+    assert d.decide(request(), dict(mode='shadow', backend='jev'), tmp_path)['reason'] == 'off'
+    assert not (tmp_path / '.clavain').exists()
+
+
+@pytest.mark.parametrize('link_component', ['.clavain', 'decisions', 'dayfile'])
+def test_log_symlink_refused(tmp_path, link_component):
+    import datetime
+    from clavain_selector.decide import decide
+    root, outside = tmp_path / 'project', tmp_path / 'outside'
+    root.mkdir()
+    outside.mkdir(mode=0o755)
+    if link_component == '.clavain':
+        (root / '.clavain').symlink_to(outside, target_is_directory=True)
+    else:
+        (root / '.clavain').mkdir()
+        if link_component == 'decisions':
+            (root / '.clavain/decisions').symlink_to(outside, target_is_directory=True)
+        else:
+            (root / '.clavain/decisions').mkdir()
+            (root / '.clavain/decisions' / (datetime.datetime.now(datetime.timezone.utc).date().isoformat()+'.jsonl')).symlink_to(outside / 'data')
+    assert decide(request(), dict(mode='shadow', backend='heuristic'), root)['reason'] == 'record_unwritable'
+    assert outside.stat().st_mode & 0o777 == 0o755
+    assert list(outside.iterdir()) == []
+
+
+def test_daily_budget_ignores_caller_session(tmp_path, monkeypatch):
+    from clavain_selector import decide as d
+    monkeypatch.setenv('CLAVAIN_STATE_DIR', str(tmp_path / 'state'))
+    monkeypatch.setattr(d.egress, 'project_owner', lambda _: 'mistakeknot')
+    monkeypatch.setattr(d.flags, 'load_registry', lambda _: {'integrations': {'decision_models': {'enabled': True, 'daily_budget': 1}}})
+    monkeypatch.setattr(d.credentials, 'load', lambda: (_ for _ in ()).throw(d.credentials.CredentialUnavailable()))
+    obj = request()
+    obj.update(egress_allowed=True, session_id='first')
+    assert d.decide(obj, dict(mode='shadow', backend='jev'), tmp_path)['reason'] == 'credential_unavailable'
+    obj['session_id'] = 'second'
+    assert d.decide(obj, dict(mode='shadow', backend='jev'), tmp_path)['reason'] == 'budget_exhausted'
+
+
+def test_registry_disabled_stops_jev(tmp_path, monkeypatch):
+    from clavain_selector import decide as d
+    monkeypatch.setattr(d.egress, 'project_owner', lambda _: 'mistakeknot')
+    monkeypatch.setattr(d.flags, 'load_registry', lambda _: {'integrations': {'decision_models': {'enabled': False, 'daily_budget': 8}}})
+    monkeypatch.setattr(d.credentials, 'load', lambda: pytest.fail('disabled provider loaded credentials'))
+    obj = request()
+    obj['egress_allowed'] = True
+    assert d.decide(obj, dict(mode='shadow', backend='jev'), tmp_path)['reason'] == 'registry_disabled'

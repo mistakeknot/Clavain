@@ -18,8 +18,7 @@ egress policy and local shadow log apply (default: current directory).
   "state": {"kind": "documentation", "size": "small"},
   "native_choice": "build",
   "egress_allowed": false,
-  "sources": [],
-  "session_id": "example-session"
+  "sources": []
 }
 ```
 
@@ -38,19 +37,28 @@ decision_models:
   route: {backend: heuristic, mode: off}
 ```
 
-Modes default to `off`. `shadow` observes a choice; `enforce` returns
+Modes default to `off`. `CLAVAIN_SELECTOR=off` (case-insensitive, trimmed)
+disables the layer before egress, credentials, calls or logging.
+`shadow` observes a choice; `enforce` returns
 `enforce_disabled` without making a provider call. Unsupported modes remain
 off. Backends are `heuristic` (a deterministic baseline agreeing with today's
 answer) and `jev` (the existing credential loader, admitted client, shared
-breaker and eight-call session budget). Clef, Clairic and other backends
+breaker and a stable per-project UTC-day budget). The registry's
+`decision_models.daily_budget` caps calls, with a conservative maximum of
+eight; changing caller session IDs does not reset it. Its registry entry ships
+with `enabled: false`; hosted shadow observations also require explicitly
+enabling that entry, in addition to the per-question shadow mode and egress
+permission. Existing integration defaults are unchanged. Clef, Clairic and other backends
 return `unsupported_backend`; S1 implements no free-tier backend.
 
-The output includes `choice`, `probs`, `confidence`, `backend`, `band`,
+The output includes `choice`, `shadow_choice`, `probs`, `confidence`, `backend`, `band`,
 `reason`, `latency_ms` and the existing attempt accounting when observed.
 Bands are `accept` at confidence >=0.8, `review` at >=0.6 and <0.8, and
 `escalate` below 0.6. Abstention, timeout and provider failure return a fallback
 reason. **Every S1 answer has `fallback: true`, including confident shadow
-answers.** Callers always continue today's behavior. A backend observation
+answers.** `choice` always holds `native_choice`. `shadow_choice` holds the
+observation, including an abstaining `escalate` answer; `probs` and
+`confidence` describe that observation. Callers always continue today's behavior. A backend observation
 never authorizes an action or skipping a review. There are no sprint hooks
 in this slice.
 
@@ -68,6 +76,13 @@ latency and physical-attempt token accounting. Hash identifiers before
 comparing caller data with a record. State, descriptions, prompt text and
 credentials are not recorded. Monetary `cost` is null: the typed Jev client
 exposes tokens, not a monetary price. Unknown attempt usage stays unknown.
+The writer pins directory descriptors and refuses symlinked directories or
+day files below the project; it never follows those links to chmod targets.
+
+S1 design choice: daily JSONL files have no byte cap or automated retention
+during the one-week shadow trial. The hosted-call budget bounds Jev traffic,
+but repeated heuristic observations can still grow the log. Monitor local disk
+usage during the trial; retention is a prerequisite for sustained rollout.
 
 `observed_outcome` initially is null. Fill it logically by appending an
 outcome with the existing `records.append_outcome(decision_id, result,

@@ -59,4 +59,6 @@ bin/clavain-cli-go
 
 # Local shadow observations and later outcome records
 .clavain/decisions/
+.clavain/outcomes/
+# Local decide validation scratch files (not produced by the command)
 .clavain/decide-*

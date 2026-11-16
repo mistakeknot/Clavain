@@ -7,13 +7,15 @@ explicit egress_allowed=true in addition to the selector's whole-request guard.
 from __future__ import annotations
 
 import json
+import datetime as dt
+import os
 from pathlib import Path
 import re
 import sys
 import time
 import uuid
 
-from clavain_selector import contract, credentials, egress, jev_client as j, records
+from clavain_selector import contract, credentials, egress, flags, jev_client as j, records
 from clavain_selector.accounting import AttemptLog, digest, stamp
 
 
@@ -30,6 +32,8 @@ def decide(obj, policy, project_root):
     result = dict(choice=native, probs={}, confidence=0., fallback=True,
                   band='escalate', backend=backend, reason='off')
     mode = policy.get('mode', 'off')
+    if str(os.environ.get(flags.GLOBAL_KILL_SWITCH, '')).strip().lower() == 'off':
+        return result
     if mode != 'shadow':
         result['reason'] = 'enforce_disabled' if mode == 'enforce' else 'off'
         return result
@@ -79,6 +83,8 @@ def decide(obj, policy, project_root):
         log.finalize_open()
     result['latency_ms'] = (time.monotonic_ns() - start) // 1_000_000
     result.update(log.to_fields())
+    result['shadow_choice'] = result['choice']
+    result['choice'] = native
     # Records reuse the existing locked append, permissions and outcome join.
     # Only identifiers and hashes leave this function; raw state/text never do.
     record = dict(schema='clavain-decide-v1', decision_id=str(uuid.uuid4()),
@@ -89,15 +95,17 @@ def decide(obj, policy, project_root):
         record['question_id'] = digest(str(obj['question']['id']).encode())
         record['candidates'] = [digest(c.id.encode()) for c in request.candidates]
         record['native_choice'] = digest(str(native).encode())
-        record['decide_answer'] = dict(choice=digest(str(result['choice']).encode()),
+        record['decide_answer'] = dict(choice=digest(str(result['shadow_choice']).encode()),
                                        confidence=result['confidence'],
                                        probs={digest(k.encode()): v for k, v in result['probs'].items()})
         record['identifier_encoding'] = 'sha256'
     # Avoid duplicating unscanned identifiers from the output in the log.
     record.pop('choice', None)
     record.pop('probs', None)
+    record.pop('shadow_choice', None)
     try:
-        records.append_record(record, record_dir=Path(project_root) / '.clavain' / 'decisions')
+        records.append_record(record, record_dir=Path(project_root).resolve() / '.clavain' / 'decisions',
+                              project_root=project_root)
         result['decision_id'] = record['decision_id']
     except Exception:
         result['reason'] = 'record_unwritable'
@@ -105,8 +113,18 @@ def decide(obj, policy, project_root):
 
 
 def _jev(request, obj, policy, result, log):
-    # Same shared breaker and conservative call budget as selector.select.
-    budget = j.Budget(str(obj.get('session_id', 'decide')), 'decision_models', limit=8)
+    # A stable project/day cap cannot be reset by changing a caller session.
+    registry = flags.load_registry(Path(__file__).resolve().parents[2] / 'config/selector-integrations.json')
+    entry = registry.get('integrations', {}).get('decision_models', {})
+    if entry.get('enabled') is not True:
+        result['reason'] = 'registry_disabled'
+        return
+    limit = entry.get('daily_budget', 0)
+    if type(limit) is not int or limit < 1:
+        result['reason'] = 'budget_exhausted'
+        return
+    day = dt.datetime.now(dt.timezone.utc).date().isoformat()
+    budget = j.Budget(f'decide:{request.project_root}:{day}', 'decision_models', limit=min(8, limit))
     if budget.consume() is not None:
         result['reason'] = 'budget_exhausted'
         return
@@ -141,7 +159,12 @@ def _jev(request, obj, policy, result, log):
 
 def main():
     try:
-        envelope = json.loads(sys.stdin.buffer.read(contract.MAX_REQUEST_BYTES + 1))
+        # The Go adapter wraps up to MAX_REQUEST_BYTES with config metadata.
+        # Bound the envelope separately so wrapping never truncates a request.
+        raw = sys.stdin.buffer.read(2 * contract.MAX_REQUEST_BYTES + 1)
+        if len(raw) > 2 * contract.MAX_REQUEST_BYTES:
+            raise ValueError
+        envelope = json.loads(raw)
         result = decide(envelope['request'], envelope['policy'], envelope['project_root'])
     except Exception:
         result = dict(choice=None, probs={}, confidence=0., fallback=True, reason='invalid_input')

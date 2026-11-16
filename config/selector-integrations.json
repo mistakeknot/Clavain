@@ -1,6 +1,13 @@
 {
   "schema_version": 1,
   "integrations": {
+    "decision_models": {
+      "enabled": false,
+      "active_allowed": false,
+      "shadow_only": true,
+      "points": ["library"],
+      "daily_budget": 8
+    },
     "support_check": {
       "flag": "CLAVAIN_SELECTOR_SUPPORT_CHECK",
       "enabled": false,

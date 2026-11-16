@@ -38,19 +38,23 @@ func runDecide(in io.Reader, out io.Writer, args []string) error {
 	if *config == "" {
 		*config = filepath.Join(*root, "config", "routing.yaml")
 	}
-	var req struct {
-		Question struct {
-			ID string `json:"id"`
-		} `json:"question"`
-		NativeChoice string `json:"native_choice"`
-	}
+	// Maps preserve JSON's case-sensitive key semantics, as Python does.
+	var fields map[string]json.RawMessage
+	var native, questionID string
 	raw, err := io.ReadAll(io.LimitReader(in, 90001))
 	fallback := func(reason string) error {
-		return json.NewEncoder(out).Encode(map[string]interface{}{"choice": req.NativeChoice, "probs": map[string]float64{}, "confidence": 0, "fallback": true, "reason": reason})
+		return json.NewEncoder(out).Encode(map[string]interface{}{"choice": native, "probs": map[string]float64{}, "confidence": 0, "fallback": true, "reason": reason})
 	}
-	if err != nil || len(raw) > 90000 || json.Unmarshal(raw, &req) != nil {
+	if err != nil || json.Unmarshal(raw, &fields) != nil {
 		return fallback("invalid_input")
 	}
+	json.Unmarshal(fields["native_choice"], &native)
+	if len(raw) > 90000 {
+		return fallback("invalid_input")
+	}
+	var question map[string]json.RawMessage
+	json.Unmarshal(fields["question"], &question)
+	json.Unmarshal(question["id"], &questionID)
 	var routing struct {
 		Decisions map[string]map[string]interface{} `yaml:"decision_models"`
 	}
@@ -58,7 +62,7 @@ func runDecide(in io.Reader, out io.Writer, args []string) error {
 	if err != nil || yaml.Unmarshal(data, &routing) != nil {
 		return fallback("config_unavailable")
 	}
-	policy := routing.Decisions[req.Question.ID]
+	policy := routing.Decisions[questionID]
 	if policy == nil {
 		return fallback("off")
 	}
@@ -68,6 +72,9 @@ func runDecide(in io.Reader, out io.Writer, args []string) error {
 	}
 	envelope, err := json.Marshal(map[string]interface{}{"request": json.RawMessage(raw), "policy": policy, "project_root": absProject})
 	if err != nil {
+		return fallback("invalid_input")
+	}
+	if len(envelope) > 180000 {
 		return fallback("invalid_input")
 	}
 	// The Python client has its own shorter deadline. Bound startup and all I/O
