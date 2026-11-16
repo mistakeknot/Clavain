@@ -3983,6 +3983,10 @@ elif [[ "$ENGINE" == "claude" ]]; then
       _dispatch_write_failure_class terminal_configuration
       exit 1
     fi
+    # Settings isolation: the caller-side --setting-sources flag is not sent. The
+    # host's fixed restricted template passes empty setting sources, and
+    # --restricted ignores user, project and local settings (Aleph mk-14uh1), so
+    # isolation is host-enforced and stricter than project,local.
     # The host accepts only a direct child of its validated caller cwd.
     # Cover early exits (the full EXIT trap is installed later and also cleans).
     trap '[[ -z "${POOL_SEAT_DIR:-}" ]] || rm -rf -- "$POOL_SEAT_DIR"; [[ -z "${PROMPT_STDIN_FILE:-}" ]] || rm -f -- "$PROMPT_STDIN_FILE"' EXIT

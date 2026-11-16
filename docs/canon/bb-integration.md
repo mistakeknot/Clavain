@@ -157,6 +157,9 @@ quota-retry availability check and the child dispatch probe.
 and server URL remain but the bearer is empty or unset, an enrolled CLI with
 pool-exec support selects `transport=pool-exec`. `BB_CLI` takes precedence over
 PATH. The server injects credentials; dispatch never retrieves them.
+Settings isolation on this route is enforced by the host: its fixed restricted
+template passes empty setting sources and `--restricted` ignores user, project
+and local settings, so the caller does not send `--setting-sources`.
 
 The command uses `claude -p --restricted --permission-mode dontAsk
 --tools=Read,Glob,Grep --prompt-file <file>` with stream-json and verbose output.
