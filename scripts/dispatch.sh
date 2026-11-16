@@ -1128,6 +1128,10 @@ _dispatch_cleanup_state() {
   # mk-ouz83: scan before any receipt is written, so a leak fails the status
   # the receipts record. This also covers signals and early exits.
   _token_leak_scan_all
+  if [[ -n "${POOL_SEAT_DIR:-}" ]]; then
+    rm -rf -- "$POOL_SEAT_DIR"
+    [[ -z "${PROMPT_STDIN_FILE:-}" ]] || rm -f -- "$PROMPT_STDIN_FILE"
+  fi
   _token_leak_conclude || [[ "$_rc" != 0 ]] || _rc=1
   # Review receipt (mk-zek32): only the resolved child that ran the review
   # writes it. A requested receipt that cannot be written fails the run, so a
@@ -3876,7 +3880,18 @@ AGENT
   # WORKDIR is applied at execution time via cd (kimi has no -C flag);
   # OUTPUT is written by teeing kimi's stdout (kimi has no -o flag).
 elif [[ "$ENGINE" == "claude" ]]; then
-  if _bb_pool_available claude; then
+  pool_exec_status=0
+  _bb_claude_pool_exec_available || pool_exec_status=$?
+  if [[ "$pool_exec_status" == 2 ]]; then
+    echo 'Error: BB host lacks restricted pooled Claude support; no local login fallback' >&2
+    _dispatch_write_failure_class terminal_configuration
+    exit 1
+  fi
+  if [[ "$pool_exec_status" == 0 ]]; then
+    _token_leak_capture
+    unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL
+    DISPATCH_TRANSPORT=pool-exec
+  elif _bb_pool_available claude; then
     _bb_claude_pool_env
     DISPATCH_TRANSPORT=direct-pooled
   else
@@ -3962,9 +3977,38 @@ elif [[ "$ENGINE" == "claude" ]]; then
   # with "Argument list too long" / exit 126 before the model ever runs
   # (real-names migration run 39676448, 2026-08-30). `claude -p` with no
   # positional reads the prompt from stdin.
-  PROMPT_STDIN_FILE=$(mktemp "${TMPDIR:-/tmp}/dispatch-claude-prompt.XXXXXX")
+  if [[ "${DISPATCH_TRANSPORT:-}" == pool-exec ]]; then
+    if [[ "$CLAUDE_UNSAFE" == true || "$NO_TOOLS" == true || "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 || -n "$SUBMIT_HELD" ]]; then
+      echo 'Error: restricted pooled Claude supports unbudgeted file-reading reviews only; use a non-pooled route for command execution' >&2
+      _dispatch_write_failure_class terminal_configuration
+      exit 1
+    fi
+    # The host accepts only a direct child of its validated caller cwd.
+    POOL_SEAT_DIR=$(mktemp -d "${WORKDIR:-.}/.dispatch-pool.XXXXXX")
+    POOL_SEAT_DIR=$(cd "$POOL_SEAT_DIR" && pwd)
+    if [[ -n "$PLAN_FILE" ]]; then
+      cp -- "$PLAN_FILE" "$POOL_SEAT_DIR/plan.md"
+      PROMPT="${PROMPT//"$PLAN_FILE"/"$POOL_SEAT_DIR/plan.md"}"
+    fi
+    # Capture command evidence before launch; the restricted seat has no Bash.
+    git -C "${WORKDIR:-.}" diff > "$POOL_SEAT_DIR/diff.txt"
+    git -C "${WORKDIR:-.}" diff --stat > "$POOL_SEAT_DIR/diffstat.txt"
+    git -C "${WORKDIR:-.}" log -10 --oneline > "$POOL_SEAT_DIR/log.txt"
+    git -C "${WORKDIR:-.}" ls-files > "$POOL_SEAT_DIR/files.txt"
+    PROMPT+=$'\nRestricted review: Read, Glob and Grep only. Caller evidence is staged in '
+    PROMPT+="$POOL_SEAT_DIR. Use the staged plan, diff.txt, diffstat.txt, log.txt and files.txt; do not attempt command execution."
+    PROMPT_STDIN_FILE=$(mktemp "${WORKDIR:-.}/.dispatch-prompt.XXXXXX")
+    PROMPT_STDIN_FILE="$(cd "$(dirname "$PROMPT_STDIN_FILE")" && pwd)/$(basename "$PROMPT_STDIN_FILE")"
+    CMD=("${BB_CLI:-bb}" pool exec -- claude -p --restricted
+      --permission-mode dontAsk "--tools=Read,Glob,Grep"
+      --prompt-file "$PROMPT_STDIN_FILE")
+    [[ -z "$MODEL" ]] || CMD+=(--model "$MODEL")
+    [[ -z "$REASONING_EFFORT" ]] || CMD+=(--effort "$REASONING_EFFORT")
+  else
+    PROMPT_STDIN_FILE=$(mktemp "${TMPDIR:-/tmp}/dispatch-claude-prompt.XXXXXX")
+    CMD+=(-p)
+  fi
   printf '%s' "$PROMPT" > "$PROMPT_STDIN_FILE"
-  CMD+=(-p)
   if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]]; then
     CMD+=(--output-format stream-json --verbose)
   fi
@@ -5920,7 +5964,7 @@ _finalize_dispatch_result() {
   if [[ "$VIA" == bb && -f "${OUTPUT}.receipt.json" ]]; then
     failure_class="$(jq -r --arg attempt "$ATTEMPT_ID" 'select(.attempt_id == $attempt) | .failure_class // empty' "${OUTPUT}.receipt.json" 2>/dev/null || true)"
   fi
-  if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "${DISPATCH_TRANSPORT:-}" == direct-pooled ]]; then
+  if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "${DISPATCH_TRANSPORT:-}" =~ ^(direct-pooled|pool-exec)$ ]]; then
     # Hub traffic is proven, but no supported request-scoped account receipt is
     # exposed. A budgeted pooled invocation cannot be accepted from guesses.
     exit_code=1
@@ -5987,6 +6031,10 @@ _finalize_dispatch_result() {
       terminal_error|terminal_configuration)
         if _claude_auth_failure "$STDERR_FILE"; then failure_class=account_access_absent; fi ;;
     esac
+  fi
+  if [[ "${POOL_PROFILE_REFUSED:-false}" == true ]]; then
+    failure_class=terminal_configuration
+    exit_code=1
   fi
   if [[ "$exit_code" == "0" ]]; then
     : > "${CLAVAIN_DISPATCH_FAILURE_FILE:-/dev/null}" 2>/dev/null || true
@@ -6135,7 +6183,12 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   # it is mirrored or turned into a verdict.
   _token_leak_scan_all
   _emit_provider_stderr "$STDERR_FILE"
-  [[ -n "${PROMPT_STDIN_FILE:-}" ]] && rm -f "$PROMPT_STDIN_FILE"
+  if [[ "${DISPATCH_TRANSPORT:-}" == pool-exec && "$KIMI_EXIT" != 0 ]]; then
+    if grep -Eqi 'restricted|not permitted|unsupported|protocol|unknown (option|argument)' "$STDERR_FILE"; then
+      echo 'Error: BB host refused restricted pooled Claude; updated host support is required (no local login fallback)' >&2
+      POOL_PROFILE_REFUSED=true
+    fi
+  fi
   set -e
   SEAT_MUTATED=""
   if { [[ "$ENGINE" == "claude" && "$CLAUDE_UNSAFE" != true ]] || [[ "$KIMI_SEAT_TOOLS" == true ]]; }; then
@@ -6145,6 +6198,8 @@ elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
       [[ -n "$SEAT_MUTATED" ]] || SEAT_MUTATED="(content of an already-modified file)"
     fi
   fi
+  [[ -n "${PROMPT_STDIN_FILE:-}" ]] && rm -f "$PROMPT_STDIN_FILE"
+  [[ -z "${POOL_SEAT_DIR:-}" ]] || rm -rf -- "$POOL_SEAT_DIR"
   # The kimi seat ran in a copy: any change there or to the plan copy is an
   # error, and the real checkout must still be as it was (a signal, since the
   # seat should never have reached it).

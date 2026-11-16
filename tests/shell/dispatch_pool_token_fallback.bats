@@ -21,13 +21,16 @@ setup() {
     # Availability server: counts every request and always answers 401, which
     # is what a present-but-rejected bearer (or a missing one) would get.
     cat > "$T/server.py" <<'PY'
-import http.server, sys
+import http.server, sys, pathlib
 hits = sys.argv[1]
 class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         open(hits, "a").write("hit\n")
-        self.send_response(401)
+        eligible = pathlib.Path(hits + ".eligible").exists()
+        self.send_response(200 if eligible else 401)
         self.end_headers()
+        if eligible:
+            self.wfile.write(b'{"claude":true,"codex":true}')
     def log_message(self, *a):
         pass
 s = http.server.HTTPServer(("127.0.0.1", 0), H)
@@ -44,7 +47,36 @@ PY
 
     cat > "$T/bin/bb" <<'SH'
 #!/bin/sh
-if [ "$1 $2" = "status --json" ]; then
+if [ "$1 $2" = "pool exec" ] && [ "${FAKE_POOL_EXEC:-}" = 1 ]; then
+  shift 2
+  [ "$1" != --help ] || exit 0
+  echo pooled > "$FAKE_POOL_LOG"
+  [ "$1" = -- ] && [ "$2" = claude ] || exit 2
+  shift
+  input=
+  prev=
+  for arg in "$@"; do
+    [ "$prev" != --prompt-file ] || input=$arg
+    prev=$arg
+  done
+  [ -n "$input" ] || exit 2
+  [ "$(dirname "$input")" = "$PWD" ] || exit 2
+  for arg in "$@"; do
+    case "$arg" in --add-dir|--allowedTools|--include-partial-messages|--session-id|hello) exit 2 ;; esac
+  done
+  case " $* " in *' --tools=Read,Glob,Grep '*) ;; *) exit 2 ;; esac
+  case " $* " in *' --restricted '*) ;; *) exit 2 ;; esac
+  if [ -n "${FAKE_POOL_ERROR:-}" ]; then
+    echo "$FAKE_POOL_ERROR" >&2
+    exit 1
+  fi
+  "$@" < "$input"
+  rc=$?
+  echo 'bb-pool-exec: transport=pooled provider=claude' >&2
+  exit "$rc"
+elif [ "$1 $2 $3" = "pool exec --help" ]; then
+  exit 0
+elif [ "$1 $2" = "status --json" ]; then
   echo '{"thread":{"id":"thr_fixture","environment":{"hostId":"host_pda34naxgq"}}}'
 else
   exit 1
@@ -82,7 +114,8 @@ esac
 SH
     chmod +x "$T"/bin/*
     export PATH="$T/bin:$PATH"
-    export FAKE_LOG="$T/seen.log" POOL_ROUTE="$ROUTE"
+    export FAKE_LOG="$T/seen.log" FAKE_POOL_LOG="$T/pool.log" POOL_ROUTE="$ROUTE"
+    unset FAKE_POOL_EXEC FAKE_POOL_ERROR
     export CLAVAIN_CONTEXT_GATEWAY_MODE=off CLAVAIN_BB_DIRECT_POOL=1
     export BB_CLI="$T/bin/bb" BB_THREAD_ID=thr_fixture BB_SERVER_URL="$ORIGIN"
     export CLAVAIN_DISPATCH_FAILURE_FILE="$T/failure"
@@ -101,7 +134,7 @@ NOTICE_CLAUDE_KEY='dispatch: the bb account-pool route is set for claude but no 
 NOTICE_CODEX='dispatch: the bb account-pool route is set for codex but no pool token is available; using the non-pooled codex login'
 
 # bats' run captures the command's stderr itself, so redirect inside the child.
-run_claude() { ERRF="$T/err" run bash -c 'exec bash "$@" 2> "$ERRF"' _ "$DISPATCH" --to claude --model m -C "$T/repo" -o "$T/out.md" 'hello'; }
+run_claude() { if [ "${FAKE_POOL_EXEC:-}" != 1 ] && [ -z "${ANTHROPIC_AUTH_TOKEN:-}" ]; then export BB_CLI="$T/missing-bb"; fi; ERRF="$T/err" run bash -c 'exec bash "$@" 2> "$ERRF"' _ "$DISPATCH" --to claude --model m -C "$T/repo" -o "$T/out.md" 'hello'; }
 run_codex() { ERRF="$T/err" run bash -c 'exec bash "$@" 2> "$ERRF"' _ "$DISPATCH" --to codex -C "$T/repo" -o "$T/out.md" 'hello'; }
 
 @test "claude: pool route set, token unset -> non-pooled login with a stderr notice" {
@@ -254,4 +287,67 @@ run_codex() { ERRF="$T/err" run bash -c 'exec bash "$@" 2> "$ERRF"' _ "$DISPATCH
     grep -qx 'ANTHROPIC_BASE_URL=set' "$T/seen.log"
     ! grep -qF 'no pool token is available' "$T/err"
     [ ! -s "$T/hits" ]
+}
+
+@test "claude: scrubbed token uses pool exec and excludes its trailer from response" {
+    export ANTHROPIC_BASE_URL="$ROUTE" ANTHROPIC_AUTH_TOKEN= FAKE_POOL_EXEC=1
+    run_claude
+    [ "$status" -eq 0 ]
+    [ "$(cat "$T/pool.log")" = pooled ]
+    [ "$(cat "$T/out.md")" = 'VERDICT: PASS' ]
+    ! grep -q 'bb-pool-exec:' "$T/out.md"
+    ! grep -qF "$DUMMY" "$T/err" "$T/out.md"
+    ! grep -qF 'no pool token is available' "$T/err"
+}
+
+@test "claude: pool exec failure is terminal configuration without local fallback" {
+    export ANTHROPIC_BASE_URL="$ROUTE" ANTHROPIC_AUTH_TOKEN= FAKE_POOL_EXEC=1
+    export FAKE_POOL_ERROR='restricted profile unsupported'
+    run_claude
+    [ "$status" -ne 0 ]
+    [ "$(cat "$T/failure")" = terminal_configuration ]
+    [ ! -e "$T/seen.log" ]
+    ! grep -qF "$DUMMY" "$T/err" "$T/out.md"
+}
+
+@test "claude: pool exec transient failure preserves failure classification" {
+    export ANTHROPIC_BASE_URL="$ROUTE" ANTHROPIC_AUTH_TOKEN= FAKE_POOL_EXEC=1
+    export FAKE_POOL_ERROR='HTTP 429 Too Many Requests'
+    run_claude
+    [ "$status" -ne 0 ]
+    [ "$(cat "$T/failure")" = rate_limited ]
+    [ ! -e "$T/seen.log" ]
+}
+
+@test "claude: a present token keeps direct pooled execution even with pool exec available" {
+    export ANTHROPIC_BASE_URL="$ROUTE" ANTHROPIC_AUTH_TOKEN="$DUMMY" FAKE_POOL_EXEC=1
+    touch "$T/hits.eligible"
+    run_claude
+    [ "$status" -eq 0 ]
+    [ ! -e "$T/pool.log" ]
+    grep -qx 'base_is_pool_route=yes' "$T/seen.log"
+    ! grep -qF "$DUMMY" "$T/err" "$T/out.md"
+}
+
+@test "claude: pool exec receives the prompt through its stdin file" {
+    export ANTHROPIC_BASE_URL="$ROUTE" FAKE_POOL_EXEC=1
+    # Record only whether the prompt arrived, never inherited credentials.
+    python3 - "$T/bin/claude" <<'PYTEST'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+p.write_text(p.read_text().replace('cat > /dev/null', 'IFS= read -r prompt || :; [[ "$prompt" == hello* ]] || exit 2'))
+PYTEST
+    run_claude
+    [ "$status" -eq 0 ]
+    [ -e "$T/pool.log" ]
+}
+
+@test "claude: old host refusal stays terminal and never launches a local account" {
+    export ANTHROPIC_BASE_URL="$ROUTE" FAKE_POOL_EXEC=1
+    export FAKE_POOL_ERROR='unknown option --restricted'
+    run_claude
+    [ "$status" -ne 0 ]
+    [ "$(cat "$T/failure")" = terminal_configuration ]
+    [ ! -e "$T/seen.log" ]
+    grep -q 'updated host support is required' "$T/err"
 }
