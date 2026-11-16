@@ -32,7 +32,18 @@ tokens as a share of tokens, reverts and fix PRs within 7 days of merge).
     python3 -I scripts/review-trial-report.py --label trial --since 2026-11-17 --until 2026-11-30 --out trial.json
     python3 -I scripts/review-trial-report.py --compare baseline.json trial.json
 
-Run the trial report on 2026-11-30 or 2026-12-01: the token window counts back from the day it runs.
+Run the trial report on 2026-11-30, the window's last day (Pacific time): the token window counts back from the day it runs, so a later first run would shift it off the trial.
+Merges from the last week of the trial have not had their 7 follow-up days yet, so the first run lists them
+as `merged_follow_up_incomplete` and leaves them out of the escape rate. Run it again on 2026-12-08 for the
+final escape rate, reusing the first run's token share:
+
+    python3 -I scripts/review-trial-report.py --label trial --since 2026-11-17 --until 2026-11-30 --tokens-from trial.json --out trial-final.json
+
+The policy helper reads paths from `git diff --no-renames --name-only`, because a rename hides its old path
+(a protected file renamed to a `.md` name would otherwise look like a doc). A path it cannot trust
+(backslash, absolute, `.` or `..` segment, control character) is keep-list. An incomplete or invalid
+`review_policy` block means no trial: full review. The trial date can only come from the clock, read in
+Pacific time (America/Los_Angeles); if that zone cannot be read there is no trial.
 Limits: receipts before plugin 0.6.334 carry no `changed_paths` or findings, so they report as `no-paths`
 and cannot be split by class; "findings that changed code" is a proxy (a later round ran on a new head); the
 token share covers dispatch-recorded roles on closed beads only.

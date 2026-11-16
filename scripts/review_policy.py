@@ -5,7 +5,7 @@ Reads `reasoning.review_policy` from config/routing.yaml. It only lowers the num
 of review rounds or skips cross-lab review for low-risk changes; it never changes
 which seat reviews, the frontier floors or reviewer independence.
 
-Outside the trial window, or with enabled: false, or CLAVAIN_REVIEW_POLICY=off,
+The window is in Pacific time (America/Los_Angeles). Outside the trial window, or with enabled: false, or CLAVAIN_REVIEW_POLICY=off,
 every change is `full` and the 3-fix-round + 1-confirm cap applies as before.
 
   review_policy.py decide [--prototype] [--config FILE] [--today YYYY-MM-DD] < paths
@@ -19,6 +19,11 @@ import os
 import re
 import sys
 from pathlib import Path
+
+try:
+    import zoneinfo
+except ImportError:  # pragma: no cover
+    zoneinfo = None
 
 DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "config" / "routing.yaml"
 
@@ -39,6 +44,12 @@ KEEP_RE = re.compile("|".join([
     r"(^|/)(scripts|bin)/[^/]*(release|publish|install|deploy|sign)[^/]*$",
     r"(^|/)plugin\.json$", r"(^|/)marketplace[^/]*\.json$",         # releases and publishes
     r"(^|/)config/routing[^/]*\.ya?ml$", r"(^|/)review[-_]policy",   # routing and this policy
+    r"(^|/)docs/canon/",                                            # canon: routing and reasoning rules
+    r"(^|/)policies/",                                              # fleet instruction and approval files
+    r"(^|/)[^/]*(standing[-_]approvals?|approvals?[-_](index|root|archive)|instruction[-_]files?)[^/]*$",
+    r"(^|/)(review-by-risk|batch-lane|handoff-scripts|ops-hygiene|decision-cards|one-shot-lane|vizier-[^/]*|coordinator-[^/]*)\.md$",
+    r"(^|/)scripts/(dispatch|lib-routing|route|review|lib-review|orchestrate|lib-gates|gate)[^/]*",  # dispatch, routing, review gates
+    r"(^|/)(dispatch|routing|review-round|review_round)[^/]*\.(sh|py)$",
     r"migrat", r"(^|/)schema[^/]*\.", r"\.sql$", r"(^|/)versions?/",  # migrations
     r"(^|/)saves?(/|[-_.])", r"save[-_]?(format|schema|game|data|file)", r"serializ",
     r"(^|/)(auth|oauth|authn|authz|login|signin|sign-in|session)[^/]*",  # sign-ins
@@ -65,9 +76,40 @@ def _day(value):
     return datetime.date.fromisoformat(str(value))
 
 
+SKIP_CLASSES = {"text-only", "doc-only", "test-only", "one-shot-prototype"}
+
+
+def valid_policy(policy):
+    """True only for a complete, well-formed block. Anything else is not an active trial (full review)."""
+    if not isinstance(policy, dict):
+        return False
+    routine = policy.get("routine")
+    if not isinstance(routine, dict):
+        return False
+    limit = routine.get("max_rounds")
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit != 1:
+        return False  # the trial is defined as exactly one routine round
+    levels = routine.get("second_round_if_severity")
+    if not isinstance(levels, list) or not levels or not all(isinstance(x, str) and x.strip() for x in levels):
+        return False
+    skips = policy.get("skip_classes")
+    if not isinstance(skips, list) or not skips or not set(skips) <= SKIP_CLASSES:
+        return False
+    keep = policy.get("keep_list")
+    return isinstance(keep, list) and bool(keep)
+
+
+def today_pacific():
+    """Today's date in America/Los_Angeles, the zone the window is stated in. None if the zone is unreadable."""
+    try:
+        return datetime.datetime.now(zoneinfo.ZoneInfo("America/Los_Angeles")).date()
+    except Exception:  # missing tz data: never guess, the trial is then not active
+        return None
+
+
 def trial_active(policy, today=None):
-    """True only inside [first_day, last_day] with the trial enabled."""
-    if not policy or policy.get("enabled") is not True:
+    """True only inside [first_day, last_day] with the trial enabled and the block complete."""
+    if not valid_policy(policy) or policy.get("enabled") is not True:
         return False
     if os.environ.get("CLAVAIN_REVIEW_POLICY", "").lower() in ("off", "0", "false", "no"):
         return False
@@ -75,8 +117,17 @@ def trial_active(policy, today=None):
         first, last = _day(policy["first_day"]), _day(policy["last_day"])
     except (KeyError, ValueError, TypeError):
         return False  # an unreadable window is never an active trial
-    today = today or _day(os.environ.get("CLAVAIN_REVIEW_POLICY_TODAY") or datetime.date.today())
+    today = today or today_pacific()
+    if today is None:
+        return False
     return first <= today <= last
+
+
+def ambiguous(path):
+    """A path git would never print for a plain file: do not guess, keep full review."""
+    return ("\\" in path or path.startswith("/") or "\x00" in path or path.startswith('"')
+            or any(part in ("", ".", "..") for part in path.split("/"))
+            or any(ord(c) < 32 for c in path))
 
 
 def classify_paths(paths, prototype=False):
@@ -84,6 +135,9 @@ def classify_paths(paths, prototype=False):
     paths = [p.strip() for p in paths if p and p.strip()]
     if not paths:
         return "keep", "no changed paths on record; unclassifiable changes keep full review"
+    odd = [p for p in paths if ambiguous(p)]
+    if odd:
+        return "keep", f"ambiguous path (backslash, absolute, dot segment or control character): {odd[0]!r}; unclassifiable changes keep full review"
     hit = [p for p in paths if KEEP_RE.search(p)]
     if hit:
         return "keep", f"keep-list path: {hit[0]}"
@@ -110,8 +164,7 @@ def decide(paths, policy, prototype=False, today=None):
     if klass in (policy.get("skip_classes") or []):
         return dict(**{"class": klass}, action="skip", max_rounds=0, trial_active=True,
                     reason=why + "; author's check, tests and CI carry it")
-    limit = int((policy.get("routine") or {}).get("max_rounds", 1))
-    return dict(**{"class": klass}, action="one-round", max_rounds=limit, trial_active=True,
+    return dict(**{"class": klass}, action="one-round", max_rounds=1, trial_active=True,
                 reason=why + "; one round, a second only after a high-severity finding")
 
 

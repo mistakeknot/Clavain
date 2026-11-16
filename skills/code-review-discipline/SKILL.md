@@ -58,7 +58,7 @@ A review loop gets at most three fix rounds. Number the reviews per change, star
 
 ### Review by risk (trial, bead mk-h9541)
 
-From 2026-11-17 through 2026-11-30, `config/routing.yaml` `reasoning.review_policy` lowers the cap for low-risk changes. Ask the helper before requesting a review: `git diff --name-only BASE..HEAD | python3 scripts/review_policy.py decide` (add `--prototype` for a declared one-shot prototype). It prints `action`:
+From 2026-11-17 through 2026-11-30, `config/routing.yaml` `reasoning.review_policy` lowers the cap for low-risk changes. Ask the helper before requesting a review: `git diff --no-renames --name-only BASE..HEAD | python3 scripts/review_policy.py decide` (add `--prototype` for a declared one-shot prototype). It prints `action`:
 
 - **skip** (text-only, doc-only, test-only, one-shot prototype): no cross-lab review. The author's check, the tests and CI carry the change.
 - **one-round** (routine reversible code): one review round. A second runs only when round 1 found a high-severity finding (P1 or High; a finding with no severity counts as high). Otherwise fix the findings with their covering tests and land.

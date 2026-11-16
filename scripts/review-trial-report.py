@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Review-by-risk trial report (bead mk-h9541): baseline and end-of-trial, same definitions.
 
-  review-trial-report.py --label baseline --since 2026-11-01 --until 2026-11-15 --out baseline.json
+  review-trial-report.py --label baseline --since 2026-11-02 --until 2026-11-15 --out baseline.json
   review-trial-report.py --label trial    --since 2026-11-17 --until 2026-11-30 --out trial.json
   review-trial-report.py --compare baseline.json trial.json
 
@@ -18,7 +18,10 @@ Four measures, per policy class (skip / one-round / full, from review_policy.py)
      tokens by role for closed beads; the share is cross-lab-review + plan-review
      (+ validation) over all roles it lists. N is the window length and counts back
      from today, so run each report on the window's last day (or save the output).
-  4. Escapes: merged PRs (gh) in the window followed within 7 days by a revert or
+  4. Escapes: merged PRs (gh) in the window, counting only those whose 7 follow-up
+     days are over (`merged_follow_up_incomplete` lists the rest; run the report
+     again 7 days after the window ends, with --tokens-from to keep the first
+     run's token share), followed within 7 days by a revert or
      hotfix PR touching one of the same paths, or by any PR whose title cites the
      PR number (`escape_rate`, the headline). `fix_same_path_rate` also counts any
      later fix(...) PR on a shared path and is an upper bound, not the headline. Needs `gh`;
@@ -107,7 +110,7 @@ def per_change(rows, policy):
         changed = with_findings = without = 0
         for n, row in enumerate(ordered):
             found = row.get("findings")
-            if not isinstance(found, list) or row.get("findings_source") == "unknown":
+            if not isinstance(found, list) or not found or row.get("findings_source") == "unknown":
                 without += 1
                 continue
             with_findings += 1
@@ -127,11 +130,14 @@ def summarize(changes):
     result = {}
     for name, items in sorted(groups.items()):
         rounds = sum(i["rounds"] for i in items)
+        known = sum(i["rounds_with_findings"] for i in items)
         result[name] = dict(changes=len(items), rounds=rounds,
                             rounds_per_change=round(rounds / len(items), 3),
                             changes_with_2plus_rounds=sum(1 for i in items if i["rounds"] >= 2),
                             findings_changed_code=sum(i["findings_changed_code"] for i in items),
-                            findings_changed_code_per_round=round(sum(i["findings_changed_code"] for i in items) / rounds, 3),
+                            # Rate over rounds whose findings are on record; unknown stays unknown (None), never 0.
+                            findings_changed_code_per_round=round(sum(i["findings_changed_code"] for i in items) / known, 3) if known else None,
+                            rounds_with_findings=known,
                             rounds_without_findings=sum(i["rounds_without_findings"] for i in items))
     return result
 
@@ -142,12 +148,14 @@ def tokens(days):
         data = json.loads(raw)
     except (OSError, ValueError, subprocess.SubprocessError):
         return None
-    roles = {k: v.get("tokens", 0) for k, v in (data.get("by_role") or {}).items()}
+    roles = {k: v.get("tokens") for k, v in (data.get("by_role") or {}).items() if isinstance(v, dict) and isinstance(v.get("tokens"), (int, float))}
     total = sum(roles.values())
-    review = sum(roles.get(r, 0) for r in REVIEW_ROLES)
+    present = [r for r in REVIEW_ROLES if r in roles]
+    review = sum(roles[r] for r in present)
+    # No review role listed at all means unknown, not zero.
     return dict(days=days, measure=data.get("measure"), by_role=roles, closed_beads=data.get("closed_beads"),
-                review_tokens=review, all_role_tokens=total,
-                review_share=round(review / total, 4) if total else None,
+                review_tokens=review if present else None, all_role_tokens=total,
+                review_share=round(review / total, 4) if total and present else None,
                 overhead_not_closed=(data.get("overhead_not_closed") or {}).get("tokens"))
 
 
@@ -160,7 +168,8 @@ def gh_json(args):
 
 def escapes(repos, since, until):
     """Merged PRs in the window followed within 7 days by a revert or a fix touching the same paths."""
-    merged_total = merged_strict = merged_loose = 0
+    merged_total = merged_strict = merged_loose = incomplete = 0
+    today = datetime.date.today()
     detail, unreadable = [], []
     horizon = until + datetime.timedelta(days=7)
     for repo in repos:
@@ -175,6 +184,9 @@ def escapes(repos, since, until):
         for pr in prs:
             merged = datetime.datetime.fromisoformat(pr["mergedAt"].replace("Z", "+00:00"))
             if not since <= merged.date() <= until:
+                continue
+            if merged.date() + datetime.timedelta(days=7) > today:
+                incomplete += 1  # its 7 follow-up days are not over: unknown, not "no escape"
                 continue
             merged_total += 1
             mine = {f["path"] for f in pr.get("files") or []}
@@ -197,7 +209,7 @@ def escapes(repos, since, until):
     if len(unreadable) == len(repos):
         return None
     rate = lambda n: round(n / merged_total, 4) if merged_total else None  # noqa: E731
-    return dict(merged=merged_total, repos_unreadable=unreadable,
+    return dict(merged=merged_total, merged_follow_up_incomplete=incomplete, repos_unreadable=unreadable,
                 escaped=merged_strict, escape_rate=rate(merged_strict),
                 fix_same_path=merged_loose, fix_same_path_rate=rate(merged_loose), examples=detail[:20])
 
@@ -209,7 +221,7 @@ def build(args):
     repos = args.repos or [r for r, _ in collections.Counter(x.get("repo") for x in rows if x.get("repo")).most_common(args.max_repos)]
     return dict(label=args.label, since=args.since.isoformat(), until=args.until.isoformat(),
                 receipts=len(rows), summary=summarize(changes),
-                tokens=tokens((args.until - args.since).days + 1),
+                tokens=(json.loads(args.tokens_from.read_text()).get("tokens") if args.tokens_from else tokens((args.until - args.since).days + 1)),
                 escapes=None if args.no_gh else escapes(repos, args.since, args.until), repos=repos,
                 generated=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"))
 
@@ -236,6 +248,7 @@ def main():
     parser.add_argument("--repos", nargs="*")
     parser.add_argument("--max-repos", type=int, default=8)
     parser.add_argument("--no-gh", action="store_true")
+    parser.add_argument("--tokens-from", type=Path, help="reuse the token share from an earlier report (the token window counts back from the day it runs)")
     parser.add_argument("--compare", nargs=2, type=Path)
     args = parser.parse_args()
     if args.compare:
