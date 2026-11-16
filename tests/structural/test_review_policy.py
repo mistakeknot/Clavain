@@ -342,6 +342,8 @@ def test_report_leaves_out_merges_whose_follow_up_is_not_over(monkeypatch):
     "config/agent-instructions.md", "config/codex-instructions.md", "config/anything.yaml",
     "scripts/clavain_selector/jev_client.py", "scripts/lib-fleet.sh", "scripts/pool-headroom.py",
     "scripts/sync-agent-instructions.py", "units/clavain.service", "docs/operating-contract.md",
+    "common/.local/bin/vizier-autoallow", "common/.local/bin/dotfiles-converge.sh", "tools/bin/run", "etc/sudoers.d/x",
+    "app/.config/tool.yaml", "server/refs/x.py", "deploy/foo.timer",
 ])
 def test_instruction_and_authority_surfaces_keep_full_review(path):
     for proto in (False, True):

@@ -57,6 +57,8 @@ KEEP_RE = re.compile("|".join([
     r"(^|/)(auth|oauth|authn|authz|login|signin|sign-in|session)[^/]*",  # sign-ins
     r"credential", r"secret", r"token", r"keychain", r"\.pem$", r"\.key$",
     r"(^|/)scripts/(lib-|clavain_selector/|clavain-select|authz|capacity|pool|provider|burn|codex-|clodex|bb-|check-instruction|sync-|startup|native-readiness|token|verify-config|gates/)",  # service budgets, approvals, fleet and instruction sync
+    r"(^|/)\.[^/]+/", r"(^|/)bin/", r"(^|/)server/", r"(^|/)systemd/", r"\.(service|timer|socket|plist)$",  # hidden config dirs, executables, services
+    r"sudoers", r"cron", r"(^|/)[^/]*ssh", r"converge", r"allow", r"denylist", r"autoMode",       # permission and host-control writers
     r"jev", r"egress", r"fleet", r"approv", r"entitle", r"selector",
     r"billing", r"payment", r"stripe", r"invoice", r"checkout", r"spend", r"quota", r"budget",
 ]), re.IGNORECASE)
