@@ -23,6 +23,13 @@
 # Per task CLASS, an ordered backend list; first that succeeds wins (free-first).
 # A class is added ONLY after its parity eval passes (executor-parity-eval).
 # Unmapped class -> `default` (safe: paid/stronger).
+# S1 design choice: opt-in observations only; enforce is rejected by decide.
+decision_models:
+  flux_triage: {backend: heuristic, mode: off}
+  route: {backend: heuristic, mode: off}
+  review_exit: {backend: heuristic, mode: off}
+  learned_router: {backend: heuristic, mode: off}
+
 executor_routing:
   mode: enforce            # off | shadow | enforce
   classes:

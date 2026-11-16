@@ -56,3 +56,7 @@ bin/clavain-cli-go
 .clavain/gate.db
 .clavain/setup-verified
 .remote-source
+
+# Local shadow observations and later outcome records
+.clavain/decisions/
+.clavain/decide-*
