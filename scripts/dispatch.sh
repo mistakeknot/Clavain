@@ -3991,8 +3991,14 @@ elif [[ "$ENGINE" == "claude" ]]; then
       PROMPT="${PROMPT//"$PLAN_FILE"/"$POOL_SEAT_DIR/plan.md"}"
     fi
     # Capture command evidence before launch; the restricted seat has no Bash.
-    git -C "${WORKDIR:-.}" diff > "$POOL_SEAT_DIR/diff.txt"
-    git -C "${WORKDIR:-.}" diff --stat > "$POOL_SEAT_DIR/diffstat.txt"
+    if [[ -n "${RR_BASE:-}" && -n "${RR_HEAD:-}" ]]; then
+      # Receipt reviews cover a committed range, not the working tree.
+      git -C "${WORKDIR:-.}" diff "$RR_BASE...$RR_HEAD" > "$POOL_SEAT_DIR/diff.txt"
+      git -C "${WORKDIR:-.}" diff --stat "$RR_BASE...$RR_HEAD" > "$POOL_SEAT_DIR/diffstat.txt"
+    else
+      git -C "${WORKDIR:-.}" diff HEAD > "$POOL_SEAT_DIR/diff.txt"
+      git -C "${WORKDIR:-.}" diff HEAD --stat > "$POOL_SEAT_DIR/diffstat.txt"
+    fi
     git -C "${WORKDIR:-.}" log -10 --oneline > "$POOL_SEAT_DIR/log.txt"
     git -C "${WORKDIR:-.}" ls-files > "$POOL_SEAT_DIR/files.txt"
     PROMPT+=$'\nRestricted review: Read, Glob and Grep only. Caller evidence is staged in '
