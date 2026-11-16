@@ -134,9 +134,11 @@ reasoning:
     trial: review-by-risk
     bead: mk-h9541
     enabled: true
-    first_day: 2026-11-17
-    last_day: 2026-11-30
-    # Routine = every change that is neither skip class nor keep-list.
+    first_day: 2026-11-18
+    last_day: 2026-12-01
+    # Routine = code under a named source directory (src, app, apps, web, ui,
+    # components, pages, public, styles, assets, examples). Allow-list: a path no
+    # safe class names (docs, tests, routine source) keeps full review.
     routine:
       max_rounds: 1
       # A second round runs only when the first found one of these. A failed
@@ -148,7 +150,7 @@ reasoning:
     skip_classes: [text-only, doc-only, test-only, one-shot-prototype]
     # Keep-list: full review, the 3-fix-round + 1-confirm cap, unchanged.
     # A keep-list path wins over every other rule. An unclassifiable change
-    # (no path list) is treated as keep-list.
+    # (no path list) and any path no safe class names are treated as keep-list.
     keep_list: [spend, credentials, sign-ins, payments, save-formats-and-migrations, releases-and-publishes, instruction-files, hooks, ci-workflows]
   profiles:
     # mk ruling 2026-09-27 (mk-h73i): all coordinator seats run Sonnet 5 (Sonnet 5.5, claude-sonnet-5-5, from 2026-09-28: mk-hpwq).

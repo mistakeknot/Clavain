@@ -63,8 +63,18 @@ KEEP_RE = re.compile("|".join([
     r"billing", r"payment", r"stripe", r"invoice", r"checkout", r"spend", r"quota", r"budget",
 ]), re.IGNORECASE)
 
-DOC_RE = re.compile(r"\.(md|mdx|txt|rst|adoc)$|(^|/)docs?/|(^|/)(README|CHANGELOG|LICENSE)[^/]*$", re.IGNORECASE)
-TEST_RE = re.compile(r"(^|/)(tests?|__tests__|spec|e2e)/|\.(test|spec)\.[a-z]+$|(^|/)test_[^/]*\.py$|_test\.(go|py)$", re.IGNORECASE)
+# Allow-list (rework, bead mk-h9541): reduced review is for paths a named safe class names, and
+# only when no keep-list pattern matches either. A path no class names keeps full review, so a
+# surface nobody listed is never reviewed less by accident.
+#   docs: prose under a docs/ directory, or a root README/CHANGELOG/LICENSE
+#   tests: files under a tests directory or named like a test
+#   routine source: code and asset files under a named source directory
+DOC_RE = re.compile(r"(^|/)docs?/.*\.(md|mdx|rst|adoc|txt)$|^(README|CHANGELOG|LICENSE)[^/]*$", re.IGNORECASE)
+TEST_RE = re.compile(r"(^|/)(tests?|__tests__|e2e)/[^/]+(/[^/]+)*\.[a-z0-9]+$|\.(test|spec)\.[a-z]+$|(^|/)test_[^/]*\.py$|_test\.(go|py)$", re.IGNORECASE)
+CODE_EXT = r"(ts|tsx|js|jsx|mjs|css|scss|html|svg|png|jpg|jpeg|gif|webp|py|go|rs|gd|lua|cs|java|kt|swift|c|h|cpp)"
+ROUTINE_RE = re.compile(rf"^(src|app|apps|web|ui|components|pages|public|styles|assets|examples)/(.+/)?[^/]+\.{CODE_EXT}$", re.IGNORECASE)
+# A declared one-shot prototype may also hold web and media assets at any depth outside the keep-list.
+PROTOTYPE_RE = re.compile(r"\.(html|css|js|jsx|ts|tsx|mjs|svg|png|jpg|jpeg|gif|webp|ogg|wav|mp3|glb|gltf)$", re.IGNORECASE)
 
 
 def load_policy(config=None):
@@ -149,7 +159,9 @@ def ambiguous(path):
 
 
 def classify_paths(paths, prototype=False):
-    """Return (class, reason). Classes: keep, routine, text-only, doc-only, test-only, one-shot-prototype."""
+    """Return (class, reason). Classes: keep, routine, text-only, doc-only, test-only, one-shot-prototype.
+
+    A change is reduced only when every path is a named safe path and none is on the keep-list."""
     if not isinstance(paths, (list, tuple)):
         return "keep", "path list is not a list; unclassifiable changes keep full review"
     if any(not isinstance(p, str) for p in paths):
@@ -163,15 +175,22 @@ def classify_paths(paths, prototype=False):
     hit = [p for p in paths if KEEP_RE.search(p)]
     if hit:
         return "keep", f"keep-list path: {hit[0]}"
+    named = lambda p: bool(DOC_RE.search(p) or TEST_RE.search(p) or ROUTINE_RE.search(p))
     if prototype:
-        return "one-shot-prototype", "declared one-shot prototype with no keep-list path"
+        unnamed = [p for p in paths if not (named(p) or PROTOTYPE_RE.search(p))]
+        if unnamed:
+            return "keep", f"path no safe class names: {unnamed[0]}; full review"
+        return "one-shot-prototype", "declared one-shot prototype; every path is a named safe path"
+    unnamed = [p for p in paths if not named(p)]
+    if unnamed:
+        return "keep", f"path no safe class names: {unnamed[0]}; full review"
     if all(DOC_RE.search(p) for p in paths):
         return "doc-only", "every path is documentation"
     if all(TEST_RE.search(p) for p in paths):
         return "test-only", "every path is a test"
     if all(DOC_RE.search(p) or TEST_RE.search(p) for p in paths):
         return "text-only", "only docs and tests changed"
-    return "routine", "code change outside the keep-list"
+    return "routine", "every path is a named safe path (code under a named source directory)"
 
 
 def decide(paths, policy, prototype=False, today=None):
@@ -209,7 +228,9 @@ def main(argv=None):
     d.add_argument("--config")
     args = parser.parse_args(argv)
     policy = load_policy(args.config)
-    print(json.dumps(decide(sys.stdin.read().splitlines(), policy, args.prototype), sort_keys=True))
+    # Split only on "\n": str.splitlines() also splits on VT, FS and other separators a path may hold.
+    raw = sys.stdin.buffer.read().decode("utf-8", "surrogateescape")
+    print(json.dumps(decide(raw.split("\n"), policy, args.prototype), sort_keys=True))
     return 0
 
 

@@ -2,7 +2,7 @@
 """Review-by-risk trial report (bead mk-h9541): baseline and end-of-trial, same definitions.
 
   review-trial-report.py --label baseline --since 2026-11-02 --until 2026-11-15 --out baseline.json
-  review-trial-report.py --label trial    --since 2026-11-17 --until 2026-11-30 --out trial.json
+  review-trial-report.py --label trial    --since 2026-11-18 --until 2026-12-01 --out trial.json
   review-trial-report.py --compare baseline.json trial.json
 
 Four measures, per policy class (skip / one-round / full, from review_policy.py) and overall:
@@ -155,15 +155,28 @@ def tokens(days):
     raw_roles = {k: v.get("tokens") if isinstance(v, dict) else None for k, v in (data.get("by_role") or {}).items()}
     roles = {k: v for k, v in raw_roles.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
     unknown_roles = sorted(k for k in raw_roles if k not in roles)
+    # Runs whose usage agent-cli could not read (runs_no_usage) leave a role's tokens a lower bound.
+    def count(role, key):
+        value = (data.get("by_role") or {}).get(role, {})
+        value = value.get(key) if isinstance(value, dict) else None
+        return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+    no_usage = {r: count(r, "runs_no_usage") for r in raw_roles}
+    runs = {r: count(r, "runs") for r in raw_roles}
+    partial = sorted(r for r, n in no_usage.items() if n is None or n > 0)
     total = sum(roles.values())
     present = [r for r in REVIEW_ROLES if r in roles]
     review = sum(roles[r] for r in present)
-    # No review role listed, or any role with unknown usage, means the share is unknown, not a precise number.
-    complete = bool(present) and not unknown_roles
+    # No review role listed, a role with unknown usage, or any run without usage data means the share is unknown.
+    complete = bool(present) and not unknown_roles and not partial
+    measured = round(review / total, 4) if total and present else None
     return dict(days=days, measure=data.get("measure"), by_role=roles, closed_beads=data.get("closed_beads"),
                 roles_unknown_tokens=unknown_roles,
+                roles_with_runs_no_usage=partial,
+                runs_no_usage=sum(n for n in no_usage.values() if n), runs=sum(n for n in runs.values() if n),
                 review_tokens=review if present else None, all_role_tokens=total,
-                review_share=round(review / total, 4) if total and complete else None,
+                review_share=measured if complete else None,
+                # Over the runs with usage data only: a lower bound, never the trial's headline number.
+                review_share_measured_runs_only=measured,
                 overhead_not_closed=(data.get("overhead_not_closed") or {}).get("tokens"))
 
 

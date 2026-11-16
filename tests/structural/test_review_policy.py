@@ -53,6 +53,40 @@ def test_keep_list_wins_over_every_skip_class(path):
         assert (got["class"], got["action"], got["max_rounds"]) == ("keep", "full", 3)
 
 
+@pytest.mark.parametrize("path", [
+    "scripts/claude_usage.py", "cmd/clavain-cli/review_worker.go", "cmd/clavain-cli/policy.go",
+    "scripts/pre-commit-hook.sh", "scripts/ci-package.sh", "tools/sync-ci-policy.py",
+    "tools/sync-model-service-authorization.py", "cloud/pre-push-public-repo.sh", "cloud/pre-push.sh",
+    "cloud/pre-commit.sh", "cloud/compose-hook.py", "common/.local/bin/vizier-autoallow",
+    "requirements.txt", "package.json", "go.mod", "notes/plan.md", "prompts/system.md", "main.sh",
+])
+def test_allow_list_unnamed_paths_keep_full_review(path):
+    """Only a path a safe class names is reduced; every other path, listed or not, keeps full review."""
+    for kw in ({}, {"prototype": True}):
+        for paths in ([path], ["docs/a.md", path], ["src/app.go", path]):
+            got = act(paths, **kw)
+            assert (got["class"], got["action"], got["max_rounds"]) == ("keep", "full", 3), (paths, kw, got)
+
+
+def test_prototype_allows_web_assets_but_not_scripts():
+    assert act(["index.html", "game.js", "art/ship.png"], prototype=True)["action"] == "skip"
+    assert act(["index.html", "run.sh"], prototype=True)["action"] == "full"
+
+
+def test_cli_splits_only_on_newline(tmp_path):
+    """A path holding VT or FS must reach the classifier whole, not be split into two docs paths."""
+    cfg = tmp_path / "r.yaml"
+    cfg.write_text(yaml.safe_dump({"reasoning": {"review_policy": dict(POLICY, first_day="2000-01-01", last_day="2999-12-31")}}))
+    for sep in ("\x0b", "\x1c", "\x0c", "\r"):
+        out = subprocess.run([sys.executable, "-I", str(ROOT / "scripts/review_policy.py"), "decide", "--config", str(cfg)],
+                             input=f"docs/a.md{sep}docs/b.md\n".encode(), capture_output=True, check=True).stdout
+        got = json.loads(out)
+        assert (got["class"], got["action"]) == ("keep", "full"), sep
+    out = subprocess.run([sys.executable, "-I", str(ROOT / "scripts/review_policy.py"), "decide", "--config", str(cfg)],
+                         input=b"docs/a.md\ndocs/b.md\n", capture_output=True, check=True).stdout
+    assert json.loads(out)["action"] == "skip"
+
+
 def test_skip_and_one_round_actions():
     assert act(["docs/a.md"])["action"] == "skip"
     assert act(["tests/test_a.py"])["action"] == "skip"
@@ -64,7 +98,7 @@ def test_no_paths_is_full_review():
     assert act([])["action"] == "full"
 
 
-@pytest.mark.parametrize("today,live", [("2026-11-16", False), ("2026-11-17", True), ("2026-11-30", True), ("2026-12-01", False)])
+@pytest.mark.parametrize("today,live", [("2026-11-17", False), ("2026-11-18", True), ("2026-12-01", True), ("2026-12-02", False)])
 def test_window_edges(today, live):
     assert act(["src/a.go"], today)["trial_active"] is live
     if not live:
@@ -160,7 +194,7 @@ def test_failure_without_paths_keeps_three(tmp_path, monkeypatch):
 
 def test_outside_window_and_rolled_back_keep_three(tmp_path, monkeypatch):
     rows = [failed("a", CODE, ["P3"]), failed("b", CODE, ["P3"])]
-    assert gate(tmp_path / "w", rows, monkeypatch, today="2026-12-01") == 0
+    assert gate(tmp_path / "w", rows, monkeypatch, today="2026-12-02") == 0
     assert gate(tmp_path / "r", rows, monkeypatch, off=True) == 0
 
 
@@ -248,7 +282,7 @@ def test_missing_keys_are_no_trial():
 
 def test_the_date_comes_only_from_the_clock(monkeypatch):
     monkeypatch.setenv("CLAVAIN_REVIEW_POLICY_TODAY", "2026-11-20")
-    clock(monkeypatch, "2026-12-01")
+    clock(monkeypatch, "2026-12-02")
     assert rp.trial_active(POLICY) is False
     assert rp.decide(["docs/a.md"], POLICY)["action"] == "full"
 
@@ -410,3 +444,17 @@ def test_report_token_share_is_unknown_when_a_role_has_unknown_usage(monkeypatch
     monkeypatch.setattr(rtr.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, json.dumps(data), ""))
     got = rtr.tokens(14)
     assert got["review_share"] is None and got["roles_unknown_tokens"] == ["validation"]
+
+
+def test_report_token_share_is_unknown_when_runs_lack_usage(monkeypatch):
+    rtr = load_report()
+    data = {"by_role": {"cross-lab-review": {"tokens": 10, "runs": 4, "runs_no_usage": 1},
+                        "execution": {"tokens": 90, "runs": 9, "runs_no_usage": 0}}}
+    monkeypatch.setattr(rtr.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, json.dumps(data), ""))
+    got = rtr.tokens(14)
+    assert got["review_share"] is None and got["roles_with_runs_no_usage"] == ["cross-lab-review"]
+    assert got["runs_no_usage"] == 1 and got["review_share_measured_runs_only"] == 0.1
+    data["by_role"]["cross-lab-review"]["runs_no_usage"] = 0
+    assert rtr.tokens(14)["review_share"] == 0.1
+    del data["by_role"]["execution"]["runs_no_usage"]  # a missing count is unknown, not zero
+    assert rtr.tokens(14)["review_share"] is None

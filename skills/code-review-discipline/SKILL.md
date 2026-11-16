@@ -58,11 +58,11 @@ A review loop gets at most three fix rounds. Number the reviews per change, star
 
 ### Review by risk (trial, bead mk-h9541)
 
-From 2026-11-17 through 2026-11-30, `config/routing.yaml` `reasoning.review_policy` lowers the cap for low-risk changes. Ask the helper before requesting a review: `git diff --no-renames --name-only BASE..HEAD | python3 scripts/review_policy.py decide` (add `--prototype` for a declared one-shot prototype). It prints `action`:
+From 2026-11-18 through 2026-12-01, `config/routing.yaml` `reasoning.review_policy` lowers the cap for low-risk changes. Ask the helper before requesting a review: `git diff --no-renames --name-only BASE..HEAD | python3 scripts/review_policy.py decide` (add `--prototype` for a declared one-shot prototype). It prints `action`:
 
-- **skip** (text-only, doc-only, test-only, one-shot prototype): no cross-lab review. The author's check, the tests and CI carry the change.
-- **one-round** (routine reversible code): one review round. A second runs only when round 1 found a high-severity finding (P1 or High; a finding with no severity counts as high). Otherwise fix the findings with their covering tests and land.
-- **full** (the keep-list: spend, credentials, sign-ins, payments, save formats and migrations, releases and publishes, instruction files, hooks, CI workflows, routing policy; also any change with no path list): the three fix rounds and the confirming review below, unchanged.
+- **skip** (text-only, doc-only, test-only, one-shot prototype; every path a named safe path): no cross-lab review. The author's check, the tests and CI carry the change.
+- **one-round** (routine code under a named source directory): one review round. A second runs only when round 1 found a high-severity finding (P1 or High; a finding with no severity counts as high). Otherwise fix the findings with their covering tests and land.
+- **full** (the keep-list: spend, credentials, sign-ins, payments, save formats and migrations, releases and publishes, instruction files, hooks, CI workflows, routing policy; also any change with no path list and any path no safe class names; the helper is an allow-list): the three fix rounds and the confirming review below, unchanged.
 
 `scripts/review-round-limit.py` enforces the one-round and two-round limits for routine changes only. One keep-list round on a bead keeps the whole bead on three. Frontier floors, reviewer independence and the seat tables are untouched, and a review that runs is dispatched as before. Roll back with `enabled: false` in the policy, `CLAVAIN_REVIEW_POLICY=off` for one dispatch, or by reverting the commit. The trial expires on its own after its last day.
 
