@@ -8,13 +8,43 @@ from pathlib import Path
 import sys
 
 from review_round_decision import DecisionRefused, claim
+import review_policy
 
 REVIEW_ROLES = {"cross-lab-review", "plan-review", "validation"}
 
 
+def failure_limit(policy, evidence):
+    """Failed rounds allowed before another review needs a decision.
+
+    3 (the 3 fix rounds + 1 confirm cap) unless the review-by-risk trial is
+    active and every failed round was a routine change: then 1, or 2 once a
+    failed round found a high-severity issue. A failed round with no findings
+    on record counts as high, and a failure with no changed paths keeps 3.
+    """
+    if not review_policy.trial_active(policy) or not evidence:
+        return 3
+    routine = (policy or {}).get("routine") or {}
+    paths = []
+    for seen in evidence.values():
+        if not seen["paths"]:
+            return 3
+        paths.extend(seen["paths"])
+    if review_policy.decide(paths, policy)["action"] != "one-round":
+        return 3
+    high = any(seen["high"] or not seen["findings"] for seen in evidence.values())
+    base = int(routine.get("max_rounds", 1))
+    return min(3, base + 1) if high else base
+
+
 def check(bead, ledger, reviews, head=None, check_only=False):
     failures = set()
+    evidence = {}  # failure key -> {"paths": set, "high": bool}; feeds the review-by-risk trial
     malformed = 0
+    policy = None
+    try:
+        policy = review_policy.load_policy()
+    except Exception:  # an unreadable policy means the full 3-round cap
+        policy = None
 
     def consider(row, source):
         if row.get("schema_version") != 1:
@@ -42,7 +72,18 @@ def check(bead, ledger, reviews, head=None, check_only=False):
             # The PR receipt and run receipt describe the same attempt. Copies
             # also count once; older receipts without IDs use their source path.
             key = (row.get("dispatch_id"), row.get("attempt_id"))
-            failures.add(key if all(key) else (source,))
+            key = key if all(key) else (source,)
+            failures.add(key)
+            seen = evidence.setdefault(key, {"paths": set(), "high": False, "findings": False})
+            paths = row.get("changed_paths")
+            if isinstance(paths, list):
+                seen["paths"].update(p for p in paths if isinstance(p, str))
+            found = row.get("findings")
+            if isinstance(found, list):
+                seen["findings"] = True
+                for item in found:
+                    sev = item.get("severity") if isinstance(item, dict) else None
+                    seen["high"] = seen["high"] or review_policy.is_high(sev, policy or {})
 
     def consume(raw, source):
         nonlocal malformed
@@ -71,23 +112,29 @@ def check(bead, ledger, reviews, head=None, check_only=False):
     if malformed:
         suffix = "s" if malformed != 1 else ""
         print(f"dispatch: skipped {malformed} malformed review history record{suffix}; counted only well-formed receipts", file=sys.stderr)
-    if len(failures) < 3:
+    limit = failure_limit(policy, evidence)
+    if len(failures) < limit:
         return 0
-    try:
-        decision_id = claim(reviews, bead, head, len(failures), check_only=check_only)
-    except DecisionRefused as error:
-        print(f"dispatch: review round decision refused: {error}", file=sys.stderr)
-    else:
-        if check_only:
+    if limit >= 3:
+        try:
+            decision_id = claim(reviews, bead, head, len(failures), check_only=check_only)
+        except DecisionRefused as error:
+            print(f"dispatch: review round decision refused: {error}", file=sys.stderr)
+        else:
+            if check_only:
+                return 0
+            print(f"dispatch: accepting one extra review round for {bead} head {head} decision {decision_id}", file=sys.stderr)
             return 0
-        print(f"dispatch: accepting one extra review round for {bead} head {head} decision {decision_id}", file=sys.stderr)
-        return 0
+    else:
+        print("dispatch: review-by-risk trial limit reached; export CLAVAIN_REVIEW_POLICY=off to run the full cap for this change", file=sys.stderr)
     directory = reviews / "round-limits"
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     summary = directory / f"{bead}.md"
     body = (f"# Review round limit: {bead}\n\n"
             f"{len(failures)} failed review rounds recorded across all heads and review roles.\n"
             "PASS and neutral rounds do not reset this cumulative count.\n"
+            f"The limit for this change is {limit} failed rounds"
+            + (" (review-by-risk trial, routine change)" if limit < 3 else "") + ".\n"
             "Another review round is refused. Choose one option and record the decision on the bead.\n\n"
             "1. Park the bead.\n"
             "2. Redesign on a frontier seat.\n"
