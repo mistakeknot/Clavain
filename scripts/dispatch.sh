@@ -3882,8 +3882,8 @@ AGENT
 elif [[ "$ENGINE" == "claude" ]]; then
   pool_exec_status=0
   _bb_claude_pool_exec_available || pool_exec_status=$?
-  if [[ "$pool_exec_status" == 2 ]]; then
-    echo 'Error: BB host lacks restricted pooled Claude support; no local login fallback' >&2
+  if [[ "$pool_exec_status" == 2 || "$pool_exec_status" == 3 ]]; then
+    echo 'Error: restricted pooled Claude is unavailable (host lacks support or enrollment is unverified); no local login fallback' >&2
     _dispatch_write_failure_class terminal_configuration
     exit 1
   fi
@@ -3984,6 +3984,8 @@ elif [[ "$ENGINE" == "claude" ]]; then
       exit 1
     fi
     # The host accepts only a direct child of its validated caller cwd.
+    # Cover early exits (the full EXIT trap is installed later and also cleans).
+    trap '[[ -z "${POOL_SEAT_DIR:-}" ]] || rm -rf -- "$POOL_SEAT_DIR"; [[ -z "${PROMPT_STDIN_FILE:-}" ]] || rm -f -- "$PROMPT_STDIN_FILE"' EXIT
     POOL_SEAT_DIR=$(mktemp -d "${WORKDIR:-.}/.dispatch-pool.XXXXXX")
     POOL_SEAT_DIR=$(cd "$POOL_SEAT_DIR" && pwd)
     if [[ -n "$PLAN_FILE" ]]; then

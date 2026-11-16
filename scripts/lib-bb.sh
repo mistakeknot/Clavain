@@ -43,7 +43,9 @@ _bb_claude_pool_exec_available() {
   _bb_pool_route_without_token claude || return 1
   command -v "${BB_CLI:-bb}" >/dev/null 2>&1 || return 1
   "${BB_CLI:-bb}" pool exec --help >/dev/null 2>&1 || return 2
-  _clavain_in_bb
+  # The pool route is already configured: an unverifiable enrollment must stop
+  # the run (status 3), never fall through to a local login.
+  _clavain_in_bb || return 3
 }
 
 _bb_native_pooled() {

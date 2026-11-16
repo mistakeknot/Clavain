@@ -77,6 +77,7 @@ if [ "$1 $2" = "pool exec" ] && [ "${FAKE_POOL_EXEC:-}" = 1 ]; then
 elif [ "$1 $2 $3" = "pool exec --help" ]; then
   exit 0
 elif [ "$1 $2" = "status --json" ]; then
+  [ -z "${FAKE_STATUS_FAIL:-}" ] || exit 1
   echo '{"thread":{"id":"thr_fixture","environment":{"hostId":"host_pda34naxgq"}}}'
 else
   exit 1
@@ -350,4 +351,19 @@ PYTEST
     [ "$(cat "$T/failure")" = terminal_configuration ]
     [ ! -e "$T/seen.log" ]
     grep -q 'updated host support is required' "$T/err"
+}
+
+@test "claude: unverifiable enrollment is terminal and never falls back to a local login" {
+    export ANTHROPIC_BASE_URL="$ROUTE" ANTHROPIC_AUTH_TOKEN= FAKE_POOL_EXEC=1 FAKE_STATUS_FAIL=1
+    run_claude
+    [ "$status" -ne 0 ]
+    [ "$(cat "$T/failure")" = terminal_configuration ]
+    [ ! -e "$T/seen.log" ]
+}
+
+@test "claude: pooled dry run leaves no staged review files" {
+    export ANTHROPIC_BASE_URL="$ROUTE" ANTHROPIC_AUTH_TOKEN= FAKE_POOL_EXEC=1
+    ERRF="$T/err" run bash -c 'exec bash "$@" 2> "$ERRF"' _ "$DISPATCH" --to claude --model m --dry-run -C "$T/repo" -o "$T/out.md" 'hello'
+    [ "$status" -eq 0 ]
+    [ -z "$(find "$T/repo" -maxdepth 1 -name '.dispatch-*')" ]
 }
