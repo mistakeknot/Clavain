@@ -8,7 +8,7 @@ which seat reviews, the frontier floors or reviewer independence.
 The window is in Pacific time (America/Los_Angeles). Outside the trial window, or with enabled: false, or CLAVAIN_REVIEW_POLICY=off,
 every change is `full` and the 3-fix-round + 1-confirm cap applies as before.
 
-  review_policy.py decide [--prototype] [--config FILE] [--today YYYY-MM-DD] < paths
+  review_policy.py decide [--prototype] [--config FILE] < paths
       prints JSON: {"class", "action", "max_rounds", "trial_active", "reason"}
       action: full | one-round | skip
 """
@@ -43,7 +43,9 @@ KEEP_RE = re.compile("|".join([
     r"(^|/)(install|release|publish|deploy|bump|sign)[^/]*\.(sh|py|ts|js|ya?ml)$",
     r"(^|/)(scripts|bin)/[^/]*(release|publish|install|deploy|sign)[^/]*$",
     r"(^|/)plugin\.json$", r"(^|/)marketplace[^/]*\.json$",         # releases and publishes
-    r"(^|/)config/routing[^/]*\.ya?ml$", r"(^|/)review[-_]policy",   # routing and this policy
+    r"(^|/)config/", r"(^|/)units/", r"(^|/)schemas?/",             # configuration, units and schemas
+    r"(^|/)review[-_]policy",                                       # this policy
+    r"instruction", r"contract",                                    # managed operating contract and instruction text
     r"(^|/)docs/canon/",                                            # canon: routing and reasoning rules
     r"(^|/)policies/",                                              # fleet instruction and approval files
     r"(^|/)[^/]*(standing[-_]approvals?|approvals?[-_](index|root|archive)|instruction[-_]files?)[^/]*$",
@@ -54,6 +56,8 @@ KEEP_RE = re.compile("|".join([
     r"(^|/)saves?(/|[-_.])", r"save[-_]?(format|schema|game|data|file)", r"serializ",
     r"(^|/)(auth|oauth|authn|authz|login|signin|sign-in|session)[^/]*",  # sign-ins
     r"credential", r"secret", r"token", r"keychain", r"\.pem$", r"\.key$",
+    r"(^|/)scripts/(lib-|clavain_selector/|clavain-select|authz|capacity|pool|provider|burn|codex-|clodex|bb-|check-instruction|sync-|startup|native-readiness|token|verify-config|gates/)",  # service budgets, approvals, fleet and instruction sync
+    r"jev", r"egress", r"fleet", r"approv", r"entitle", r"selector",
     r"billing", r"payment", r"stripe", r"invoice", r"checkout", r"spend", r"quota", r"budget",
 ]), re.IGNORECASE)
 
@@ -77,6 +81,8 @@ def _day(value):
 
 
 SKIP_CLASSES = {"text-only", "doc-only", "test-only", "one-shot-prototype"}
+KEEP_CATEGORIES = {"spend", "credentials", "sign-ins", "payments", "save-formats-and-migrations",
+                   "releases-and-publishes", "instruction-files", "hooks", "ci-workflows"}
 
 
 def valid_policy(policy):
@@ -96,7 +102,17 @@ def valid_policy(policy):
     if not isinstance(skips, list) or not skips or not set(skips) <= SKIP_CLASSES:
         return False
     keep = policy.get("keep_list")
-    return isinstance(keep, list) and bool(keep)
+    if not isinstance(keep, list) or not all(isinstance(x, str) for x in keep) or set(keep) != KEEP_CATEGORIES or len(keep) != len(KEEP_CATEGORIES):
+        return False  # every keep-list category must be named, nothing else
+    if policy.get("enabled") not in (True, False):
+        return False
+    for key in ("trial", "bead"):
+        if not isinstance(policy.get(key), str) or not policy[key].strip():
+            return False
+    for key in ("first_day", "last_day"):
+        if key not in policy:
+            return False
+    return True
 
 
 def today_pacific():
@@ -127,12 +143,16 @@ def ambiguous(path):
     """A path git would never print for a plain file: do not guess, keep full review."""
     return ("\\" in path or path.startswith("/") or "\x00" in path or path.startswith('"')
             or any(part in ("", ".", "..") for part in path.split("/"))
-            or any(ord(c) < 32 for c in path))
+            or any(ord(c) < 32 or ord(c) == 127 for c in path) or path != path.strip())
 
 
 def classify_paths(paths, prototype=False):
     """Return (class, reason). Classes: keep, routine, text-only, doc-only, test-only, one-shot-prototype."""
-    paths = [p.strip() for p in paths if p and p.strip()]
+    if not isinstance(paths, (list, tuple)):
+        return "keep", "path list is not a list; unclassifiable changes keep full review"
+    if any(not isinstance(p, str) for p in paths):
+        return "keep", "non-string path entry; unclassifiable changes keep full review"
+    paths = [p for p in paths if p != ""]
     if not paths:
         return "keep", "no changed paths on record; unclassifiable changes keep full review"
     odd = [p for p in paths if ambiguous(p)]
@@ -185,11 +205,9 @@ def main(argv=None):
     d = sub.add_parser("decide")
     d.add_argument("--prototype", action="store_true", help="declare a one-shot prototype")
     d.add_argument("--config")
-    d.add_argument("--today")
     args = parser.parse_args(argv)
     policy = load_policy(args.config)
-    today = _day(args.today) if args.today else None
-    print(json.dumps(decide(sys.stdin.read().splitlines(), policy, args.prototype, today), sort_keys=True))
+    print(json.dumps(decide(sys.stdin.read().splitlines(), policy, args.prototype), sort_keys=True))
     return 0
 
 

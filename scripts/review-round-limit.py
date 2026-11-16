@@ -84,9 +84,16 @@ def check(bead, ledger, reviews, head=None, check_only=False):
             failures.add(key)
         paths = row.get("changed_paths")
         if isinstance(paths, list):
-            seen["paths"].update(p for p in paths if isinstance(p, str))
+            if all(isinstance(p, str) for p in paths):
+                seen["paths"].update(paths)
+            else:
+                seen["truncated"] = True  # a malformed entry is unknown evidence: full cap
+        elif paths is not None:
+            seen["truncated"] = True
         if row.get("changed_paths_truncated"):
             seen["truncated"] = True
+        if row.get("findings_truncated"):
+            seen["high"] = True  # omitted findings have unknown severity: count as high
         found = row.get("findings")
         # findings: [] with findings_source "unknown" means the verdict was not parsed into findings.
         if isinstance(found, list) and found and row.get("findings_source") != "unknown":

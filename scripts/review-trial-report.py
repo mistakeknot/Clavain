@@ -107,16 +107,19 @@ def per_change(rows, policy):
         if not paths:
             klass = "no-paths"
         heads = [r.get("head_sha") for r in ordered]
-        changed = with_findings = without = 0
+        changed = with_findings = without = unknown_heads = 0
         for n, row in enumerate(ordered):
             found = row.get("findings")
             if not isinstance(found, list) or not found or row.get("findings_source") == "unknown":
                 without += 1
                 continue
             with_findings += 1
-            if any(h != heads[n] for h in heads[n + 1:]):
+            later = heads[n + 1:]
+            if heads[n] is None or any(h is None for h in later):
+                unknown_heads += 1  # missing head evidence cannot show that the author pushed
+            elif any(h != heads[n] for h in later):
                 changed += sum(1 for f in found if actionable(f))
-        out[key] = dict(rounds=len(ordered), klass=klass, findings_changed_code=changed,
+        out[key] = dict(rounds=len(ordered), klass=klass, findings_changed_code=changed, rounds_unknown_heads=unknown_heads,
                         rounds_with_findings=with_findings, rounds_without_findings=without,
                         failed_rounds=sum(1 for r in ordered if r.get("verdict") in ("BLOCK", "FAIL")))
     return out
@@ -130,14 +133,15 @@ def summarize(changes):
     result = {}
     for name, items in sorted(groups.items()):
         rounds = sum(i["rounds"] for i in items)
-        known = sum(i["rounds_with_findings"] for i in items)
+        unknown_heads = sum(i["rounds_unknown_heads"] for i in items)
+        known = sum(i["rounds_with_findings"] for i in items) - unknown_heads
         result[name] = dict(changes=len(items), rounds=rounds,
                             rounds_per_change=round(rounds / len(items), 3),
                             changes_with_2plus_rounds=sum(1 for i in items if i["rounds"] >= 2),
                             findings_changed_code=sum(i["findings_changed_code"] for i in items),
                             # Rate over rounds whose findings are on record; unknown stays unknown (None), never 0.
                             findings_changed_code_per_round=round(sum(i["findings_changed_code"] for i in items) / known, 3) if known else None,
-                            rounds_with_findings=known,
+                            rounds_with_findings=known, rounds_unknown_heads=unknown_heads,
                             rounds_without_findings=sum(i["rounds_without_findings"] for i in items))
     return result
 
@@ -148,14 +152,18 @@ def tokens(days):
         data = json.loads(raw)
     except (OSError, ValueError, subprocess.SubprocessError):
         return None
-    roles = {k: v.get("tokens") for k, v in (data.get("by_role") or {}).items() if isinstance(v, dict) and isinstance(v.get("tokens"), (int, float))}
+    raw_roles = {k: v.get("tokens") if isinstance(v, dict) else None for k, v in (data.get("by_role") or {}).items()}
+    roles = {k: v for k, v in raw_roles.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
+    unknown_roles = sorted(k for k in raw_roles if k not in roles)
     total = sum(roles.values())
     present = [r for r in REVIEW_ROLES if r in roles]
     review = sum(roles[r] for r in present)
-    # No review role listed at all means unknown, not zero.
+    # No review role listed, or any role with unknown usage, means the share is unknown, not a precise number.
+    complete = bool(present) and not unknown_roles
     return dict(days=days, measure=data.get("measure"), by_role=roles, closed_beads=data.get("closed_beads"),
+                roles_unknown_tokens=unknown_roles,
                 review_tokens=review if present else None, all_role_tokens=total,
-                review_share=round(review / total, 4) if total and present else None,
+                review_share=round(review / total, 4) if total and complete else None,
                 overhead_not_closed=(data.get("overhead_not_closed") or {}).get("tokens"))
 
 

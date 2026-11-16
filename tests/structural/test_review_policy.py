@@ -334,3 +334,77 @@ def test_report_leaves_out_merges_whose_follow_up_is_not_over(monkeypatch):
     monkeypatch.setattr(rtr, "gh_json", lambda args: prs)
     got = rtr.escapes(["o/r"], today - datetime.timedelta(days=40), today)
     assert got["merged"] == 1 and got["merged_follow_up_incomplete"] == 1
+
+
+# ---- round 2 of the cross-lab review (bead mk-h9541) ----
+
+@pytest.mark.parametrize("path", [
+    "config/agent-instructions.md", "config/codex-instructions.md", "config/anything.yaml",
+    "scripts/clavain_selector/jev_client.py", "scripts/lib-fleet.sh", "scripts/pool-headroom.py",
+    "scripts/sync-agent-instructions.py", "units/clavain.service", "docs/operating-contract.md",
+])
+def test_instruction_and_authority_surfaces_keep_full_review(path):
+    for proto in (False, True):
+        assert act([path], prototype=proto)["action"] == "full", path
+
+
+def test_decide_cli_has_no_date_override():
+    out = subprocess.run([sys.executable, str(ROOT / "scripts/review_policy.py"), "decide", "--today", "2026-11-20"],
+                         input="docs/a.md\n", capture_output=True, text=True)
+    assert out.returncode != 0 and "unrecognized arguments" in out.stderr
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda p: p.update(keep_list=[None]),
+    lambda p: p.update(keep_list=["unrelated"]),
+    lambda p: p.update(keep_list=[["spend"]]),
+    lambda p: p.update(keep_list=POLICY["keep_list"][:-1]),
+    lambda p: p.pop("trial"),
+    lambda p: p.pop("bead"),
+    lambda p: p.pop("enabled"),
+    lambda p: p.pop("first_day"),
+])
+def test_invalid_policy_block_is_not_an_active_trial(mutate):
+    bad = json.loads(json.dumps(POLICY, default=str))
+    mutate(bad)
+    assert act(["docs/a.md"], policy=bad)["action"] == "full"
+
+
+@pytest.mark.parametrize("paths", [
+    ["docs/a.md\t"], ["docs/a.md\n"], [" docs/a.md"], ["docs/a\x7f.md"], ["docs/a.md", None], ["docs/a.md", 3],
+])
+def test_raw_path_evidence_is_validated_before_cleanup(paths):
+    assert act(paths)["action"] == "full"
+
+
+def test_round_gate_treats_a_malformed_path_entry_as_unknown(tmp_path, monkeypatch):
+    row = failed("a", CODE, ["P3"])
+    row["changed_paths"] = ["src/a.go", None]
+    assert gate(tmp_path, [row], monkeypatch) == 0
+
+
+def test_round_gate_counts_truncated_findings_as_high(tmp_path, monkeypatch):
+    row = failed("a", CODE, ["P3"] * 3)
+    row["findings_truncated"] = True
+    assert gate(tmp_path, [row], monkeypatch) == 0
+
+
+def test_report_missing_head_is_not_a_code_change():
+    rtr = load_report()
+    def row(attempt, head):
+        return dict(kind="cross-lab-review-receipt", repo="o/r", pr="1", dispatch_id="d" + attempt, attempt_id=attempt,
+                    head_sha=head, created_at="2026-11-20T0%s:00:00Z" % attempt, findings_source="parsed",
+                    findings=[{"severity": "P1"}], changed_paths=["src/a.go"], verdict="BLOCK")
+    out = rtr.summarize(rtr.per_change([row("1", None), row("2", "h2")], POLICY))["all"]
+    assert out["findings_changed_code"] == 0 and out["rounds_with_findings"] == 1
+    assert out["rounds_unknown_heads"] == 1
+    out = rtr.summarize(rtr.per_change([row("1", "h1"), row("2", "h2")], POLICY))["all"]
+    assert out["findings_changed_code"] == 1
+
+
+def test_report_token_share_is_unknown_when_a_role_has_unknown_usage(monkeypatch):
+    rtr = load_report()
+    data = {"by_role": {"cross-lab-review": {"tokens": 10}, "execution": {"tokens": 90}, "validation": {"tokens": None}}}
+    monkeypatch.setattr(rtr.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, json.dumps(data), ""))
+    got = rtr.tokens(14)
+    assert got["review_share"] is None and got["roles_unknown_tokens"] == ["validation"]
