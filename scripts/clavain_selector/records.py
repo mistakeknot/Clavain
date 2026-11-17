@@ -36,6 +36,7 @@ from clavain_selector.contract import MAX_CANDIDATES, Candidate, Point, Provenan
 
 SCHEMA = "clavain.selector.decision"
 SCHEMA_VERSION = 1
+PROJECT_LOG_MAX_BYTES = 8 * 1024 * 1024
 
 _VALID_APPLIED = ("native", "emitted")
 _SUMMARY_MAX_CHARS = 96
@@ -355,6 +356,8 @@ def append_record(record: Mapping[str, Any], *, record_dir: str | Path | None = 
                   project_root: str | Path | None = None,
                   max_bytes: int | None = None) -> Path:
     """Append one decision record as a JSONL line; returns the file written."""
+    if max_bytes is not None and project_root is None:
+        raise ValueError('max_bytes requires project_root')
     resolved_dir = _resolve_record_dir(record_dir)
     created_at = record.get("created_at")
     when = _parse_iso(created_at) if created_at else dt.datetime.now(dt.timezone.utc)
@@ -419,13 +422,18 @@ def append_outcome(
         "note": _truncate(note, 200) if note else None,
     }
     path = _outcomes_dir(resolved_dir) / _day_filename(when)
-    # Walk from the filesystem root with pinned descriptors, refusing links
-    # in every component, including .clavain and the sibling outcomes directory.
+    # Trust ancestors above .clavain (or the configured record parent),
+    # resolving that anchor once; pin and refuse links below it.
     descriptors = []
     try:
         absolute = path.absolute()
-        descriptors.append(os.open(absolute.anchor, os.O_RDONLY | os.O_DIRECTORY))
-        for component in absolute.parent.parts[1:]:
+        parent = absolute.parent
+        anchor = parent.parent.parent if parent.parent.name == '.clavain' else parent.parent
+        anchor = anchor.resolve()
+        anchor.mkdir(parents=True, exist_ok=True, mode=0o700)
+        descriptors.append(os.open(anchor, os.O_RDONLY | os.O_DIRECTORY))
+        components = ('.clavain', 'outcomes') if parent.parent.name == '.clavain' else ('outcomes',)
+        for component in components:
             try:
                 os.mkdir(component, mode=0o700, dir_fd=descriptors[-1])
             except FileExistsError:

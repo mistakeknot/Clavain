@@ -61,12 +61,12 @@ def observe(root, project, loop, native, findings, claude_tokens):
         estimated_claude_tokens_saved=0)
     prior = [r for r in records.read_records(record_dir=directory)
              if r.get('schema') == observation['schema'] and r.get('loop_hash') == loop_hash]
-    records.append_record(observation, record_dir=directory, project_root=project)
+    records.append_record(observation, record_dir=directory, project_root=project, max_bytes=records.PROJECT_LOG_MAX_BYTES)
     for index, previous in enumerate(prior):
         records.append_record(dict(schema='review-exit-outcome-v1',
             decision_id=previous['decision_id'], through_observation=observation['observation_id'],
             loop_hash=loop_hash, **outcome(prior[index + 1:] + [observation])),
-            record_dir=directory, project_root=project)
+            record_dir=directory, project_root=project, max_bytes=records.PROJECT_LOG_MAX_BYTES)
 
 
 def main():

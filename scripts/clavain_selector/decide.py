@@ -19,7 +19,7 @@ from clavain_selector import contract, credentials, egress, flags, jev_client as
 from clavain_selector.accounting import AttemptLog, digest, stamp
 
 
-SHADOW_LOG_MAX_BYTES = 8 * 1024 * 1024
+SHADOW_LOG_MAX_BYTES = records.PROJECT_LOG_MAX_BYTES
 
 
 def band(confidence):
@@ -168,21 +168,24 @@ def _jev(request, obj, policy, result, log):
         result['reason'] = 'circuit_open'
         return
     try:
-        key = credentials.load()
-    except credentials.CredentialUnavailable:
-        result['reason'] = 'credential_unavailable'
-        return
-    admitted = egress.admit(request, key_literal=key.reveal(), high_entropy=True)
-    if isinstance(admitted, egress.Refusal):
-        result['reason'] = 'egress_refused'
-        return
-    call = j.JevCall.build(admitted, fit_questions=False,
-                          deadline=j.Deadline.start(int(policy.get('deadline_ms', 1500))))
-    if budget.consume() is not None:
-        result['reason'] = 'budget_exhausted'
-        return
-    response = j.JevClient(key).call(call, log=log)
-    breaker.record(response)
+        try:
+            key = credentials.load()
+        except credentials.CredentialUnavailable:
+            result['reason'] = 'credential_unavailable'
+            return
+        admitted = egress.admit(request, key_literal=key.reveal(), high_entropy=True)
+        if isinstance(admitted, egress.Refusal):
+            result['reason'] = 'egress_refused'
+            return
+        call = j.JevCall.build(admitted, fit_questions=False,
+                              deadline=j.Deadline.start(int(policy.get('deadline_ms', 1500))))
+        if budget.consume() is not None:
+            result['reason'] = 'budget_exhausted'
+            return
+        response = j.JevClient(key).call(call, log=log)
+        breaker.record(response)
+    finally:
+        breaker.release_probe()
     if isinstance(response, j.JevFailure):
         result['reason'] = response.reason.value
         return

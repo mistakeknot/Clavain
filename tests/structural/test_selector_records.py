@@ -392,3 +392,18 @@ def test_project_log_cap_spans_day_files(tmp_path):
         append_record(second, record_dir=directory, project_root=tmp_path, max_bytes=size)
     assert read_records(record_dir=directory) == [first]
     assert sum(p.stat().st_size for p in directory.glob('*.jsonl')) == size
+
+
+def test_outcome_allows_symlink_above_trusted_project(tmp_path):
+    real = tmp_path / 'real'
+    real.mkdir()
+    alias = tmp_path / 'alias'
+    alias.symlink_to(real, target_is_directory=True)
+    path = append_outcome('synthetic', 'verified', record_dir=alias / '.clavain/decisions')
+    assert path.exists()
+    assert json.loads(path.read_text())['decision_id'] == 'synthetic'
+
+
+def test_cap_requires_project_root(tmp_path):
+    with pytest.raises(ValueError):
+        append_record({}, record_dir=tmp_path, max_bytes=1)

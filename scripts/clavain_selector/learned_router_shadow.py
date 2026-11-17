@@ -87,7 +87,7 @@ def observe(root, policy, project, event):
     previous = signal.signal(signal.SIGALRM, expired)
     signal.setitimer(signal.ITIMER_REAL, max(.001, min(1, 6 - (time.monotonic() - started))))
     try:
-        records.append_record(row, record_dir=Path(project).resolve() / '.clavain/decisions', project_root=project)
+        records.append_record(row, record_dir=Path(project).resolve() / '.clavain/decisions', project_root=project, max_bytes=records.PROJECT_LOG_MAX_BYTES)
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, previous)

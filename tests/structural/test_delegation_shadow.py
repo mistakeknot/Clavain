@@ -499,3 +499,13 @@ def test_doc_states_method_paths_join_and_log_reading():
                    'jq', 'egress', 'CLAVAIN_SELECTOR=off'):
         assert needle in doc, needle
     assert 'delegation-shadow.md' in (ROOT / 'docs/reference/decide.md').read_text()
+
+
+def test_companion_obeys_project_log_cap(env, monkeypatch):
+    from clavain_selector import records
+    monkeypatch.setattr(records, 'PROJECT_LOG_MAX_BYTES', 1)
+    result = run(env)
+    assert result['native_choice'] == 'plan'
+    assert result['reason'] == 'record_unwritable'
+    rows = env.records()
+    assert len(rows) == 1 and rows[0]['schema'] == 'clavain-decide-v1'
