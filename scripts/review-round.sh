@@ -273,7 +273,16 @@ echo "$OUT/receipt.md"
 # base refs change between rounds.
 shadow_native=continue
 if [ "$RC" -eq 0 ] && tail -1 "$OUT/receipt.md" | grep -qx 'VERDICT: PASS'; then shadow_native=exit; fi
-( python3 "$HERE/review_exit_shadow.py" --project "$SRC_REPO" \
-    --loop "${REVIEW_EXIT_LOOP_ID:-${CLAVAIN_BEAD_ID:-$SRC_REPO}:$BASE}" \
-    --native "$shadow_native" --panel "$OUT" </dev/null >/dev/null 2>&1 & ) || true
+shadow_loop="${REVIEW_EXIT_LOOP_ID:-${CLAVAIN_BEAD_ID:-}}"
+if [ -z "$shadow_loop" ]; then
+  shadow_branch=$(git -C "$SRC_REPO" symbolic-ref -q --short HEAD 2>/dev/null) || shadow_branch=""
+  [ -z "$shadow_branch" ] || shadow_loop="$SRC_REPO:$shadow_branch:$BASE"
+fi
+# Detached source checkouts need an explicit change ID; a base alone cannot
+# distinguish unrelated changes. Branch IDs must not be reused across changes.
+if [ -n "$shadow_loop" ]; then
+  ( python3 "$HERE/review_exit_shadow.py" --project "$SRC_REPO" \
+      --loop "$shadow_loop" --native "$shadow_native" --panel "$OUT" \
+      </dev/null >/dev/null 2>&1 & ) || true
+fi
 exit "$RC"

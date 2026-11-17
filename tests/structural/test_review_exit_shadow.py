@@ -22,6 +22,10 @@ def test_later_rounds_and_unknown_usage():
     assert outcome([])['could_exit'] is None
     assert outcome([dict(findings=1, claude_tokens=2),
                     dict(findings=None, claude_tokens=None)])['could_exit'] is False
+    for findings in [1, None]:
+        result = outcome([dict(findings=0, claude_tokens=100),
+                          dict(findings=findings, claude_tokens=50)])
+        assert result['estimated_claude_tokens_saved'] == 0
 
 
 def test_off_is_inert(tmp_path):
@@ -102,14 +106,72 @@ def main_runner(tmp_path, monkeypatch):
 @pytest.mark.parametrize('count,expected', [(0, 0), (2, 2), ('0', None),
     (True, None), (-1, None), (None, None), ([], None)])
 def test_main_only_counts_explicit_current_run_files(main_runner, tmp_path, count, expected):
-    run, _, _ = main_runner
-    stale = tmp_path / 'stale.json'
+    run, _, project = main_runner
+    verdict_dir = project / '.clavain/verdicts'
+    verdict_dir.mkdir(parents=True)
+    stale = verdict_dir / 'stale.json'
     stale.write_text(json.dumps(dict(findings_count=99)))
-    current = tmp_path / 'current.json'
+    current = verdict_dir / 'current.json'
     current.write_text(json.dumps(dict(findings_count=count)))
     row = run('--verdict-file', current)[0]
     assert row['findings'] == expected
     assert row['claude_tokens'] == (len(current.read_bytes()) + 3) // 4
+
+
+@pytest.mark.parametrize('bad_content', [None, '{', '[]', 'null'])
+def test_main_bad_file_retains_unknown_observation(main_runner, tmp_path, bad_content):
+    run, _, _ = main_runner
+    current = tmp_path / 'current.json'
+    current.write_text('{"findings_count": 0}')
+    bad = tmp_path / 'bad.json'
+    if bad_content is not None:
+        bad.write_text(bad_content)
+    row = run('--verdict-file', current, '--verdict-file', bad)[0]
+    assert row['findings'] is None
+    if bad_content is None:
+        assert row['claude_tokens'] is None
+
+
+def test_main_missing_panel_retains_observation(main_runner, tmp_path):
+    run, _, _ = main_runner
+    assert run('--panel', tmp_path / 'gone')[0]['findings'] is None
+
+
+@pytest.mark.parametrize('grounded,bead,enforce_rc,advance_rc,expected', [
+    ('', 'bead', 0, 0, 'continue'), ('tests', 'bead', 1, 0, 'continue'),
+    ('tests', 'bead', 0, 1, 'continue'), ('tests', 'bead', 0, 0, 'exit'),
+    ('tests', '', 0, 0, 'continue')])
+def test_gate_native_comes_from_completed_gate(tmp_path, grounded, bead, enforce_rc, advance_rc, expected):
+    """Execute the command's actual native gate fence, then its callback fence."""
+    root = Path(__file__).resolve().parents[2]
+    text = (root / 'commands/quality-gates.md').read_text().split('### 3b:', 1)[1].split('## Phase 4:', 1)[0]
+    fences = [block.split('```', 1)[0] for block in text.split('```bash\n')[1:]]
+    native_index = next(i for i, block in enumerate(fences) if 'enforce-gate' in block)
+    callback_index = next(i for i, block in enumerate(fences) if 'review_exit_shadow.py' in block)
+    assert callback_index > native_index
+    native = fences[native_index]
+    callback = fences[callback_index]
+    script = '''
+clavain-cli() {
+  case "$1" in
+    enforce-gate) return "$TEST_ENFORCE_RC";;
+    advance-phase) return "$TEST_ADVANCE_RC";;
+    *) return 0;;
+  esac
+}
+python3() { printf '%s\\n' "$@" > "$CALLBACK_ARGS"; }
+'''
+    script += native + '\n' + callback + '\nwait\n'
+    env = dict(os.environ, GROUNDED=grounded, BEAD_ID=bead, OUTPUT_DIR=str(tmp_path),
+               TEST_ENFORCE_RC=str(enforce_rc), TEST_ADVANCE_RC=str(advance_rc),
+               CLAUDE_PLUGIN_ROOT=str(root), REVIEW_EXIT_LOOP_ID='change',
+               REVIEW_EXIT_NATIVE='exit', CALLBACK_ARGS=str(tmp_path / 'args'))
+    proc = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True, timeout=5)
+    deadline = time.monotonic() + 2
+    while not (tmp_path / 'args').exists() and time.monotonic() < deadline:
+        time.sleep(.01)
+    args = (tmp_path / 'args').read_text().splitlines()
+    assert args[args.index('--native') + 1] == expected, proc.stderr
 
 
 def test_main_empty_manifest_is_unknown(main_runner):
@@ -194,7 +256,9 @@ def test_real_round_keeps_exit_and_persists_in_source(tmp_path, dispatch_rc, exp
     for key in ['CLAVAIN_BEAD_ID', 'REVIEW_EXIT_LOOP_ID', 'CLAVAIN_SELECTOR']:
         env.pop(key, None)
     from clavain_selector.records import read_records
-    for number in [1, 2]:
+    for number in [1, 2, 3]:
+        if number == 3:
+            git('checkout', '-qb', 'other-change')
         out = tmp_path / f'round-{number}'
         proc = subprocess.run(['bash', str(plugin / 'scripts/review-round.sh'),
             '--repo', str(source), '--base', 'main', '--head', head,
@@ -212,5 +276,10 @@ def test_real_round_keeps_exit_and_persists_in_source(tmp_path, dispatch_rc, exp
                 break
             time.sleep(.02)
         assert len(observations) == number
-        assert observations[-1]['loop_hash'] == hashlib.sha256(f'{source}:main'.encode()).hexdigest()
+        branch = 'other-change' if number == 3 else 'main'
+        assert observations[-1]['loop_hash'] == hashlib.sha256(f'{source}:{branch}:main'.encode()).hexdigest()
+        if number == 3:
+            assert observations[-1]['loop_hash'] != observations[0]['loop_hash']
+            assert not any(r.get('schema') == 'review-exit-outcome-v1' and
+                           r.get('through_observation') == observations[-1]['observation_id'] for r in rows)
         assert observations[-1]['shadow_exit'] is (expected_rc == 0)

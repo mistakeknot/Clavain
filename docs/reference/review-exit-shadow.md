@@ -8,17 +8,23 @@ The CLI subprocess has a six-second timeout. Egress is always false; tests
 use the heuristic. Hosted registry settings and budgets are unchanged.
 
 Set `REVIEW_EXIT_LOOP_ID` to one stable identifier for a change across heads
-and rounds. Round runner defaults to bead-or-repository plus base; override
-when bases change or multiple changes share that default. Quality gates
+and rounds. Round runner uses an explicit loop ID, then a bead ID, then
+source repository plus source branch plus base. Override when bases change
+or a branch is reused for another change. Detached source checkouts without
+an explicit loop or bead ID skip observation. Quality gates
 requires a loop ID or bead, and the native decision in `REVIEW_EXIT_NATIVE`.
 The round runner stores records in the lasting source checkout, outside the
-temporary worktrees it removes on exit; its default loop ID also uses the
-source checkout. Gate callbacks pass each current-run verdict using repeated
+temporary worktrees it removes on exit. Gate callbacks pass each current-run verdict using repeated
 `--verdict-file` arguments. The controller starts with an empty run-local list
 and records all verdict paths produced in that invocation, never a directory
 glob. No complete list means unknown findings and usage. The helper snapshots
 each listed file once for both findings and the byte estimate; duplicate paths
-count once. A listed file must remain available until the callback reads it.
+count once. Missing, unreadable, malformed or non-object verdict files keep
+the observation with unknown findings; unreadable bytes also make the token
+estimate unknown. An unavailable panel receipt likewise keeps an unknown
+observation. Gate observations run after enforcement and advancement: native
+exit is recorded only when phase advancement succeeds. Missing grounding, a
+blocked gate, failed advancement or no bead keeps the native value continue.
 Supply callbacks in round order; concurrent callbacks for the same loop may
 miss a later-outcome join. Different loop IDs are independent.
 
@@ -38,7 +44,8 @@ Panel PASS is zero; all other panel verdicts remain unknown. Gate verdicts
 use explicit nonnegative `findings_count` values, including minor findings.
 
 `estimated_claude_tokens_saved` sums estimates for later rounds with zero
-findings. The method is ceil(total UTF-8 artifact bytes / 4): panel prompts
+findings only when `could_exit` is true; wrong or unknown exits record zero
+savings and incomplete estimation. The method is ceil(total UTF-8 artifact bytes / 4): panel prompts
 plus reviewer responses, or gate verdict JSON files. This is a conservative
 artifact-size proxy for counterfactual Claude tokens, even when another lab
 performed the review. It excludes hidden context, tool traffic, cache effects

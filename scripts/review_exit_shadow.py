@@ -18,9 +18,12 @@ def outcome(later):
     findings = sum(x['findings'] for x in later) if known else None
     empty = [x for x in later if x['findings'] == 0]
     found = any((x['findings'] or 0) > 0 for x in later)
-    return dict(later_findings=findings, could_exit=False if found else (findings == 0 if known else None),
-                estimated_claude_tokens_saved=sum(x['claude_tokens'] or 0 for x in empty),
-                token_estimate_complete=all(x['claude_tokens'] is not None for x in empty))
+    could_exit = False if found else (findings == 0 if known else None)
+    return dict(later_findings=findings, could_exit=could_exit,
+                estimated_claude_tokens_saved=(sum(x['claude_tokens'] or 0 for x in empty)
+                                              if could_exit is True else 0),
+                token_estimate_complete=(could_exit is True and
+                                        all(x['claude_tokens'] is not None for x in empty)))
 
 
 def call_decide(request, root, project):
@@ -85,22 +88,40 @@ def main():
     if args.verdict_file:
         # The controller supplies only artifacts produced in this invocation.
         # Read once, so the count and byte proxy describe the same snapshot.
-        snapshots = [p.read_bytes() for p in dict.fromkeys(args.verdict_file)]
-        rows = [json.loads(raw) for raw in snapshots]
-        counts = [r.get('findings_count') for r in rows]
+        snapshots, counts = [], []
+        complete = True
+        for path in dict.fromkeys(args.verdict_file):
+            try:
+                raw = path.read_bytes()
+            except OSError:
+                counts.append(None)
+                complete = False
+                continue
+            snapshots.append(raw)
+            try:
+                row = json.loads(raw)
+                counts.append(row.get('findings_count') if isinstance(row, dict) else None)
+            except (ValueError, UnicodeError):
+                counts.append(None)
         if counts and all(type(n) is int and n >= 0 for n in counts):
             findings = sum(counts)
-        if rows:
+        if complete:
             tokens = (sum(map(len, snapshots)) + 3) // 4
     if args.panel:
         # The round's merged receipt is authoritative. PASS WITH NOTES, invalid
         # verdicts and failed CI remain unknown rather than claiming zero findings.
-        receipt = (args.panel / 'receipt.md').read_text()
-        if receipt.rstrip().endswith('VERDICT: PASS'):
-            findings = 0
+        try:
+            receipt = (args.panel / 'receipt.md').read_text()
+            if receipt.rstrip().endswith('VERDICT: PASS'):
+                findings = 0
+        except (OSError, UnicodeError):
+            pass
         files = list(args.panel.glob('prompt-*.txt')) + list(args.panel.glob('lens-*.md'))
         if files:
-            tokens = (sum(len(p.read_bytes()) for p in files) + 3) // 4
+            try:
+                tokens = (sum(len(p.read_bytes()) for p in files) + 3) // 4
+            except OSError:
+                pass
     observe(root, args.project.resolve(),
             args.loop, args.native, findings, tokens)
 
