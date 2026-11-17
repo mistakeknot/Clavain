@@ -34,10 +34,13 @@ Configure each question ID under `decision_models`:
 
 ```yaml
 decision_models:
-  route: {backend: heuristic, mode: off}
+  route: {backend: heuristic, mode: shadow}
 ```
 
-Modes default to `off`. `CLAVAIN_SELECTOR=off` (case-insensitive, trimmed)
+Missing modes default to `off`. The shipped configuration enables `shadow` with
+`backend: heuristic` for `flux_triage`, `route`, `review_exit` and
+`learned_router`. `flux_triage` controls the live S3 delegation observer;
+interflux triage itself has no live observer yet. `CLAVAIN_SELECTOR=off` (case-insensitive, trimmed)
 disables the layer before egress, credentials, calls or logging.
 `shadow` observes a choice; `enforce` returns
 `enforce_disabled` without making a provider call. Unsupported modes remain
@@ -45,7 +48,9 @@ off. Backends are `heuristic` (a deterministic baseline agreeing with today's
 answer) and `jev` (the existing credential loader, admitted client, shared
 breaker and a stable per-project UTC-day budget). The registry's
 `decision_models.daily_budget` caps calls, with a conservative maximum of
-eight; changing caller session IDs does not reset it. Its registry entry ships
+eight calls per project per UTC day; changing caller session IDs does not reset
+it. Over-budget calls fall back to the native choice. This is the design choice
+for any future hosted trial; the current heuristic-only trial makes no Jev calls. Its registry entry ships
 with `enabled: false`; hosted shadow observations also require explicitly
 enabling that entry, in addition to the per-question shadow mode and egress
 permission. Existing integration defaults are unchanged. Clef, Clairic and other backends
@@ -93,3 +98,49 @@ to preserve the complete decision contract.
 
 Main-thread delegation call sites record companion observations; see
 [delegation-shadow.md](delegation-shadow.md).
+
+## Reading the trial week
+
+Read `<project>/.clavain/decisions/YYYY-MM-DD.jsonl` in each observed project.
+Select the seven daily files for the trial week; all globs below cover the
+files present. Heuristic agreement is tautological (confidence 1, band accept),
+so this week measures observation counts, confidence bands and token estimates,
+not real model agreement or realized savings. Jev remains disabled. Native
+choices always run, and `CLAVAIN_SELECTOR=off` disables observations entirely.
+
+The common S1 rows identify tracks by SHA256 of the question ID. Count only
+completed observations (`reason: shadow_mode`) as agreement; fallback rows
+remain separate. This local script reports per-track counts and bands:
+
+```bash
+python3 - /absolute/project/root <<'PYTHON'
+import collections, hashlib, json, pathlib, sys
+tracks = {hashlib.sha256(k.encode()).hexdigest(): k for k in
+          ('flux_triage', 'route', 'review_exit', 'learned_router')}
+rows = [json.loads(line) for p in sorted(
+    (pathlib.Path(sys.argv[1]) / '.clavain/decisions').glob('*.jsonl'))
+    for line in p.read_text().splitlines()]
+for hashed, track in tracks.items():
+    selected = [r for r in rows if r.get('schema') == 'clavain-decide-v1'
+                and r.get('question_id') == hashed]
+    completed = [r for r in selected if r.get('reason') == 'shadow_mode']
+    print(track, dict(count=len(selected), completed=len(completed),
+          agreeing=sum(r['native_choice'] == r['decide_answer']['choice']
+                       for r in completed),
+          bands=dict(collections.Counter(r.get('band') for r in completed))))
+PYTHON
+```
+
+Read token estimates according to their schema; do not add companion rows to
+S1 counts or combine unlike estimates as measured savings:
+
+| Track | Estimate fields and interpretation |
+|-------|------------------------------------|
+| route | S1 `estimated_claude_tokens_saved`: ceiling of input plus output bytes divided by four and batch size; `observed_claude_tokens_saved` stays zero. |
+| flux_triage (delegation) | `clavain-delegation-shadow-v1`: `main_thread_tokens` and `estimated_claude_tokens_saved`; null when unknown. Join S1 by `decision_id`, group by `site`; see delegation-shadow.md. |
+| review_exit | `review-exit-observation-v1`: `claude_tokens` is an artifact byte proxy. Later `review-exit-outcome-v1` rows update hypothetical savings; use the latest outcome per decision, never sum cumulative updates. |
+| learned_router | `clavain-learned-router-v1`: `estimated_input_tokens` is prompt characters divided by four, rounded up; `estimated_claude_tokens_saved` stays zero when the heuristic keeps the same seat. Join S1 via `s1_decision_id`. |
+
+Unknown estimates stay null. S1 physical-attempt usage is provider accounting,
+not Claude savings; heuristic observations make zero provider attempts. Logs
+contain hashed identifiers and numeric projections, never raw text or credentials.

@@ -408,22 +408,24 @@ def test_main_is_silent_and_exits_zero_on_garbage_args(env, capsys):
     assert out.out == '' and out.err == ''
 
 
-def test_script_entry_point_is_silent_and_inert_by_default(env):
+def test_script_entry_point_is_silent_and_disabled_by_kill_switch(env, monkeypatch):
+    monkeypatch.setenv('CLAVAIN_SELECTOR', 'off')
     proc = subprocess.run([sys.executable, str(ROOT / 'scripts/clavain_selector/delegation_shadow.py'),
                            '--foreground', '--project-root', str(env.project)] + _argv()[0:],
                           capture_output=True, text=True, timeout=20,
                           env={**os.environ, 'PYTHONPATH': str(ROOT / 'scripts')})
     assert proc.returncode == 0 and proc.stdout == '' and proc.stderr == ''
-    # The shipped routing.yaml keeps flux_triage off, so nothing may be written.
+    # The global kill switch overrides the shipped shadow mode.
     assert not (env.project / '.clavain').exists()
 
 
-# --- shipped configuration is untouched -----------------------------------------------
+# --- shipped configuration -----------------------------------------------------------
 
-def test_shipped_policy_stays_off_and_budget_unchanged():
+def test_shipped_policy_is_heuristic_shadow_and_hosted_registry_disabled():
     routing = yaml.safe_load((ROOT / 'config/routing.yaml').read_text())
-    policy = routing['decision_models']['flux_triage']  # YAML 1.1 reads a bare `off` as False
-    assert policy['backend'] == 'heuristic' and policy['mode'] in ('off', False)
+    assert set(routing['decision_models']) == {'flux_triage', 'route', 'review_exit', 'learned_router'}
+    for policy in routing['decision_models'].values():
+        assert policy == {'backend': 'heuristic', 'mode': 'shadow'}
     registry = json.loads((ROOT / 'config/selector-integrations.json').read_text())
     entry = registry['integrations']['decision_models']
     assert entry['enabled'] is False and entry['daily_budget'] == 8
