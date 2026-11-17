@@ -6,6 +6,7 @@ explicit egress_allowed=true in addition to the selector's whole-request guard.
 """
 from __future__ import annotations
 
+from contextlib import ExitStack
 import json
 import datetime as dt
 import os
@@ -21,6 +22,9 @@ from clavain_selector import observer_privacy
 
 
 SHADOW_LOG_MAX_BYTES = records.PROJECT_LOG_MAX_BYTES
+# Design choice: conservative bound for 16 hashed candidates plus escalation, two physical
+# attempts, bounded counters/probabilities, timestamps and fixed observer metadata.
+SHADOW_RECORD_HEADROOM = 64 * 1024
 
 
 def band(confidence):
@@ -49,6 +53,11 @@ def observation_metadata(value):
 
 
 def decide(obj, policy, project_root):
+    with ExitStack() as stack:
+        return _decide(obj, policy, project_root, stack)
+
+
+def _decide(obj, policy, project_root, stack):
     start = time.monotonic_ns()
     log = AttemptLog()
     native = obj.get('native_choice') if isinstance(obj, dict) else None
@@ -65,6 +74,21 @@ def decide(obj, policy, project_root):
     request = None
     admitted = None
     metadata = None
+    guarded_append = None
+
+    def before_call():
+        nonlocal guarded_append
+        try:
+            guarded_append = stack.enter_context(records.admit_project_record(
+                project_root, max_bytes=SHADOW_LOG_MAX_BYTES, reserve_bytes=SHADOW_RECORD_HEADROOM))
+        except records.LogCapacityExhausted:
+            result['reason'] = 'log_capacity_exhausted'
+            return False
+        except records.RecordUnwritable:
+            result['reason'] = 'record_unwritable'
+            return False
+        return True
+
     hosted_observer = 'privacy_contract' in policy or (isinstance(obj, dict) and 'privacy_contract' in obj)
     if hosted_observer:
         try:
@@ -121,7 +145,7 @@ def decide(obj, policy, project_root):
             if isinstance(admitted, egress.Refusal):
                 result['reason'] = 'egress_refused'
             else:
-                _jev(request, obj, policy, result, log)
+                _jev(request, obj, policy, result, log, before_call=before_call)
     except (KeyError, ValueError, TypeError, AttributeError):
         result['reason'] = 'invalid_input'
     except Exception:
@@ -156,15 +180,20 @@ def decide(obj, policy, project_root):
     if hosted_observer:
         record['privacy_contract'] = observer_privacy.VERSION
     try:
-        records.append_record(record, record_dir=Path(project_root).resolve() / '.clavain' / 'decisions',
-                              project_root=project_root, max_bytes=SHADOW_LOG_MAX_BYTES)
+        if guarded_append is not None:
+            guarded_append(record)
+        elif result['reason'] in ('log_capacity_exhausted', 'record_unwritable'):
+            return result
+        else:
+            records.append_record(record, record_dir=Path(project_root).resolve() / '.clavain' / 'decisions',
+                                  project_root=project_root, max_bytes=SHADOW_LOG_MAX_BYTES)
         result['decision_id'] = record['decision_id']
     except Exception:
         result['reason'] = 'record_unwritable'
     return result
 
 
-def _jev(request, obj, policy, result, log):
+def _jev(request, obj, policy, result, log, *, before_call=None):
     # A stable project/day cap cannot be reset by changing a caller session.
     registry = flags.load_registry(Path(__file__).resolve().parents[2] / 'config/selector-integrations.json')
     entry = registry.get('integrations', {}).get('decision_models', {})
@@ -197,6 +226,8 @@ def _jev(request, obj, policy, result, log):
             return
         call = j.JevCall.build(admitted, fit_questions=False,
                               deadline=j.Deadline.start(int(policy.get('deadline_ms', 1500))))
+        if before_call is not None and not before_call():
+            return
         if budget.consume() is not None:
             result['reason'] = 'budget_exhausted'
             return

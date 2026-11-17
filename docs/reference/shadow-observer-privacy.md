@@ -78,11 +78,13 @@ Heuristic agreement is tautological; hosted disagreement is possible, but route
 counts/hashes contain no semantic evidence for choosing a route. Agreement on
 this projection cannot establish semantic correctness or justify reduced review.
 
-The shared budget caps logical decisions at eight per Git common directory
-per UTC day across route and review-exit (and other hosted observer decisions), even if a
-session changes. Lower configured limits still apply. The existing breaker and
+Contract-marked route and review-exit observations share eight logical calls
+per Git common directory per UTC day, even if a session changes. Unmarked
+generic `decide` requests retain their separate project-root/day budget keys;
+this is not a single cap over every hosted decision of a project. Lower configured limits still apply. The existing breaker and
 deadline remain. Budget slots are consumed only after breaker, credential, loaded-key egress
-and call-construction checks pass. Refusals before that point do not spend a
+and call-construction checks pass, followed by log-capacity admission.
+Refusals before budget consumption do not spend a
 slot; half-open breaker probes are released on every exit. A logical call can contain the client's existing bounded retry;
 physical attempts are accounted separately. Over-budget, open-breaker, denied
 egress and missing credentials all retain native behavior.
@@ -100,3 +102,29 @@ counterfactual proxy; observed savings stay zero because every native call runs.
 Review-exit observations join to this accounting through `decision_id`.
 Interpret their agreement/exit fields only after joining to a decision with
 `reason=shadow_mode`; operational fallbacks are not independent predictions.
+
+
+Before any hosted `decide` call consumes budget, capacity admission requires
+64 KiB of accounting headroom under the existing 8 MiB project log cap,
+including all day files. This is a conservative bound for the supported record:
+at most 16 hashed candidates plus escalation probabilities, two physical attempt records,
+bounded token counters, timestamps and fixed observer metadata. A regression
+serializes this maximum shape and verifies that it fits. Admission keeps the
+pinned directory lock through the final accounting append, so cooperating
+project appenders cannot consume the checked space, even in another day file.
+This can stop hosted calls slightly before the cap is exactly full.
+
+Insufficient headroom returns `log_capacity_exhausted`: native choice and shadow
+choice agree, confidence is zero, probabilities are empty, fallback is true,
+and physical attempts are zero. No client call or budget consumption occurs.
+The refusal has no persisted decision ID when accounting capacity is denied.
+A busy admission lock or unsafe/unavailable record directory returns
+`record_unwritable` without waiting, calling Jev or consuming budget. The marked
+packet paired with a heuristic policy also fails closed before admission.
+
+Admitted calls write finalized physical attempt usage through the guarded
+writer. Budget refusals and ordinary client exceptions release both log and
+breaker guards; unknown usage remains explicitly unknown in the persisted
+record. The final byte-cap check and all existing symlink/file guards remain.
+This protects against cooperating-writer capacity races; disk failure, external
+filesystem mutation and process death can still prevent persistence.

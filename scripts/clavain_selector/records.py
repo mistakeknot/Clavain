@@ -19,6 +19,7 @@ otherwise every candidate entry is reduced to `{id_sha256, payload_sha256}`.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import datetime as dt
 import fcntl
 import hashlib
@@ -371,33 +372,78 @@ def append_record(record: Mapping[str, Any], *, record_dir: str | Path | None = 
         root = Path(project_root).resolve()
         if resolved_dir.absolute() != root / '.clavain' / 'decisions':
             raise RecordUnwritable('unexpected project record directory')
-        descriptors = []
-        try:
-            descriptors.append(os.open(root, os.O_RDONLY | os.O_DIRECTORY))
-            for component in ('.clavain', 'decisions'):
-                try:
-                    os.mkdir(component, mode=0o700, dir_fd=descriptors[-1])
-                except FileExistsError:
-                    pass
-                descriptors.append(os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-                                           dir_fd=descriptors[-1]))
-            # Serialize the size check and append across every day file.
-            fcntl.flock(descriptors[-1], fcntl.LOCK_EX)
-            if max_bytes is not None:
-                total = 0
-                for name in os.listdir(descriptors[-1]):
-                    info = os.stat(name, dir_fd=descriptors[-1], follow_symlinks=False)
-                    if name.endswith('.jsonl') and stat.S_ISREG(info.st_mode):
-                        total += info.st_size
-                if total + len((line + "\n").encode("utf-8")) > max_bytes:
-                    raise RecordUnwritable('project record byte cap reached')
-            _append_line(path, line, parent_fd=descriptors[-1])
-        except OSError as exc:
-            raise RecordUnwritable('unsafe project record path') from exc
-        finally:
-            for fd in reversed(descriptors):
-                os.close(fd)
+        with _project_directory(root) as directory_fd:
+            _check_project_capacity(directory_fd, len((line + "\n").encode("utf-8")), max_bytes)
+            _append_line(path, line, parent_fd=directory_fd)
     return path
+
+
+class LogCapacityExhausted(RecordUnwritable):
+    """Insufficient bounded log space to admit a hosted call."""
+
+
+@contextmanager
+def _project_directory(root, *, nonblocking=False):
+    descriptors = []
+    try:
+        descriptors.append(os.open(root, os.O_RDONLY | os.O_DIRECTORY))
+        for component in ('.clavain', 'decisions'):
+            try:
+                os.mkdir(component, mode=0o700, dir_fd=descriptors[-1])
+            except FileExistsError:
+                pass
+            descriptors.append(os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                       dir_fd=descriptors[-1]))
+        fcntl.flock(descriptors[-1], fcntl.LOCK_EX | (fcntl.LOCK_NB if nonblocking else 0))
+        yield descriptors[-1]
+    except OSError as exc:
+        raise RecordUnwritable('unsafe or unavailable project record path') from exc
+    finally:
+        for fd in reversed(descriptors):
+            os.close(fd)
+
+
+def _check_project_capacity(directory_fd, needed, max_bytes):
+    if max_bytes is None:
+        return
+    total = 0
+    for name in os.listdir(directory_fd):
+        info = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        if name.endswith('.jsonl') and stat.S_ISREG(info.st_mode):
+            total += info.st_size
+    if total + needed > max_bytes:
+        raise LogCapacityExhausted('project record byte cap reached')
+
+
+@contextmanager
+def admit_project_record(project_root, *, max_bytes, reserve_bytes):
+    """Pin and lock capacity until the final append; busy admission fails closed.
+
+    Public project appenders take this same directory lock, even for another
+    day file. No capacity can be consumed between admission and accounting.
+    The yielded writer must be used inside this context, without reacquiring
+    its lock. Disk failure or process death remains outside this guarantee.
+    """
+    root = Path(project_root).resolve()
+    with _project_directory(root, nonblocking=True) as directory_fd:
+        _check_project_capacity(directory_fd, reserve_bytes, max_bytes)
+        active = True
+        def append(record):
+            if not active:
+                raise RecordUnwritable('expired record admission')
+            line = json.dumps(record, sort_keys=True, ensure_ascii=True)
+            size = len((line + "\n").encode('utf-8'))
+            if size > reserve_bytes:
+                raise RecordUnwritable('accounting record exceeds admission bound')
+            _check_project_capacity(directory_fd, size, max_bytes)
+            when = _parse_iso(record['created_at']) if record.get('created_at') else dt.datetime.now(dt.timezone.utc)
+            path = root / '.clavain/decisions' / _day_filename(when)
+            _append_line(path, line, parent_fd=directory_fd)
+            return path
+        try:
+            yield append
+        finally:
+            active = False
 
 
 def append_outcome(
