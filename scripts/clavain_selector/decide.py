@@ -17,6 +17,7 @@ import uuid
 
 from clavain_selector import contract, credentials, egress, flags, jev_client as j, records
 from clavain_selector.accounting import AttemptLog, digest, stamp
+from clavain_selector import observer_privacy
 
 
 SHADOW_LOG_MAX_BYTES = records.PROJECT_LOG_MAX_BYTES
@@ -64,15 +65,25 @@ def decide(obj, policy, project_root):
     request = None
     admitted = None
     metadata = None
+    hosted_observer = 'privacy_contract' in policy or (isinstance(obj, dict) and 'privacy_contract' in obj)
+    if hosted_observer:
+        try:
+            observer_privacy.validate(obj)
+        except (ValueError, TypeError, KeyError):
+            result['reason'] = 'invalid_input'
+            return result
+        if not observer_privacy.enabled(policy):
+            result['reason'] = 'egress_not_authorized'
+            return result
     if isinstance(obj, dict) and 'observation_metadata' in obj:
         try:
             metadata = observation_metadata(obj['observation_metadata'])
         except (ValueError, TypeError):
             result['reason'] = 'invalid_input'
             return result
-        # This opt-in projection is local-only, even if config changed after
-        # the observer's preflight. S1 hosted callers remain unchanged.
-        if backend != 'heuristic':
+        # Legacy metadata packets stay local even if config changed after
+        # preflight. Hosted packets require the independent closed contract.
+        if backend != 'heuristic' and not hosted_observer:
             result['reason'] = 'unsupported_backend'
             return result
     try:
@@ -88,7 +99,8 @@ def decide(obj, policy, project_root):
             raise ValueError
         request = contract.SelectionRequest(
             integration='decision_models', point=contract.Point.LIBRARY,
-            task=question['text'], context=json.dumps(obj['state'], allow_nan=False),
+            task=question['text'], context=json.dumps(observer_privacy.wire_state(obj['state'])
+                if hosted_observer else obj['state'], allow_nan=False),
             candidates=candidates, task_revision='shadow',
             session=contract.SessionRef('decide'),
             sources=tuple(Path(p) for p in obj.get('sources', [])),
@@ -141,6 +153,8 @@ def decide(obj, policy, project_root):
     record.pop('shadow_choice', None)
     if metadata is not None:
         record.update(metadata)
+    if hosted_observer:
+        record['privacy_contract'] = observer_privacy.VERSION
     try:
         records.append_record(record, record_dir=Path(project_root).resolve() / '.clavain' / 'decisions',
                               project_root=project_root, max_bytes=SHADOW_LOG_MAX_BYTES)
@@ -162,15 +176,19 @@ def _jev(request, obj, policy, result, log):
         result['reason'] = 'budget_exhausted'
         return
     day = dt.datetime.now(dt.timezone.utc).date().isoformat()
-    budget = j.Budget(f'decide:{request.project_root}:{day}', 'decision_models', limit=min(8, limit))
+    scope = observer_privacy.project_scope(request.project_root) if 'privacy_contract' in obj else request.project_root
+    budget = j.Budget(f'decide:{scope}:{day}', 'decision_models', limit=min(8, limit))
     breaker = j.Breaker()
     if breaker.check() is not None:
         result['reason'] = 'circuit_open'
         return
     try:
         try:
+            if 'privacy_contract' in obj:
+                # Hosted observers never redirect credentials outside this directory.
+                credentials.secrets_file_path().resolve().relative_to((Path.home() / '.config/jev').resolve())
             key = credentials.load()
-        except credentials.CredentialUnavailable:
+        except (credentials.CredentialUnavailable, ValueError, OSError):
             result['reason'] = 'credential_unavailable'
             return
         admitted = egress.admit(request, key_literal=key.reveal(), high_entropy=True)
