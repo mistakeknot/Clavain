@@ -8,9 +8,11 @@ redirected to `/dev/null`. Never wait for it or use its return value.
 
 The observer reads the selected routing YAML (`CLAVAIN_ROUTING_POLICY`, or
 the plugin's `config/routing.yaml`, passed explicitly by command instructions).
-Only `decision_models.route: {mode: shadow, backend: heuristic}` admits a call.
+The local baseline uses `decision_models.route: {mode: shadow, backend: heuristic}`.
+Hosted observations require the explicit opt-in described in
+[the hosted privacy contract](shadow-observer-privacy.md).
 Off, enforce, unknown modes, missing or malformed configuration, and configured
-hosted backends are inert before subprocess execution or logging.
+hosted backends without that contract are inert before subprocess execution or logging.
 `CLAVAIN_SELECTOR=off`, trimmed and case-insensitive, disables the observer
 before reading configuration. Defaults and other tracks remain unchanged/off.
 Python needs PyYAML to read configuration; an unavailable dependency is silent
@@ -41,13 +43,14 @@ for the other sites. Malformed results are skipped, retaining all existing
 native fallback behavior. The subject is SHA256 of the bead ID, or of the
 description for text-mode 4b. Never send the subject's raw text. No native
 classification prompt, response, reason, plan or lane intent is passed to the
-observer, persisted or sent to a provider. Counts include the complete native
+observer, persisted or sent to a provider. Hosted subject IDs are additionally
+replaced by fresh per-call HMAC pseudonyms before admission. Counts include the complete native
 prompt and response UTF8 bytes, computed without writing their text to disk.
 Missing counts or hashes mean skip the observation.
 
 Command instructions apply an eligibility gate before any measurement work or
 helper launch: inspect the already available routing policy and silently do
-nothing unless route mode is exactly `shadow`, the backend is `heuristic` and
+nothing unless route mode is exactly `shadow`, the backend is `heuristic` (or explicitly opted-in `jev`) and
 the global kill is not `off`. If the configuration is not already known, only a
 normal configuration read is allowed, never a measurement or helper subprocess.
 Observe only when exact byte counts, the normalized native choice and the
@@ -70,12 +73,13 @@ The observer runs `clavain-cli decide` using the bundled
 `<plugin-root>/bin/clavain-cli` when it is a regular executable file, otherwise
 bare `clavain-cli` from `PATH`. The choice is made once before the call; there
 is no fallback if the selected process fails, so the call stays bounded. It is invoked with question ID `route`, site-specific
-candidates, explicit plugin/config/project roots, `egress_allowed: false` and
+candidates, explicit plugin/config/project roots, `egress_allowed: false` for the heuristic baseline and
 `sources: []`. Its state contains only numeric counts, a SHA256 subject ID and
 a static site ID, so there are no source files to declare. CLI output is
 discarded and never parsed; `subprocess.run` has a six-second timeout. All
-exceptions are silent. S1 also refuses hosted backends when this opt-in
-metadata is present, covering a configuration change between reads.
+exceptions are silent. S1 refuses hosted backends for legacy packets without the privacy contract,
+covering a configuration change between reads. Contract-marked packets pass
+the closed allowlist before either egress admission. Accounting metadata stays local.
 
 Read local `.clavain/decisions/YYYY-MM-DD.jsonl` using the S1 record reader or
 JSONL tools. S1's private permissions, locked append and symlink protection

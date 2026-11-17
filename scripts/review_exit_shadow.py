@@ -11,6 +11,7 @@ import uuid
 
 import yaml
 from clavain_selector import records
+from clavain_selector import observer_privacy
 
 
 def outcome(later):
@@ -43,12 +44,15 @@ def observe(root, project, loop, native, findings, claude_tokens):
     directory = project / '.clavain/decisions'
     # Existing record writer owns the secure append; no raw loop IDs are written.
     # Callbacks for a loop must be ordered by the caller.
-    answer = call_decide(dict(question=dict(id='review_exit',
+    request = dict(question=dict(id='review_exit',
         text='Could this review round have exited early?', candidates=[
             dict(id='exit', description='Exit the review loop'),
             dict(id='continue', description='Continue reviewing')]),
         state=dict(findings=findings, loop_hash=loop_hash), native_choice=native,
-        egress_allowed=False, sources=[]), root, project)
+        egress_allowed=False, sources=[])
+    if observer_privacy.enabled(policy['decision_models']['review_exit']):
+        request.update(privacy_contract=observer_privacy.VERSION, egress_allowed=True)
+    answer = call_decide(request, root, project)
     if not answer.get('decision_id'):
         return
     observation = dict(schema='review-exit-observation-v1',
