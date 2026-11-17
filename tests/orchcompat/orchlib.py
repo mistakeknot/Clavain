@@ -252,7 +252,7 @@ ROLES = (
 )
 # Roles that refuse to resolve without a producer identity (checked by the
 # golden: the no-producer case for these records the refusal).
-PRODUCERS = (None, "claude-opus-5-5", "gpt-6.1-sol", "claude-fable-5-2")
+PRODUCERS = (None, "claude-opus-5-5", "gpt-6.2-sol", "claude-fable-5-2")
 REASON_SETS = ((),) + tuple((r,) for r in REASONS) + (tuple(REASONS),)
 
 

@@ -36,7 +36,7 @@ cat > "$WORK/routine.json" <<'JSON'
 JSON
 
 CLAUDE_LANE='["claude-opus-5-5","claude-sonnet-5-5","kimi-code/k3"]'
-NO_ASTRA='["gpt-6.1-sol","claude-opus-5-5","claude-sonnet-5-5","kimi-code/k3"]'
+NO_ASTRA='["gpt-6.2-sol","claude-opus-5-5","claude-sonnet-5-5","kimi-code/k3"]'
 
 ctx() { # ctx <base> <available_models-json|-> <out>
   if [[ "$2" == "-" ]]; then cp "$1" "$3"; else
@@ -69,9 +69,9 @@ check_primary scout               "$WORK/c-routine.json" scout-sol
 check_primary release-preparation "$WORK/c-routine.json" release-sol
 check_primary deep-execution      "$WORK/c-routine.json" deep-exec-sol
 check_primary deep-execution      "$WORK/c-front.json"   deep-astra
-check_primary plan-review         "$WORK/c-front.json"   review-opus gpt-6-astra
+check_primary plan-review         "$WORK/c-front.json"   review-opus gpt-6.2-astra
 check_primary plan-review         "$WORK/c-front.json"   review-astra claude-opus-5-5
-check_primary validation          "$WORK/c-front.json"   validation-opus gpt-6.1-sol
+check_primary validation          "$WORK/c-front.json"   validation-opus gpt-6.2-sol
 
 # ---------------------------------------------------------------------------
 # 2. mk-3b8z: Opus 5.5 replaced Fable 5.1 and every Opus seat runs Opus 5.5.
@@ -113,7 +113,7 @@ out="$(resolve "$POLICY" plan-review "$WORK/c-codex-down.json" claude-sonnet-5-5
 [[ "$(jq -r .profile.model <<< "$out")" == claude-opus-5-5 ]] || fail "Sonnet-authored plan, Astra out: expected Opus 5.5, got: $out"
 
 # An Astra-authored plan is reviewed by Opus 5.5, a distinct frontier model.
-receipt="$(resolve "$POLICY" plan-review "$WORK/c-codex-down.json" gpt-6-astra)" \
+receipt="$(resolve "$POLICY" plan-review "$WORK/c-codex-down.json" gpt-6.2-astra)" \
   || fail "Astra-authored plan-review has no reviewer: $receipt"
 echo "$receipt" | jq -e '
   .profile_ref == "review-opus"
@@ -207,8 +207,8 @@ echo "$receipt" | jq -e '
 #    still be refused: eligibility (reasoning.frontier_models) and selection
 #    (dispatch.roles + fallbacks) are separate mechanisms.
 # ---------------------------------------------------------------------------
-sed 's/^  frontier_models: .*/  frontier_models: [gpt-6-astra]/' "$POLICY" > "$WORK/no-eligibility.yaml"
-if out="$(resolve "$WORK/no-eligibility.yaml" plan-review "$WORK/c-codex-down.json" gpt-6-astra)"; then
+sed 's/^  frontier_models: .*/  frontier_models: [gpt-6.2-astra]/' "$POLICY" > "$WORK/no-eligibility.yaml"
+if out="$(resolve "$WORK/no-eligibility.yaml" plan-review "$WORK/c-codex-down.json" gpt-6.2-astra)"; then
   fail "plan-review resolved without frontier eligibility for the substitute: $out"
 fi
 [[ "$out" == *"no eligible model satisfies reasoning contract"* ]] \
@@ -224,7 +224,7 @@ receipt="$(resolve "$POLICY" planning "$WORK/c-front.json")" \
 echo "$receipt" | jq -e '.profile_ref == "planning-opus" and .profile.model == "claude-opus-5-5"' >/dev/null \
   || fail "frontier authoring no longer prefers Opus while it is reachable: $receipt"
 
-ctx "$WORK/frontier.json" '["gpt-6-astra"]' "$WORK/c-astra-only.json"
+ctx "$WORK/frontier.json" '["gpt-6.2-astra"]' "$WORK/c-astra-only.json"
 receipt="$(resolve "$POLICY" planning "$WORK/c-astra-only.json")" \
   || fail "frontier authoring has no seat when only Astra is reachable: $receipt"
 echo "$receipt" | jq -e '

@@ -27,7 +27,7 @@ teardown() {
 
 # A richer fake `ic` than the builder's own helper: answers `route list`
 # (producer receipt lookup), `route identity` (always resolves to the
-# fixture's gpt-6-astra producer unless IC_IDENTITY_OVERRIDE says otherwise
+# fixture's gpt-6.2-astra producer unless IC_IDENTITY_OVERRIDE says otherwise
 # for a given --model), `route dispatch` (candidate resolution, driven by
 # $IC_ROUTE_DISPATCH_JSON), and `route record` (audit persistence, logged
 # verbatim to ic.log so a test can grep its --context= payload).
@@ -56,7 +56,7 @@ elif [[ "$*" == *"route identity"* ]]; then
     if [[ -n "${IC_IDENTITY_OVERRIDE:-}" && "$model" == "${IC_IDENTITY_OVERRIDE_MODEL:-}" ]]; then
         printf '{"model_identity":"%s"}\n' "$IC_IDENTITY_OVERRIDE"
     else
-        printf '{"model_identity":"gpt-6-astra"}\n'
+        printf '{"model_identity":"gpt-6.2-astra"}\n'
     fi
 elif [[ "$*" == *"route dispatch"* ]]; then
     cat "$IC_ROUTE_DISPATCH_JSON"
@@ -117,7 +117,7 @@ EOF
     fake_backend claude 0
 
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --dry-run --role-resolved --role plan-review \
-        --to claude --model gpt-6-astra --review-input "$INPUT_JSON" -C "$T/repo"
+        --to claude --model gpt-6.2-astra --review-input "$INPUT_JSON" -C "$T/repo"
     [ "$status" -ne 0 ]
     [[ "$output" == *"failed to build review packet"* ]]
     # No backend should ever start on a build failure.
@@ -129,7 +129,7 @@ EOF
     build_packet
 
     run bash "$DISPATCH" --dry-run --role-resolved --role validation \
-        --to claude --model gpt-6-astra --review-packet "$PACKET" --plan "$T/repo/f.txt" -C "$T/repo"
+        --to claude --model gpt-6.2-astra --review-packet "$PACKET" --plan "$T/repo/f.txt" -C "$T/repo"
     [ "$status" -ne 0 ]
     [[ "$output" == *"--plan cannot be combined"* ]]
 }
@@ -140,11 +140,11 @@ EOF
 
     local route_json
     route_json="$(jq -n --arg policy "$REAL_POLICY_HASH" \
-        '{policy_hash:$policy, profile_ref:"primary", profile:{backend:"claude",model:"gpt-6-astra",model_identity:"gpt-6-astra"}}')"
+        '{policy_hash:$policy, profile_ref:"primary", profile:{backend:"claude",model:"gpt-6.2-astra",model_identity:"gpt-6.2-astra"}}')"
 
     fake_backend claude 0
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --role-resolved --role validation \
-        --to claude --model gpt-6-astra --resolved-route-json "$route_json" \
+        --to claude --model gpt-6.2-astra --resolved-route-json "$route_json" \
         --review-packet "$PACKET" -C "$T/repo"
     [ "$status" -eq 0 ]
     cat "$T"/claude.stdin.* > "$T/claude_stdin.captured" 2>/dev/null
@@ -158,10 +158,10 @@ EOF
     rm -f "$T"/claude.stdin.* "$T"/claude.argv.*
 
     route_json="$(jq -n --arg policy "$REAL_POLICY_HASH" \
-        '{policy_hash:$policy, profile_ref:"primary", profile:{backend:"codex",model:"gpt-6-astra",model_identity:"gpt-6-astra"}}')"
+        '{policy_hash:$policy, profile_ref:"primary", profile:{backend:"codex",model:"gpt-6.2-astra",model_identity:"gpt-6.2-astra"}}')"
     fake_backend codex 0
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --role-resolved --role validation \
-        --to codex --model gpt-6-astra --resolved-route-json "$route_json" \
+        --to codex --model gpt-6.2-astra --resolved-route-json "$route_json" \
         --review-packet "$PACKET" -C "$T/repo"
     [ "$status" -eq 0 ]
     cat "$T"/codex.argv.* > "$T/codex_argv.captured" 2>/dev/null
@@ -177,13 +177,13 @@ EOF
     IC_ROUTE_DISPATCH_JSON="$T/route-dispatch.json"
     jq -n --arg policy "$REAL_POLICY_HASH" \
         '{policy_hash:$policy,
-          profile_ref:"primary", profile:{backend:"codex",model:"gpt-6-astra",model_identity:"gpt-6-astra"},
-          fallback_chain:[{profile_ref:"fallback",profile:{backend:"claude",model:"gpt-6-astra",model_identity:"gpt-6-astra"}}]}' \
+          profile_ref:"primary", profile:{backend:"codex",model:"gpt-6.2-astra",model_identity:"gpt-6.2-astra"},
+          fallback_chain:[{profile_ref:"fallback",profile:{backend:"claude",model:"gpt-6.2-astra",model_identity:"gpt-6.2-astra"}}]}' \
         > "$IC_ROUTE_DISPATCH_JSON"
     export IC_ROUTE_DISPATCH_JSON
 
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --role plan-review \
-        --producer-identity gpt-6-astra --review-input "$INPUT_JSON" -C "$T/repo" -o "$T/out.md"
+        --producer-identity gpt-6.2-astra --review-input "$INPUT_JSON" -C "$T/repo" -o "$T/out.md"
     [ "$status" -eq 0 ]
 
     # Built exactly once (from --review-input), never rebuilt across candidates.
@@ -220,7 +220,7 @@ EOF
     install_builder_spy
 
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --dry-run --role-resolved --role validation \
-        --to claude --model gpt-6-astra --review-packet "$PACKET" -C "$T/repo"
+        --to claude --model gpt-6.2-astra --review-packet "$PACKET" -C "$T/repo"
     [ "$status" -eq 0 ]
     [ ! -s "$BUILD_COUNT_FILE" ]
     grep -q "route identity" "$IC_LOG"
@@ -247,13 +247,13 @@ EOF
     export CLAVAIN_CONTEXT_GATEWAY_MODE=on
 
     run bash "$DISPATCH" --dry-run --role-resolved --role validation \
-        --to claude --model gpt-6-astra --review-packet "$PACKET" -C "$T/repo"
+        --to claude --model gpt-6.2-astra --review-packet "$PACKET" -C "$T/repo"
     [ "$status" -eq 0 ]
     [ ! -s "$GATEWAY_COUNT_FILE" ]
 
     # Control: the same gateway DOES run for an ordinary (non-packet) prompt.
     run bash "$DISPATCH" --dry-run --role-resolved --role validation \
-        --to claude --model gpt-6-astra -C "$T/repo" "ordinary prompt"
+        --to claude --model gpt-6.2-astra -C "$T/repo" "ordinary prompt"
     [ "$status" -eq 0 ]
     [ -s "$GATEWAY_COUNT_FILE" ]
 }
@@ -269,7 +269,7 @@ EOF
         source "$REPO_ROOT/scripts/lib-dispatch-audit.sh"
     REVIEW_PACKET="$PACKET"
     REVIEW_PACKET_JSON="$(cat "$manifest_path")"
-    ROLE=validation; ROLE_RESOLVED=true; ENGINE=claude; MODEL=gpt-6-astra
+    ROLE=validation; ROLE_RESOLVED=true; ENGINE=claude; MODEL=gpt-6.2-astra
     REASONING_EFFORT=""; SERVICE_TIER=""; SANDBOX=""
     DISPATCH_ID=d1; ATTEMPT_ID=a1; WORKDIR="$T/repo"; OUTPUT=""
     DISPATCH_SESSION_ID=""; CLAVAIN_RUN_ID=""; CLAVAIN_BEAD_ID=""; CLAVAIN_BEAD_SOURCE="none"
@@ -287,12 +287,12 @@ EOF
     fake_backend claude 0
     local route_json
     route_json="$(jq -n --arg policy "$REAL_POLICY_HASH" \
-        '{policy_hash:$policy, profile_ref:"primary", profile:{backend:"claude",model:"gpt-6-astra",model_identity:"gpt-6-astra"}}')"
+        '{policy_hash:$policy, profile_ref:"primary", profile:{backend:"claude",model:"gpt-6.2-astra",model_identity:"gpt-6.2-astra"}}')"
     # Real (non-dry) run: a role-resolved dispatch wraps PROMPT in a multi-KB
     # reasoning contract, so a dry-run's truncated preview can't be trusted to
     # surface a marker placed at the end of the assembled prompt.
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --role-resolved --role validation \
-        --to claude --model gpt-6-astra --resolved-route-json "$route_json" \
+        --to claude --model gpt-6.2-astra --resolved-route-json "$route_json" \
         --plan "$T/repo/f.txt" --prompt-file "$T/prompt.md" -C "$T/repo"
     [ "$status" -eq 0 ]
     claude_argv="$(cat "$T"/claude.argv.* 2>/dev/null)"
@@ -316,7 +316,7 @@ capture_role_prompt() {
     export PROMPT_CAPTURE="$T/captured-prompt"
     run bash -c 'trap '\''printf "%s" "${PROMPT:-}" > "$PROMPT_CAPTURE"'\'' EXIT; source "$@"' _ \
         "$DISPATCH" --dry-run --role-resolved --role "$role" \
-        --to claude --model gpt-6-astra -C "$T/repo" "$@"
+        --to claude --model gpt-6.2-astra -C "$T/repo" "$@"
     [ "$status" -eq 0 ]
     captured_prompt="$(cat "$PROMPT_CAPTURE")"
 }

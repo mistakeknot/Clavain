@@ -67,7 +67,7 @@ def test_codex_seat_runs_codex_with_resolved_profile(rig):
     assert call["cli"] == "codex"
     argv = call["argv"]
     assert argv[:2] == ["exec", "-s"]
-    for pair in (["-m", "gpt-6.1-sol"], ["-c", "model_reasoning_effort=medium"],
+    for pair in (["-m", "gpt-6.2-sol"], ["-c", "model_reasoning_effort=medium"],
                  ["-c", "service_tier=default"]):
         assert any(argv[i:i + 2] == pair for i in range(len(argv) - 1)), (pair, argv)
     assert str(rig.repo) in argv
@@ -218,10 +218,10 @@ def test_session_variables_do_not_reach_the_script(rig, tmp_path, monkeypatch):
 
 def test_receipt_carries_producer_and_bead(rig):
     rig.dispatch("--role", "routine-execution", *rig.base_args(),
-                 "--producer-identity", "gpt-6.1-sol", "--bead", "mk-abc.1",
+                 "--producer-identity", "gpt-6.2-sol", "--bead", "mk-abc.1",
                  CLAVAIN_DECISION_CONTEXT=rig.ctx)
     (rec,) = rig.receipts()
-    assert rec["producer_identity"] == "gpt-6.1-sol"
+    assert rec["producer_identity"] == "gpt-6.2-sol"
     assert rec["bead_id"] == "mk-abc.1"
 
 

@@ -17,7 +17,7 @@ setup() {
     HEAD_SHA="$(git -C "$R" rev-parse HEAD)"
     export CLAVAIN_REVIEW_RECEIPT_DIR="$T/reviews"
     RR_REPO=o/r RR_REPO_ID=R_abc123 RR_PR=7 RR_HEAD="$HEAD_SHA" RR_BASE="$BASE"
-    PRODUCER_IDENTITY=claude-sonnet-5-5 MODEL=gpt-6.1-sol CAPACITY_SUBSTITUTE_JSON=""
+    PRODUCER_IDENTITY=claude-sonnet-5-5 MODEL=gpt-6.2-sol CAPACITY_SUBSTITUTE_JSON=""
     DISPATCH_ID=d1 ATTEMPT_ID=a1 VALIDATOR_RELATIONSHIP=different-model
     RESOLVED_ROUTE_JSON="{\"policy_hash\":\"$(printf 'a%.0s' {1..64})\"}"
     OUT="$T/out.md"; printf 'Findings: none\n\nVERDICT: PASS\n' > "$OUT"
@@ -81,7 +81,7 @@ teardown() { rm -rf "$T"; }
     [ "$(jq -r .verdict "$f")" = PASS ]
     [ "$(jq -r .head_sha "$f")" = "$HEAD_SHA" ]
     [ "$(jq -r .diff_sha256 "$f")" = "$RR_DIFF_SHA256" ]
-    [ "$(jq -r .reviewer_identity "$f")" = gpt-6.1-sol ]
+    [ "$(jq -r .reviewer_identity "$f")" = gpt-6.2-sol ]
     [ "$(jq -r .pr "$f")" = 7 ]
 }
 
@@ -299,7 +299,7 @@ _reject_passing_suffix() {
 @test "no receipt for same-lab, substitute, failed or hashless runs" {
     _review_receipt_prepare "$R"
     MODEL=claude-opus-5-5; run _review_receipt_write "$OUT" 0; [ "$status" -ne 0 ]
-    MODEL=gpt-6.1-sol; CAPACITY_SUBSTITUTE_JSON='{"x":1}'; run _review_receipt_write "$OUT" 0; [ "$status" -ne 0 ]
+    MODEL=gpt-6.2-sol; CAPACITY_SUBSTITUTE_JSON='{"x":1}'; run _review_receipt_write "$OUT" 0; [ "$status" -ne 0 ]
     CAPACITY_SUBSTITUTE_JSON=""; run _review_receipt_write "$OUT" 1; [ "$status" -ne 0 ]
     RESOLVED_ROUTE_JSON='{}'; run _review_receipt_write "$OUT" 0; [ "$status" -ne 0 ]
     [ ! -e "$T/reviews/o__r/7-$HEAD_SHA.json" ]

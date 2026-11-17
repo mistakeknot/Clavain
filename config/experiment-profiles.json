@@ -6,7 +6,7 @@
     "tier": "exp-mk-d0h1j.1-sol-medium",
     "assert": {
       "backend": "codex",
-      "model": "gpt-6.1-sol",
+      "model": "gpt-6.2-sol",
       "effort": "medium",
       "service_tier": "standard",
       "require_exempted": [
@@ -14,6 +14,6 @@
       ]
     },
     "task_type": "advisory-support-grouping",
-    "producer_model": "gpt-6-astra"
+    "producer_model": "gpt-6.2-astra"
   }
 }

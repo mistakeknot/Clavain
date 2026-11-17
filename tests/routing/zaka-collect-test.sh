@@ -20,17 +20,17 @@ route="$(cd "$ROOT" && ic route dispatch --policy="$ROOT/config/routing.yaml" --
 jq -n --argjson route "$route" --arg cwd "$TEST_ROOT/work" --arg events "$TEST_ROOT/events.jsonl" '
   {session:"as-123456789012345678901234",transport:"app-server",thread_id:"thread-1",turn_id:"turn-1",
    phase:"completed",turn_status:"completed",pending_requests:[],event_log:$events,updated_at:"2026-09-05T00:00:00Z",
-   config:{workdir:$cwd,model:"gpt-6-astra",sandbox:"read-only",metadata:{schema_version:1,
+   config:{workdir:$cwd,model:"gpt-6.2-astra",sandbox:"read-only",metadata:{schema_version:1,
      dispatch_id:"dispatch-1",attempt_id:"attempt-1",parent_session_id:"parent-1",run_id:"run-1",bead_id:"bead-1",
      resolved_route:$route,resolved_profile:{profile_ref:$route.profile_ref,profile:$route.profile},
-     checkout:{before:"initial"},execution:{backend:"codex",model:"gpt-6-astra",codex_version:"0.153.3"}}}}
+     checkout:{before:"initial"},execution:{backend:"codex",model:"gpt-6.2-astra",codex_version:"0.153.3"}}}}
 ' > "$FIXTURE"
 printf '%s\n' '{"direction":"receive","message":{"method":"item/completed","params":{"turnId":"turn-1","item":{"type":"agentMessage","text":"VERDICT: CLEAN"}}}}' > "$TEST_ROOT/events.jsonl"
 printf '%s\n' '{"direction":"receive","message":{"method":"turn/completed","params":{"turn":{"id":"turn-1","status":"completed"}}}}' >> "$TEST_ROOT/events.jsonl"
 bash "$ROOT/scripts/collect-zaka.sh" as-123456789012345678901234 > "$TEST_ROOT/result.json"
 jq -e '.state == "completed" and .result.verdict == "VERDICT: CLEAN" and .execution.turn_id == "turn-1"' "$TEST_ROOT/result.json" >/dev/null
 records="$(cd "$TEST_ROOT/work" && ic --json route list --limit=10)"
-jq -e 'length == 1 and .[0].session_id == "parent-1" and .[0].run_id == "run-1" and .[0].bead_id == "bead-1" and (.[0].context_json | fromjson | .attempt_id == "attempt-1" and .execution.thread_id == "thread-1" and .execution.turn_id == "turn-1" and .state == "completed" and .resolved_profile.profile.model == "gpt-6-astra")' <<< "$records" >/dev/null
+jq -e 'length == 1 and .[0].session_id == "parent-1" and .[0].run_id == "run-1" and .[0].bead_id == "bead-1" and (.[0].context_json | fromjson | .attempt_id == "attempt-1" and .execution.thread_id == "thread-1" and .execution.turn_id == "turn-1" and .state == "completed" and .resolved_profile.profile.model == "gpt-6.2-astra")' <<< "$records" >/dev/null
 # Collecting the same finished turn must not inflate count-based gates.
 bash "$ROOT/scripts/collect-zaka.sh" as-123456789012345678901234 >/dev/null
 [[ "$(cd "$TEST_ROOT/work" && ic --json route list --limit=10 | jq length)" == 1 ]]

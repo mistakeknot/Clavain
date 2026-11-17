@@ -199,7 +199,7 @@ echo "PASS: 401 is anchored like 429, without losing the original mk-zz4m auth c
 # --- Existing classes stay intact ------------------------------------------
 
 assert_class "account access absent" \
-  'The gpt-6-astra model is not supported when using Codex with a ChatGPT account.' account_access_absent
+  'The gpt-6.2-astra model is not supported when using Codex with a ChatGPT account.' account_access_absent
 
 assert_class "model unavailable" \
   'Error: model_not_found: gpt-9-nonexistent' model_unavailable

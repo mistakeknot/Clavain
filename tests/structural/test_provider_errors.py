@@ -171,7 +171,7 @@ def test_codex_exhausted_429_retries_is_rate_limited():
 
 @pytest.mark.parametrize("message,expected", [
     ("Selected model is at capacity. Please try a different model.", "rate_limited"),
-    ('{"detail":"The \'gpt-6.1-sol\' model is not supported when using Codex with a ChatGPT account."}',
+    ('{"detail":"The \'gpt-6.2-sol\' model is not supported when using Codex with a ChatGPT account."}',
      "account_access_absent"),
     ("model server exploded", "terminal_error"),
 ])

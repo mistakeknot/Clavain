@@ -28,7 +28,7 @@ printf '%s\n' '{"reasons":[],"rationale":"validation-sol fallback coverage","sco
 resolved="$(ic --json route dispatch --role=validation \
   --policy="$ROOT/config/routing.yaml" \
   --policy-profile=ci-campaign-pilot \
-  --producer-identity=gpt-6-astra \
+  --producer-identity=gpt-6.2-astra \
   --context-file="$CONTEXT_FILE" 2>&1)" || fail "ic route dispatch failed: $resolved"
 
 # Candidate set = primary + fallback_chain, in the order ic actually returns

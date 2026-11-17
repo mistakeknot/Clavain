@@ -108,6 +108,7 @@ subagents:
       model: sonnet
 
 reasoning:
+  # mk-au6a1: all Sol and Astra seats move to 6.2 at unchanged efforts.
   # gpt-6-astra and claude-opus-5-5 are the two frontier authors. mk ruled on
   # 2026-09-25 (mk-3b8z) that Opus 5.5 outperforms Fable 5.1 and replaces it,
   # and that every Opus seat runs Opus 5.5; claude-fable-5-1 and claude-opus-5
@@ -124,7 +125,7 @@ reasoning:
   # other role's chain names a Fable seat, so Opus 5.5 keeps plan-review and
   # every other seat stays as it was. Fable-authored work is reviewed by another
   # lab through cross_lab_first (see the note above `cross_lab_first`).
-  frontier_models: [gpt-6-astra, claude-opus-5-5, claude-fable-5-2]
+  frontier_models: [gpt-6.2-astra, claude-opus-5-5, claude-fable-5-2]
   frontier_reasons: [unresolved-success-criteria, foundational-invariants, broad-consequences, difficult-verification, capability-failure]
   dual_review_reasons: [foundational-invariants, broad-consequences]
   strikes: 2
@@ -321,14 +322,14 @@ dispatch:
     exp-mk-d0h1j.1-sol-medium:
       role: cross-lab-review
       backend: codex
-      model: gpt-6.1-sol
+      model: gpt-6.2-sol
       reasoning_effort: medium
       service_tier: standard
       fallbacks: []
     planning-astra:
       role: frontier-planning
       backend: codex
-      model: gpt-6-astra
+      model: gpt-6.2-astra
       reasoning_effort: medium
       service_tier: standard
       minimum_codex_version: 0.153.1
@@ -368,7 +369,7 @@ dispatch:
     review-astra:
       role: plan-review
       backend: codex
-      model: gpt-6-astra
+      model: gpt-6.2-astra
       reasoning_effort: medium
       service_tier: standard
       minimum_codex_version: 0.153.1
@@ -424,7 +425,7 @@ dispatch:
     one-shot-astra:
       role: one-shot-author
       backend: codex
-      model: gpt-6-astra
+      model: gpt-6.2-astra
       reasoning_effort: high
       service_tier: standard
       minimum_codex_version: 0.153.1
@@ -466,7 +467,7 @@ dispatch:
     fast:
       role: routine-execution
       backend: codex
-      model: gpt-6.1-sol
+      model: gpt-6.2-sol
       reasoning_effort: medium
       service_tier: standard
       # mk ruling 2026-09-25: Codex exhaustion must never block development.
@@ -477,7 +478,7 @@ dispatch:
     fast-clavain:
       role: scout
       backend: codex
-      model: gpt-6.1-sol
+      model: gpt-6.2-sol
       reasoning_effort: medium
       service_tier: standard
       # mk ruling 2026-09-25: same seat scout-sol already falls back to.
@@ -486,7 +487,7 @@ dispatch:
     deep:
       role: deep-execution
       backend: codex
-      model: gpt-6.1-sol
+      model: gpt-6.2-sol
       reasoning_effort: high
       # mk-42j9.26 verdict item 2: the deep-execution Sol seats stay at or above high.
       service_tier: standard
@@ -498,7 +499,7 @@ dispatch:
     deep-clavain:
       role: deep-execution
       backend: codex
-      model: gpt-6.1-sol
+      model: gpt-6.2-sol
       reasoning_effort: high
       # mk-42j9.26 verdict item 2: the deep-execution Sol seats stay at or above high.
       service_tier: standard
@@ -508,7 +509,7 @@ dispatch:
     main-astra:
       role: main-integrator
       backend: codex
-      model: gpt-6-astra
+      model: gpt-6.2-astra
       reasoning_effort: xhigh
       service_tier: standard
       minimum_codex_version: 0.153.1
@@ -517,7 +518,7 @@ dispatch:
     main-sol:
       role: main-integrator
       backend: codex
-      model: gpt-6.1-sol
+      model: gpt-6.2-sol
       # mk ruling 2026-09-26 (mk-rpnv.17): authority seat, high not medium —
       # roster Rule 6 bars Sol-medium from authority roles.
       reasoning_effort: high
@@ -532,7 +533,7 @@ dispatch:
     scout-sol:
       role: scout
       backend: codex
-      model: gpt-6.1-sol
+      model: gpt-6.2-sol
       reasoning_effort: medium
       service_tier: standard
       fallbacks: [scout-sonnet]
@@ -559,7 +560,7 @@ dispatch:
     main-session-astra:
       role: main-session
       backend: codex
-      model: gpt-6-astra
+      model: gpt-6.2-astra
       reasoning_effort: medium
       service_tier: standard
     lane-status-quo:
@@ -603,7 +604,7 @@ dispatch:
     coordination-sol:
       role: coordination
       backend: codex
-      model: gpt-6.1-sol
+      model: gpt-6.2-sol
       reasoning_effort: medium
       service_tier: standard
       # Codex coordinates through the bb CLI in its shell; it has no in-session
@@ -612,7 +613,7 @@ dispatch:
     routine-sol:
       role: routine-execution
       backend: codex
-      model: gpt-6.1-sol
+      model: gpt-6.2-sol
       reasoning_effort: medium
       service_tier: standard
       fallbacks: [routine-sonnet]
@@ -620,7 +621,7 @@ dispatch:
     planning-sol:
       role: planning
       backend: codex
-      model: gpt-6.1-sol
+      model: gpt-6.2-sol
       reasoning_effort: high
       service_tier: standard
       # Same chain routine-sol gave planning before mk-42j9.27. An elevated context
@@ -630,7 +631,7 @@ dispatch:
     routine-exec-sol:
       role: routine-execution
       backend: codex
-      model: gpt-6.1-sol
+      model: gpt-6.2-sol
       reasoning_effort: high
       service_tier: standard
       # Default routine-execution seat (bead mk-mhuo2.1). High, not routine-sol's
@@ -648,7 +649,7 @@ dispatch:
     deep-exec-sol:
       role: deep-execution
       backend: codex
-      model: gpt-6.1-sol
+      model: gpt-6.2-sol
       reasoning_effort: high
       service_tier: standard
       # Default deep-execution seat when the context is not elevated (bead
@@ -679,7 +680,7 @@ dispatch:
     deep-astra:
       role: deep-execution
       backend: codex
-      model: gpt-6-astra
+      model: gpt-6.2-astra
       reasoning_effort: high
       service_tier: standard
       minimum_codex_version: 0.153.1
@@ -688,7 +689,7 @@ dispatch:
     deep-sol:
       role: deep-execution
       backend: codex
-      model: gpt-6.1-sol
+      model: gpt-6.2-sol
       reasoning_effort: high
       # mk-42j9.26 verdict item 2: the deep-execution Sol seats stay at or above high.
       service_tier: standard
@@ -750,7 +751,7 @@ dispatch:
     validation-sol:
       role: validation
       backend: codex
-      model: gpt-6.1-sol
+      model: gpt-6.2-sol
       reasoning_effort: medium
       service_tier: standard
       fallbacks: [validation-opus, validation-sonnet]
@@ -758,7 +759,7 @@ dispatch:
     release-sol:
       role: release-preparation
       backend: codex
-      model: gpt-6.1-sol
+      model: gpt-6.2-sol
       reasoning_effort: medium
       service_tier: standard
       fallbacks: [release-sonnet]
@@ -775,7 +776,7 @@ dispatch:
     release-authority-main:
       role: release-authority
       backend: main
-      model: gpt-6-astra
+      model: gpt-6.2-astra
       reasoning_effort: xhigh
       service_tier: standard
       minimum_codex_version: 0.153.1
@@ -784,7 +785,7 @@ dispatch:
     release-authority-sol:
       role: release-authority
       backend: main
-      model: gpt-6.1-sol
+      model: gpt-6.2-sol
       # mk ruling 2026-09-26 (mk-rpnv.17): authority seat, high not medium.
       reasoning_effort: high
       service_tier: standard
@@ -792,7 +793,7 @@ dispatch:
     crosslab-sol:
       role: cross-lab-review
       backend: codex
-      model: gpt-6.1-sol
+      model: gpt-6.2-sol
       reasoning_effort: medium
       service_tier: standard
       fallbacks: [crosslab-astra, crosslab-opus]
@@ -800,7 +801,7 @@ dispatch:
     crosslab-astra:
       role: cross-lab-review
       backend: codex
-      model: gpt-6-astra
+      model: gpt-6.2-astra
       reasoning_effort: xhigh
       service_tier: standard
       minimum_codex_version: 0.153.1

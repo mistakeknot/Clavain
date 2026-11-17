@@ -15,7 +15,7 @@ experiment_tiers = {e['tier'] for e in registry.values()}
 assert len(experiment_tiers) == len(registry)
 for name, e in registry.items():
     assert profiles[name] == {'scope': e['bead'], 'roles': {e['role']: e['tier']}}
-    assert e['producer_model']=='gpt-6-astra'
+    assert e['producer_model']=='gpt-6.2-astra'
     t = tiers[e['tier']]
     assert t['fallbacks'] == []
     for key, field in [('backend','backend'), ('model','model'), ('reasoning_effort','effort'), ('service_tier','service_tier')]:
@@ -43,7 +43,7 @@ with tempfile.TemporaryDirectory() as tmp:
         args=['ic','--json','route','dispatch',f'--policy={path}',f'--role={role}',f'--context-file={context}']
         if profile: args.append(f'--policy-profile={profile}')
         if producer is None and role in {'plan-review','validation','cross-lab-review'}:
-            producer = 'gpt-6-astra' if profile else ('gpt-6.1-sol' if role=='plan-review' else 'opus')
+            producer = 'gpt-6.2-astra' if profile else ('gpt-6.2-sol' if role=='plan-review' else 'opus')
         if producer: args.append(f'--producer-identity={producer}')
         result=subprocess.run(args, text=True, capture_output=True)
         if not ok:
@@ -77,9 +77,9 @@ with tempfile.TemporaryDirectory() as tmp:
         result=subprocess.run(['bash','-c','source "$1"; EXPERIMENT_ENTRY="$2"; _experiment_producer_check "$3"',
                                '_',str(guard),json.dumps(registry['experiment-mk-d0h1j.1-sol-medium']),json.dumps(route)],capture_output=True,text=True)
         return result.returncode==0
-    for producer in ['gpt-6-astra','openai/gpt-6-astra']:
+    for producer in ['gpt-6.2-astra','openai/gpt-6.2-astra']:
         r=resolve('cross-lab-review',profile='experiment-mk-d0h1j.1-sol-medium',reasons=['difficult-verification'],scope='mk-d0h1j.1',producer=producer)
-        assert r['producer_model']=='gpt-6-astra' and admitted(r)
+        assert r['producer_model']=='gpt-6.2-astra' and admitted(r)
     for producer in ['opus','sonnet','kimi-code/k3']:
         r=resolve('cross-lab-review',profile='experiment-mk-d0h1j.1-sol-medium',reasons=['difficult-verification'],scope='mk-d0h1j.1',producer=producer)
         assert not admitted(r), producer

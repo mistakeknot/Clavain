@@ -164,14 +164,14 @@ def _receipt(tmp_path, *recs):
 
 def _rec(**kw):
     base = {"role": "routine-execution", "outcome": "completed", "exit_code": 0,
-            "model": "requested-model", "observed_model": "gpt-6.1-sol"}
+            "model": "requested-model", "observed_model": "gpt-6.2-sol"}
     base.update(kw)
     return base
 
 
 def test_receipt_identity_uses_completed_model_after_fallback(tmp_path):
     f = _receipt(tmp_path, _rec(observed_model="claude-sonnet-5-5", outcome="failed", exit_code=1), _rec())
-    assert sep.read_receipt_identity(f, "routine-execution") == "gpt-6.1-sol"
+    assert sep.read_receipt_identity(f, "routine-execution") == "gpt-6.2-sol"
 
 
 def test_receipt_identity_fails_closed(tmp_path):
@@ -203,16 +203,16 @@ def _stub_dispatch(tmp_path, model):
 def test_real_dispatch_path_binds_judge_to_receipt_identity(tmp_path, monkeypatch):
     log = tmp_path / "log"
     monkeypatch.setenv("STUB_LOG", str(log))
-    stub = _stub_dispatch(tmp_path, "gpt-6.1-sol")
+    stub = _stub_dispatch(tmp_path, "gpt-6.2-sol")
     ex, _ = sep.make_dispatch_callables(stub, "routine-execution", "cross-lab-review", 30)
     text, ident = ex("injected", CASES[0], "BODY")
-    assert ident == "gpt-6.1-sol"
+    assert ident == "gpt-6.2-sol"
     judge_stub = _stub_dispatch(tmp_path, "claude-opus-5-5")
     _, judge = sep.make_dispatch_callables(judge_stub, "routine-execution", "cross-lab-review", 30)
     # the judge stub records under the executor role name, so use it as judge role too
     _, judge = sep.make_dispatch_callables(judge_stub, "routine-execution", "routine-execution", 30)
     assert judge(CASES[0], text, ident) == 0.5
-    assert log.read_text().split() == ["gpt-6.1-sol"]
+    assert log.read_text().split() == ["gpt-6.2-sol"]
 
 
 def test_duplicate_case_ids_rejected(tmp_path):
@@ -256,8 +256,8 @@ def test_cli_missing_dispatch_is_error(tmp_path, capsys):
 
 
 def test_receipt_identity_ignores_requested_model_and_rejects_unknown(tmp_path):
-    f = _receipt(tmp_path, _rec(model="claude-sonnet-5-5", observed_model="gpt-6.1-sol"))
-    assert sep.read_receipt_identity(f, "routine-execution") == "gpt-6.1-sol"  # mismatch: observed wins
+    f = _receipt(tmp_path, _rec(model="claude-sonnet-5-5", observed_model="gpt-6.2-sol"))
+    assert sep.read_receipt_identity(f, "routine-execution") == "gpt-6.2-sol"  # mismatch: observed wins
     agree = _receipt(tmp_path, _rec(model="m", observed_model="m"))
     assert sep.read_receipt_identity(agree, "routine-execution") == "m"
     for bad in ("unknown", "UNKNOWN", None):
@@ -312,7 +312,7 @@ def test_known_receipt_next_to_bad_one_fails_closed(tmp_path, bad):
 
 def test_failed_receipt_without_identity_is_ignored(tmp_path):
     bad = _rec(outcome="failed", exit_code=1, observed_model="unknown")
-    assert sep.read_receipt_identity(_receipt(tmp_path, bad, _rec()), "routine-execution") == "gpt-6.1-sol"
+    assert sep.read_receipt_identity(_receipt(tmp_path, bad, _rec()), "routine-execution") == "gpt-6.2-sol"
 
 
 def _two_role_stub(tmp_path, exec_model, judge_model):
@@ -337,24 +337,24 @@ def _run_pair(tmp_path, exec_model, judge_model):
 
 def test_judge_on_producer_model_rejected(tmp_path):
     with pytest.raises(RuntimeError, match="not cross-model"):
-        _run_pair(tmp_path, "gpt-6.1-sol", "gpt-6.1-sol")
+        _run_pair(tmp_path, "gpt-6.2-sol", "gpt-6.2-sol")
 
 
 def test_judge_with_unknown_or_missing_observed_model_rejected(tmp_path):
     with pytest.raises(RuntimeError):
-        _run_pair(tmp_path, "gpt-6.1-sol", "unknown")
+        _run_pair(tmp_path, "gpt-6.2-sol", "unknown")
     with pytest.raises(RuntimeError):
-        _run_pair(tmp_path, "gpt-6.1-sol", "none")
+        _run_pair(tmp_path, "gpt-6.2-sol", "none")
 
 
 def test_judge_on_other_model_accepted(tmp_path):
-    assert _run_pair(tmp_path, "gpt-6.1-sol", "claude-opus-5-5") == 0.5
+    assert _run_pair(tmp_path, "gpt-6.2-sol", "claude-opus-5-5") == 0.5
 
 
 def _real_args(tmp_path):
     skill = tmp_path / "SKILL.md"
     skill.write_text("x")
-    stub = _stub_dispatch(tmp_path, "gpt-6.1-sol")
+    stub = _stub_dispatch(tmp_path, "gpt-6.2-sol")
     return ["--skill", str(skill), "--cases", str(ROOT / "tests/skill-evals/paired/ship.json"),
             "--dispatch", str(stub), "--fake-judge", "--repeats", "1", "--seed", "1"]
 

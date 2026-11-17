@@ -145,7 +145,7 @@ class RosterGenerateNegativeCases(unittest.TestCase):
     def test_non_mapping_families_is_a_diagnostic(self):
         # N6: a well-formed YAML file of the wrong shape is refused, not a traceback.
         families = self.base / "families.yaml"
-        families.write_text("- gpt-6-astra\n- claude-opus-5\n")
+        families.write_text("- gpt-6.2-astra\n- claude-opus-5\n")
         snap, sha = self.write_snapshot("2026-09-23T12:20:44.712Z")
         result = self.run_generate(snap, sha, families=families)
         self.assert_refused_without_patch(result, "families")

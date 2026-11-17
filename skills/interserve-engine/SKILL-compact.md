@@ -42,10 +42,10 @@ DISPATCH=$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/dispatch.sh' 
 
 | Tier | Model | Use for |
 |------|-------|---------|
-| fast | gpt-5.3-codex-spark | Read-only, verification, quick reviews |
-| deep | gpt-5.3-codex | Implementation, complex reasoning |
+| fast | gpt-6.2-sol | Read-only, verification, quick reviews |
+| deep | gpt-6.2-sol | Implementation, complex reasoning |
 
-`--tier` and `-m` are mutually exclusive. For x-high: `CLAVAIN_DISPATCH_PROFILE=interserve bash "$DISPATCH" ...`
+`--tier` and `-m` are mutually exclusive. Fast uses medium effort and deep uses high effort.
 
 ## Backend Selection (`--to`)
 

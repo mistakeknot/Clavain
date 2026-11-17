@@ -26,6 +26,28 @@
 # `ref` binds a non-tier reference (local model) whose routing.yaml entry
 # declares its mode; its declared effort/mode are still re-checked.
 rows:
+  # mk-au6a1: proposed exact rows; UNVERIFIED against the pinned snapshot.
+  # Missing rows still fail closed; previous versions remain for attribution.
+  - model: gpt-6.2-sol
+    effort: medium
+    reasoning_mode: reasoning
+    slug: gpt-6.2-sol-medium
+  - model: gpt-6.2-sol
+    effort: high
+    reasoning_mode: reasoning
+    slug: gpt-6.2-sol-high
+  - model: gpt-6.2-astra
+    effort: medium
+    reasoning_mode: reasoning
+    slug: gpt-6.2-astra-medium
+  - model: gpt-6.2-astra
+    effort: high
+    reasoning_mode: reasoning
+    slug: gpt-6.2-astra-high
+  - model: gpt-6.2-astra
+    effort: xhigh
+    reasoning_mode: reasoning
+    slug: gpt-6.2-astra-xhigh
   - model: claude-opus-5
     effort: high
     reasoning_mode: reasoning

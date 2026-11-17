@@ -11,7 +11,7 @@ cat > "$TMP_ROOT/bin/ic" <<'IC'
 if [[ "$*" == *'route dispatch'* ]]; then
   jq -n --arg policy "$TEST_ROOT/config/routing.yaml" --arg hash "$TEST_POLICY_HASH" \
     '{requested_role:"deep-execution",profile_ref:"deep-astra",policy_source:$policy,
-      policy_hash:$hash,profile:{backend:"codex",model:"gpt-6-astra",
+      policy_hash:$hash,profile:{backend:"codex",model:"gpt-6.2-astra",
       reasoning_effort:"high",service_tier:"standard"},fallback_chain:[]}'
 elif [[ "$*" == *'route record'* ]]; then
   for arg in "$@"; do

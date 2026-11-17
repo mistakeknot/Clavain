@@ -83,10 +83,10 @@ DISPATCH=$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/dispatch.sh' 
 
 | Tier | Model | Use for |
 |------|-------|---------|
-| fast | `gpt-5.3-codex-spark` | Read-only exploration, verification, quick reviews |
-| deep | `gpt-5.3-codex` | Implementation, complex reasoning, debates |
+| fast | `gpt-6.2-sol` | Read-only exploration, verification, quick reviews |
+| deep | `gpt-6.2-sol` | Implementation, complex reasoning, debates |
 
-For x-high: set `CLAVAIN_DISPATCH_PROFILE=interserve` when invoking — then fast→`gpt-5.3-codex-spark-xhigh`, deep→`gpt-5.3-codex-xhigh`. `--tier` and `-m` are mutually exclusive. Missing `routing.yaml` degrades gracefully.
+Fast uses medium effort and deep uses high effort. `--tier` and `-m` are mutually exclusive. Missing `routing.yaml` degrades gracefully.
 
 ## Backend Selection (`--to`)
 

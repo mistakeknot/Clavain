@@ -190,7 +190,7 @@ governed() {
     export CODEX_HOME="$T/codex"
     local tid=01a0f12b-4441-7732-b494-da5347122cea
     mkdir -p "$CODEX_HOME/sessions/2026/11/06"
-    printf '{"type":"session_meta","payload":{"id":"%s"}}\n{"type":"turn_context","payload":{"model":"gpt-6-astra","effort":"high"}}\n{"type":"response_item","payload":{"type":"message","role":"assistant"}}\n' "$tid" > "$CODEX_HOME/sessions/2026/11/06/rollout-test-$tid.jsonl"
+    printf '{"type":"session_meta","payload":{"id":"%s"}}\n{"type":"turn_context","payload":{"model":"gpt-6.2-astra","effort":"high"}}\n{"type":"response_item","payload":{"type":"message","role":"assistant"}}\n' "$tid" > "$CODEX_HOME/sessions/2026/11/06/rollout-test-$tid.jsonl"
     cat > "$T/bin/codex" <<'FAKE'
 #!/usr/bin/env bash
 if [[ "$*" == *--version* ]]; then echo codex-test; exit; fi
@@ -200,10 +200,10 @@ FAKE
     run bash "$DISPATCH" --role validation --role-resolved --resolved-profile-ref p1 \
         --resolved-route-json "{\"policy_hash\":\"$POLICY_HASH\"}" \
         --resolved-profile-json '{"profile_ref":"p1"}' --producer-identity prod-model \
-        --to codex --model gpt-6.1-sol --reasoning-effort high -C "$T/repo" \
+        --to codex --model gpt-6.2-sol --reasoning-effort high -C "$T/repo" \
         --prompt-file "$T/prompt.md" -o "$T/out.md"
     [ "$status" -eq 0 ]
-    [ "$(jq -r .observed_model "$T/state/receipts.jsonl")" = gpt-6-astra ]
+    [ "$(jq -r .observed_model "$T/state/receipts.jsonl")" = gpt-6.2-astra ]
     [ "$(jq -r .observed_model_matches_requested "$T/state/receipts.jsonl")" = false ]
     [ "$(jq -r .observed_thread_id "$T/state/receipts.jsonl")" = "$tid" ]
 }

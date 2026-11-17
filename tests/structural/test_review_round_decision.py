@@ -266,7 +266,7 @@ def test_outer_dispatch_forwards_head_to_actual_child(tmp_path, decision):
         CLAVAIN_DISPATCH_RECEIPT_FILE=str(ledger),
         CLAVAIN_REVIEW_RECEIPT_DIR=str(tmp_path / "reviews"), CLAVAIN_ROUTING_PRECHECK="0")
     result = subprocess.run(["bash", str(scripts / "dispatch.sh"), "--role", "cross-lab-review",
-        "--bead", "test-1", "--producer-identity", "gpt-6.1-sol", "--head", HEAD,
+        "--bead", "test-1", "--producer-identity", "gpt-6.2-sol", "--head", HEAD,
         "--prompt", "dummy"], env=env, capture_output=True, text=True, timeout=30)
     assert result.returncode == 1, result.stderr
     assert f"head {HEAD} decision dummy-decision" in result.stderr

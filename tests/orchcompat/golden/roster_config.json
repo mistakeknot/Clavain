@@ -65,6 +65,16 @@
    "sol",
    "GPT-6.1 Sol"
   ],
+  "gpt-6.2-astra": [
+   "openai",
+   "astra",
+   "GPT-6.2 Astra"
+  ],
+  "gpt-6.2-sol": [
+   "openai",
+   "sol",
+   "GPT-6.2 Sol"
+  ],
   "gpt-oss-120b": [
    "openai",
    "gpt-oss",
@@ -408,6 +418,31 @@
    "gpt-6.1-sol",
    "gpt-6.1-sol-medium"
   ],
+  "gpt-6.2-astra@high": [
+   "exact",
+   "gpt-6.2-astra",
+   "gpt-6.2-astra-high"
+  ],
+  "gpt-6.2-astra@medium": [
+   "exact",
+   "gpt-6.2-astra",
+   "gpt-6.2-astra-medium"
+  ],
+  "gpt-6.2-astra@xhigh": [
+   "exact",
+   "gpt-6.2-astra",
+   "gpt-6.2-astra-xhigh"
+  ],
+  "gpt-6.2-sol@high": [
+   "exact",
+   "gpt-6.2-sol",
+   "gpt-6.2-sol-high"
+  ],
+  "gpt-6.2-sol@medium": [
+   "exact",
+   "gpt-6.2-sol",
+   "gpt-6.2-sol-medium"
+  ],
   "kimi-code/k3@high": [
    "waiver-ratified",
    "kimi-code/k3",
@@ -477,6 +512,11 @@
   "gpt-6-sol@medium",
   "gpt-6.1-sol@high",
   "gpt-6.1-sol@medium",
+  "gpt-6.2-astra@high",
+  "gpt-6.2-astra@medium",
+  "gpt-6.2-astra@xhigh",
+  "gpt-6.2-sol@high",
+  "gpt-6.2-sol@medium",
   "local:nemotron-30b-a3b-8bit",
   "local:qwen3.6-35b-a3b-4bit"
  ],

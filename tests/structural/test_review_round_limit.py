@@ -34,7 +34,7 @@ def invoke(tmp_path, rows, role="cross-lab-review", bead="test-1", child=False, 
     if head is not None:
         bead_args += ["--head", head]
     return subprocess.run(["bash", str(ROOT / "scripts/dispatch.sh"),
-                           "--role", role, *bead_args, "--producer-identity", "gpt-6.1-sol",
+                           "--role", role, *bead_args, "--producer-identity", "gpt-6.2-sol",
                            "--prompt", "dummy"], env=env, capture_output=True, text=True)
 
 

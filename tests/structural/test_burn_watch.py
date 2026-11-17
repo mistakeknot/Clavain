@@ -72,15 +72,15 @@ def test_decompose_classes_roles_and_shares(tmp_path):
 
 def test_codex_report_groups_and_window(tmp_path):
     write(tmp_path, "2026/10/16/a.jsonl", *codex_lines(
-        "/x/host-data/worktrees/thr_vn99e647a6-1/repo", "gpt-6.1-sol",
+        "/x/host-data/worktrees/thr_vn99e647a6-1/repo", "gpt-6.2-sol",
         ("2026-10-16T10:00:00Z", 1000, 900, 10), ("2026-10-16T10:30:00Z", 2000, 1800, 20),
         ("2026-10-16T12:00:00Z", 5000, 0, 0), originator="bb"))
     write(tmp_path, "2026/10/16/b.jsonl", *codex_lines(
-        "/x/projects/Clavain", "gpt-6-astra", ("2026-10-16T10:10:00Z", 3000, 0, 5)))
+        "/x/projects/Clavain", "gpt-6.2-astra", ("2026-10-16T10:10:00Z", 3000, 0, 5)))
     data = run_json(CODEX, "--root", str(tmp_path), "--since", "2026-10-16T10:00Z", "--until", "2026-10-16T11:00Z")
     assert data["sessions"] == 2
     assert data["totals"]["input_tokens"] == 6000 and data["totals"]["cached_input_tokens"] == 2700
-    assert data["models"] == {"gpt-6.1-sol": 2, "gpt-6-astra": 1}
+    assert data["models"] == {"gpt-6.2-sol": 2, "gpt-6.2-astra": 1}
     assert {r["lineage"]: r["input_tokens"] for r in data["by_lineage"]} == {"thr_vn99e647a6": 3000, "Clavain": 3000}
     assert {r["originator"]: r["sessions"] for r in data["by_originator"]} == {"bb": 1, "codex_exec": 1}
     assert data["median_session_input"] == 3000
@@ -268,7 +268,7 @@ def test_unreadable_transcript_is_not_a_quiet_hour(tmp_path):
 def test_unlistable_directory_is_not_a_quiet_hour(tmp_path):
     claude, codex, state, log = watch_env(tmp_path, {"hourly_burn_max": 1_000_000})
     busy_hours(claude)
-    write(codex, "2026/10/16/a.jsonl", *codex_lines("/p", "gpt-6.1-sol", ("2026-10-16T10:30:00Z", 10, 0, 1)))
+    write(codex, "2026/10/16/a.jsonl", *codex_lines("/p", "gpt-6.2-sol", ("2026-10-16T10:30:00Z", 10, 0, 1)))
     hidden = [claude / WORKSPACE, codex / "2026"]
     for directory in hidden:
         directory.chmod(0)
@@ -291,12 +291,12 @@ def test_codex_repeated_snapshot_counts_once(tmp_path):
         total_token_usage=dict(input_tokens=1000), last_token_usage=usage))))
     write(tmp_path, "2026/10/16/a.jsonl",
           json.dumps(dict(type="session_meta", timestamp="2026-10-16T10:00:00Z", payload=dict(originator="x", cwd="/p"))),
-          json.dumps(dict(type="turn_context", timestamp="2026-10-16T10:00:00Z", payload=dict(model="gpt-6.1-sol"))),
+          json.dumps(dict(type="turn_context", timestamp="2026-10-16T10:00:00Z", payload=dict(model="gpt-6.2-sol"))),
           event("2026-10-16T10:01:00Z"),
           json.dumps(dict(type="turn_context", timestamp="2026-10-16T10:02:00Z", payload=dict(model="gpt-5.6-sol"))),
           event("2026-10-16T10:02:00Z"))
     data = run_json(CODEX, "--root", str(tmp_path), "--since", "2026-10-16T10:00Z", "--until", "2026-10-16T11:00Z")
-    assert data["totals"]["input_tokens"] == 1000 and data["models"] == {"gpt-6.1-sol": 1}
+    assert data["totals"]["input_tokens"] == 1000 and data["models"] == {"gpt-6.2-sol": 1}
 
 
 @pytest.mark.parametrize("bad, text", [

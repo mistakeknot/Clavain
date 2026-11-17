@@ -57,7 +57,7 @@ EOF
     cat > "$T/bin/ic" <<'SH'
 #!/usr/bin/env bash
 if [[ "$*" == *"route list"* ]]; then echo '[]'
-elif [[ "$*" == *"route identity"* ]]; then echo '{"model_identity":"gpt-6.1-sol"}'
+elif [[ "$*" == *"route identity"* ]]; then echo '{"model_identity":"gpt-6.2-sol"}'
 elif [[ "$*" == *"route record"* ]]; then exit 0
 else exit 3; fi
 SH
@@ -78,7 +78,7 @@ EOF
     OUT="$T/out.md"
     POLICY_HASH="$(sha256sum "$BATS_TEST_DIRNAME/../../config/routing.yaml" | cut -d' ' -f1)"
     ROUTE_JSON="$(jq -n --arg h "$POLICY_HASH" \
-        '{policy_hash:$h, profile_ref:"primary", profile:{backend:"codex",model:"gpt-6.1-sol",model_identity:"gpt-6.1-sol"}}')"
+        '{policy_hash:$h, profile_ref:"primary", profile:{backend:"codex",model:"gpt-6.2-sol",model_identity:"gpt-6.2-sol"}}')"
 }
 
 teardown() { rm -rf "$T"; }
@@ -96,7 +96,7 @@ commit_paths() {
 
 run_review() {
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --role-resolved --role cross-lab-review \
-        --to codex --model gpt-6.1-sol --resolved-route-json "$ROUTE_JSON" \
+        --to codex --model gpt-6.2-sol --resolved-route-json "$ROUTE_JSON" \
         --producer-identity claude-sonnet-5-5 "${RECEIPT_FLAGS[@]}" -C "$R" \
         --prompt-file "$T/prompt.md" -o "$OUT" "$@"
 }
