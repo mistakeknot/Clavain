@@ -83,6 +83,7 @@ rr() { bash "$RR" --repo "$R" --base main --head "$HEAD_SHA" --producer-identity
     mkdir -p "$copied"
     cp "$RR" "$copied/review-round.sh"
     cp -R "$BATS_TEST_DIRNAME/../../scripts/clavain_selector" "$copied/"
+    find "$copied" -type d -name __pycache__ -exec rm -r {} +
     cat > "$copied/review_exit_shadow.py" <<'PY'
 import os, subprocess, sys
 from clavain_selector import records
@@ -108,6 +109,7 @@ PY
     done
     [ -f "$SHADOW_BYTECODE_LOG" ]
     [ "$(cat "$SHADOW_BYTECODE_LOG")" = $'True\nTrue' ]
+    [ -z "$(find "$copied" -name __pycache__ -print -quit)" ]
 }
 
 @test "dispatch failure is never a pass" {

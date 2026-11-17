@@ -405,20 +405,30 @@ def _project_directory(root, *, nonblocking=False):
 
 
 def _ensure_project_ignore(directory_fd):
-    """Create decisions/.gitignore once so shadow logs stay out of git status.
+    """Publish a complete decisions/.gitignore so logs stay out of git status.
 
-    Exclusive, no-follow creation inside the pinned directory: an existing file,
+    Exclusive temporary creation and linking inside the pinned directory: an existing file,
     symlink or directory is never touched or followed.
     """
+    # Publish a complete file without replacing any existing operator content.
+    temporary = '.gitignore-' + uuid.uuid4().hex
     try:
-        ignore_fd = os.open('.gitignore', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+        ignore_fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                             0o600, dir_fd=directory_fd)
-    except FileExistsError:
-        return
-    with os.fdopen(ignore_fd, 'w', encoding='utf-8') as ignore:
-        ignore.write('*\n!.gitignore\n')
-        ignore.flush()
-        os.fsync(ignore.fileno())
+        try:
+            with os.fdopen(ignore_fd, 'w', encoding='utf-8') as ignore:
+                ignore.write('*\n!.gitignore\n')
+                ignore.flush()
+                os.fsync(ignore.fileno())
+            try:
+                os.link(temporary, '.gitignore', src_dir_fd=directory_fd,
+                        dst_dir_fd=directory_fd, follow_symlinks=False)
+            except FileExistsError:
+                pass
+        finally:
+            os.unlink(temporary, dir_fd=directory_fd)
+    except OSError as exc:
+        raise RecordUnwritable('could not publish project ignore file') from exc
 
 
 def _check_project_capacity(directory_fd, needed, max_bytes):
@@ -444,6 +454,7 @@ def admit_project_record(project_root, *, max_bytes, reserve_bytes):
     """
     root = Path(project_root).resolve()
     with _project_directory(root, nonblocking=True) as directory_fd:
+        _ensure_project_ignore(directory_fd)
         _check_project_capacity(directory_fd, reserve_bytes, max_bytes)
         active = True
         def append(record):
