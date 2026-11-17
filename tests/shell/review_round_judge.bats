@@ -182,3 +182,11 @@ run_round() {
     run bash "$RR" --repo "$R" --base main --head "$HEAD_SHA" --producer-identity p --out-dir "$OUT" --prompt-file /dev/null --gate-cmd 'echo two > "$(printf "AGENTS.md\nxxxAGENTS.md")"'
     [ "$status" -eq 11 ]
 }
+
+@test "a gate cannot hide a deleted file behind a rename onto an overlaid path" {
+    cd "$R"
+    git rm -q AGENTS.md; echo "base rules" > xxxAGENTS.md; git add -A; git commit -qm change
+    HEAD_SHA=$(git rev-parse HEAD)
+    run bash "$RR" --repo "$R" --base main --head "$HEAD_SHA" --producer-identity p --out-dir "$OUT" --prompt-file /dev/null --gate-cmd 'mv xxxAGENTS.md AGENTS.md; git add -A'
+    [ "$status" -eq 11 ]
+}

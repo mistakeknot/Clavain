@@ -170,7 +170,15 @@ exact_head_wt() {
   git -C "$REPO" status --porcelain -z --untracked-files=all | python3 -I -c '
 import sys
 skip = {l.split("\t")[0].encode() for l in open(sys.argv[1], encoding="utf-8", errors="surrogateescape").read().split("\n") if l}
-bad = [r for r in sys.stdin.buffer.read().split(b"\0") if r and r[3:] not in skip]
+recs = [r for r in sys.stdin.buffer.read().split(b"\0") if r]
+bad = False
+i = 0
+while i < len(recs):
+    r = recs[i]; i += 1
+    if r[3:] not in skip: bad = True
+    if r[:2].count(b"R") or r[:2].count(b"C"):   # a rename or copy record is followed by its bare source path
+        if i >= len(recs) or recs[i] not in skip: bad = True
+        i += 1
 sys.exit(1 if bad else 0)' "$OVERLAID"
 }
 if [ "$MODE" = confirm ]; then
