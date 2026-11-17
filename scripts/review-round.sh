@@ -281,7 +281,7 @@ fi
 # Detached source checkouts need an explicit change ID; a base alone cannot
 # distinguish unrelated changes. Branch IDs must not be reused across changes.
 if [ -n "$shadow_loop" ]; then
-  ( python3 "$HERE/review_exit_shadow.py" --project "$SRC_REPO" \
+  ( PYTHONDONTWRITEBYTECODE=1 python3 -B "$HERE/review_exit_shadow.py" --project "$SRC_REPO" \
       --loop "$shadow_loop" --native "$shadow_native" --panel "$OUT" \
       </dev/null >/dev/null 2>&1 & ) || true
 fi
