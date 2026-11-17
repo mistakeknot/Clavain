@@ -2827,7 +2827,7 @@ case "${ROLE:-}" in
       [[ "$ROLE_RESOLVED" == true ]] || round_limit_args+=(--check-only)
       python3 "$DISPATCH_SCRIPT_DIR/review-round-limit.py" "$CLAVAIN_BEAD_ID" \
         "${CLAVAIN_DISPATCH_RECEIPT_FILE:-${XDG_STATE_HOME:-${HOME:-/nonexistent}/.local/state}/clavain/dispatch-receipts.jsonl}" \
-        "$(_review_receipt_dir)" --head "${REVIEW_HEAD:-${RR_HEAD:-}}" "${round_limit_args[@]}" || exit "$?"
+        "$(_review_receipt_dir)" --head "${REVIEW_HEAD:-${RR_HEAD:-}}" --role "$ROLE" "${round_limit_args[@]}" || exit "$?"
     fi
     ;;
 esac

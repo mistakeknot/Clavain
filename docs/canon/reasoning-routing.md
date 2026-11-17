@@ -69,7 +69,9 @@ Proposed authority: **vizier only**. The authority records the consequences on
 the bead and writes `<review-receipt-dir>/round-limits/decisions/<bead>.json`
 with `python3 scripts/review-round-decision.py --reviews-dir <review-receipt-dir>
 --bead <bead> --head <lowercase-40-hex-commit> --accepted-failures <current-count>
---ruling <recorded-decision>`. All four decision arguments are explicit. The
+--ruling <recorded-decision>`. All four decision arguments are explicit. Add
+`--role cross-lab-review`, `--role plan-review`, or `--role validation` to
+restrict the decision to that role; omitting it preserves the shared claim. The
 writer creates the decisions directory with mode 0700, creates a fresh unique
 ID and UTC timestamp, and publishes complete JSON by an atomic rename from a
 0600 temporary file. A writer lock prevents concurrent writers from replacing
@@ -99,7 +101,8 @@ procedural, not OS isolation.
 
 Schema version 1 contains `decision_id`, `bead`, `head`, `accepted_failures`,
 `authority` (`vizier`), `ruling`, `decided_at` (ISO 8601 with timezone), and
-`mac`. HMAC-SHA256 covers every field except `mac`, encoded as UTF-8 JSON with
+`mac`, plus an optional `role` (one of the three review roles). HMAC-SHA256
+covers every field except `mac`, including `role` when present, encoded as UTF-8 JSON with
 sorted keys, no whitespace (`separators=(",", ":")`), and `ensure_ascii=True`.
 Both writer and gate require a lowercase 40-hex head. The decision must be a
 regular, non-symlink file owned by the current uid,
@@ -113,7 +116,10 @@ means no decision can apply. A successful check atomically creates a
 `<SHA256(decision_id)>.consumed` marker with exclusive creation in the same
 directory; retain the marker even if dispatch later fails. It permits one
 additional review round at that head for any of the three review roles.
-Decisions are not bound to a review role; all three roles share the single claim.
+When `role` is present, only that review role can claim the decision; a mismatch
+refuses without consuming it. Without `role`, existing decisions keep the shared
+single claim across all three roles: a plan-review claim also consumes the
+cross-lab-review opportunity. Dispatch supplies its role for both checks and claims.
 The next failure changes the count and requires a new
 recorded decision. Concurrent claimants cannot both succeed.
 
