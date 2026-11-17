@@ -92,5 +92,6 @@ func runDecide(in io.Reader, out io.Writer, args []string) error {
 	if json.Unmarshal(response, &result) != nil || result["fallback"] != true {
 		return fallback("invalid_response")
 	}
+	result["choice"] = native
 	return json.NewEncoder(out).Encode(result)
 }

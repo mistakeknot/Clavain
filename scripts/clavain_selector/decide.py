@@ -19,6 +19,9 @@ from clavain_selector import contract, credentials, egress, flags, jev_client as
 from clavain_selector.accounting import AttemptLog, digest, stamp
 
 
+SHADOW_LOG_MAX_BYTES = 8 * 1024 * 1024
+
+
 def band(confidence):
     return 'accept' if confidence >= .8 else 'escalate' if confidence < .6 else 'review'
 
@@ -92,7 +95,7 @@ def decide(obj, policy, project_root):
             project_root=Path(project_root).resolve())
         if contract.validate_request(request) is not None:
             raise ValueError
-        # Scan before even the local record projection: no prompt text is logged.
+        # Heuristic observations stay local; hosted requests pass the egress guard below.
         if result['backend'] == 'heuristic':
             # Conservative deterministic baseline: agree with today's answer.
             result.update(probs={c.id: float(c.id == native) for c in candidates},
@@ -140,7 +143,7 @@ def decide(obj, policy, project_root):
         record.update(metadata)
     try:
         records.append_record(record, record_dir=Path(project_root).resolve() / '.clavain' / 'decisions',
-                              project_root=project_root)
+                              project_root=project_root, max_bytes=SHADOW_LOG_MAX_BYTES)
         result['decision_id'] = record['decision_id']
     except Exception:
         result['reason'] = 'record_unwritable'
@@ -160,9 +163,6 @@ def _jev(request, obj, policy, result, log):
         return
     day = dt.datetime.now(dt.timezone.utc).date().isoformat()
     budget = j.Budget(f'decide:{request.project_root}:{day}', 'decision_models', limit=min(8, limit))
-    if budget.consume() is not None:
-        result['reason'] = 'budget_exhausted'
-        return
     breaker = j.Breaker()
     if breaker.check() is not None:
         result['reason'] = 'circuit_open'
@@ -178,6 +178,9 @@ def _jev(request, obj, policy, result, log):
         return
     call = j.JevCall.build(admitted, fit_questions=False,
                           deadline=j.Deadline.start(int(policy.get('deadline_ms', 1500))))
+    if budget.consume() is not None:
+        result['reason'] = 'budget_exhausted'
+        return
     response = j.JevClient(key).call(call, log=log)
     breaker.record(response)
     if isinstance(response, j.JevFailure):

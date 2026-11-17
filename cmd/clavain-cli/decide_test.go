@@ -87,3 +87,20 @@ func TestDecideHelperTimeout(t *testing.T) {
 		t.Fatal(out.String())
 	}
 }
+
+func TestDecideForcesNativeChoice(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "scripts", "clavain_selector"), 0700)
+	os.WriteFile(filepath.Join(dir, "scripts", "clavain_selector", "decide.py"), []byte(`print('{"choice":"build","shadow_choice":"build","fallback":true}')`), 0600)
+	config := filepath.Join(dir, "routing.yaml")
+	os.WriteFile(config, []byte("decision_models:\n  route: {mode: shadow, backend: heuristic}\n"), 0600)
+	var out bytes.Buffer
+	if err := runDecide(strings.NewReader(`{"question":{"id":"route"},"native_choice":"plan"}`), &out, []string{"--plugin-root", dir, "--config", config}); err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]interface{}
+	json.Unmarshal(out.Bytes(), &got)
+	if got["choice"] != "plan" || got["shadow_choice"] != "build" {
+		t.Fatal(out.String())
+	}
+}

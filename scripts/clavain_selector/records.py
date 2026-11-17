@@ -25,6 +25,7 @@ import hashlib
 import json
 import math
 import os
+import stat
 import uuid
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -351,7 +352,8 @@ def _append_line(path: Path, line: str, *, parent_fd: int | None = None) -> None
 
 
 def append_record(record: Mapping[str, Any], *, record_dir: str | Path | None = None,
-                  project_root: str | Path | None = None) -> Path:
+                  project_root: str | Path | None = None,
+                  max_bytes: int | None = None) -> Path:
     """Append one decision record as a JSONL line; returns the file written."""
     resolved_dir = _resolve_record_dir(record_dir)
     created_at = record.get("created_at")
@@ -376,6 +378,16 @@ def append_record(record: Mapping[str, Any], *, record_dir: str | Path | None = 
                     pass
                 descriptors.append(os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
                                            dir_fd=descriptors[-1]))
+            # Serialize the size check and append across every day file.
+            fcntl.flock(descriptors[-1], fcntl.LOCK_EX)
+            if max_bytes is not None:
+                total = 0
+                for name in os.listdir(descriptors[-1]):
+                    info = os.stat(name, dir_fd=descriptors[-1], follow_symlinks=False)
+                    if name.endswith('.jsonl') and stat.S_ISREG(info.st_mode):
+                        total += info.st_size
+                if total + len((line + "\n").encode("utf-8")) > max_bytes:
+                    raise RecordUnwritable('project record byte cap reached')
             _append_line(path, line, parent_fd=descriptors[-1])
         except OSError as exc:
             raise RecordUnwritable('unsafe project record path') from exc
@@ -407,7 +419,27 @@ def append_outcome(
         "note": _truncate(note, 200) if note else None,
     }
     path = _outcomes_dir(resolved_dir) / _day_filename(when)
-    _append_line(path, json.dumps(entry, sort_keys=True, ensure_ascii=True))
+    # Walk from the filesystem root with pinned descriptors, refusing links
+    # in every component, including .clavain and the sibling outcomes directory.
+    descriptors = []
+    try:
+        absolute = path.absolute()
+        descriptors.append(os.open(absolute.anchor, os.O_RDONLY | os.O_DIRECTORY))
+        for component in absolute.parent.parts[1:]:
+            try:
+                os.mkdir(component, mode=0o700, dir_fd=descriptors[-1])
+            except FileExistsError:
+                pass
+            descriptors.append(os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                       dir_fd=descriptors[-1]))
+        os.fchmod(descriptors[-1], 0o700)
+        _append_line(path, json.dumps(entry, sort_keys=True, ensure_ascii=True),
+                     parent_fd=descriptors[-1])
+    except OSError as exc:
+        raise RecordUnwritable('unsafe outcome path') from exc
+    finally:
+        for fd in reversed(descriptors):
+            os.close(fd)
     return path
 
 
