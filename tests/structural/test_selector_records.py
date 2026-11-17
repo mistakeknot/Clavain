@@ -358,3 +358,52 @@ def test_unwritable_raises(tmp_path):
             append_record(build_record(**_base_kwargs()), record_dir=record_dir)
     finally:
         os.chmod(record_dir.parent, 0o700)
+
+@pytest.mark.parametrize('component', ['.clavain', 'outcomes', 'dayfile'])
+def test_outcome_refuses_symlinks(tmp_path, component):
+    import datetime as dt
+    root = tmp_path / 'project'
+    root.mkdir()
+    outside = tmp_path / 'outside'
+    outside.mkdir(mode=0o755)
+    parent = root / '.clavain'
+    if component == '.clavain':
+        parent.symlink_to(outside, target_is_directory=True)
+    else:
+        parent.mkdir()
+        if component == 'outcomes':
+            (parent / 'outcomes').symlink_to(outside, target_is_directory=True)
+        else:
+            (parent / 'outcomes').mkdir()
+            (parent / 'outcomes' / (dt.datetime.now(dt.timezone.utc).date().isoformat() + '.jsonl')).symlink_to(outside / 'data')
+    with pytest.raises(RecordUnwritable):
+        append_outcome('synthetic-id', 'verified', record_dir=parent / 'decisions')
+    assert list(outside.iterdir()) == []
+    assert stat.S_IMODE(outside.stat().st_mode) == 0o755
+
+
+def test_project_log_cap_spans_day_files(tmp_path):
+    directory = tmp_path / '.clavain/decisions'
+    first = {'created_at': '2026-01-01T00:00:00Z', 'value': 'synthetic'}
+    second = dict(first, created_at='2026-01-02T00:00:00Z')
+    size = len((json.dumps(first, sort_keys=True, ensure_ascii=True) + '\n').encode())
+    append_record(first, record_dir=directory, project_root=tmp_path, max_bytes=size)
+    with pytest.raises(RecordUnwritable):
+        append_record(second, record_dir=directory, project_root=tmp_path, max_bytes=size)
+    assert read_records(record_dir=directory) == [first]
+    assert sum(p.stat().st_size for p in directory.glob('*.jsonl')) == size
+
+
+def test_outcome_allows_symlink_above_trusted_project(tmp_path):
+    real = tmp_path / 'real'
+    real.mkdir()
+    alias = tmp_path / 'alias'
+    alias.symlink_to(real, target_is_directory=True)
+    path = append_outcome('synthetic', 'verified', record_dir=alias / '.clavain/decisions')
+    assert path.exists()
+    assert json.loads(path.read_text())['decision_id'] == 'synthetic'
+
+
+def test_cap_requires_project_root(tmp_path):
+    with pytest.raises(ValueError):
+        append_record({}, record_dir=tmp_path, max_bytes=1)

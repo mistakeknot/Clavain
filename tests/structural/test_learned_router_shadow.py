@@ -117,3 +117,17 @@ exec 3>&1
         time.sleep(.01)
     assert (tmp_path / 'started').exists()
     assert (tmp_path / 'finished').exists()
+
+
+def test_observation_obeys_project_log_cap(tmp_path, monkeypatch):
+    from clavain_selector import records
+    monkeypatch.setattr(records, 'PROJECT_LOG_MAX_BYTES', 1)
+    policy = tmp_path / 'routing.yaml'
+    policy.write_text('decision_models:\n  learned_router: {mode: shadow, backend: heuristic}\n')
+    monkeypatch.setattr(shadow.subprocess, 'run', lambda *a, **k: type('Result', (), {'stdout': json.dumps(
+        dict(decision_id='test-decision', shadow_choice='native', confidence=1, reason='shadow_mode'))})())
+    with pytest.raises(records.RecordUnwritable):
+        shadow.observe(tmp_path, policy, tmp_path, dict(
+            route=dict(profile_ref='native', profile=dict(backend='claude', model='claude-sonnet-5-5')),
+            native='native', role='scout', prompt_chars=401, exit_code=0))
+    assert records.read_records(record_dir=tmp_path / '.clavain/decisions') == []

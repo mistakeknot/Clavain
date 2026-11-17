@@ -244,7 +244,7 @@ def observe(*, site, native_choice, candidates, state, main_thread_tokens=None,
             main_thread_tokens=main_thread_tokens, native_outcome=native_outcome)
         result['reason'] = 'record_unwritable'
         records.append_record(companion, record_dir=root / '.clavain' / 'decisions',
-                              project_root=root)
+                              project_root=root, max_bytes=records.PROJECT_LOG_MAX_BYTES)
         result.update(status='observed', reason=companion['reason'],
                       decision_id=answer['decision_id'])
     except Exception:

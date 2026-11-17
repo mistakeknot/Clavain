@@ -150,6 +150,15 @@ def test_daily_budget_ignores_caller_session(tmp_path, monkeypatch):
     obj.update(egress_allowed=True, session_id='first')
     assert d.decide(obj, dict(mode='shadow', backend='jev'), tmp_path)['reason'] == 'credential_unavailable'
     obj['session_id'] = 'second'
+    assert d.decide(obj, dict(mode='shadow', backend='jev'), tmp_path)['reason'] == 'credential_unavailable'
+    monkeypatch.setattr(d.credentials, 'load', lambda: d.credentials.SecretStr('synthetic-key'))
+    class Client:
+        def __init__(self, key): pass
+        def call(self, call, *, log):
+            return d.j.JevFailure(d.contract.FallbackReason.TIMEOUT, d.j.FailureDetail.DEADLINE, 0, None, 1)
+    monkeypatch.setattr(d.j, 'JevClient', Client)
+    assert d.decide(obj, dict(mode='shadow', backend='jev'), tmp_path)['reason'] == 'timeout'
+    obj['session_id'] = 'third'
     assert d.decide(obj, dict(mode='shadow', backend='jev'), tmp_path)['reason'] == 'budget_exhausted'
 
 
@@ -161,3 +170,69 @@ def test_registry_disabled_stops_jev(tmp_path, monkeypatch):
     obj = request()
     obj['egress_allowed'] = True
     assert d.decide(obj, dict(mode='shadow', backend='jev'), tmp_path)['reason'] == 'registry_disabled'
+
+@pytest.mark.parametrize('refusal', ['breaker', 'credential', 'egress'])
+def test_refused_call_does_not_spend_budget(tmp_path, monkeypatch, refusal):
+    from clavain_selector import decide as d
+    monkeypatch.setattr(d.flags, 'load_registry', lambda _: {'integrations': {'decision_models': {'enabled': True, 'daily_budget': 8}}})
+    monkeypatch.setattr(d.j.Budget, 'consume', lambda _: pytest.fail('refusal spent budget'))
+    monkeypatch.setattr(d.j.Breaker, 'check', lambda _: 'open' if refusal == 'breaker' else None)
+    def credential():
+        if refusal == 'credential':
+            raise d.credentials.CredentialUnavailable()
+        return d.credentials.SecretStr('synthetic-key')
+    monkeypatch.setattr(d.credentials, 'load', credential)
+    monkeypatch.setattr(d.egress, 'admit', lambda *a, **kw: d.egress.Refusal.__new__(d.egress.Refusal))
+    from types import SimpleNamespace
+    result = {}
+    d._jev(SimpleNamespace(project_root=tmp_path), {}, {}, result, d.AttemptLog())
+    assert result['reason'] == {'breaker': 'circuit_open', 'credential': 'credential_unavailable', 'egress': 'egress_refused'}[refusal]
+
+
+def test_shadow_log_total_cap_keeps_native(tmp_path, monkeypatch):
+    from clavain_selector import decide as d
+    monkeypatch.setattr(d, 'SHADOW_LOG_MAX_BYTES', 1)
+    result = d.decide(request(), dict(mode='shadow', backend='heuristic'), tmp_path)
+    assert result['choice'] == 'plan' and result['fallback']
+    assert result['reason'] == 'record_unwritable'
+    assert sum(p.stat().st_size for p in (tmp_path / '.clavain/decisions').glob('*.jsonl')) == 0
+
+
+def test_heuristic_projection_does_not_claim_egress_scan():
+    import inspect
+    from clavain_selector import decide as d
+    assert 'Scan before even the local record projection' not in inspect.getsource(d.decide)
+
+@pytest.mark.parametrize('refusal', ['budget', 'credential', 'egress', 'exception'])
+def test_real_half_open_probe_not_leaked(tmp_path, monkeypatch, refusal):
+    from clavain_selector import decide as d
+    from types import SimpleNamespace
+    monkeypatch.setenv('CLAVAIN_STATE_DIR', str(tmp_path))
+    monkeypatch.setattr(d.flags, 'load_registry', lambda _: {'integrations': {'decision_models': {'enabled': True, 'daily_budget': 1}}})
+    path = tmp_path / 'selector/breaker.json'
+    path.parent.mkdir()
+    path.write_text(json.dumps({'opened_until': 0, 'probe_pending': False}))
+    day = d.dt.datetime.now(d.dt.timezone.utc).date().isoformat()
+    if refusal == 'budget':
+        assert d.j.Budget(f'decide:{tmp_path}:{day}', 'decision_models', limit=1).consume() is None
+    def load():
+        if refusal == 'credential':
+            raise d.credentials.CredentialUnavailable()
+        return d.credentials.SecretStr('synthetic-key')
+    monkeypatch.setattr(d.credentials, 'load', load)
+    def admit(*a, **kw):
+        if refusal == 'egress':
+            return d.egress.Refusal.__new__(d.egress.Refusal)
+        return object()
+    monkeypatch.setattr(d.egress, 'admit', admit)
+    monkeypatch.setattr(d.j.JevCall, 'build', lambda *a, **kw: object())
+    monkeypatch.setattr(d.j.JevClient, 'call', lambda *a, **kw: (_ for _ in ()).throw(RuntimeError('synthetic')))
+    result = {}
+    if refusal == 'exception':
+        with pytest.raises(RuntimeError):
+            d._jev(SimpleNamespace(project_root=tmp_path), {}, {}, result, d.AttemptLog())
+    else:
+        d._jev(SimpleNamespace(project_root=tmp_path), {}, {}, result, d.AttemptLog())
+        assert result['reason'] == {'budget': 'budget_exhausted', 'credential': 'credential_unavailable', 'egress': 'egress_refused'}[refusal]
+    assert json.loads(path.read_text())['probe_pending'] is False
+    assert d.j.Breaker().check() is None

@@ -25,6 +25,7 @@ import hashlib
 import json
 import math
 import os
+import stat
 import uuid
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -35,6 +36,7 @@ from clavain_selector.contract import MAX_CANDIDATES, Candidate, Point, Provenan
 
 SCHEMA = "clavain.selector.decision"
 SCHEMA_VERSION = 1
+PROJECT_LOG_MAX_BYTES = 8 * 1024 * 1024
 
 _VALID_APPLIED = ("native", "emitted")
 _SUMMARY_MAX_CHARS = 96
@@ -351,8 +353,11 @@ def _append_line(path: Path, line: str, *, parent_fd: int | None = None) -> None
 
 
 def append_record(record: Mapping[str, Any], *, record_dir: str | Path | None = None,
-                  project_root: str | Path | None = None) -> Path:
+                  project_root: str | Path | None = None,
+                  max_bytes: int | None = None) -> Path:
     """Append one decision record as a JSONL line; returns the file written."""
+    if max_bytes is not None and project_root is None:
+        raise ValueError('max_bytes requires project_root')
     resolved_dir = _resolve_record_dir(record_dir)
     created_at = record.get("created_at")
     when = _parse_iso(created_at) if created_at else dt.datetime.now(dt.timezone.utc)
@@ -376,6 +381,16 @@ def append_record(record: Mapping[str, Any], *, record_dir: str | Path | None = 
                     pass
                 descriptors.append(os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
                                            dir_fd=descriptors[-1]))
+            # Serialize the size check and append across every day file.
+            fcntl.flock(descriptors[-1], fcntl.LOCK_EX)
+            if max_bytes is not None:
+                total = 0
+                for name in os.listdir(descriptors[-1]):
+                    info = os.stat(name, dir_fd=descriptors[-1], follow_symlinks=False)
+                    if name.endswith('.jsonl') and stat.S_ISREG(info.st_mode):
+                        total += info.st_size
+                if total + len((line + "\n").encode("utf-8")) > max_bytes:
+                    raise RecordUnwritable('project record byte cap reached')
             _append_line(path, line, parent_fd=descriptors[-1])
         except OSError as exc:
             raise RecordUnwritable('unsafe project record path') from exc
@@ -407,7 +422,32 @@ def append_outcome(
         "note": _truncate(note, 200) if note else None,
     }
     path = _outcomes_dir(resolved_dir) / _day_filename(when)
-    _append_line(path, json.dumps(entry, sort_keys=True, ensure_ascii=True))
+    # Trust ancestors above .clavain (or the configured record parent),
+    # resolving that anchor once; pin and refuse links below it.
+    descriptors = []
+    try:
+        absolute = path.absolute()
+        parent = absolute.parent
+        anchor = parent.parent.parent if parent.parent.name == '.clavain' else parent.parent
+        anchor = anchor.resolve()
+        anchor.mkdir(parents=True, exist_ok=True, mode=0o700)
+        descriptors.append(os.open(anchor, os.O_RDONLY | os.O_DIRECTORY))
+        components = ('.clavain', 'outcomes') if parent.parent.name == '.clavain' else ('outcomes',)
+        for component in components:
+            try:
+                os.mkdir(component, mode=0o700, dir_fd=descriptors[-1])
+            except FileExistsError:
+                pass
+            descriptors.append(os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                       dir_fd=descriptors[-1]))
+        os.fchmod(descriptors[-1], 0o700)
+        _append_line(path, json.dumps(entry, sort_keys=True, ensure_ascii=True),
+                     parent_fd=descriptors[-1])
+    except OSError as exc:
+        raise RecordUnwritable('unsafe outcome path') from exc
+    finally:
+        for fd in reversed(descriptors):
+            os.close(fd)
     return path
 
 

@@ -283,3 +283,16 @@ def test_real_round_keeps_exit_and_persists_in_source(tmp_path, dispatch_rc, exp
             assert not any(r.get('schema') == 'review-exit-outcome-v1' and
                            r.get('through_observation') == observations[-1]['observation_id'] for r in rows)
         assert observations[-1]['shadow_exit'] is (expected_rc == 0)
+
+
+def test_observation_obeys_project_log_cap(tmp_path, monkeypatch):
+    import review_exit_shadow as r
+    from clavain_selector import records
+    root = tmp_path / 'plugin'
+    (root / 'config').mkdir(parents=True)
+    (root / 'config/routing.yaml').write_text('decision_models:\n  review_exit: {mode: shadow, backend: heuristic}\n')
+    monkeypatch.setattr(records, 'PROJECT_LOG_MAX_BYTES', 1)
+    monkeypatch.setattr(r, 'call_decide', lambda *a: dict(decision_id='synthetic', shadow_choice='continue'))
+    with pytest.raises(records.RecordUnwritable):
+        r.observe(root, tmp_path, 'synthetic', 'continue', 0, 10)
+    assert records.read_records(record_dir=tmp_path / '.clavain/decisions') == []

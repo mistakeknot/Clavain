@@ -841,6 +841,7 @@ class Breaker:
     def __init__(self, *, path: Path | None = None, now_fn=time.time) -> None:
         self._path = path or (_selector_dir() / "breaker.json")
         self._now_fn = now_fn
+        self._probe_claimed = False
 
     def check(self) -> FallbackReason | None:
         fd, state = _read_locked_json(self._path)
@@ -858,12 +859,22 @@ class Breaker:
                 state["probe_pending"] = True
                 _write_locked_json(fd, state)
                 fd = -1
+                self._probe_claimed = True
                 return None
             return None
         finally:
             if fd >= 0:
                 fcntl.flock(fd, fcntl.LOCK_UN)
                 os.close(fd)
+
+    def release_probe(self) -> None:
+        """Release only this instance's half-open reservation after a local refusal."""
+        if not self._probe_claimed:
+            return
+        fd, state = _read_locked_json(self._path)
+        state["probe_pending"] = False
+        _write_locked_json(fd, state)
+        self._probe_claimed = False
 
     def record(self, result: "JevResult") -> None:
         fd, state = _read_locked_json(self._path)
@@ -888,7 +899,10 @@ class Breaker:
                             state["opened_until"] = now + BREAKER_OPEN_SECONDS
                             failures = 0
                         state["consecutive_failures"] = failures
+            if self._probe_claimed:
+                state["probe_pending"] = False
             _write_locked_json(fd, state)
+            self._probe_claimed = False
         except Exception:
             fcntl.flock(fd, fcntl.LOCK_UN)
             os.close(fd)

@@ -79,10 +79,10 @@ exposes tokens, not a monetary price. Unknown attempt usage stays unknown.
 The writer pins directory descriptors and refuses symlinked directories or
 day files below the project; it never follows those links to chmod targets.
 
-S1 design choice: daily JSONL files have no byte cap or automated retention
-during the one-week shadow trial. The hosted-call budget bounds Jev traffic,
-but repeated heuristic observations can still grow the log. Monitor local disk
-usage during the trial; retention is a prerequisite for sustained rollout.
+Trial log design choice: project decision JSONL files have an 8 MiB total
+byte cap across all days. The locked size check includes the pending line;
+when full, observations return `record_unwritable` without appending. Native
+fallback continues unchanged. There is no automatic deletion or rotation.
 
 `observed_outcome` initially is null. Fill it logically by appending an
 outcome with the existing `records.append_outcome(decision_id, result,
