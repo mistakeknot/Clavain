@@ -451,3 +451,25 @@ def test_project_gitignore_preserves_existing(tmp_path, existing):
         assert outside.read_text() == 'untouched\n'
     elif existing == 'dangling':
         assert not outside.exists()
+
+
+def test_failed_ignore_publication_can_retry(tmp_path, monkeypatch):
+    from clavain_selector import records
+    original = records.os.fsync
+    def fail(fd):
+        raise OSError('synthetic disk failure')
+    monkeypatch.setattr(records.os, 'fsync', fail)
+    directory = tmp_path / '.clavain/decisions'
+    with pytest.raises(RecordUnwritable):
+        append_record({}, record_dir=directory, project_root=tmp_path)
+    assert not (directory / '.gitignore').exists()
+    monkeypatch.setattr(records.os, 'fsync', original)
+    append_record({}, record_dir=directory, project_root=tmp_path)
+    assert (directory / '.gitignore').read_text() == '*\n!.gitignore\n'
+
+
+def test_admission_creates_ignore(tmp_path):
+    from clavain_selector import records
+    with records.admit_project_record(tmp_path, max_bytes=1000, reserve_bytes=100) as write:
+        write({})
+    assert (tmp_path / '.clavain/decisions/.gitignore').read_text() == '*\n!.gitignore\n'

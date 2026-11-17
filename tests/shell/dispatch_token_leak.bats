@@ -443,6 +443,7 @@ W
     done
     [ -f "$SHADOW_BYTECODE_LOG" ]
     [ "$(cat "$SHADOW_BYTECODE_LOG")" = True:True ]
+    [ -z "$(find "$T/mock/scripts" -name __pycache__ -print -quit)" ]
 }
 
 # ---- scan after the last write ---------------------------------------------
