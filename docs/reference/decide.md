@@ -80,8 +80,9 @@ The writer pins directory descriptors and refuses symlinked directories or
 day files below the project; it never follows those links to chmod targets.
 
 Before starting the trial, install a release whose `clavain-cli` supports
-`decide`. Verify the installed CLI with `clavain-cli decide --config /dev/null`:
-it must return `reason: off`. The one-week shadow trial starts only after
+`decide`. Verify the installed CLI with
+`echo '{}' | clavain-cli decide --config /dev/null` (the command reads its
+request from stdin): it must return `reason: off`. The one-week shadow trial starts only after
 that prerequisite passes. Zero rows before then means the observer is not
 wired, not that no events occurred.
 
