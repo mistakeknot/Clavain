@@ -10,6 +10,8 @@ Auto-dispatch to `/sprint` or `/work`. New project? → `/clavain:project-onboar
 
 ## Patterns (reference by name)
 
+**S2 measurement:** Obtain exact UTF8 byte counts from the caller's serialized prompt/response strings (equivalent to `len(text.encode('utf-8'))`) and hash the subject using a host string API. Pass strings through structured arguments; never interpolate raw description, prompt, response or evidence text into shell code. Never guess byte counts or hashes. If exact measurement is unavailable, skip the observation and continue the native path.
+
 **token-attribution:** `_is_sid=$(cat /tmp/interstat-session-id 2>/dev/null||echo ""); [[ -n "$_is_sid" ]] && echo "$CLAVAIN_BEAD_ID" > "/tmp/interstat-bead-${_is_sid}" 2>/dev/null||true; ic session attribute --session="${_is_sid}" --bead="$CLAVAIN_BEAD_ID" 2>/dev/null||true`
 
 **claim-identity:** `bd set-state "$CLAVAIN_BEAD_ID" "claimed_by=${CLAUDE_SESSION_ID:-unknown}" 2>/dev/null||true; bd set-state "$CLAVAIN_BEAD_ID" "claimed_at=$(date +%s)" 2>/dev/null||true`

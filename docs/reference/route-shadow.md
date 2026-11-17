@@ -44,6 +44,12 @@ classification prompt, response, reason, plan or lane intent is passed to the
 observer, persisted or sent to a provider. Counts include the complete native
 prompt and response UTF8 bytes, computed without writing their text to disk.
 Missing counts or hashes mean skip the observation.
+Measure counts exactly from serialized caller strings using a host API such as
+`len(text.encode('utf-8'))`; never guess or interpolate untrusted text into
+shell code. If the host cannot expose exact strings or telemetry, skip.
+Hashes are pseudonyms: unsalted hashes of enumerable bead IDs or guessed
+descriptions can be matched by dictionary search. Private log permissions
+provide the confidentiality boundary.
 
 The observer calls `clavain-cli decide` with question ID `route`, site-specific
 candidates, explicit plugin/config/project roots, `egress_allowed: false` and

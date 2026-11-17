@@ -327,6 +327,7 @@ lane_intent=$(bd state "$CLAVAIN_BEAD_ID" lane_intent 2>/dev/null) || lane_inten
 ```
 
 When `lane_intent` is non-empty, check whether the plan contradicts it. Use a haiku agent (foreground, ~500 tokens):
+- S2 measurement uses exact UTF8 byte counts from serialized caller strings (equivalent to `len(text.encode('utf-8'))`) and a host string API for SHA256. Use structured string arguments; never interpolate plan, intent, prompt or response text into shell code. Never guess counts or hashes; skip observation if exact measurement is unavailable.
 - Input: plan summary (first 500 chars), lane intent text
 - Prompt: "Does this plan contradict or undermine the lane's strategic intent? Return JSON: `{\"contradicts\": bool, \"reason\": \"...\"}`"
 - Immediately after the native result, launch S2 asynchronously. In caller memory normalize only JSON boolean `contradicts`: true → `contradicts`, false → `aligned`, as `route_native_choice`; skip malformed results. Set `route_subject_sha256` to lowercase SHA256 of the bead ID and `route_input_bytes` / `route_output_bytes` to UTF8 byte counts of the complete native prompt / response. Missing counts/hash → skip observation. Pass no plan, lane intent or reason text.
