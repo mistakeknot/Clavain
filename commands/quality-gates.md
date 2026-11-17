@@ -319,6 +319,21 @@ fi
 
 ### 3b: Ground the Verdict, Then Enforce Gate + Record Phase
 
+After choosing the native gate result, record a LOG-ONLY early-exit observation.
+Set `REVIEW_EXIT_NATIVE=exit` only when today's gate chose to finish; otherwise
+set it to `continue`. Do not derive this value from the observer. Keep the same
+`REVIEW_EXIT_LOOP_ID` for all rounds of this change. Missing IDs skip observation.
+This callback never changes a gate or excuses a required review round.
+
+```bash
+if [[ -n "${REVIEW_EXIT_LOOP_ID:-${CLAVAIN_BEAD_ID:-}}" && -n "${REVIEW_EXIT_NATIVE:-}" ]]; then
+  ( python3 "${CLAUDE_PLUGIN_ROOT}/scripts/review_exit_shadow.py" \
+      --project "$PWD" --loop "${REVIEW_EXIT_LOOP_ID:-$CLAVAIN_BEAD_ID}" \
+      --native "$REVIEW_EXIT_NATIVE" --verdict-dir .clavain/verdicts \
+      </dev/null >/dev/null 2>&1 & ) || true
+fi
+```
+
 Read `{OUTPUT_DIR}/synthesis.md` and present to user (~30-50 lines).
 
 **Grounding check.** A review synthesis is opinion — informed,

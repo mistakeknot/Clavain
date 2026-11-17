@@ -268,4 +268,12 @@ exact_head_wt || { echo "review-round: worktree changed during the round; eviden
   echo; echo "VERDICT: $worst"
 } > "$OUT/receipt.md"
 echo "$OUT/receipt.md"
+# LOG ONLY: the completed native verdict remains authoritative. Never wait for
+# or consume the observer's answer. Group rounds with an explicit loop ID when
+# base refs change between rounds.
+shadow_native=continue
+if [ "$RC" -eq 0 ] && tail -1 "$OUT/receipt.md" | grep -qx 'VERDICT: PASS'; then shadow_native=exit; fi
+( python3 "$HERE/review_exit_shadow.py" --project "$REPO" \
+    --loop "${REVIEW_EXIT_LOOP_ID:-${CLAVAIN_BEAD_ID:-$REPO}:$BASE}" \
+    --native "$shadow_native" --panel "$OUT" </dev/null >/dev/null 2>&1 & ) || true
 exit "$RC"
