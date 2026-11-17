@@ -108,3 +108,58 @@ run_round() {
     [ "$(cat "$BATS_TEST_TMPDIR/victim")" = untouched ]
     grep -q 'AGENTS.md: base rules' "$SEEN"
 }
+
+@test "a PR that swaps a parent directory for a symlink cannot make restoration write outside the tree" {
+    cd "$R"
+    mkdir -p "$BATS_TEST_TMPDIR/outside"; echo untouched > "$BATS_TEST_TMPDIR/outside/seats.md"
+    git rm -q -r docs; ln -s "$BATS_TEST_TMPDIR/outside" docs
+    git add -A; git commit -qm change
+    run_round
+    [ "$status" -eq 11 ]
+    [ "$(cat "$BATS_TEST_TMPDIR/outside/seats.md")" = untouched ]
+}
+
+@test "a judge symlink is pinned: changing only its target does not change what the reviewer reads" {
+    cd "$R"
+    echo "policy v1" > policy.txt; rm AGENTS.md; ln -s policy.txt AGENTS.md
+    git add -A; git commit -qm base2; git branch -f main
+    echo "policy v2 weakened" > policy.txt; git add -A; git commit -qm change
+    run_round
+    [ "$status" -eq 0 ]
+    grep -q 'AGENTS.md: policy v1' "$SEEN"
+    ! grep -q weakened "$SEEN"
+    grep -qx 'AGENTS.md' "$OUT/judge-files-changed.txt"
+}
+
+@test "a gate that rewrites an overlaid judge file fails the round" {
+    cd "$R"
+    echo "weakened" > AGENTS.md; git add -A; git commit -qm change
+    HEAD_SHA=$(git rev-parse HEAD)
+    run bash "$RR" --repo "$R" --base main --head "$HEAD_SHA" --producer-identity p --out-dir "$OUT" --prompt-file /dev/null --gate-cmd 'echo compromised > AGENTS.md'
+    [ "$status" -eq 11 ]
+}
+
+@test "the last glob of a manifest without a trailing newline still applies" {
+    cd "$R"
+    printf 'extra/*.md' > .review-judge-paths; git add -A; git commit -qm base2; git branch -f main
+    echo "weakened extra" > extra/rule.md; git add -A; git commit -qm change
+    run_round
+    [ "$status" -eq 0 ]
+    grep -q 'extra/rule.md: base extra' "$SEEN"
+}
+
+@test "a directory in place of a judge file fails closed" {
+    cd "$R"
+    git rm -q docs/seats.md; mkdir -p docs/seats.md; echo x > docs/seats.md/f
+    git add -A; git commit -qm change
+    run_round
+    [ "$status" -eq 11 ]
+}
+
+@test "a judge path containing a newline fails closed" {
+    cd "$R"
+    mkdir -p "$(printf 'a\nb')"; echo x > "$(printf 'a\nb')/AGENTS.md"
+    git add -A; git commit -qm change
+    run_round
+    [ "$status" -eq 11 ]
+}
