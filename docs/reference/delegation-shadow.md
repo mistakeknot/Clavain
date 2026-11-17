@@ -34,12 +34,13 @@ actual values in the new shell): `DISPATCH`, `ROLE`, `CATEGORY`, `MODE`,
 
 Only when `decision_models.flux_triage.mode` in
 `$SHADOW_ROOT/config/routing.yaml` is exactly
-`shadow`. It ships `off`; so `off`, `enforce`, an unknown mode, a missing entry
+`shadow`. It ships `shadow` with `backend: heuristic`; `off`, `enforce`,
+an unknown mode, a missing entry
 and `CLAVAIN_SELECTOR=off` all return before any process, credential, call or
 file. `enforce` is never honoured. Egress is always false (no hosted call, no
 `sources`), and the shipped `decision_models` registry entry stays disabled with
-budget 8. Turn it on for a trial by setting the question's `mode: shadow` with
-`backend: heuristic`.
+budget 8. The shipped trial observes all three delegation sites locally.
+The shared key does not enable interflux triage, which has no live observer.
 
 The helper detaches (fire-and-forget), prints nothing and exits 0 whatever
 happens. Total work is capped at six seconds; a timeout, crash, missing

@@ -14,6 +14,28 @@ def request():
         state={}, native_choice='plan', egress_allowed=False)
 
 
+@pytest.mark.parametrize('track', ['flux_triage', 'route', 'review_exit', 'learned_router'])
+def test_shipped_shadow_is_log_only_and_kill_switch_is_inert(track, tmp_path, monkeypatch):
+    import yaml
+    from clavain_selector import decide as d
+    policy = yaml.safe_load((Path(__file__).resolve().parents[2] /
+                             'config/routing.yaml').read_text())['decision_models'][track]
+    monkeypatch.delenv('CLAVAIN_SELECTOR', raising=False)
+    monkeypatch.setattr(d.egress, 'admit', lambda *a, **kw: pytest.fail('egress ran'))
+    monkeypatch.setattr(d.credentials, 'load', lambda: pytest.fail('credentials read'))
+    obj = request()
+    obj['question']['id'] = track
+    (tmp_path / 'enabled').mkdir()
+    answer = d.decide(obj, policy, tmp_path / 'enabled')
+    assert answer['choice'] == obj['native_choice'] and answer['fallback'] is True
+    assert answer['reason'] == 'shadow_mode'
+    assert len(list((tmp_path / 'enabled/.clavain/decisions').glob('*.jsonl'))) == 1
+    monkeypatch.setenv('CLAVAIN_SELECTOR', ' OFF ')
+    answer = d.decide(obj, policy, tmp_path / 'disabled')
+    assert answer['choice'] == obj['native_choice'] and answer['reason'] == 'off'
+    assert not (tmp_path / 'disabled/.clavain').exists()
+
+
 def test_shadow_heuristic_and_log(tmp_path):
     from clavain_selector.decide import decide
     result = decide(request(), dict(mode='shadow', backend='heuristic'), tmp_path)
