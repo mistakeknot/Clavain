@@ -148,7 +148,7 @@ def build_companion(answer, *, site, question_id, native_choice, candidate_ids,
         question_id=digest(question_id.encode()),
         candidates=[digest(c.encode()) for c in candidate_ids],
         native_choice=digest(native_choice.encode()),
-        shadow_choice=digest(shadow.encode()) if isinstance(shadow, str) else None,
+        shadow_choice=digest(shadow.encode()) if completed else None,
         agreement=agreement, backend=answer.get('backend'), reason=answer.get('reason'),
         band=answer.get('band'),
         confidence=float(confidence) if isinstance(confidence, (int, float)) and not isinstance(confidence, bool) else None,
@@ -158,12 +158,24 @@ def build_companion(answer, *, site, question_id, native_choice, candidate_ids,
         native_actual_outcome=native_outcome if native_outcome in OUTCOMES else None)
 
 
-def _find_cli(plugin_root):
+def _find_cli(plugin_root, deadline=None):
+    # Probe with an empty config: supported wrappers return off without logging,
+    # reading credentials or invoking Python. Old bundled binaries reject decide.
+    deadline = deadline if deadline is not None else time.monotonic() + .75
     candidates = [os.environ.get('CLAVAIN_CLI'), str(Path(plugin_root) / 'bin' / 'clavain-cli'),
                   shutil.which('clavain-cli')]
     for path in candidates:
         if path and os.path.isfile(path) and os.access(path, os.X_OK):
-            return path
+            remaining = min(.25, deadline - time.monotonic())
+            if remaining <= 0:
+                return None
+            try:
+                code, out = _run_decide([path, 'decide', '--config', os.devnull], {}, remaining)
+                answer = json.loads(out) if code == 0 else None
+                if isinstance(answer, dict) and answer.get('fallback') is True and answer.get('reason') == 'off':
+                    return path
+            except Exception:
+                pass
     return None
 
 
@@ -203,7 +215,7 @@ def observe(*, site, native_choice, candidates, state, main_thread_tokens=None,
             result['reason'] = reason
             return result
         result.update(status='failed', reason='cli_unavailable')
-        cli = _find_cli(plugin_root)
+        cli = _find_cli(plugin_root, start + min(.75, deadline_s - _WRITE_RESERVE_S))
         if cli is None:
             return result
         root = Path(project_root).resolve()

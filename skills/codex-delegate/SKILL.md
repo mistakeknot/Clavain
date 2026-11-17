@@ -59,7 +59,10 @@ Use `timeout: 600000`.
 
 Then log one shadow observation of the role already used (silent, detached, inert unless `flux_triage` is `shadow`; see `docs/reference/delegation-shadow.md`). Set `ROLE` to the exact `--role` value used in step 3 and `CATEGORY` to the task category from Role Selection. Set `SHADOW_OUTCOME` to `success`, `warn` or `failure` from the sidecar, and `SHADOW_DECISION_TOKENS` only from a counted main-thread decision estimate; leave either unset if unknown.
 ```bash
-python3 "$(dirname "$DISPATCH")/clavain_selector/delegation_shadow.py" --site codex-delegate --native "$ROLE" --candidate "scout=Read-only exploration" --candidate "routine-execution=Bounded routine edits" --candidate "deep-execution=Implementation needing deeper reasoning" --candidate "validation=Independent read-only review" --state "category=$CATEGORY" --main-thread-tokens "${SHADOW_DECISION_TOKENS:-}" --native-outcome "${SHADOW_OUTCOME:-}" >/dev/null 2>&1 || true
+SHADOW_ROOT="${CLAVAIN_SOURCE_DIR:-${CLAVAIN_DIR:-${CLAUDE_PLUGIN_ROOT:-}}}"
+if [ -n "$SHADOW_ROOT" ] && [ -n "${DISPATCH:-}" ]; then
+python3 "$SHADOW_ROOT/scripts/clavain_selector/delegation_shadow.py" --site codex-delegate --native "${ROLE:-}" --candidate "scout=Read-only exploration" --candidate "routine-execution=Bounded routine edits" --candidate "deep-execution=Implementation needing deeper reasoning" --candidate "validation=Independent read-only review" --state "category=${CATEGORY:-}" --main-thread-tokens "${SHADOW_DECISION_TOKENS:-}" --native-outcome "${SHADOW_OUTCOME:-}" >/dev/null 2>&1 || true
+fi
 ```
 
 **5. Reflect — record outcome** (OODARC Reflect leg: the dispatch ran the *Act* leg; capturing its result here is how the caller Reflects and Compounds)

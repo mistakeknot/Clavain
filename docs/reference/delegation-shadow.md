@@ -23,7 +23,17 @@ scope.
 
 ## When it runs
 
-Only when `decision_models.flux_triage.mode` in `config/routing.yaml` is exactly
+All three blocks resolve `SHADOW_ROOT` from the first nonempty value of
+`CLAVAIN_SOURCE_DIR`, `CLAVAIN_DIR`, then `CLAUDE_PLUGIN_ROOT`. Set one to the
+absolute root of the selected Clavain installation or checkout; the shadow
+blocks never discover a root by searching cached versions or from `DISPATCH`.
+An empty root skips silently. The executor blocks also skip an empty `DISPATCH`.
+Carry the earlier shell variables across blocks explicitly (or restore their
+actual values in the new shell): `DISPATCH`, `ROLE`, `CATEGORY`, `MODE`,
+`TASK_COUNT`, `DIFF_LINES`, `CHANGED_FILES`, and `FLUX_DRIVE_STATUS` as applicable.
+
+Only when `decision_models.flux_triage.mode` in
+`$SHADOW_ROOT/config/routing.yaml` is exactly
 `shadow`. It ships `off`; so `off`, `enforce`, an unknown mode, a missing entry
 and `CLAVAIN_SELECTOR=off` all return before any process, credential, call or
 file. `enforce` is never honoured. Egress is always false (no hosted call, no
@@ -36,8 +46,14 @@ happens. Total work is capped at six seconds; a timeout, crash, missing
 `clavain-cli` or unwritable log leaves the flow untouched. A failure between the
 two appends can leave an S1 record without its companion; exclude unmatched
 records when calculating delegation metrics.
-`CLAVAIN_CLI` overrides the binary lookup (default: `bin/clavain-cli` in the
-plugin, then `PATH`).
+Binary candidates are `CLAVAIN_CLI`, `$SHADOW_ROOT/bin/clavain-cli`, then
+`clavain-cli` on `PATH`. A bounded, no-log probe using an empty config selects
+the first that actually supports `decide`; old bundled binaries are skipped.
+Real runs require a rebuilt binary containing `decide.go`, provided through
+one of those candidates. Probe time counts within the six-second helper cap.
+The three distinct `site` tags in the table separate metrics; all intentionally
+share the brief's `flux_triage` mode switch. Incomplete observations have null
+`shadow_choice`, so fallback hashes cannot be mistaken for agreement.
 
 ## Records
 

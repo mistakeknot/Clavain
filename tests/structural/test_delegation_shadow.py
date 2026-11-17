@@ -27,6 +27,9 @@ from pathlib import Path
 args = sys.argv[1:]
 assert args[0] == 'decide', args
 opts = dict(zip(args[1::2], args[2::2]))
+if opts.get('--config') == os.devnull:
+    print(json.dumps(dict(fallback=True, reason='off')))
+    sys.exit(0)
 if os.environ.get('STUB_MARKER'):
     Path(os.environ['STUB_MARKER']).open('a').write('called\\n')
 raw = sys.stdin.read()
@@ -217,7 +220,45 @@ def test_agreement_and_savings_rules(shadow, confidence, band, reason, agree, sa
     assert comp['agreement'] is agree
     assert comp['estimated_claude_tokens_saved'] == saved
     assert comp['decision_id'] == 'd-1'
-    assert comp['shadow_choice'] == sha(shadow)
+    assert comp['shadow_choice'] == (sha(shadow) if agree is not None else None)
+
+
+def test_old_bundled_cli_does_not_hide_capable_path_cli(env, monkeypatch):
+    from clavain_selector import delegation_shadow as ds
+    plugin = env.tmp / 'plugin'
+    (plugin / 'bin').mkdir(parents=True)
+    old = plugin / 'bin/clavain-cli'
+    old.write_text('#!/bin/sh\nexit 1\n')
+    old.chmod(0o755)
+    monkeypatch.delenv('CLAVAIN_CLI')
+    monkeypatch.setenv('PATH', str(env.tmp))
+    assert ds._find_cli(plugin) == str(env.tmp / 'clavain-cli')
+
+
+@pytest.mark.parametrize('site', ['quality-gates', 'codex-delegate', 'interserve-engine'])
+def test_call_site_skips_empty_root_and_dispatch(site, tmp_path):
+    path = SITES[site]
+    block = next(b for b in re.findall(r'```bash\n(.*?)```', path.read_text(), re.S)
+                 if 'delegation_shadow.py' in b)
+    assert 'SHADOW_ROOT=' in block
+    assert '[ -n "$SHADOW_ROOT" ]' in block
+    if site != 'quality-gates':
+        assert '[ -n "${DISPATCH:-}" ]' in block
+    marker = tmp_path / 'called'
+    fake_python = tmp_path / 'python3'
+    fake_python.write_text(f'#!/bin/sh\nprintf called > "{marker}"\n')
+    fake_python.chmod(0o755)
+    shell_env = dict(os.environ, PATH=str(tmp_path), CLAVAIN_SOURCE_DIR='',
+                     CLAVAIN_DIR='', CLAUDE_PLUGIN_ROOT='', DISPATCH='')
+    result = subprocess.run(['/bin/bash', '-uc', block], cwd=tmp_path,
+                            env=shell_env, capture_output=True)
+    assert result.returncode == 0 and not result.stdout and not result.stderr
+    assert not marker.exists()
+    if site != 'quality-gates':
+        shell_env['CLAVAIN_SOURCE_DIR'] = str(tmp_path)
+        result = subprocess.run(['/bin/bash', '-uc', block], cwd=tmp_path,
+                                env=shell_env, capture_output=True)
+        assert result.returncode == 0 and not marker.exists()
 
 
 # --- inert: off / enforce / kill / missing policy ----------------------------------
