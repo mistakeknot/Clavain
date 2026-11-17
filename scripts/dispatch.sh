@@ -1202,7 +1202,9 @@ _dispatch_cleanup_state() {
       jq -cn --argjson route "$RESOLVED_ROUTE_JSON" --arg native "$RESOLVED_PROFILE_REF" \
         --arg role "$ROLE" --argjson exit_code "$_rc" --argjson prompt_chars "${#PROMPT}" \
         '{route:$route,native:$native,role:$role,exit_code:$exit_code,prompt_chars:$prompt_chars}' |
-        PYTHONPATH="$DISPATCH_SCRIPT_DIR" python3 -m clavain_selector.learned_router_shadow \
+        # This detached reader can outlive the scripts tree (e.g. test fixtures).
+        # Do not race its removal by creating import caches after dispatch exits.
+        PYTHONPATH="$DISPATCH_SCRIPT_DIR" python3 -B -m clavain_selector.learned_router_shadow \
           "$DISPATCH_SCRIPT_DIR/.." "${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}" "${WORKDIR:-.}"
     ) </dev/null >/dev/null 2>&1 &
   fi
