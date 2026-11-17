@@ -163,3 +163,22 @@ run_round() {
     run_round
     [ "$status" -eq 11 ]
 }
+
+@test "a symlinked manifest at the merge base fails closed" {
+    cd "$R"
+    echo 'extra/*.md' > manifest.txt; rm .review-judge-paths; ln -s manifest.txt .review-judge-paths
+    git add -A; git commit -qm base2; git branch -f main
+    echo "weakened extra" > extra/rule.md; git add -A; git commit -qm change
+    run_round
+    [ "$status" -eq 11 ]
+}
+
+@test "a gate cannot hide a change to a file whose name embeds a newline and an overlaid path" {
+    cd "$R"
+    echo "weakened" > AGENTS.md
+    nm="$(printf 'AGENTS.md\nxxxAGENTS.md')"
+    echo one > "$nm"; git add -A; git commit -qm change
+    HEAD_SHA=$(git rev-parse HEAD)
+    run bash "$RR" --repo "$R" --base main --head "$HEAD_SHA" --producer-identity p --out-dir "$OUT" --prompt-file /dev/null --gate-cmd 'echo two > "$(printf "AGENTS.md\nxxxAGENTS.md")"'
+    [ "$status" -eq 11 ]
+}

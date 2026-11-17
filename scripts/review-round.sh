@@ -167,7 +167,11 @@ overlay_ok() {   # every overlaid path holds exactly the merge-base content and 
 exact_head_wt() {
   [ "$(git -C "$REPO" rev-parse HEAD)" = "$HEAD" ] || return 1
   overlay_ok || return 1
-  [ -z "$(git -C "$REPO" status --porcelain -z --untracked-files=all | tr '\0' '\n' | grep -v '^$' | awk -v f="$OVERLAID" 'BEGIN{FS="\t"; while((getline l < f)>0){split(l,a,"\t"); skip[a[1]]=1}} !(substr($0,4) in skip)')" ]
+  git -C "$REPO" status --porcelain -z --untracked-files=all | python3 -I -c '
+import sys
+skip = {l.split("\t")[0].encode() for l in open(sys.argv[1], encoding="utf-8", errors="surrogateescape").read().split("\n") if l}
+bad = [r for r in sys.stdin.buffer.read().split(b"\0") if r and r[3:] not in skip]
+sys.exit(1 if bad else 0)' "$OVERLAID"
 }
 if [ "$MODE" = confirm ]; then
   git -C "$REPO" merge-base --is-ancestor "$PRIOR_HEAD" "$HEAD" 2>/dev/null || { echo "review-round: $PRIOR_HEAD is not an ancestor of $HEAD (rebased?); run a full first round" >&2; exit 12; }
@@ -182,6 +186,7 @@ fi
 # copy of its merge-base target, so the PR cannot change what it points at.
 die11() { echo "review-round: $*" >&2; exit 11; }
 MB=$(git -C "$REPO" merge-base "$BASE" "$HEAD" 2>/dev/null) || die "no merge base between $BASE and $HEAD"
+case "$(git -C "$REPO" ls-tree "$MB" -- .review-judge-paths | cut -d' ' -f1)" in 120000) die11 ".review-judge-paths is a symlink at the merge base; it cannot be read safely";; esac
 JUDGE_SPECS=(':(glob)AGENTS.md' ':(glob)CLAUDE.md' ':(glob)**/AGENTS.md' ':(glob)**/CLAUDE.md'
   ':(glob)**/CODING_STANDARDS.md' ':(glob)**/seats.md' ':(glob)**/review-checklist*.md' ':(glob).review-judge-paths')
 while IFS= read -r g || [ -n "$g" ]; do
