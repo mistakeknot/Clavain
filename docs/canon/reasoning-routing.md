@@ -112,8 +112,9 @@ change the producer identity or reviewer independence checks. No head
 means no decision can apply. A successful check atomically creates a
 `<SHA256(decision_id)>.consumed` marker with exclusive creation in the same
 directory; retain the marker even if dispatch later fails. It permits one
-additional review round at that head for any of the three review roles. The next failure
-changes the count and requires a new
+additional review round at that head for any of the three review roles.
+Decisions are not bound to a review role; all three roles share the single claim.
+The next failure changes the count and requires a new
 recorded decision. Concurrent claimants cannot both succeed.
 
 Dispatch's outer preflight uses `--check-only` to validate without consuming;

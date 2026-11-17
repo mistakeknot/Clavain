@@ -341,3 +341,15 @@ def test_head_only_cannot_mix_receipt_head(tmp_path, decision, role):
     assert result.returncode == 1, result.stderr
     assert "--review-head cannot be combined" in result.stderr
     assert gate(tmp_path, decision).returncode == 0
+
+
+@pytest.mark.parametrize("role", ["plan-review", "validation"])
+@pytest.mark.parametrize("child", [False, True])
+def test_receipt_head_wrong_role_keeps_decision(tmp_path, decision, role, child):
+    dummy_python(tmp_path, decision[1])
+    result = invoke(tmp_path, [receipt(attempt=str(i)) for i in range(3)],
+                    role=role, head=HEAD, child=child)
+    assert result.returncode == 1, result.stderr
+    assert "apply to --role cross-lab-review only" in result.stderr
+    assert "accepting one extra review round" not in result.stderr
+    assert gate(tmp_path, decision).returncode == 0

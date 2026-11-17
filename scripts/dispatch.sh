@@ -2810,6 +2810,11 @@ if [[ -n "$REVIEW_HEAD" ]]; then
   fi
 fi
 
+if _review_receipt_requested && [[ "$ROLE" != cross-lab-review ]]; then
+  echo "Error: --repo/--repo-id/--pr/--head/--base apply to --role cross-lab-review only" >&2
+  exit 1
+fi
+
 _resolve_dispatch_bead
 # Review budgets belong to beads, never PR heads. Check both the outer call
 # and resolved children, before role resolution or any provider launch.
@@ -2954,10 +2959,6 @@ fi
 # Review receipt (mk-zek32): all five flags or none, cross-lab-review only.
 # Validated and derived before any model runs, so a bad flag fails fast.
 if _review_receipt_requested; then
-  if [[ "$ROLE" != cross-lab-review ]]; then
-    echo "Error: --repo/--repo-id/--pr/--head/--base apply to --role cross-lab-review only" >&2
-    exit 1
-  fi
   _review_receipt_prepare "${WORKDIR:-.}" || exit 1
 fi
 
