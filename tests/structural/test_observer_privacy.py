@@ -248,3 +248,42 @@ def test_each_hosted_route_site_has_only_frozen_wire_fields(hosted, tmp_path, si
     state = json.loads(body['context'])
     assert set(state) == {'site_id', 'subject_sha256', 'input_bytes', 'output_bytes', 'batch_size'}
     assert state['site_id'] == site
+
+
+@pytest.mark.parametrize('refusal', ['credential', 'egress', 'budget', 'build'])
+def test_hosted_half_open_refusals_preserve_upstream_guards(hosted, tmp_path, monkeypatch, refusal):
+    d, calls = hosted
+    path = tmp_path / 'state/selector/breaker.json'
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(dict(opened_until=0, probe_pending=False)))
+    # The first admission precedes the breaker; the second is loaded-key admission.
+    admit = d.egress.admit
+    if refusal == 'credential':
+        def load():
+            raise d.credentials.CredentialUnavailable()
+        monkeypatch.setattr(d.credentials, 'load', load)
+    elif refusal == 'egress':
+        monkeypatch.setattr(d.egress, 'admit', lambda *a, **kw:
+            d.egress.Refusal(('cred.loaded_key',)) if kw.get('key_literal') else admit(*a, **kw))
+    elif refusal == 'build':
+        monkeypatch.setattr(d.j.JevCall, 'build', lambda *a, **kw: (_ for _ in ()).throw(ValueError()))
+    else:
+        monkeypatch.setattr(d.j.Budget, 'consume', lambda _: d.contract.FallbackReason.BUDGET_EXHAUSTED)
+    if refusal != 'budget':
+        monkeypatch.setattr(d.j.Budget, 'consume', lambda _: pytest.fail('pre-call refusal spent budget'))
+    result = d.decide(route(), POLICY, tmp_path)
+    assert result['choice'] == 'work' and result['fallback'] and not calls
+    assert result['reason'] == dict(credential='credential_unavailable', egress='egress_refused',
+                                  budget='budget_exhausted', build='invalid_input')[refusal]
+    assert json.loads(path.read_text())['probe_pending'] is False
+    assert d.j.Breaker().check() is None
+
+
+def test_hosted_shadow_log_cap_preserves_native(hosted, tmp_path, monkeypatch):
+    d, calls = hosted
+    monkeypatch.setattr(d, 'SHADOW_LOG_MAX_BYTES', 1)
+    result = d.decide(route(), POLICY, tmp_path)
+    assert len(calls) == 1
+    assert result['choice'] == 'work' and result['fallback']
+    assert result['reason'] == 'record_unwritable'
+    assert sum(p.stat().st_size for p in (tmp_path / '.clavain/decisions').glob('*.jsonl')) == 0
