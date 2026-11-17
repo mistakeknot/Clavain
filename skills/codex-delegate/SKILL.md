@@ -57,6 +57,9 @@ Use `timeout: 600000`.
 - Check `.verdict` sidecar first; `pass` → brief summary; `warn`/`fail` → read full output
 - Retry once with tighter scope; if retry fails, return failure to the caller
 
+After reading the sidecar, observe the dispatched role using the [engine's shadow protocol](../interserve-engine/SKILL.md#delegation-shadow-protocol). Restore `ROLE` from step 3's `--role` argument and `CATEGORY` from Role Selection. Map the sidecar verdict to `SHADOW_OUTCOME`: `success`, `warn` or `failure`; omit it when unknown. The command below supplies this site's role candidates.
+Run the [executor-role observation block](../interserve-engine/SKILL.md#executor-role-observation) from the engine. Its candidate list and shell setup are maintained there.
+
 **5. Reflect — record outcome** (OODARC Reflect leg: the dispatch ran the *Act* leg; capturing its result here is how the caller Reflects and Compounds)
 ```bash
 _db="$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.clavain/interspect/interspect.db"

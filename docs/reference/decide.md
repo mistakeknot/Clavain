@@ -90,3 +90,6 @@ record_dir=project_root / '.clavain/decisions')`; `records.read_records` joins
 these later outcomes without modifying old lines. The existing `ic route
 record` subcommand only accepts routing-specific fields, so S1 uses JSONL
 to preserve the complete decision contract.
+
+Main-thread delegation call sites record companion observations; see
+[delegation-shadow.md](delegation-shadow.md).
