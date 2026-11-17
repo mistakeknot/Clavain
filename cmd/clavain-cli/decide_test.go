@@ -49,6 +49,36 @@ func TestDecideMissingHelperFallsBack(t *testing.T) {
 	}
 }
 
+func TestDecideChildDisablesBytecode(t *testing.T) {
+	t.Setenv("PYTHONDONTWRITEBYTECODE", "")
+	dir := t.TempDir()
+	helper := filepath.Join(dir, "scripts", "clavain_selector", "decide.py")
+	if err := os.MkdirAll(filepath.Dir(helper), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(helper, []byte(`import json, os, sys
+print(json.dumps({"choice": "plan", "fallback": True,
+                  "reason": str(sys.dont_write_bytecode) + ":" + os.environ.get("PYTHONDONTWRITEBYTECODE", "")}))
+`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	config := filepath.Join(dir, "routing.yaml")
+	if err := os.WriteFile(config, []byte("decision_models:\n  route: {mode: shadow, backend: heuristic}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := runDecide(strings.NewReader(`{"question":{"id":"route"},"native_choice":"plan"}`), &out, []string{"--plugin-root", dir, "--config", config}); err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]interface{}
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["reason"] != "True:1" {
+		t.Fatalf("decide child can write bytecode: %s", out.String())
+	}
+}
+
 func TestDecideEnvelopeAndCase(t *testing.T) {
 	root, _ := filepath.Abs("../..")
 	dir := t.TempDir()
