@@ -109,6 +109,10 @@ subagents:
 
 reasoning:
   # mk-au6a1: all Sol and Astra seats move to 6.2 at unchanged efforts.
+  # Rollout requires an Intercore effort ladder for gpt-6.2-*; ic 8c82b970
+  # lacks it and excludes floored seats as unsupported_adapter. Do not roll
+  # out until tests/routing/reasoning-contract-test.sh passes with that ic.
+  # The older model names in dated notes below describe prior migrations.
   # gpt-6-astra and claude-opus-5-5 are the two frontier authors. mk ruled on
   # 2026-09-25 (mk-3b8z) that Opus 5.5 outperforms Fable 5.1 and replaces it,
   # and that every Opus seat runs Opus 5.5; claude-fable-5-1 and claude-opus-5

@@ -88,6 +88,9 @@ DISPATCH=$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/dispatch.sh' 
 
 Fast uses medium effort and deep uses high effort. `--tier` and `-m` are mutually exclusive. Missing `routing.yaml` degrades gracefully.
 
+`CLAVAIN_DISPATCH_PROFILE=interserve` selects the `fast-clavain` /
+`deep-clavain` tier variants, keeping their configured efforts.
+
 ## Backend Selection (`--to`)
 
 `dispatch.sh --to <codex|kimi>` picks the dispatch backend. **Codex is the default** — existing invocations are unchanged.
