@@ -57,7 +57,11 @@ def observe(*, site, native_choice, subject_sha256, input_bytes, output_bytes,
                               input_bytes=input_bytes, output_bytes=output_bytes, batch_size=batch_size),
                    native_choice=native_choice, egress_allowed=False, sources=[],
                    observation_metadata=metadata)
-        subprocess.run(['clavain-cli', 'decide', '--plugin-root', str(Path(plugin_root).resolve()),
+        plugin_root = Path(plugin_root).resolve()
+        binary = plugin_root / 'bin' / 'clavain-cli'
+        # Prefer the bundled binary; no fallback once a launched process fails.
+        command = str(binary) if binary.is_file() and os.access(binary, os.X_OK) else 'clavain-cli'
+        subprocess.run([command, 'decide', '--plugin-root', str(plugin_root),
                         '--config', str(config), '--project-root', str(Path(project_root).resolve())],
                        input=json.dumps(obj).encode(), stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL, timeout=6, check=False)

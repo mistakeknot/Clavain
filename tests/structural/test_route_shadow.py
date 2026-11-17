@@ -1,12 +1,45 @@
 """S2 observes native answers without influencing them or exporting text."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
+import sys
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.mark.parametrize('bundled', ['executable', 'missing', 'nonexecutable'])
+def test_real_binary_resolution(setup, monkeypatch, tmp_path, bundled):
+    s, args = setup
+    plugin = tmp_path / 'plugin'
+    (plugin / 'bin').mkdir(parents=True)
+    path_dir = tmp_path / 'path'
+    path_dir.mkdir()
+    marker = tmp_path / 'invocation.json'
+    monkeypatch.setenv('PATH', str(path_dir))
+    monkeypatch.setenv('S2_TEST_MARKER', str(marker))
+    for location, label in [(path_dir / 'clavain-cli', 'path'),
+                            (plugin / 'bin/clavain-cli', 'bundled')]:
+        if label == 'bundled' and bundled == 'missing':
+            continue
+        location.write_text('#!' + sys.executable + '\n'
+            'import json, os, sys\n'
+            'from pathlib import Path\n'
+            'Path(os.environ["S2_TEST_MARKER"]).write_text(json.dumps('
+            '{"binary": ' + repr(label) + ', "args": sys.argv[1:], '
+            '"request": json.load(sys.stdin)}))\n')
+        location.chmod(0o600 if label == 'bundled' and bundled == 'nonexecutable' else 0o700)
+    args['plugin_root'] = plugin
+    s.observe(**args)
+    record = json.loads(marker.read_text())
+    assert record['binary'] == ('bundled' if bundled == 'executable' else 'path')
+    assert record['args'][:3] == ['decide', '--plugin-root', str(plugin)]
+    assert record['request']['question']['id'] == 'route'
+    assert record['request']['native_choice'] == 'work'
+    assert record['request']['egress_allowed'] is False
 
 
 def sha(value):
@@ -79,7 +112,9 @@ def test_real_heuristic_bridge_and_private_record(setup, monkeypatch, site, choi
     assert s.observe(**args) is None
     assert len(calls) == 1
     cmd, kw, obj, result = calls[0]
-    assert cmd == ['clavain-cli', 'decide', '--plugin-root', str(ROOT),
+    bundled = ROOT / 'bin' / 'clavain-cli'
+    expected = str(bundled) if bundled.is_file() and os.access(bundled, os.X_OK) else 'clavain-cli'
+    assert cmd == [expected, 'decide', '--plugin-root', str(ROOT),
                    '--config', str(args['config']), '--project-root', str(args['project_root'])]
     assert 0 < kw['timeout'] <= 6
     assert kw['stdout'] == kw['stderr'] == subprocess.DEVNULL
@@ -165,3 +200,24 @@ def test_command_wiring_preserves_native_paths():
     assert 'single background haiku batch-check. Wait 5s max.' in route
     assert 'Use a haiku agent (foreground, ~500 tokens)' in sprint
     assert 'If no lane intent or `contradicts == false`: proceed silently to Step 5.' in sprint
+
+
+def test_instruction_eligibility_and_drop_late_constraints():
+    route = (ROOT / 'commands/route.md').read_text()
+    sprint = (ROOT / 'commands/sprint.md').read_text()
+    gate = route[route.index('**S2 measurement'):route.index('**token-attribution')]
+    for needle in ['Before any measurement', 'exactly `shadow`', '`heuristic`',
+                   'CLAVAIN_SELECTOR', 'silently do nothing', 'already in hand',
+                   'heredoc', 'never guess']:
+        assert needle in gate
+    assert route.count('S2 eligibility and measurement pattern') == 3
+    sweep = route[route.index('3. **Staleness sweep'):]
+    sweep = sweep[:sweep.index('keep the native background sweep')]
+    assert 'within the existing 5s wait' in sweep
+    assert 'drop late results and cache hits' in sweep
+    assert 'completion handler' not in sweep and 'including results arriving after' not in sweep
+    assert 'S2 eligibility and measurement pattern' in sprint
+    assert 'exactly `shadow`' in sprint and 'heredocs' in sprint
+    doc = (ROOT / 'docs/reference/route-shadow.md').read_text()
+    assert 'bin/clavain-cli' in doc and 'no fallback' in doc
+    assert 'not evidence' in doc

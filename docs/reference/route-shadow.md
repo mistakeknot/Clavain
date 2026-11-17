@@ -44,14 +44,32 @@ classification prompt, response, reason, plan or lane intent is passed to the
 observer, persisted or sent to a provider. Counts include the complete native
 prompt and response UTF8 bytes, computed without writing their text to disk.
 Missing counts or hashes mean skip the observation.
-Measure counts exactly from serialized caller strings using a host API such as
-`len(text.encode('utf-8'))`; never guess or interpolate untrusted text into
-shell code. If the host cannot expose exact strings or telemetry, skip.
+
+Command instructions apply an eligibility gate before any measurement work or
+helper launch: inspect the already available routing policy and silently do
+nothing unless route mode is exactly `shadow`, the backend is `heuristic` and
+the global kill is not `off`. If the configuration is not already known, only a
+normal configuration read is allowed, never a measurement or helper subprocess.
+Observe only when exact byte counts, the normalized native choice and the
+subject hash are already in hand from host telemetry. No new count, hash or
+computation tool calls, no guessing or estimating, no heredocs and no raw text
+interpolated into shell code; otherwise skip silently. The savings figure the
+observer computes from the supplied exact counts remains an estimate. For the
+staleness sweep, only fresh Haiku results arriving within the existing five
+second wait are observed; late results and cache hits are dropped, with no
+follow-up, polling or completion tracking.
+
+Current hosts may not expose exact byte counts or hashes, so skipping can be
+the common outcome. An empty or sparse log is therefore not evidence about
+classifier quality, routing quality or the feature's value.
 Hashes are pseudonyms: unsalted hashes of enumerable bead IDs or guessed
 descriptions can be matched by dictionary search. Private log permissions
 provide the confidentiality boundary.
 
-The observer calls `clavain-cli decide` with question ID `route`, site-specific
+The observer runs `clavain-cli decide` using the bundled
+`<plugin-root>/bin/clavain-cli` when it is a regular executable file, otherwise
+bare `clavain-cli` from `PATH`. The choice is made once before the call; there
+is no fallback if the selected process fails, so the call stays bounded. It is invoked with question ID `route`, site-specific
 candidates, explicit plugin/config/project roots, `egress_allowed: false` and
 `sources: []`. Its state contains only numeric counts, a SHA256 subject ID and
 a static site ID, so there are no source files to declare. CLI output is
