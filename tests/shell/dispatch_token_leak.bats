@@ -418,6 +418,31 @@ W
     [ -f "$T/out.md.token-leak.json" ]
 }
 
+@test "detached shadow observer disables bytecode writes before importing copied scripts" {
+    mock_scripts
+    # Report the actual interpreter setting, including when the caller permits
+    # bytecode. Publish atomically so the parent only reads a complete result.
+    cat > "$T/mock/scripts/clavain_selector/learned_router_shadow.py" <<'W'
+import os, sys
+path = os.environ["SHADOW_BYTECODE_LOG"]
+with open(path + ".tmp", "w") as stream:
+    stream.write(str(sys.dont_write_bytecode))
+os.replace(path + ".tmp", path)
+W
+    export SHADOW_BYTECODE_LOG="$T/shadow-bytecode"
+    unset PYTHONDONTWRITEBYTECODE
+    DISPATCH="$MOCK_DISPATCH"
+    run governed
+    [ "$status" -eq 0 ]
+    # The observer deliberately outlives dispatch; synchronize on its report.
+    for ((i=0; i<200; i++)); do
+        [[ ! -f "$SHADOW_BYTECODE_LOG" ]] || break
+        sleep 0.05
+    done
+    [ -f "$SHADOW_BYTECODE_LOG" ]
+    [ "$(cat "$SHADOW_BYTECODE_LOG")" = True ]
+}
+
 # ---- scan after the last write ---------------------------------------------
 
 review() {
