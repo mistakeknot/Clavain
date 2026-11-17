@@ -23,6 +23,27 @@ def band(confidence):
     return 'accept' if confidence >= .8 else 'escalate' if confidence < .6 else 'review'
 
 
+def observation_metadata(value):
+    """Closed, opt-in numeric/hash projection; no caller-provided prose."""
+    counts = {'input_bytes', 'output_bytes', 'batch_size', 'estimate_method',
+              'estimated_claude_tokens_saved', 'observed_claude_tokens_saved'}
+    hashes = {'site_sha256', 'subject_sha256'}
+    if type(value) is not dict or set(value) != counts | hashes:
+        raise ValueError
+    if any(type(value[k]) is not int or not 0 <= value[k] <= 10**9 for k in counts):
+        raise ValueError
+    if any(type(value[k]) is not str or not re.fullmatch('[0-9a-f]{64}', value[k])
+           for k in hashes):
+        raise ValueError
+    if not 1 <= value['batch_size'] <= 1000 or value['estimate_method'] != 1:
+        raise ValueError
+    divisor = 4 * value['batch_size']
+    estimate = (value['input_bytes'] + value['output_bytes'] + divisor - 1) // divisor
+    if value['estimated_claude_tokens_saved'] != estimate or value['observed_claude_tokens_saved'] != 0:
+        raise ValueError
+    return dict(value)
+
+
 def decide(obj, policy, project_root):
     start = time.monotonic_ns()
     log = AttemptLog()
@@ -39,6 +60,18 @@ def decide(obj, policy, project_root):
         return result
     request = None
     admitted = None
+    metadata = None
+    if isinstance(obj, dict) and 'observation_metadata' in obj:
+        try:
+            metadata = observation_metadata(obj['observation_metadata'])
+        except (ValueError, TypeError):
+            result['reason'] = 'invalid_input'
+            return result
+        # This opt-in projection is local-only, even if config changed after
+        # the observer's preflight. S1 hosted callers remain unchanged.
+        if backend != 'heuristic':
+            result['reason'] = 'unsupported_backend'
+            return result
     try:
         question = obj['question']
         qid = question['id']
@@ -103,6 +136,8 @@ def decide(obj, policy, project_root):
     record.pop('choice', None)
     record.pop('probs', None)
     record.pop('shadow_choice', None)
+    if metadata is not None:
+        record.update(metadata)
     try:
         records.append_record(record, record_dir=Path(project_root).resolve() / '.clavain' / 'decisions',
                               project_root=project_root)

@@ -329,6 +329,11 @@ lane_intent=$(bd state "$CLAVAIN_BEAD_ID" lane_intent 2>/dev/null) || lane_inten
 When `lane_intent` is non-empty, check whether the plan contradicts it. Use a haiku agent (foreground, ~500 tokens):
 - Input: plan summary (first 500 chars), lane intent text
 - Prompt: "Does this plan contradict or undermine the lane's strategic intent? Return JSON: `{\"contradicts\": bool, \"reason\": \"...\"}`"
+- Immediately after the native result, launch S2 asynchronously. In caller memory normalize only JSON boolean `contradicts`: true → `contradicts`, false → `aligned`, as `route_native_choice`; skip malformed results. Set `route_subject_sha256` to lowercase SHA256 of the bead ID and `route_input_bytes` / `route_output_bytes` to UTF8 byte counts of the complete native prompt / response. Missing counts/hash → skip observation. Pass no plan, lane intent or reason text.
+  ```bash
+  python3 "$CLAUDE_PLUGIN_ROOT/scripts/clavain_selector/route_shadow.py" --site sprint-lane-intent --native-choice "$route_native_choice" --subject-sha256 "$route_subject_sha256" --input-bytes "$route_input_bytes" --output-bytes "$route_output_bytes" --plugin-root "$CLAUDE_PLUGIN_ROOT" --config "${CLAVAIN_ROUTING_POLICY:-$CLAUDE_PLUGIN_ROOT/config/routing.yaml}" --project-root "$PWD" </dev/null >/dev/null 2>&1 &
+  ```
+  Never wait for the observer or read its return to affect behavior. Keep this native strategic intent gate, escalation and pause behavior unchanged; see `docs/reference/route-shadow.md`.
 - If `contradicts == true`:
   1. Display: `Strategic contradiction detected: <reason>` + lane intent
   2. Escalate: `sprint_escalate_strategic_contradiction "$CLAVAIN_BEAD_ID" "$lane_name" "$reason"`

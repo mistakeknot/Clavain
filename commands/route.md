@@ -60,6 +60,11 @@ implementation for goal-scale asks.
 - Cache: `bd set-state "$bead_id" "complexity=$complexity"`
 - Display: `Complexity: ${complexity}/5 (${complexity_label})`
 - **Staleness check:** Haiku agent (foreground): is bead already implemented? Return `{"implemented":bool,"evidence":"..."}`. If true→AskUserQuestion(close/proceed/investigate).
+- Immediately after the native result, launch S2 below before continuing that same native path. In caller memory, normalize only a JSON boolean `implemented`: true → `implemented`, false → `not_implemented`; skip observation for malformed results. Set `route_subject_sha256` to lowercase SHA256 of the bead ID, and `route_input_bytes` / `route_output_bytes` to the UTF8 byte counts of the complete native prompt / response (including evidence). Pass only these counts and hash; never pass or persist the text. If counts/hash are unavailable, skip observation.
+  ```bash
+  python3 "$CLAUDE_PLUGIN_ROOT/scripts/clavain_selector/route_shadow.py" --site route-staleness --native-choice "$route_native_choice" --subject-sha256 "$route_subject_sha256" --input-bytes "$route_input_bytes" --output-bytes "$route_output_bytes" --plugin-root "$CLAUDE_PLUGIN_ROOT" --config "${CLAVAIN_ROUTING_POLICY:-$CLAUDE_PLUGIN_ROOT/config/routing.yaml}" --project-root "$PWD" </dev/null >/dev/null 2>&1 &
+  ```
+  Never wait for the observer or read its return to affect behavior; retain the foreground check and close/proceed/investigate question.
 - → Step 4.
 
 **Free text:**
@@ -78,6 +83,12 @@ Only when `route_mode="discovery"`.
 2. Parse: `DISCOVERY_UNAVAILABLE`/`DISCOVERY_ERROR`/`[]` → `/clavain:sprint`. JSON array → continue.
 
 3. **Staleness sweep:** Top 3 without `possibly_done`: check `ic state get "bead_sweep" "<id>"` (1hr cache). Misses→single background haiku batch-check. Wait 5s max.
+
+   After each native batch result arrives, in its completion handler launch S2 once per returned bead, including results arriving after the existing 5s limit. Observe only fresh Haiku results, not cache hits. Normalize JSON boolean `implemented` strictly to `implemented` / `not_implemented`; skip malformed entries. In caller memory compute `route_subject_sha256` from that bead ID and the UTF8 byte counts of the complete batch prompt / response as `route_input_bytes` / `route_output_bytes`; `route_batch_size` is the number of beads checked in that batch. This apportions the batch estimate equally (rounding each share up). Missing counts/hash → skip observation. Never pass native text or evidence.
+   ```bash
+   python3 "$CLAUDE_PLUGIN_ROOT/scripts/clavain_selector/route_shadow.py" --site route-sweep --native-choice "$route_native_choice" --subject-sha256 "$route_subject_sha256" --input-bytes "$route_input_bytes" --output-bytes "$route_output_bytes" --batch-size "$route_batch_size" --plugin-root "$CLAUDE_PLUGIN_ROOT" --config "${CLAVAIN_ROUTING_POLICY:-$CLAUDE_PLUGIN_ROOT/config/routing.yaml}" --project-root "$PWD" </dev/null >/dev/null 2>&1 &
+   ```
+   Never wait for the observer or read its return to affect behavior; keep the native background sweep, cache and 5s wait limit unchanged.
 
 3b. **Context warmth annotation:** For each top-3 bead, check if recent sessions touched related files:
    ```bash
@@ -148,6 +159,14 @@ Examples to include in prompt:
 - `/work`: `{type:task, C:3, has_plan:true, phase:plan-reviewed}` — plan exists and reviewed
 
 Return `{"command":"/sprint"|"/work","confidence":0.0-1.0,"reason":"..."}`. Parse fails→default `/sprint`.
+
+Immediately after the native result, launch S2 asynchronously. In caller memory normalize only exact `/sprint` → `sprint` or `/work` → `work` into `route_native_choice`; skip malformed results while retaining the native `/sprint` default. Set `route_subject_sha256` to lowercase SHA256 of the bead ID (or free-text description in text mode), and `route_input_bytes` / `route_output_bytes` to UTF8 byte counts of the complete native prompt / response. Missing counts/hash → skip observation. No prompt, description or reason is passed or persisted.
+
+```bash
+python3 "$CLAUDE_PLUGIN_ROOT/scripts/clavain_selector/route_shadow.py" --site route-4b --native-choice "$route_native_choice" --subject-sha256 "$route_subject_sha256" --input-bytes "$route_input_bytes" --output-bytes "$route_output_bytes" --plugin-root "$CLAUDE_PLUGIN_ROOT" --config "${CLAVAIN_ROUTING_POLICY:-$CLAUDE_PLUGIN_ROOT/config/routing.yaml}" --project-root "$PWD" </dev/null >/dev/null 2>&1 &
+```
+
+Never wait for the observer or read its return to affect behavior. Continue to 4c using only the native result/default. See `docs/reference/route-shadow.md` for local log interpretation.
 
 ### 4c: Dispatch
 
