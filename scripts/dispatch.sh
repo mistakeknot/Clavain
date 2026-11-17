@@ -1186,6 +1186,26 @@ _dispatch_cleanup_state() {
   [[ -z "$TOKEN_LEAK_HITS" ]] || rm -f "$TOKEN_LEAK_HITS" 2>/dev/null || true
   # The EXIT trap exits with this, so the status matches the committed receipt.
   DISPATCH_FINAL_RC="$_rc"
+  if [[ "${RUN_RECEIPT_ARMED:-false}" == true && "${ROLE_RESOLVED:-false}" == true ]]; then
+    # B6 observes only after today's dispatch completed. It cannot return a
+    # choice, change status, or hold the caller's output descriptors open.
+    (
+      # Drop inherited status pipes and lock descriptors as well as stdio.
+      # /dev/fd supplies the same inventory on hosts without procfs.
+      shadow_fd_dir="/proc/$BASHPID/fd"
+      [[ -d "$shadow_fd_dir" ]] || shadow_fd_dir=/dev/fd
+      for shadow_fd_path in "$shadow_fd_dir"/*; do
+        shadow_fd="${shadow_fd_path##*/}"
+        [[ "$shadow_fd" =~ ^[0-9]+$ ]] || continue
+        [[ "$shadow_fd" -le 2 ]] || exec {shadow_fd}>&-
+      done
+      jq -cn --argjson route "$RESOLVED_ROUTE_JSON" --arg native "$RESOLVED_PROFILE_REF" \
+        --arg role "$ROLE" --argjson exit_code "$_rc" --argjson prompt_chars "${#PROMPT}" \
+        '{route:$route,native:$native,role:$role,exit_code:$exit_code,prompt_chars:$prompt_chars}' |
+        PYTHONPATH="$DISPATCH_SCRIPT_DIR" python3 -m clavain_selector.learned_router_shadow \
+          "$DISPATCH_SCRIPT_DIR/.." "${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}" "${WORKDIR:-.}"
+    ) </dev/null >/dev/null 2>&1 &
+  fi
   if [[ "${CLAVAIN_HELD_SNAPSHOT_OWNER:-}" == "$$" ]]; then rm -f -- "${CLAVAIN_HELD_CONTEXT_SNAPSHOT:-}"; fi
   rm -f "$STATE_FILE" "${STATE_FILE}.tmp" 2>/dev/null || true
   if [[ -n "${INTERBAND_DISPATCH_FILE:-}" ]]; then
