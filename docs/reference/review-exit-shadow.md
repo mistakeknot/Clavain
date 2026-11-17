@@ -11,6 +11,14 @@ Set `REVIEW_EXIT_LOOP_ID` to one stable identifier for a change across heads
 and rounds. Round runner defaults to bead-or-repository plus base; override
 when bases change or multiple changes share that default. Quality gates
 requires a loop ID or bead, and the native decision in `REVIEW_EXIT_NATIVE`.
+The round runner stores records in the lasting source checkout, outside the
+temporary worktrees it removes on exit; its default loop ID also uses the
+source checkout. Gate callbacks pass each current-run verdict using repeated
+`--verdict-file` arguments. The controller starts with an empty run-local list
+and records all verdict paths produced in that invocation, never a directory
+glob. No complete list means unknown findings and usage. The helper snapshots
+each listed file once for both findings and the byte estimate; duplicate paths
+count once. A listed file must remain available until the callback reads it.
 Supply callbacks in round order; concurrent callbacks for the same loop may
 miss a later-outcome join. Different loop IDs are independent.
 
@@ -42,3 +50,11 @@ For missed-finding evaluation compare `shadow_exit` against `could_exit`;
 any later finding invalidates a proposed exit. Unknown outcomes are excluded.
 
 LOG ONLY: all existing quality, grounding, review and escalation rules apply.
+
+Trial limitations retained after review: hashes are unsalted and guessable,
+so local logs do not provide strong pseudonymity. Cumulative outcome appends
+grow quadratically with loop length and each callback scans the log directory;
+keep loop IDs scoped to a change rather than a standing campaign. The outer
+six-second subprocess timeout kills the CLI but may briefly leave its Python
+child running; the Go wrapper has its own six-second cap. These limitations
+need follow-up before sustained rollout; they do not authorize enforcement.

@@ -273,7 +273,7 @@ echo "$OUT/receipt.md"
 # base refs change between rounds.
 shadow_native=continue
 if [ "$RC" -eq 0 ] && tail -1 "$OUT/receipt.md" | grep -qx 'VERDICT: PASS'; then shadow_native=exit; fi
-( python3 "$HERE/review_exit_shadow.py" --project "$REPO" \
-    --loop "${REVIEW_EXIT_LOOP_ID:-${CLAVAIN_BEAD_ID:-$REPO}:$BASE}" \
+( python3 "$HERE/review_exit_shadow.py" --project "$SRC_REPO" \
+    --loop "${REVIEW_EXIT_LOOP_ID:-${CLAVAIN_BEAD_ID:-$SRC_REPO}:$BASE}" \
     --native "$shadow_native" --panel "$OUT" </dev/null >/dev/null 2>&1 & ) || true
 exit "$RC"

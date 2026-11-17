@@ -71,7 +71,8 @@ def main():
     parser.add_argument('--project', type=Path, default=Path.cwd())
     parser.add_argument('--loop', required=True)
     parser.add_argument('--native', choices=['exit', 'continue'], required=True)
-    parser.add_argument('--verdict-dir', type=Path)
+    parser.add_argument('--verdict-file', type=Path, action='append', default=[],
+                        help='One verdict produced by this run; repeat for all run verdicts')
     parser.add_argument('--panel', type=Path)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
@@ -81,13 +82,16 @@ def main():
         return
     findings = None
     tokens = None
-    if args.verdict_dir:
-        rows = [json.loads(p.read_text()) for p in args.verdict_dir.glob('*.json')]
+    if args.verdict_file:
+        # The controller supplies only artifacts produced in this invocation.
+        # Read once, so the count and byte proxy describe the same snapshot.
+        snapshots = [p.read_bytes() for p in dict.fromkeys(args.verdict_file)]
+        rows = [json.loads(raw) for raw in snapshots]
         counts = [r.get('findings_count') for r in rows]
         if counts and all(type(n) is int and n >= 0 for n in counts):
             findings = sum(counts)
         if rows:
-            tokens = (sum(len(p.read_bytes()) for p in args.verdict_dir.glob('*.json')) + 3) // 4
+            tokens = (sum(map(len, snapshots)) + 3) // 4
     if args.panel:
         # The round's merged receipt is authoritative. PASS WITH NOTES, invalid
         # verdicts and failed CI remain unknown rather than claiming zero findings.

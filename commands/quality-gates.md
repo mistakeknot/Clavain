@@ -35,6 +35,15 @@ No arguments → analyze current unstaged + staged changes (`git diff` + `git di
 
 ## Phase 1: Analyze Changes
 
+For the LOG-ONLY review-exit callback, start a fresh run-local list
+`REVIEW_EXIT_VERDICT_FILES=()`. As this invocation produces verdicts (including
+flux-drive, plan conformance, and grounding), record their exact paths in that
+list. Carry the list explicitly across shell blocks. Include all verdicts
+produced this invocation; never fill the list by globbing `.clavain/verdicts`
+or by reusing a prior invocation's list. If the complete current-run list is
+unavailable, leave it empty so the observer records findings as unknown.
+This bookkeeping does not change the native gate's inputs or verdicts.
+
 ```bash
 git diff --name-only HEAD
 git diff --cached --name-only
@@ -327,9 +336,13 @@ This callback never changes a gate or excuses a required review round.
 
 ```bash
 if [[ -n "${REVIEW_EXIT_LOOP_ID:-${CLAVAIN_BEAD_ID:-}}" && -n "${REVIEW_EXIT_NATIVE:-}" ]]; then
+  REVIEW_EXIT_VERDICT_ARGS=()
+  for verdict_file in "${REVIEW_EXIT_VERDICT_FILES[@]}"; do
+    REVIEW_EXIT_VERDICT_ARGS+=(--verdict-file "$verdict_file")
+  done
   ( python3 "${CLAUDE_PLUGIN_ROOT}/scripts/review_exit_shadow.py" \
       --project "$PWD" --loop "${REVIEW_EXIT_LOOP_ID:-$CLAVAIN_BEAD_ID}" \
-      --native "$REVIEW_EXIT_NATIVE" --verdict-dir .clavain/verdicts \
+      --native "$REVIEW_EXIT_NATIVE" "${REVIEW_EXIT_VERDICT_ARGS[@]}" \
       </dev/null >/dev/null 2>&1 & ) || true
 fi
 ```
