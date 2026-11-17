@@ -82,7 +82,9 @@ func runDecide(in io.Reader, out io.Writer, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "python3", filepath.Join(*root, "scripts", "clavain_selector", "decide.py"))
-	cmd.Env = append(os.Environ(), "PYTHONPATH="+filepath.Join(*root, "scripts"))
+	// Shadow callers can outlive a temporary plugin tree. Keep this helper and
+	// its descendants from creating import caches while that tree is removed.
+	cmd.Env = append(os.Environ(), "PYTHONPATH="+filepath.Join(*root, "scripts"), "PYTHONDONTWRITEBYTECODE=1")
 	cmd.Stdin = bytes.NewReader(envelope)
 	response, err := cmd.Output()
 	if err != nil {

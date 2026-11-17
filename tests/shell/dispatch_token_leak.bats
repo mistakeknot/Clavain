@@ -423,10 +423,12 @@ W
     # Report the actual interpreter setting, including when the caller permits
     # bytecode. Publish atomically so the parent only reads a complete result.
     cat > "$T/mock/scripts/clavain_selector/learned_router_shadow.py" <<'W'
-import os, sys
+import os, sys, subprocess
 path = os.environ["SHADOW_BYTECODE_LOG"]
+child = subprocess.check_output([sys.executable, "-c",
+    "import sys; print(sys.dont_write_bytecode)"], text=True).strip()
 with open(path + ".tmp", "w") as stream:
-    stream.write(str(sys.dont_write_bytecode))
+    stream.write(str(sys.dont_write_bytecode) + ":" + child)
 os.replace(path + ".tmp", path)
 W
     export SHADOW_BYTECODE_LOG="$T/shadow-bytecode"
@@ -440,7 +442,7 @@ W
         sleep 0.05
     done
     [ -f "$SHADOW_BYTECODE_LOG" ]
-    [ "$(cat "$SHADOW_BYTECODE_LOG")" = True ]
+    [ "$(cat "$SHADOW_BYTECODE_LOG")" = True:True ]
 }
 
 # ---- scan after the last write ---------------------------------------------
