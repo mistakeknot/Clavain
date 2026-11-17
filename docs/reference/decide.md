@@ -79,6 +79,12 @@ exposes tokens, not a monetary price. Unknown attempt usage stays unknown.
 The writer pins directory descriptors and refuses symlinked directories or
 day files below the project; it never follows those links to chmod targets.
 
+Before starting the trial, install a release whose `clavain-cli` supports
+`decide`. Verify the installed CLI with `clavain-cli decide --config /dev/null`:
+it must return `reason: off`. The one-week shadow trial starts only after
+that prerequisite passes. Zero rows before then means the observer is not
+wired, not that no events occurred.
+
 Trial log design choice: project decision JSONL files have an 8 MiB total
 byte cap across all days. The locked size check includes the pending line;
 when full, observations return `record_unwritable` without appending. Native

@@ -383,6 +383,18 @@ def append_record(record: Mapping[str, Any], *, record_dir: str | Path | None = 
                                            dir_fd=descriptors[-1]))
             # Serialize the size check and append across every day file.
             fcntl.flock(descriptors[-1], fcntl.LOCK_EX)
+            # Exclusive creation preserves existing files and symlinks. Use
+            # the pinned directory so parent-path swaps cannot redirect writes.
+            try:
+                ignore_fd = os.open('.gitignore', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                    0o600, dir_fd=descriptors[-1])
+            except FileExistsError:
+                pass
+            else:
+                with os.fdopen(ignore_fd, 'w', encoding='utf-8') as ignore:
+                    ignore.write('*\n!.gitignore\n')
+                    ignore.flush()
+                    os.fsync(ignore.fileno())
             if max_bytes is not None:
                 total = 0
                 for name in os.listdir(descriptors[-1]):
