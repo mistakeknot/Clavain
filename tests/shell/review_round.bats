@@ -78,6 +78,38 @@ FAKE
 
 rr() { bash "$RR" --repo "$R" --base main --head "$HEAD_SHA" --producer-identity p --out-dir "$OUT" "$@"; }
 
+@test "detached shadow observer disables bytecode writes before importing copied scripts" {
+    local copied="$BATS_TEST_TMPDIR/copied-scripts"
+    mkdir -p "$copied"
+    cp "$RR" "$copied/review-round.sh"
+    cp -R "$BATS_TEST_DIRNAME/../../scripts/clavain_selector" "$copied/"
+    cat > "$copied/review_exit_shadow.py" <<'PY'
+import os, subprocess, sys
+from clavain_selector import records
+
+# A fresh interpreter without -B must inherit suppression too (as decide does).
+child = subprocess.check_output(
+    [sys.executable, "-c", "import sys; print(sys.dont_write_bytecode)"], text=True
+).strip()
+path = os.environ["SHADOW_BYTECODE_LOG"]
+with open(path + ".tmp", "w") as stream:
+    stream.write(f"{sys.dont_write_bytecode}\n{child}\n")
+os.replace(path + ".tmp", path)
+PY
+    export SHADOW_BYTECODE_LOG="$BATS_TEST_TMPDIR/shadow-bytecode"
+    unset PYTHONDONTWRITEBYTECODE
+    RR="$copied/review-round.sh"
+    run rr
+    [ "$status" -eq 0 ]
+    # Synchronize on the detached observer's atomic completion report.
+    for ((i=0; i<200; i++)); do
+        [[ ! -f "$SHADOW_BYTECODE_LOG" ]] || break
+        sleep 0.05
+    done
+    [ -f "$SHADOW_BYTECODE_LOG" ]
+    [ "$(cat "$SHADOW_BYTECODE_LOG")" = $'True\nTrue' ]
+}
+
 @test "dispatch failure is never a pass" {
     FAKE_RC=7 run rr --mode first
     [ "$status" -eq 3 ]
