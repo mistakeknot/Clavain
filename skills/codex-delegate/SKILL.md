@@ -57,13 +57,8 @@ Use `timeout: 600000`.
 - Check `.verdict` sidecar first; `pass` → brief summary; `warn`/`fail` → read full output
 - Retry once with tighter scope; if retry fails, return failure to the caller
 
-Then log one shadow observation of the role already used (silent, detached, inert unless `flux_triage` is `shadow`; see `docs/reference/delegation-shadow.md`). Set `ROLE` to the exact `--role` value used in step 3 and `CATEGORY` to the task category from Role Selection. Set `SHADOW_OUTCOME` to `success`, `warn` or `failure` from the sidecar, and `SHADOW_DECISION_TOKENS` only from a counted main-thread decision estimate; leave either unset if unknown.
-```bash
-SHADOW_ROOT="${CLAVAIN_SOURCE_DIR:-${CLAVAIN_DIR:-${CLAUDE_PLUGIN_ROOT:-}}}"
-if [ -n "$SHADOW_ROOT" ] && [ -n "${DISPATCH:-}" ]; then
-python3 "$SHADOW_ROOT/scripts/clavain_selector/delegation_shadow.py" --site codex-delegate --native "${ROLE:-}" --candidate "scout=Read-only exploration" --candidate "routine-execution=Bounded routine edits" --candidate "deep-execution=Implementation needing deeper reasoning" --candidate "validation=Independent read-only review" --state "category=${CATEGORY:-}" --main-thread-tokens "${SHADOW_DECISION_TOKENS:-}" --native-outcome "${SHADOW_OUTCOME:-}" >/dev/null 2>&1 || true
-fi
-```
+After reading the sidecar, observe the dispatched role using the [engine's shadow protocol](../interserve-engine/SKILL.md#delegation-shadow-protocol). Restore `ROLE` from step 3's `--role` argument and `CATEGORY` from Role Selection. Map the sidecar verdict to `SHADOW_OUTCOME`: `success`, `warn` or `failure`; omit it when unknown. The command below supplies this site's role candidates.
+Run the [executor-role observation block](../interserve-engine/SKILL.md#executor-role-observation) from the engine. Its candidate list and shell setup are maintained there.
 
 **5. Reflect — record outcome** (OODARC Reflect leg: the dispatch ran the *Act* leg; capturing its result here is how the caller Reflects and Compounds)
 ```bash

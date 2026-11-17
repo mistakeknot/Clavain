@@ -13,7 +13,7 @@ Each instruction makes its choice first, then calls
 | `--site` | Instruction | Native choice (actual) | Candidates |
 |----------|-------------|------------------------|------------|
 | `quality-gates` | `commands/quality-gates.md` Phase 2 | always `delegate_flux_drive` (fixed delegation) | `delegate_flux_drive`, `main_thread_review` |
-| `codex-delegate` | `skills/codex-delegate/SKILL.md` step 4 | the role used (`$ROLE`) | `scout`, `routine-execution`, `deep-execution`, `validation` |
+| `codex-delegate` | `skills/codex-delegate/SKILL.md` step 4 links to the engine's Executor-role observation block | the role used (`$ROLE`) | `scout`, `routine-execution`, `deep-execution`, `validation` |
 | `interserve-engine` | `skills/interserve-engine/SKILL.md` Dispatch Routing | the mode chosen (`$MODE`) | `megaprompt`, `parallel_delegation`, `ordered_delegation`, `debate_first` |
 
 `quality-gates` has one real option today, so its observation measures only

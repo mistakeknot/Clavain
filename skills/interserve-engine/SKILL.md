@@ -133,7 +133,9 @@ bash "$DISPATCH" --via zaka --to kimi -C "$PROJECT_DIR" "Long-running refactor â
 | Sequential dependent tasks | Ordered delegation |
 | Complex decision before implementing | Debate first |
 
-Once you have picked a mode, log the choice you actually made (log-only: silent, detached, inert unless `flux_triage` is `shadow`; see `docs/reference/delegation-shadow.md`). Set `MODE` to `megaprompt`, `parallel_delegation`, `ordered_delegation` or `debate_first`, and `TASK_COUNT` to the number of tasks. Set `SHADOW_DECISION_TOKENS` only from a counted main-thread estimate.
+### Delegation shadow protocol
+
+Once you have picked a mode, log the choice you actually made (log-only: silent, detached, inert unless `flux_triage` is `shadow`; see `docs/reference/delegation-shadow.md`). Carry the actual shell variables across blocks and resolve the installation root as that reference describes. Set `MODE` to `megaprompt`, `parallel_delegation`, `ordered_delegation` or `debate_first`, and `TASK_COUNT` to the number of tasks. Set `SHADOW_DECISION_TOKENS` only from a counted main-thread estimate; omit unknown estimates and outcomes. The codex-delegate skill uses this same protocol with its own role candidates.
 ```bash
 SHADOW_ROOT="${CLAVAIN_SOURCE_DIR:-${CLAVAIN_DIR:-${CLAUDE_PLUGIN_ROOT:-}}}"
 if [ -n "$SHADOW_ROOT" ] && [ -n "${DISPATCH:-}" ]; then
@@ -142,6 +144,19 @@ fi
 ```
 
 ---
+
+### Executor-role observation
+
+For codex-delegate, run this after reading the result sidecar, using the role
+actually dispatched and the protocol above. This block observes the executor
+role; the preceding block observes the orchestration mode.
+
+```bash
+SHADOW_ROOT="${CLAVAIN_SOURCE_DIR:-${CLAVAIN_DIR:-${CLAUDE_PLUGIN_ROOT:-}}}"
+if [ -n "$SHADOW_ROOT" ] && [ -n "${DISPATCH:-}" ]; then
+python3 "$SHADOW_ROOT/scripts/clavain_selector/delegation_shadow.py" --site codex-delegate --native "${ROLE:-}" --candidate "scout=Read-only exploration" --candidate "routine-execution=Bounded routine edits" --candidate "deep-execution=Implementation needing deeper reasoning" --candidate "validation=Independent read-only review" --state "category=${CATEGORY:-}" --main-thread-tokens "${SHADOW_DECISION_TOKENS:-}" --native-outcome "${SHADOW_OUTCOME:-}" >/dev/null 2>&1 || true
+fi
+```
 
 ## Megaprompt Mode (Single Task)
 

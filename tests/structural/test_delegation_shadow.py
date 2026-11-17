@@ -237,9 +237,9 @@ def test_old_bundled_cli_does_not_hide_capable_path_cli(env, monkeypatch):
 
 @pytest.mark.parametrize('site', ['quality-gates', 'codex-delegate', 'interserve-engine'])
 def test_call_site_skips_empty_root_and_dispatch(site, tmp_path):
-    path = SITES[site]
+    path = SITES['interserve-engine'] if site == 'codex-delegate' else SITES[site]
     block = next(b for b in re.findall(r'```bash\n(.*?)```', path.read_text(), re.S)
-                 if 'delegation_shadow.py' in b)
+                 if f'--site {site} ' in b)
     assert 'SHADOW_ROOT=' in block
     assert '[ -n "$SHADOW_ROOT" ]' in block
     if site != 'quality-gates':
@@ -452,8 +452,8 @@ def helper_commands(path):
 @pytest.mark.parametrize('site', sorted(SITES))
 def test_call_site_invokes_helper_with_actual_native_choice(site, env):
     from clavain_selector import delegation_shadow as ds
-    path = SITES[site]
-    found = helper_commands(path)
+    path = SITES['interserve-engine'] if site == 'codex-delegate' else SITES[site]
+    found = [(offset, line) for offset, line in helper_commands(path) if f'--site {site} ' in line]
     assert len(found) == 1, f'{path} must carry exactly one helper call'
     offset, line = found[0]
     assert line.rstrip().endswith('|| true'), 'observation must never fail the workflow'
@@ -477,7 +477,10 @@ def test_quality_gates_call_site_follows_the_fixed_delegation():
 
 def test_codex_delegate_call_site_follows_dispatch():
     text = SITES['codex-delegate'].read_text()
-    assert text.index('**3. Dispatch**') < text.index('delegation_shadow.py') < text.index('**5. Reflect')
+    link = '../interserve-engine/SKILL.md#executor-role-observation'
+    assert text.index('**3. Dispatch**') < text.index(link) < text.index('**5. Reflect')
+    assert 'delegation_shadow.py' not in text
+    assert '### Executor-role observation' in SITES['interserve-engine'].read_text()
 
 
 def test_interserve_call_site_follows_the_mode_choice():
