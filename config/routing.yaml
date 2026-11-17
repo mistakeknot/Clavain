@@ -128,6 +128,37 @@ reasoning:
   frontier_reasons: [unresolved-success-criteria, foundational-invariants, broad-consequences, difficult-verification, capability-failure]
   dual_review_reasons: [foundational-invariants, broad-consequences]
   strikes: 2
+  # Review by risk: a two-week trial (bead mk-h9541). It changes only how many
+  # review rounds a change gets and which changes need cross-lab review at all.
+  # It never touches frontier_models, frontier_reasons, dual_review_reasons,
+  # the role table, effort floors or reviewer independence: any review that does
+  # run is dispatched exactly as before. Read by scripts/review_policy.py and
+  # scripts/review-round-limit.py; route-spawn.sh and ic ignore it.
+  # Rollback: set `enabled: false` (or export CLAVAIN_REVIEW_POLICY=off), or
+  # revert the commit that added this block. The trial also expires on its own
+  # the day after `last_day`; nothing needs to be turned off.
+  review_policy:
+    trial: review-by-risk
+    bead: mk-h9541
+    enabled: true
+    first_day: 2026-11-18
+    last_day: 2026-12-01
+    # Routine = code under a named source directory (src, app, apps, web, ui,
+    # components, pages, public, styles, assets, examples). Allow-list: a path no
+    # safe class names (docs, tests, routine source) keeps full review.
+    routine:
+      max_rounds: 1
+      # A second round runs only when the first found one of these. A failed
+      # round with no severity on record counts as high, so a missing label can
+      # only add a round, never remove one.
+      second_round_if_severity: [P1, High, Critical, Blocker]
+    # Skip class: no cross-lab review. The author's check, tests and CI carry
+    # the change. Applies only when every changed path is in the class.
+    skip_classes: [text-only, doc-only, test-only, one-shot-prototype]
+    # Keep-list: full review, the 3-fix-round + 1-confirm cap, unchanged.
+    # A keep-list path wins over every other rule. An unclassifiable change
+    # (no path list) and any path no safe class names are treated as keep-list.
+    keep_list: [spend, credentials, sign-ins, payments, save-formats-and-migrations, releases-and-publishes, instruction-files, hooks, ci-workflows]
   profiles:
     # mk ruling 2026-09-27 (mk-h73i): all coordinator seats run Sonnet 5 (Sonnet 5.5, claude-sonnet-5-5, from 2026-09-28: mk-hpwq).
     # Reverses the mk-42j9.25/mk-42j9.5 per-project Opus coordinator-seat
