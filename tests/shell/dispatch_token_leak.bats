@@ -275,6 +275,7 @@ mock_scripts() {
     # a private copy of scripts/ whose flere worker and bb seat worker are stubs
     mkdir -p "$T/mock"
     cp -r "$ROOT/scripts" "$T/mock/scripts"
+    find "$T/mock/scripts" -type d -name __pycache__ -exec rm -r {} +
     local d
     for d in config .claude-plugin docs hooks; do
         [[ ! -e "$ROOT/$d" ]] || ln -s "$ROOT/$d" "$T/mock/$d"

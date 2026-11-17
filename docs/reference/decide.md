@@ -139,6 +139,14 @@ for p in sorted((pathlib.Path(sys.argv[1]) / '.clavain/decisions').glob('*.jsonl
     for line in p.read_text().splitlines():
         try:
             row = json.loads(line)
+            if not isinstance(row, dict):
+                continue
+            if row.get('reason') == 'shadow_mode' and (
+                not isinstance(row.get('decide_answer'), dict)
+                or 'choice' not in row['decide_answer']
+                or 'native_choice' not in row
+            ):
+                continue
             when = dt.datetime.fromisoformat(row['created_at'].replace('Z', '+00:00'))
             if cutoff <= when <= now:
                 rows.append(row)

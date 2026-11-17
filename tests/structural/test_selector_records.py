@@ -463,6 +463,7 @@ def test_failed_ignore_publication_can_retry(tmp_path, monkeypatch):
     with pytest.raises(RecordUnwritable):
         append_record({}, record_dir=directory, project_root=tmp_path)
     assert not (directory / '.gitignore').exists()
+    assert not list(directory.glob('.gitignore-*'))
     monkeypatch.setattr(records.os, 'fsync', original)
     append_record({}, record_dir=directory, project_root=tmp_path)
     assert (directory / '.gitignore').read_text() == '*\n!.gitignore\n'

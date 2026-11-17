@@ -405,9 +405,9 @@ def _project_directory(root, *, nonblocking=False):
 
 
 def _ensure_project_ignore(directory_fd):
-    """Create decisions/.gitignore once so shadow logs stay out of git status.
+    """Publish a complete decisions/.gitignore so logs stay out of git status.
 
-    Exclusive, no-follow creation inside the pinned directory: an existing file,
+    Exclusive temporary creation and linking inside the pinned directory: an existing file,
     symlink or directory is never touched or followed.
     """
     # Publish a complete file without replacing any existing operator content.
