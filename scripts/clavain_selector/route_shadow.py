@@ -1,4 +1,4 @@
-"""S2 local-only observer. Called asynchronously after the native classifier.
+"""S2 observer. Called asynchronously after the native classifier.
 
 Only closed site/choice identifiers, SHA256 IDs and byte counts enter this
 process. No classification text, prompt, file contents or subject names do.
@@ -12,6 +12,10 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from clavain_selector import observer_privacy
 
 
 SITES = {
@@ -33,7 +37,8 @@ def observe(*, site, native_choice, subject_sha256, input_bytes, output_bytes,
         config = Path(config).resolve()
         routing = yaml.safe_load(config.read_text())
         policy = routing['decision_models']['route']
-        if policy.get('mode') != 'shadow' or policy.get('backend') != 'heuristic':
+        hosted = observer_privacy.enabled(policy)
+        if policy.get('mode') != 'shadow' or (policy.get('backend') != 'heuristic' and not hosted):
             return
         if type(site) is not str or site not in SITES:
             return
@@ -57,6 +62,8 @@ def observe(*, site, native_choice, subject_sha256, input_bytes, output_bytes,
                               input_bytes=input_bytes, output_bytes=output_bytes, batch_size=batch_size),
                    native_choice=native_choice, egress_allowed=False, sources=[],
                    observation_metadata=metadata)
+        if hosted:
+            obj.update(privacy_contract=observer_privacy.VERSION, egress_allowed=True)
         plugin_root = Path(plugin_root).resolve()
         binary = plugin_root / 'bin' / 'clavain-cli'
         # Prefer the bundled binary; no fallback once a launched process fails.
