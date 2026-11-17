@@ -244,7 +244,8 @@ def test_consumed_notice_requires_new_decision(tmp_path, decision):
     assert "new decision" in result.stderr
 
 
-def test_outer_dispatch_forwards_head_to_actual_child(tmp_path, decision):
+@pytest.mark.parametrize("role", ["cross-lab-review", "plan-review", "validation"])
+def test_outer_dispatch_forwards_head_to_actual_child(tmp_path, decision, role):
     import shutil
     # Copy scripts only; the receipt derivation stub avoids any repository or
     # remote lookup. Fake routing cannot reach a provider: the child fails its
@@ -265,8 +266,9 @@ def test_outer_dispatch_forwards_head_to_actual_child(tmp_path, decision):
     env.update(PATH=str(tmp_path / "bin") + os.pathsep + env["PATH"],
         CLAVAIN_DISPATCH_RECEIPT_FILE=str(ledger),
         CLAVAIN_REVIEW_RECEIPT_DIR=str(tmp_path / "reviews"), CLAVAIN_ROUTING_PRECHECK="0")
-    result = subprocess.run(["bash", str(scripts / "dispatch.sh"), "--role", "cross-lab-review",
-        "--bead", "test-1", "--producer-identity", "gpt-6.1-sol", "--head", HEAD,
+    result = subprocess.run(["bash", str(scripts / "dispatch.sh"), "--role", role,
+        "--bead", "test-1", "--producer-identity", "gpt-6.1-sol",
+        "--head" if role == "cross-lab-review" else "--review-head", HEAD,
         "--prompt", "dummy"], env=env, capture_output=True, text=True, timeout=30)
     assert result.returncode == 1, result.stderr
     assert f"head {HEAD} decision dummy-decision" in result.stderr
@@ -290,4 +292,52 @@ def test_concurrent_writers_publish_one_complete_decision(tmp_path, decision):
         results = list(pool.map(lambda _: dummy_run(args, decision[1]), range(2)))
     assert sorted(r.returncode for r in results) == [0, 26]
     assert decision[0].stat().st_mode & 0o777 == 0o600
+    assert gate(tmp_path, decision).returncode == 0
+
+
+@pytest.mark.parametrize("role", ["plan-review", "validation"])
+def test_head_only_decision_consumed_once(tmp_path, decision, role):
+    dummy_python(tmp_path, decision[1])
+    rows = [receipt(attempt=str(i)) for i in range(3)]
+    outer = invoke(tmp_path, rows, role=role, review_head=HEAD)
+    assert outer.returncode == 1, outer.stderr
+    assert "could not resolve dispatch role" in outer.stderr
+    child = invoke(tmp_path, rows, role=role, review_head=HEAD, child=True)
+    assert child.returncode == 1, child.stderr
+    assert "accepting one extra review round" in child.stderr
+    assert "requires an immutable policy hash" in child.stderr
+    second = invoke(tmp_path, rows, role=role, review_head=HEAD, child=True)
+    assert second.returncode == 25, second.stderr
+    assert "consumed" in second.stderr
+
+
+@pytest.mark.parametrize("role", ["plan-review", "validation"])
+def test_head_only_without_decision_refuses(tmp_path, role):
+    rows = [receipt(attempt=str(i)) for i in range(3)]
+    result = invoke(tmp_path, rows, role=role, review_head=HEAD)
+    assert result.returncode == 25, result.stderr
+
+
+@pytest.mark.parametrize("head", ["", "short", "a" * 39, "a" * 41, "A" * 40, "g" * 40])
+@pytest.mark.parametrize("role", ["plan-review", "validation"])
+def test_head_only_bad_hex_refuses(tmp_path, role, head):
+    result = invoke(tmp_path, [], role=role, review_head=head)
+    assert result.returncode == 1, result.stderr
+    assert "--review-head" in result.stderr
+
+
+@pytest.mark.parametrize("role", ["cross-lab-review", "planning"])
+def test_head_only_wrong_role_refuses(tmp_path, role):
+    result = invoke(tmp_path, [], role=role, review_head=HEAD)
+    assert result.returncode == 1, result.stderr
+    assert "--review-head applies to --role plan-review or validation only" in result.stderr
+
+
+@pytest.mark.parametrize("role", ["plan-review", "validation"])
+def test_head_only_cannot_mix_receipt_head(tmp_path, decision, role):
+    dummy_python(tmp_path, decision[1])
+    result = invoke(tmp_path, [receipt(attempt=str(i)) for i in range(3)],
+                    role=role, head=HEAD, review_head=HEAD, child=True)
+    assert result.returncode == 1, result.stderr
+    assert "--review-head cannot be combined" in result.stderr
     assert gate(tmp_path, decision).returncode == 0

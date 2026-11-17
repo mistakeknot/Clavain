@@ -153,6 +153,7 @@ MINIMUM_CODEX_VERSION=""
 FALLBACK_REASON=""
 PRODUCER_IDENTITY=""
 RR_REPO=""; RR_REPO_ID=""; RR_PR=""; RR_HEAD=""; RR_BASE=""
+REVIEW_HEAD=""
 REVIEW_SCRATCH=false
 REVIEW_SCRATCH_DIR=""
 REVIEW_SCRATCH_TREE=""
@@ -1276,6 +1277,8 @@ Options:
   --policy-profile <NAME>      Declared policy overlay (pilot requires campaign scope)
   --experiment-task-type <TYPE>  Sol experiment requires advisory-support-grouping; never a gate review
   --producer-identity <ID>      Producer backend/model identity for validator audit records
+  --review-head <SHA>           Exact lowercase 40-hex head for plan-review/validation
+                               round-limit decisions; no PR receipt flags
   --repo OWNER/NAME --repo-id ID --pr N --head SHA --base SHA
                                 Write a review receipt (cross-lab-review only; all five
                                 required; -C must hold both commits). One JSON file per
@@ -2569,6 +2572,15 @@ while [[ $# -gt 0 ]]; do
       esac
       shift 2
       ;;
+    --review-head)
+      require_arg "$1" "${2:-}"
+      REVIEW_HEAD="$2"
+      [[ "$REVIEW_HEAD" =~ ^[0-9a-f]{40}$ ]] || {
+        echo "Error: --review-head must be a full lowercase 40-hex commit sha" >&2
+        exit 1
+      }
+      shift 2
+      ;;
     --review-scratch)
       REVIEW_SCRATCH=true
       shift
@@ -2785,6 +2797,19 @@ if [[ -n "$TIER" && "$ENGINE" != kimi && "${CLAVAIN_ROUTING_PRECHECK:-}" != "" &
   _dispatch_routing_precheck "" "${precheck_policy:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}" || exit 1
 fi
 
+# Head-only decisions never enable PR receipt mode. Reject incompatible flags
+# before the round-limit gate can consume a decision.
+if [[ -n "$REVIEW_HEAD" ]]; then
+  if [[ "$ROLE" != plan-review && "$ROLE" != validation ]]; then
+    echo "Error: --review-head applies to --role plan-review or validation only" >&2
+    exit 1
+  fi
+  if _review_receipt_requested; then
+    echo "Error: --review-head cannot be combined with --repo/--repo-id/--pr/--head/--base" >&2
+    exit 1
+  fi
+fi
+
 _resolve_dispatch_bead
 # Review budgets belong to beads, never PR heads. Check both the outer call
 # and resolved children, before role resolution or any provider launch.
@@ -2797,7 +2822,7 @@ case "${ROLE:-}" in
       [[ "$ROLE_RESOLVED" == true ]] || round_limit_args+=(--check-only)
       python3 "$DISPATCH_SCRIPT_DIR/review-round-limit.py" "$CLAVAIN_BEAD_ID" \
         "${CLAVAIN_DISPATCH_RECEIPT_FILE:-${XDG_STATE_HOME:-${HOME:-/nonexistent}/.local/state}/clavain/dispatch-receipts.jsonl}" \
-        "$(_review_receipt_dir)" --head "${RR_HEAD:-}" "${round_limit_args[@]}" || exit "$?"
+        "$(_review_receipt_dir)" --head "${REVIEW_HEAD:-${RR_HEAD:-}}" "${round_limit_args[@]}" || exit "$?"
     fi
     ;;
 esac
