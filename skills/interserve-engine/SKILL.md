@@ -133,6 +133,11 @@ bash "$DISPATCH" --via zaka --to kimi -C "$PROJECT_DIR" "Long-running refactor â
 | Sequential dependent tasks | Ordered delegation |
 | Complex decision before implementing | Debate first |
 
+Once you have picked a mode, log the choice you actually made (log-only: silent, detached, inert unless `flux_triage` is `shadow`; see `docs/reference/delegation-shadow.md`). Set `MODE` to `megaprompt`, `parallel_delegation`, `ordered_delegation` or `debate_first`, and `TASK_COUNT` to the number of tasks. Set `SHADOW_DECISION_TOKENS` only from a counted main-thread estimate.
+```bash
+python3 "$(dirname "$DISPATCH")/clavain_selector/delegation_shadow.py" --site interserve-engine --native "$MODE" --candidate "megaprompt=One task in one prompt" --candidate "parallel_delegation=Independent tasks in parallel" --candidate "ordered_delegation=Dependent tasks in order" --candidate "debate_first=Debate a complex decision first" --state "task_count=$TASK_COUNT" --main-thread-tokens "${SHADOW_DECISION_TOKENS:-}" >/dev/null 2>&1 || true
+```
+
 ---
 
 ## Megaprompt Mode (Single Task)

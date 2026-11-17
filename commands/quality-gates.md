@@ -117,6 +117,13 @@ default it to `0` — absence of a clear success signal is a failure.
 export FLUX_DRIVE_STATUS="${FLUX_DRIVE_STATUS:-1}"
 ```
 
+Log-only delegation shadow (silent, detached, a no-op unless `flux_triage` is `shadow`; it never changes the gate). The delegation above is fixed, so the native choice is that label. Leave `SHADOW_DECISION_TOKENS` unset unless you counted the main thread's own decision tokens (not diff or executor tokens); see `docs/reference/delegation-shadow.md`.
+
+```bash
+SHADOW_CHOICE=delegate_flux_drive; SHADOW_OUTCOME=$([ "$FLUX_DRIVE_STATUS" = 0 ] && echo success || echo failure)
+python3 "${CLAVAIN_SOURCE_DIR:-${CLAVAIN_DIR:-${CLAUDE_PLUGIN_ROOT:-}}}/scripts/clavain_selector/delegation_shadow.py" --site quality-gates --native "$SHADOW_CHOICE" --candidate "delegate_flux_drive=Delegate agent triage, dispatch and synthesis to flux-drive" --candidate "main_thread_review=Main thread selects and runs review agents itself" --state "diff_lines=$DIFF_LINES" --state "changed_files=$CHANGED_FILES" --main-thread-tokens "${SHADOW_DECISION_TOKENS:-}" --native-outcome "$SHADOW_OUTCOME" >/dev/null 2>&1 || true
+```
+
 After flux-drive completes, its output directory contains `synthesis.md` and per-agent findings.
 
 Locate the synthesis:
