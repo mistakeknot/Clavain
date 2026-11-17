@@ -176,11 +176,12 @@ def _run_decide(cmd, request, timeout):
     except subprocess.TimeoutExpired:
         return None, None
     finally:
+        # The leader may have exited while descendants still hold its group.
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
         if proc.poll() is None:
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except OSError:
-                pass
             try:
                 proc.wait(timeout=1)
             except Exception:

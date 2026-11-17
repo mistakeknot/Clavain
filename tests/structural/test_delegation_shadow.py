@@ -56,6 +56,33 @@ main()
 '''
 
 CANDIDATES = [('plan', 'Plan the work'), ('build', 'Build the work')]
+
+
+def test_wrapper_exit_cleans_up_surviving_descendant(tmp_path):
+    from clavain_selector import delegation_shadow as ds
+    import signal
+    marker = tmp_path / 'child.pid'
+    script = (
+        'import subprocess,sys; '
+        'p=subprocess.Popen([sys.executable,"-c","import time; time.sleep(30)"],'
+        'stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); '
+        'open(sys.argv[1],"w").write(str(p.pid))'
+    )
+    ds._run_decide([sys.executable, '-c', script, str(marker)], {}, 1)
+    pid = int(marker.read_text())
+    try:
+        for _ in range(50):
+            status = Path(f'/proc/{pid}/stat')
+            if not status.exists() or status.read_text().split()[2] == 'Z':
+                break
+            time.sleep(.01)
+        else:
+            pytest.fail('CLI descendant survived wrapper exit')
+    finally:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 SECRET_STATE = 'sk-AAAA-private-state-value'
 SECRET_DESC = 'PRIVATE-DESCRIPTION-SENTINEL'
 SECRET_TEXT = 'PRIVATE-TEXT-SENTINEL'
