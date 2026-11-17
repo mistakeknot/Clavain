@@ -1190,6 +1190,15 @@ _dispatch_cleanup_state() {
     # B6 observes only after today's dispatch completed. It cannot return a
     # choice, change status, or hold the caller's output descriptors open.
     (
+      # Drop inherited status pipes and lock descriptors as well as stdio.
+      # /dev/fd supplies the same inventory on hosts without procfs.
+      shadow_fd_dir="/proc/$BASHPID/fd"
+      [[ -d "$shadow_fd_dir" ]] || shadow_fd_dir=/dev/fd
+      for shadow_fd_path in "$shadow_fd_dir"/*; do
+        shadow_fd="${shadow_fd_path##*/}"
+        [[ "$shadow_fd" =~ ^[0-9]+$ ]] || continue
+        [[ "$shadow_fd" -le 2 ]] || exec {shadow_fd}>&-
+      done
       jq -cn --argjson route "$RESOLVED_ROUTE_JSON" --arg native "$RESOLVED_PROFILE_REF" \
         --arg role "$ROLE" --argjson exit_code "$_rc" --argjson prompt_chars "${#PROMPT}" \
         '{route:$route,native:$native,role:$role,exit_code:$exit_code,prompt_chars:$prompt_chars}' |

@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import signal
+import time
 import uuid
 
 import yaml
@@ -30,6 +32,7 @@ def seat_cost(profile):
 
 
 def observe(root, policy, project, event):
+    started = time.monotonic()
     if os.environ.get('CLAVAIN_SELECTOR', '').strip().lower() == 'off':
         return
     settings = yaml.safe_load(Path(policy).read_text())['decision_models']['learned_router']
@@ -45,12 +48,12 @@ def observe(root, policy, project, event):
     request = dict(question=dict(id='learned_router', text='Choose a dispatch model seat',
                    candidates=[dict(id=k, description=f"{v['backend']} {v['model']}") for k, v in seats.items()]),
                    native_choice=native, state=dict(role_sha256=hashed(event['role']),
-                   policy_sha256=hashed(Path(policy).read_bytes().hex())),
+                   policy_sha256=hashlib.sha256(Path(policy).read_bytes()).hexdigest()),
                    egress_allowed=False, sources=[str(policy)])
     answer = json.loads(subprocess.run(
         ['clavain-cli', 'decide', '--plugin-root', str(root), '--config', str(policy),
          '--project-root', str(project)], input=json.dumps(request), text=True,
-        capture_output=True, check=True, timeout=6).stdout)
+        capture_output=True, check=True, timeout=max(.001, 6 - (time.monotonic() - started))).stdout)
     if not answer.get('decision_id'):
         return
     choice = answer.get('shadow_choice')
@@ -62,17 +65,32 @@ def observe(root, policy, project, event):
     old_cost, new_cost = seat_cost(original), seat_cost(proposed)
     saved = 0
     if confidence >= .6 and original.get('backend') == 'claude' and choice != native:
-        saved = estimate if old_cost is not None and new_cost is not None and new_cost < old_cost else None
+        if old_cost is None or new_cost is None:
+            saved = None
+        elif new_cost < old_cost:
+            saved = estimate
+    observed = answer.get('reason') == 'shadow_mode'
     row = dict(schema='clavain-learned-router-v1', decision_id=str(uuid.uuid4()),
                s1_decision_id=answer['decision_id'], created_at=stamp(),
                question_id=hashed('learned_router'), role_id=hashed(event['role']),
                native_choice=hashed(native), shadow_choice=hashed(choice),
-               agreement=choice == native if choice in seats else None,
+               agreement=choice == native if observed and choice in seats else None,
                confidence=confidence, mode='shadow', applied='native',
                estimated_input_tokens=estimate, estimated_claude_tokens_saved=saved,
                token_estimate_method='ceil_prompt_characters_div_4_input_only_seat_rank_v1',
                exit_code=event['exit_code'])
-    records.append_record(row, record_dir=Path(project) / '.clavain/decisions', project_root=project)
+    # The observer runs on the main thread of its own detached process. Bound
+    # lock acquisition and append by the remaining six-second helper budget,
+    # at most one second, without changing the shared writer's semantics.
+    def expired(signum, frame):
+        raise TimeoutError('observer append deadline')
+    previous = signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, max(.001, min(1, 6 - (time.monotonic() - started))))
+    try:
+        records.append_record(row, record_dir=Path(project).resolve() / '.clavain/decisions', project_root=project)
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
 
 
 def main():

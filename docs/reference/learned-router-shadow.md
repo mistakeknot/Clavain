@@ -6,6 +6,9 @@ tier dispatches are outside this track. Routing and dispatch still choose and
 run the seat before the observer starts; observer output never returns to them.
 The detached worker closes inherited output descriptors. A missing binary,
 bad configuration, timeout or unwritable log silently loses an observation.
+Descriptors above 2 are enumerated through procfs or `/dev/fd` and closed
+before the pipeline starts. The companion append waits at most one second,
+within the remaining six-second observer budget, including lock acquisition.
 
 `decision_models.learned_router` stays `mode: off`. To collect local trial
 evidence use a task-local policy copy with `mode: shadow, backend: heuristic`.
@@ -22,7 +25,8 @@ S1 records retain confidence and hashed answers. Companion records with
 `schema: clavain-learned-router-v1` link through `s1_decision_id`, and contain:
 
 - `native_choice`, `shadow_choice`, `question_id`, `role_id`: SHA256 identifiers.
-- `agreement`: equality of the shadow seat and executed seat; null if absent.
+- `agreement`: equality of the shadow seat and executed seat; null if absent
+  or if S1 returned a non-observation fallback reason.
 - `confidence`, `exit_code`, `mode: shadow`, `applied: native`.
 - `estimated_input_tokens`: ceil(final assembled prompt character count / 4).
 - `estimated_claude_tokens_saved`: those input tokens only when confidence is
