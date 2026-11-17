@@ -1,4 +1,4 @@
-"""System One main-thread delegation shadow observations (mk-42j9.7.8).
+"""System One main-thread delegation shadow observations.
 
 The helper observes a delegation choice the instruction already made. It never
 changes that choice, never calls out unless the question's policy is `shadow`,

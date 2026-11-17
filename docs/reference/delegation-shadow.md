@@ -1,4 +1,4 @@
-# Delegation shadow observations (mk-42j9.7.8)
+# Delegation shadow observations
 
 Log-only observations of three main-thread delegation choices. They never
 change the choice, never gate a step and never print. Built on the S1 decision
@@ -33,7 +33,9 @@ budget 8. Turn it on for a trial by setting the question's `mode: shadow` with
 
 The helper detaches (fire-and-forget), prints nothing and exits 0 whatever
 happens. Total work is capped at six seconds; a timeout, crash, missing
-`clavain-cli` or unwritable log leaves the flow untouched and writes nothing.
+`clavain-cli` or unwritable log leaves the flow untouched. A failure between the
+two appends can leave an S1 record without its companion; exclude unmatched
+records when calculating delegation metrics.
 `CLAVAIN_CLI` overrides the binary lookup (default: `bin/clavain-cli` in the
 plugin, then `PATH`).
 

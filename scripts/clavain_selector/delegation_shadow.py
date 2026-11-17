@@ -1,4 +1,4 @@
-"""Shadow observations for main-thread delegation choices (mk-42j9.7.8).
+"""Shadow observations for main-thread delegation choices.
 
 An instruction call site makes its delegation choice, then calls this helper
 with the choice it actually made. The helper never changes that choice and
