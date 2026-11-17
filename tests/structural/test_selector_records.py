@@ -407,3 +407,47 @@ def test_outcome_allows_symlink_above_trusted_project(tmp_path):
 def test_cap_requires_project_root(tmp_path):
     with pytest.raises(ValueError):
         append_record({}, record_dir=tmp_path, max_bytes=1)
+
+
+def test_project_gitignore_without_repository_ignore(tmp_path):
+    import subprocess
+    subprocess.run(['git', 'init', '-q', str(tmp_path)], check=True)
+    directory = tmp_path / '.clavain/decisions'
+    path = append_record({}, record_dir=directory, project_root=tmp_path)
+    ignore = directory / '.gitignore'
+    assert ignore.read_text() == '*\n!.gitignore\n'
+    before = ignore.stat()
+    append_record({}, record_dir=directory, project_root=tmp_path)
+    assert ignore.stat().st_mtime_ns == before.st_mtime_ns
+    assert not (tmp_path / '.gitignore').exists()
+    result = subprocess.run(['git', '-C', str(tmp_path), 'check-ignore', str(path)],
+                            capture_output=True, text=True)
+    assert result.returncode == 0
+    result = subprocess.run(['git', '-C', str(tmp_path), 'check-ignore', str(ignore)],
+                            capture_output=True, text=True)
+    assert result.returncode == 1
+
+
+@pytest.mark.parametrize('existing', ['different', 'symlink', 'dangling', 'directory'])
+def test_project_gitignore_preserves_existing(tmp_path, existing):
+    directory = tmp_path / '.clavain/decisions'
+    directory.mkdir(parents=True)
+    ignore = directory / '.gitignore'
+    outside = tmp_path / 'outside'
+    if existing == 'different':
+        ignore.write_text('custom\n')
+    elif existing == 'directory':
+        ignore.mkdir()
+    else:
+        if existing == 'symlink':
+            outside.write_text('untouched\n')
+        ignore.symlink_to(outside)
+    before = ignore.lstat()
+    append_record({}, record_dir=directory, project_root=tmp_path)
+    assert ignore.lstat() == before
+    if existing == 'different':
+        assert ignore.read_text() == 'custom\n'
+    elif existing == 'symlink':
+        assert outside.read_text() == 'untouched\n'
+    elif existing == 'dangling':
+        assert not outside.exists()

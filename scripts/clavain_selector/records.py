@@ -373,6 +373,7 @@ def append_record(record: Mapping[str, Any], *, record_dir: str | Path | None = 
         if resolved_dir.absolute() != root / '.clavain' / 'decisions':
             raise RecordUnwritable('unexpected project record directory')
         with _project_directory(root) as directory_fd:
+            _ensure_project_ignore(directory_fd)
             _check_project_capacity(directory_fd, len((line + "\n").encode("utf-8")), max_bytes)
             _append_line(path, line, parent_fd=directory_fd)
     return path
@@ -401,6 +402,23 @@ def _project_directory(root, *, nonblocking=False):
     finally:
         for fd in reversed(descriptors):
             os.close(fd)
+
+
+def _ensure_project_ignore(directory_fd):
+    """Create decisions/.gitignore once so shadow logs stay out of git status.
+
+    Exclusive, no-follow creation inside the pinned directory: an existing file,
+    symlink or directory is never touched or followed.
+    """
+    try:
+        ignore_fd = os.open('.gitignore', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                            0o600, dir_fd=directory_fd)
+    except FileExistsError:
+        return
+    with os.fdopen(ignore_fd, 'w', encoding='utf-8') as ignore:
+        ignore.write('*\n!.gitignore\n')
+        ignore.flush()
+        os.fsync(ignore.fileno())
 
 
 def _check_project_capacity(directory_fd, needed, max_bytes):
