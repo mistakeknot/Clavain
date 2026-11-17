@@ -10,6 +10,8 @@ Auto-dispatch to `/sprint` or `/work`. New project? → `/clavain:project-onboar
 
 ## Patterns (reference by name)
 
+**S2 measurement (eligibility first):** Before any measurement work or helper launch, inspect the selected routing policy already available to you. If `decision_models.route.mode` is not exactly `shadow`, the backend is not `heuristic`, or the global `CLAVAIN_SELECTOR` kill is `off`, silently do nothing. If the configuration is not already known, use a normal configuration read only; never run a measurement or helper subprocess to find out. Observe only when the exact UTF8 byte counts of the complete native prompt and response, the normalized native choice and the lowercase SHA256 subject hash are already in hand from host telemetry. Do not make new tool calls to compute, hash or count anything; never guess or estimate counts; never use heredocs or interpolate raw description, prompt, response or evidence text into shell code. Otherwise skip silently and continue the native path. The observer derives the savings figure from the supplied counts; it remains an estimate.
+
 **token-attribution:** `_is_sid=$(cat /tmp/interstat-session-id 2>/dev/null||echo ""); [[ -n "$_is_sid" ]] && echo "$CLAVAIN_BEAD_ID" > "/tmp/interstat-bead-${_is_sid}" 2>/dev/null||true; ic session attribute --session="${_is_sid}" --bead="$CLAVAIN_BEAD_ID" 2>/dev/null||true`
 
 **claim-identity:** `bd set-state "$CLAVAIN_BEAD_ID" "claimed_by=${CLAUDE_SESSION_ID:-unknown}" 2>/dev/null||true; bd set-state "$CLAVAIN_BEAD_ID" "claimed_at=$(date +%s)" 2>/dev/null||true`
@@ -60,6 +62,11 @@ implementation for goal-scale asks.
 - Cache: `bd set-state "$bead_id" "complexity=$complexity"`
 - Display: `Complexity: ${complexity}/5 (${complexity_label})`
 - **Staleness check:** Haiku agent (foreground): is bead already implemented? Return `{"implemented":bool,"evidence":"..."}`. If true→AskUserQuestion(close/proceed/investigate).
+- After the native result, apply the **S2 eligibility and measurement pattern** above; if eligible, launch S2 below in the background before continuing that same native path. Normalize only a JSON boolean `implemented`: true → `implemented`, false → `not_implemented`; skip malformed results. `route_subject_sha256`, `route_input_bytes` and `route_output_bytes` must be the exact values already in hand for this bead ID and the complete native prompt / response (including evidence); otherwise skip silently. Pass only these counts and hash; never pass or persist the text.
+  ```bash
+  python3 "$CLAUDE_PLUGIN_ROOT/scripts/clavain_selector/route_shadow.py" --site route-staleness --native-choice "$route_native_choice" --subject-sha256 "$route_subject_sha256" --input-bytes "$route_input_bytes" --output-bytes "$route_output_bytes" --plugin-root "$CLAUDE_PLUGIN_ROOT" --config "${CLAVAIN_ROUTING_POLICY:-$CLAUDE_PLUGIN_ROOT/config/routing.yaml}" --project-root "$PWD" </dev/null >/dev/null 2>&1 &
+  ```
+  Never wait for the observer or read its return to affect behavior; retain the foreground check and close/proceed/investigate question.
 - → Step 4.
 
 **Free text:**
@@ -78,6 +85,12 @@ Only when `route_mode="discovery"`.
 2. Parse: `DISCOVERY_UNAVAILABLE`/`DISCOVERY_ERROR`/`[]` → `/clavain:sprint`. JSON array → continue.
 
 3. **Staleness sweep:** Top 3 without `possibly_done`: check `ic state get "bead_sweep" "<id>"` (1hr cache). Misses→single background haiku batch-check. Wait 5s max.
+
+   Apply the **S2 eligibility and measurement pattern** above. Observe only fresh Haiku results that arrive within the existing 5s wait; drop late results and cache hits, and do no follow-up, polling or completion tracking for them. For each such returned bead, if eligible, launch S2 once. Normalize JSON boolean `implemented` strictly to `implemented` / `not_implemented`; skip malformed entries. `route_subject_sha256` (for that bead ID) and `route_input_bytes` / `route_output_bytes` (complete batch prompt / response) must be exact values already in hand, else skip silently; `route_batch_size` is the number of beads checked in that batch. This apportions the batch estimate equally (rounding each share up), still an estimate. Never pass native text or evidence.
+   ```bash
+   python3 "$CLAUDE_PLUGIN_ROOT/scripts/clavain_selector/route_shadow.py" --site route-sweep --native-choice "$route_native_choice" --subject-sha256 "$route_subject_sha256" --input-bytes "$route_input_bytes" --output-bytes "$route_output_bytes" --batch-size "$route_batch_size" --plugin-root "$CLAUDE_PLUGIN_ROOT" --config "${CLAVAIN_ROUTING_POLICY:-$CLAUDE_PLUGIN_ROOT/config/routing.yaml}" --project-root "$PWD" </dev/null >/dev/null 2>&1 &
+   ```
+   Never wait for the observer or read its return to affect behavior; keep the native background sweep, cache and 5s wait limit unchanged.
 
 3b. **Context warmth annotation:** For each top-3 bead, check if recent sessions touched related files:
    ```bash
@@ -148,6 +161,14 @@ Examples to include in prompt:
 - `/work`: `{type:task, C:3, has_plan:true, phase:plan-reviewed}` — plan exists and reviewed
 
 Return `{"command":"/sprint"|"/work","confidence":0.0-1.0,"reason":"..."}`. Parse fails→default `/sprint`.
+
+After the native result, apply the **S2 eligibility and measurement pattern** above; if eligible, launch S2 in the background. Normalize only exact `/sprint` → `sprint` or `/work` → `work` into `route_native_choice`; skip malformed results while retaining the native `/sprint` default. `route_subject_sha256` (bead ID, or free-text description in text mode) and `route_input_bytes` / `route_output_bytes` (complete native prompt / response) must be exact values already in hand, else skip silently. No prompt, description or reason is passed or persisted.
+
+```bash
+python3 "$CLAUDE_PLUGIN_ROOT/scripts/clavain_selector/route_shadow.py" --site route-4b --native-choice "$route_native_choice" --subject-sha256 "$route_subject_sha256" --input-bytes "$route_input_bytes" --output-bytes "$route_output_bytes" --plugin-root "$CLAUDE_PLUGIN_ROOT" --config "${CLAVAIN_ROUTING_POLICY:-$CLAUDE_PLUGIN_ROOT/config/routing.yaml}" --project-root "$PWD" </dev/null >/dev/null 2>&1 &
+```
+
+Never wait for the observer or read its return to affect behavior. Continue to 4c using only the native result/default. See `docs/reference/route-shadow.md` for local log interpretation.
 
 ### 4c: Dispatch
 
