@@ -7,12 +7,10 @@ import os
 from pathlib import Path
 import sys
 
-from review_round_decision import DecisionRefused, claim
-
-REVIEW_ROLES = {"cross-lab-review", "plan-review", "validation"}
+from review_round_decision import REVIEW_ROLES, DecisionRefused, claim
 
 
-def check(bead, ledger, reviews, head=None, check_only=False):
+def check(bead, ledger, reviews, head=None, check_only=False, role=None):
     failures = set()
     malformed = 0
 
@@ -74,7 +72,7 @@ def check(bead, ledger, reviews, head=None, check_only=False):
     if len(failures) < 3:
         return 0
     try:
-        decision_id = claim(reviews, bead, head, len(failures), check_only=check_only)
+        decision_id = claim(reviews, bead, head, len(failures), check_only=check_only, role=role)
     except DecisionRefused as error:
         print(f"dispatch: review round decision refused: {error}", file=sys.stderr)
     else:
@@ -112,9 +110,10 @@ if __name__ == "__main__":
         parser.add_argument("ledger", type=Path)
         parser.add_argument("reviews", type=Path)
         parser.add_argument("--head")
+        parser.add_argument("--role", choices=sorted(REVIEW_ROLES))
         parser.add_argument("--check-only", action="store_true", help="outer dispatch preflight; resolved child must claim")
         args = parser.parse_args()
-        sys.exit(check(args.bead, args.ledger, args.reviews, args.head, args.check_only))
+        sys.exit(check(args.bead, args.ledger, args.reviews, args.head, args.check_only, args.role))
     except (OSError, ValueError, TypeError, RecursionError):
         # No input bytes or exception text: receipts may contain private data.
         print("dispatch: cannot verify review round history or write summary (exit 26)", file=sys.stderr)
