@@ -94,6 +94,7 @@ class Meter:
         self.observed_identity = ""
         self.models = {}
         self.steps = {}
+        self.tool_names = {}
         self.current = None
         self.total = dict.fromkeys(FIELDS, 0)
         self.result = None
@@ -123,8 +124,12 @@ class Meter:
             raise ValueError("invalid provider event")
         if event.get("session_id", self.session) != self.session:
             raise ValueError("provider session changed within invocation")
-        if event.get("parent_tool_use_id"):
-            raise ValueError("unexpected subagent activity in budgeted seat")
+        parent = event.get("parent_tool_use_id")
+        if parent:
+            if not isinstance(parent, str) or parent not in self.tool_names:
+                raise ValueError("unknown parent tool use in budgeted seat")
+            if self.tool_names[parent] in ("Agent", "Task"):
+                raise ValueError("unexpected subagent activity in budgeted seat")
         kind = event["type"]
         if self.result is not None:
             raise ValueError("provider event after final result")
@@ -137,6 +142,8 @@ class Meter:
             partial = event.get("event", {})
             if partial.get("type") == "message_start":
                 self.step(partial.get("message"), partial=True)
+            elif partial.get("type") == "content_block_start":
+                self.tool_use(partial.get("content_block"))
             elif partial.get("type") == "message_delta":
                 if self.current is None:
                     raise ValueError("message delta without message start")
@@ -202,6 +209,20 @@ class Meter:
             self.total = totals
             self.result = event
 
+    def tool_use(self, block):
+        if not isinstance(block, dict) or block.get("type") != "tool_use":
+            return
+        tool_id, name = block.get("id"), block.get("name")
+        if not isinstance(tool_id, str) or not tool_id or not isinstance(name, str) or not name:
+            raise ValueError("missing tool use identity")
+        if tool_id in self.tool_names and self.tool_names[tool_id] != name:
+            raise ValueError("conflicting tool use identity")
+        # Partial and complete assistant records repeat the same invocation.
+        # Parent IDs on ordinary tool heartbeats do not imply a subagent.
+        self.tool_names[tool_id] = name
+        if name in ("Agent", "Task"):
+            raise ValueError("unexpected subagent activity in budgeted seat")
+
     def step(self, message, *, partial):
         if not isinstance(message, dict) or not message.get("id"):
             raise ValueError("missing message identity")
@@ -218,6 +239,8 @@ class Meter:
         if partial:
             self.current = key
         self.retotal()
+        for block in message.get("content", []):
+            self.tool_use(block)
 
     def retotal(self):
         self.total = {k: sum(step[k] for step in self.steps.values()) for k in FIELDS}
