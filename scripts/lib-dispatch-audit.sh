@@ -188,6 +188,7 @@ _role_audit_context() {
   fi
   jq -cn --argjson route "${RESOLVED_ROUTE_JSON:-null}" --argjson profile "${RESOLVED_PROFILE_JSON:-null}" \
     --argjson review_packet "$review_packet" \
+    --argjson pool_receipt "${POOL_RECEIPT_JSON:-null}" \
     --arg dispatch_id "$DISPATCH_ID" --arg attempt_id "$ATTEMPT_ID" --arg state "$state" \
     --arg retry_id "${CLAVAIN_RETRY_ID:-}" --arg account "unknown" \
     --arg backend "$ENGINE" --arg model "$MODEL" --arg effort "$REASONING_EFFORT" \
@@ -237,7 +238,8 @@ _role_audit_context() {
         + (if $intercept | type == "object" then {intercept_evidence:$intercept} else {} end)
         + (if $intercept_error != "" then {intercept_evidence_error:$intercept_error} else {} end))}
       + (if $enrollment != "" then {task_envelope:{enrollment_id:$enrollment,manifest_sha256:$manifest,cohort_id:$cohort}} else {} end)
-      + (if $review_packet != null then {review_packet:$review_packet} else {} end)' | _augment_dispatch_receipt
+      + (if $review_packet != null then {review_packet:$review_packet} else {} end)
+      + (if $pool_receipt != null then {pool_receipt:$pool_receipt} else {} end)' | _augment_dispatch_receipt
 }
 
 _record_role_routing_decision() {
@@ -364,6 +366,7 @@ _build_dispatch_run_receipt() {
   local u
   for u in "$usage_json" "{}"; do  # a bad usage object must not lose the base receipt
     line="$(jq -cn --argjson observed "$observed" --argjson usage "$u" --arg role "$ROLE" --arg backend "${ENGINE:-}" --arg model "${MODEL:-}" \
+      --argjson pool_receipt "${POOL_RECEIPT_JSON:-null}" \
       --arg effort "${REASONING_EFFORT:-}" --arg producer "${PRODUCER_IDENTITY:-}" \
       --arg bead "${CLAVAIN_BEAD_ID:-}" --arg ctx "$ctx_hash" \
       --arg thread "${BB_THREAD_ID:-}" --arg session "${DISPATCH_SESSION_ID:-}" \
@@ -383,6 +386,7 @@ _build_dispatch_run_receipt() {
        tokens_out: (if $tout == "" then null else ($tout|tonumber) end)}
       + (if $verdict_class != "" then {verdict_class:$verdict_class} else {} end)
       + $observed
+      + (if $pool_receipt != null then {pool_receipt:$pool_receipt} else {} end)
       + ($usage | {usage_status, usage_basis, usage_note, tokens_in, tokens_out, tokens_cached_in,
                    tokens_cache_write_in, tokens_reasoning_out} | with_entries(select(.value != null)))')"
     [[ -n "$line" ]] && break

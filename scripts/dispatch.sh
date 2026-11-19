@@ -4074,10 +4074,15 @@ elif [[ "$ENGINE" == "claude" ]]; then
   fi
   if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
     DISPATCH_ID="${DISPATCH_ID:-$(_dispatch_audit_id)}"
+    pool_accounting_args=()
+    if [[ "${DISPATCH_TRANSPORT:-}" == direct-pooled ]]; then
+      _prepare_role_audit
+      pool_accounting_args=(--pool-receipt "${CLAVAIN_REVIEW_EVENTS}.${ATTEMPT_ID}.pool-receipt.json" --pool-attempt "$ATTEMPT_ID")
+    fi
     CMD=(python3 "$DISPATCH_SCRIPT_DIR/claude_usage.py"
       --events "$CLAVAIN_REVIEW_EVENTS" --dispatch "$DISPATCH_ID" --model "$MODEL"
       --policy "${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
-      --budget "${CLAVAIN_TOKEN_BUDGET:-0}" -- "${CMD[@]}")
+      --budget "${CLAVAIN_TOKEN_BUDGET:-0}" "${pool_accounting_args[@]}" -- "${CMD[@]}")
   fi
   # WORKDIR via cd and OUTPUT via tee at execution time, same as kimi
   # (claude -p prints the response on stdout; no -C/-o flags used).
@@ -4092,6 +4097,11 @@ else
   # passthrough below; other callers may still override it deliberately.
   CMD+=(-c "$(_seat_codex_env_args)")
   if _bb_pool_available codex; then
+    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
+      echo 'Error: budgeted pooled Codex lacks a request receipt adapter; refusing before provider launch' >&2
+      _dispatch_write_failure_class terminal_accounting
+      exit 1
+    fi
     _bb_codex_pool_token
     # Match BB's provider-codex launch contract. The hub token stays in env.
     export CODEX_OPENAI_BASE_URL="${BB_SERVER_URL%/}/api/v1/plugins/account-pool/http/v1"
@@ -6025,10 +6035,13 @@ _finalize_dispatch_result() {
     failure_class="$(jq -r --arg attempt "$ATTEMPT_ID" 'select(.attempt_id == $attempt) | .failure_class // empty' "${OUTPUT}.receipt.json" 2>/dev/null || true)"
   fi
   if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "${DISPATCH_TRANSPORT:-}" =~ ^(direct-pooled|pool-exec)$ ]]; then
-    # Hub traffic is proven, but no supported request-scoped account receipt is
-    # exposed. A budgeted pooled invocation cannot be accepted from guesses.
-    exit_code=1
-    failure_class=terminal_accounting
+    # Only the metered Claude adapter can admit a scoped pool attempt. Its
+    # terminal ledger must bind retained receipt bytes to this exact attempt.
+    if [[ "$ENGINE" != claude ]] || ! POOL_RECEIPT_JSON=$(python3 "$DISPATCH_SCRIPT_DIR/pool_receipt.py" \
+      --check-ledger "$CLAVAIN_REVIEW_EVENTS" --attempt "$ATTEMPT_ID"); then
+      exit_code=1
+      failure_class=terminal_accounting
+    fi
   fi
   # A terminal stderr denial dominates an earlier structured capacity error.
   # A stderr terminal_policy denial (an explicit policy block) is always

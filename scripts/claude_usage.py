@@ -234,8 +234,12 @@ class Meter:
 
 
 def run(args):
+    from pool_receipt import PoolAttempt
     invocation, session = str(uuid.uuid4()), str(uuid.uuid4())
     meter = Meter(args.model, args.dispatch, invocation, session, args.policy)
+    pool = (PoolAttempt(args.pool_attempt, args.pool_receipt)
+            if args.pool_receipt else None)
+    pool_evidence = None
     destination = Path(args.events)
     # Never overwrite prior attempts, including raw provider evidence.
     raw_path = Path(str(destination) + "." + invocation + ".raw.jsonl")
@@ -250,7 +254,10 @@ def run(args):
         raw_path.chmod(0o600)
 
         def emit(**kwargs):
-            ledger.write(json.dumps(meter.record(**kwargs), separators=(",", ":")) + "\n")
+            record = meter.record(**kwargs)
+            if pool_evidence is not None:
+                record["pool_receipt"] = pool_evidence
+            ledger.write(json.dumps(record, separators=(",", ":")) + "\n")
             ledger.flush()
             if kwargs.get("terminal"):
                 os.fsync(ledger.fileno())
@@ -276,7 +283,8 @@ def run(args):
         try:
             # Inherit the worker group so the supervisor's final group KILL
             # cannot orphan this adapter or the model's tool children.
-            child = subprocess.Popen(command, stdin=sys.stdin, stdout=subprocess.PIPE)
+            child = subprocess.Popen(command, stdin=sys.stdin, stdout=subprocess.PIPE,
+                                     env=pool.child_env() if pool else None)
             sel = selectors.DefaultSelector()
             sel.register(child.stdout, selectors.EVENT_READ)
             pending = b""
@@ -324,6 +332,11 @@ def run(args):
             backend_exit = child.returncode if child is not None else 127
         if backend_exit < 0:
             backend_exit = 128 - backend_exit
+        if pool:
+            try:
+                pool_evidence = pool.finish(meter.total)
+            except (ValueError, OSError):
+                meter.error = meter.error or "pool request accounting unavailable or unreconciled"
         if meter.result is None:
             meter.error = meter.error or "provider ended without complete accounting"
         complete = meter.result is not None and not meter.error and not cancelled[0] and not budget_hit
@@ -351,10 +364,14 @@ def main():
     parser.add_argument("--model", required=True)
     parser.add_argument("--policy", required=True)
     parser.add_argument("--budget", type=int, default=0)
+    parser.add_argument("--pool-receipt")
+    parser.add_argument("--pool-attempt")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     if args.budget < 0 or not args.command or not args.dispatch or not args.model:
         parser.error("explicit dispatch/model, command and nonnegative budget required")
+    if bool(args.pool_receipt) != bool(args.pool_attempt):
+        parser.error("pool receipt destination and attempt must be supplied together")
     try:
         return run(args)
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
