@@ -201,10 +201,9 @@ dispatch:
   model_aliases:
     opus: claude-opus-5-5
     # mk ruling 2026-09-28 (mk-hpwq): Sonnet 5.5 replaces Sonnet 5 in every seat.
-    # claude-sonnet-5 is deliberately not a seat: Anthropic falls higher-risk
-    # cyber requests back to it automatically, so it stays in the roster maps
-    # (roster-families/slugs) to attribute those runs, never in a chain.
+    # Older Sonnet identifiers remain in roster maps for historical attribution.
     sonnet: claude-sonnet-5-5
+    haiku: claude-haiku-4-5
     k3: kimi-code/k3
     kimi/k3: kimi-code/k3
   # Roles are the authoritative dispatch interface. Tier names remain for
