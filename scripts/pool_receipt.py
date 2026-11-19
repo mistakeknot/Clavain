@@ -1,4 +1,4 @@
-"""Claude attempt accounting through the authenticated account-pool contract.
+"""Attempt accounting through the authenticated account-pool contract.
 
 Host and scoped bearers remain in memory. Never include HTTP bodies or errors
 in diagnostics: a server error is not trusted to be free of credentials.
@@ -15,13 +15,13 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_ope
 FIELDS = ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
 
 
-def validate(data, attempt):
+def validate(data, attempt, provider="claude"):
     def require(condition):
         if not condition:
             raise ValueError("pool receipt lacks complete request-bound accounting")
     require(isinstance(data, dict))
     require(data.get("version") == 1 and data.get("attempt_id") == attempt and
-            data.get("provider") == "claude" and bool(data.get("host_id")) and
+            provider in ("claude", "codex") and data.get("provider") == provider and bool(data.get("host_id")) and
             isinstance(data.get("id"), str) and re.fullmatch(r"[a-f0-9]{32}", data["id"]))
     require(all(data.get(k) is True for k in ("sealed", "valid", "complete")))
     requests = data.get("requests")
@@ -36,7 +36,7 @@ def validate(data, attempt):
         for j, hop in enumerate(hops, 1):
             require(isinstance(hop, dict) and hop.get("index") == j and
                     isinstance(hop.get("account_id"), str) and bool(hop["account_id"]) and
-                    hop.get("provider") == "claude" and hop.get("state") == "complete" and
+                    hop.get("provider") == provider and hop.get("state") == "complete" and
                     type(hop.get("status")) is int and 200 <= hop["status"] < 300)
             usage = hop.get("usage")
             if request["kind"] == "metadata":
@@ -59,22 +59,27 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 class PoolAttempt:
-    def __init__(self, attempt, destination):
+    def __init__(self, attempt, destination, provider="claude"):
+        if provider not in ("claude", "codex"):
+            raise ValueError("unsupported pool provider")
+        self.provider = provider
         self.attempt = attempt
         self.destination = Path(destination)
-        self.base = os.environ.get("ANTHROPIC_BASE_URL", "")
+        self.base = (os.environ.get("CODEX_OPENAI_BASE_URL", "").removesuffix("/v1")
+                     if provider == "codex" else os.environ.get("ANTHROPIC_BASE_URL", ""))
         url = urlsplit(self.base)
         if (url.scheme not in ("http", "https") or not url.hostname or url.username or
                 url.password or url.query or url.fragment or
                 url.path != "/api/v1/plugins/account-pool/http" or
                 (url.scheme == "http" and url.hostname not in ("localhost", "127.0.0.1", "::1"))):
             raise ValueError("invalid pool receipt origin")
-        self.host_token = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
+        self.token_env = "CODEX_POOL_AUTH_TOKEN" if provider == "codex" else "ANTHROPIC_AUTH_TOKEN"
+        self.host_token = os.environ.get(self.token_env, "")
         if not self.host_token or self.destination.exists() or self.destination.is_symlink():
             raise ValueError("pool receipt preflight unavailable")
-        begin = self.request("begin", dict(version=1, provider="claude", attempt_id=attempt))
+        begin = self.request("begin", dict(version=1, provider=provider, attempt_id=attempt))
         if (not isinstance(begin, dict) or begin.get("version") != 1 or
-                begin.get("attempt_id") != attempt or begin.get("provider") != "claude" or
+                begin.get("attempt_id") != attempt or begin.get("provider") != provider or
                 not isinstance(begin.get("id"), str) or not re.fullmatch(r"[a-f0-9]{32}", begin["id"]) or
                 not begin.get("host_id") or not isinstance(begin.get("token"), str) or not begin["token"] or
                 type(begin.get("expires_at")) is not int or begin["expires_at"] <= time.time()*1000):
@@ -96,12 +101,14 @@ class PoolAttempt:
 
     def child_env(self):
         env = {k: v for k, v in os.environ.items() if v != self.host_token}
-        env["ANTHROPIC_AUTH_TOKEN"] = self.scoped
+        env[self.token_env] = self.scoped
         return env
 
     def finish(self, totals):
         for _ in range(20):
             data = self.request("finalize", dict(version=1, id=self.id, attempt_id=self.attempt))
+            if not isinstance(data, dict):
+                raise ValueError("invalid pool receipt response")
             if data.get("complete") is True:
                 break
             time.sleep(.1)
@@ -119,14 +126,14 @@ class PoolAttempt:
             out.write(encoded + "\n")
             out.flush()
             os.fsync(out.fileno())
-        observed = validate(data, self.attempt)
+        observed = validate(data, self.attempt, self.provider)
         if observed != totals:
             raise ValueError("pool request usage differs from provider totals")
         return {"path": str(self.destination), "sha256": hashlib.sha256((encoded + "\n").encode()).hexdigest(),
                 "id": self.id, "attempt_id": self.attempt}
 
 
-def check_ledger(path, attempt):
+def check_ledger(path, attempt, provider="claude"):
     record = None
     with open(path) as ledger:
         for line in ledger:
@@ -141,7 +148,7 @@ def check_ledger(path, attempt):
     if hashlib.sha256(raw).hexdigest() != ref["sha256"]:
         raise ValueError("pool evidence hash mismatch")
     data = json.loads(raw)
-    if data.get("id") != ref["id"] or validate(data, attempt) != {k: record[k] for k in FIELDS}:
+    if data.get("id") != ref["id"] or validate(data, attempt, provider) != {k: record[k] for k in FIELDS}:
         raise ValueError("pool evidence does not reconcile")
     return ref
 
@@ -152,9 +159,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check-ledger", required=True)
     parser.add_argument("--attempt", required=True)
+    parser.add_argument("--provider", choices=("claude", "codex"), default="claude")
     args = parser.parse_args()
     try:
-        print(json.dumps(check_ledger(args.check_ledger, args.attempt)))
+        print(json.dumps(check_ledger(args.check_ledger, args.attempt, args.provider)))
     except (ValueError, OSError, KeyError, TypeError):
         print("pool request accounting unavailable or invalid", file=sys.stderr)
         sys.exit(1)

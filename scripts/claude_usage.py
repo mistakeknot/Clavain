@@ -82,6 +82,8 @@ def counts(value, *, model=False, output_required=True):
 
 
 class Meter:
+    provider = "claude"
+
     def __init__(self, model, dispatch, invocation, session, policy):
         self.model = model
         self.dispatch = dispatch
@@ -233,11 +235,11 @@ class Meter:
                 "error": self.error, "backend_exit": backend_exit}
 
 
-def run(args):
+def run(args, meter_class=Meter):
     from pool_receipt import PoolAttempt
     invocation, session = str(uuid.uuid4()), str(uuid.uuid4())
-    meter = Meter(args.model, args.dispatch, invocation, session, args.policy)
-    pool = (PoolAttempt(args.pool_attempt, args.pool_receipt)
+    meter = meter_class(args.model, args.dispatch, invocation, session, args.policy)
+    pool = (PoolAttempt(args.pool_attempt, args.pool_receipt, meter.provider)
             if args.pool_receipt else None)
     pool_evidence = None
     destination = Path(args.events)
@@ -266,6 +268,9 @@ def run(args):
             nonlocal budget_hit
             raw.write(line.decode("utf-8", errors="replace") + "\n")
             raw.flush()
+            if meter.provider == "codex":
+                sys.stdout.buffer.write(line + b"\n")
+                sys.stdout.buffer.flush()
             try:
                 meter.event(json.loads(line))
             except (ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
@@ -278,8 +283,9 @@ def run(args):
         command = args.command
         if command and command[0] == "--":
             command = command[1:]
-        command += ["--output-format", "stream-json", "--verbose",
-                    "--include-partial-messages", "--session-id", session]
+        if meter.provider == "claude":
+            command += ["--output-format", "stream-json", "--verbose",
+                        "--include-partial-messages", "--session-id", session]
         try:
             # Inherit the worker group so the supervisor's final group KILL
             # cannot orphan this adapter or the model's tool children.
@@ -335,6 +341,8 @@ def run(args):
         if pool:
             try:
                 pool_evidence = pool.finish(meter.total)
+                if meter.provider == "codex":
+                    meter.bind_pool(pool_evidence)
             except (ValueError, OSError):
                 meter.error = meter.error or "pool request accounting unavailable or unreconciled"
         if meter.result is None:
@@ -346,13 +354,13 @@ def run(args):
         raw.flush()
         os.fsync(raw.fileno())
         emit(terminal=True, complete=complete, status=status, backend_exit=backend_exit)
-        if meter.result and isinstance(meter.result.get("result"), str):
+        if meter.provider == "claude" and meter.result and isinstance(meter.result.get("result"), str):
             print(meter.result["result"])
         if status != "success":
             failure = os.environ.get("CLAVAIN_DISPATCH_FAILURE_FILE")
             if failure:
                 Path(failure).write_text("terminal_accounting\n")
-            print("Claude accounting: " + status + (": " + meter.error if meter.error else ""),
+            print(meter.provider + " accounting: " + status + (": " + meter.error if meter.error else ""),
                   file=sys.stderr)
         return backend_exit or (0 if status == "success" else 1)
 
