@@ -33,7 +33,7 @@ def events():
     ]
 
 
-def dispatch(tmp_path, stream, *, exit_code=0, stderr="", budget=10000, via=None, cancel=False, governed=False):
+def dispatch(tmp_path, stream, *, exit_code=0, stderr="", budget=10000, via=None, cancel=False, governed=False, pool_env=None):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     fixture = tmp_path / "provider.json"
@@ -45,6 +45,8 @@ from pathlib import Path
 if '--version' in sys.argv:
     print('2.1.267 (Claude Code)'); sys.exit(0)
 sys.stdin.read()
+if os.environ.get('EXPECTED_POOL_TOKEN'):
+    assert os.environ.get('ANTHROPIC_AUTH_TOKEN') == os.environ['EXPECTED_POOL_TOKEN']
 session = sys.argv[sys.argv.index('--session-id')+1] if '--session-id' in sys.argv else 'legacy'
 with open(os.environ['CALLS'], 'a') as f: f.write('called\\n')
 for event in json.loads(Path(os.environ['FIXTURE']).read_text()):
@@ -64,6 +66,13 @@ sys.exit(int(os.environ['PROVIDER_EXIT']))
            "CLAVAIN_REQUIRE_USAGE": "1", "CLAVAIN_BB_DIRECT_POOL": "0", "CLAVAIN_REVIEW_EVENTS": str(ledger),
            "CLAVAIN_TOKEN_BUDGET": str(budget), "CLAVAIN_DISPATCH_ID": "fixture-dispatch",
            "CLAVAIN_CONTEXT_GATEWAY_MODE": "off"}
+    if pool_env:
+        env.update(pool_env)
+        host = json.loads((ROOT/'config/bb-integration.json').read_text())['allowed_host_ids'][0]
+        bb = bin_dir / 'bb'
+        bb.write_text('#!/usr/bin/env python3\nimport json\nprint(' + repr(json.dumps(dict(thread=dict(id='fixture-thread', environment=dict(hostId=host))))) + ')\n')
+        bb.chmod(0o755)
+        env['BB_CLI'] = str(bb)
     cmd = ["bash", str(ROOT / "scripts/dispatch.sh"), "--to", "claude", "--model", MODEL,
            "-C", str(tmp_path), "-o", str(output)]
     if governed:
@@ -94,6 +103,60 @@ sys.exit(int(os.environ['PROVIDER_EXIT']))
                               capture_output=True, text=True, timeout=30)
     records = [json.loads(line) for line in ledger.read_text().splitlines()] if ledger.exists() else []
     return proc, output, records
+
+
+@pytest.mark.requires_ic
+@pytest.mark.parametrize("mode", ["success", "refused", "missing-account", "wrong-totals", "provider-fail"])
+def test_pooled_dispatch_admits_before_spending_and_retains_attribution(tmp_path, mode):
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    import threading
+    calls = []
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_): pass
+        def do_GET(self):
+            self.send_response(200); self.end_headers()
+            self.wfile.write(json.dumps(dict(threadId="fixture-thread", availability=dict(claude=True, codex=True))).encode())
+        def do_POST(self):
+            action = self.path.rsplit("/", 1)[-1]
+            calls.append(action)
+            payload = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            assert self.headers['x-bb-account-pool-token'] == 'synthetic-host-token'
+            self.send_response(503 if mode == 'refused' else 200); self.end_headers()
+            if mode == 'refused': return
+            data = dict(version=1, id='a'*32, host_id='fixture-host', attempt_id=payload['attempt_id'], provider='claude')
+            if action == 'begin':
+                data.update(token='synthetic-scoped-token', expires_at=9999999999999)
+            else:
+                data.update(sealed=True, valid=True, complete=True, requests=[dict(id=1, kind='inference', state='finished', hops=[dict(index=1, account_id='fixture-account', provider='claude', status=200, state='complete', model=MODEL, usage=dict(input_tokens=10, output_tokens=9, cache_read_input_tokens=30, cache_creation_input_tokens=20))])])
+                if mode == 'missing-account': data['requests'][0]['hops'][0]['account_id'] = None
+                if mode == 'wrong-totals': data['requests'][0]['hops'][0]['usage']['input_tokens'] = 11
+            self.wfile.write(json.dumps(data).encode())
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    origin = 'http://127.0.0.1:' + str(server.server_port)
+    try:
+        proc, _, records = dispatch(tmp_path, events(), exit_code=7 if mode == 'provider-fail' else 0, pool_env=dict(
+            BB_SERVER_URL=origin, BB_THREAD_ID='fixture-thread', CLAVAIN_BB_DIRECT_POOL='1',
+            ANTHROPIC_BASE_URL=origin+'/api/v1/plugins/account-pool/http',
+            ANTHROPIC_AUTH_TOKEN='synthetic-host-token', CODEX_POOL_AUTH_TOKEN='',
+            EXPECTED_POOL_TOKEN='synthetic-scoped-token'))
+    finally:
+        server.shutdown(); server.server_close(); thread.join()
+    if mode == 'success':
+        assert proc.returncode == 0, proc.stderr
+        assert calls == ['begin', 'finalize']
+        ref = records[-1]['pool_receipt']
+        data = json.loads(Path(ref['path']).read_text())
+        assert data['requests'][0]['hops'][0]['account_id'] == 'fixture-account'
+    elif mode == 'refused':
+        assert proc.returncode != 0
+        assert calls == ['begin']
+        assert not (tmp_path/'calls').exists()
+    else:
+        assert proc.returncode != 0
+        assert calls == ['begin', 'finalize']
+        assert records[-1]['status'] != 'success'
 
 
 @pytest.mark.requires_ic
