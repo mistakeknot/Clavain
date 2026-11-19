@@ -2900,15 +2900,6 @@ if [[ "$ENGINE" == kimi && -n "$ROLE" && -n "$REASONING_EFFORT" ]]; then
   exit 1
 fi
 
-# PR receipts require a retained review body. Refuse before routing/launch:
-# Codex only writes that body when -o is supplied; its JSONL status parser
-# does not save the final message as a replacement output file.
-if [[ "$ROLE" == cross-lab-review && -z "$OUTPUT" ]]; then
-  echo 'Error: cross-lab-review requires -o/--output <file> to retain the review and write its receipt' >&2
-  _dispatch_write_failure_class terminal_configuration
-  exit 1
-fi
-
 # Opt-in review-packet boundary (plan step 4). Activated only by an explicit
 # --review-input/--review-packet flag, for both the outer role-dispatch call
 # (which may build a fresh packet) and a resolved child (verify-only, from
@@ -2969,6 +2960,16 @@ fi
 # Validated and derived before any model runs, so a bad flag fails fast.
 if _review_receipt_requested; then
   _review_receipt_prepare "${WORKDIR:-.}" || exit 1
+fi
+
+# All cross-lab reviews require a retained body, across backends and entry
+# modes, even without PR receipt flags. Validate those flags first so partial
+# sets keep their specific diagnostic, then refuse missing output before
+# routing/launch. Codex's JSONL status parser does not save the final body.
+if [[ "$ROLE" == cross-lab-review && -z "$OUTPUT" ]]; then
+  echo 'Error: cross-lab-review requires -o/--output-last-message <file> to retain the review and write its receipt' >&2
+  _dispatch_write_failure_class terminal_configuration
+  exit 1
 fi
 
 # A role is a complete Intercore-owned execution contract. The outer invocation
