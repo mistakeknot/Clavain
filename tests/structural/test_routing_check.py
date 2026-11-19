@@ -140,7 +140,8 @@ def test_real_policy_copy(inputs):
     policy = yaml.safe_load((ROOT / "config/routing.yaml").read_text())
     aliases = policy["dispatch"]["model_aliases"]
     released = {"models": [{"id": model} for model in sorted({
-        aliases.get(t["model"], t["model"]) for t in policy["dispatch"]["tiers"].values()})]}
+        aliases.get(t["model"], t["model"]) for t in policy["dispatch"]["tiers"].values()
+    } | set(aliases.values()))]}
     actual = (inputs[0], policy, released, inputs[3])
     report(run(actual), 0)
     policy["dispatch"]["tiers"]["routine-sol"]["model"] = "gpt-5.6-sol"
@@ -259,7 +260,8 @@ def test_real_policy_with_scoped_project_clavain_profile(inputs):
         "scope": "project:clavain", "roles": {"coordinator-seat": "coordinator-seat-opus"}}
     policy["reasoning"]["project_profiles"] = {"clavain": "project-clavain"}
     released = {"models": [{"id": model} for model in sorted({
-        aliases.get(t["model"], t["model"]) for t in tiers.values()})]}
+        aliases.get(t["model"], t["model"]) for t in tiers.values()
+    } | set(aliases.values()))]}
     opus = tiers["coordinator-seat-opus"]
     seats = {"seats": [{"thread": "thr_c", "role": "coordinator-seat", "project": "clavain",
                         "model": aliases.get(opus["model"], opus["model"]),
