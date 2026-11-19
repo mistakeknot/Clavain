@@ -2900,6 +2900,15 @@ if [[ "$ENGINE" == kimi && -n "$ROLE" && -n "$REASONING_EFFORT" ]]; then
   exit 1
 fi
 
+# PR receipts require a retained review body. Refuse before routing/launch:
+# Codex only writes that body when -o is supplied; its JSONL status parser
+# does not save the final message as a replacement output file.
+if [[ "$ROLE" == cross-lab-review && -z "$OUTPUT" ]]; then
+  echo 'Error: cross-lab-review requires -o/--output <file> to retain the review and write its receipt' >&2
+  _dispatch_write_failure_class terminal_configuration
+  exit 1
+fi
+
 # Opt-in review-packet boundary (plan step 4). Activated only by an explicit
 # --review-input/--review-packet flag, for both the outer role-dispatch call
 # (which may build a fresh packet) and a resolved child (verify-only, from
