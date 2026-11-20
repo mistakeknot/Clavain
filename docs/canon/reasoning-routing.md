@@ -107,10 +107,14 @@ sorted keys, no whitespace (`separators=(",", ":")`), and `ensure_ascii=True`.
 Both writer and gate require a lowercase 40-hex head. The decision must be a
 regular, non-symlink file owned by the current uid,
 with no group/other write bits. It applies only to the exact head supplied by
-dispatch's receipt `--head` (cross-lab-review) or head-only `--review-head`
-(plan-review and validation) and the exact current failed-round count. The
-head-only flag requires a lowercase 40-hex commit, is accepted only for those
-two roles, and cannot be combined with PR receipt identifiers. It does not
+dispatch's head-only `--round-head` (all three review roles), receipt `--head`
+(cross-lab-review), or compatible head-only `--review-head` (plan-review and
+validation), and the exact current failed-round count. `--round-head` requires
+a lowercase 40-hex commit and supplies only the round-limit head; it does not
+enable PR receipts. When combined with `--head` or `--review-head`, their values
+must match before any decision claim. `--review-head` retains its restriction
+to plan-review and validation and cannot be combined with PR receipt identifiers.
+PR `--head` semantics remain unchanged. These flags do not
 change the producer identity or reviewer independence checks. No head
 means no decision can apply. A successful check atomically creates a
 `<SHA256(decision_id)>.consumed` marker with exclusive creation in the same
