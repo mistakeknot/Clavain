@@ -16,7 +16,7 @@ def receipt(bead="test-1", verdict="FAIL", role="cross-lab-review", attempt="a")
                 dispatch_id="d", outcome="completed")
 
 
-def invoke(tmp_path, rows, role="cross-lab-review", bead="test-1", child=False, head=None, review_head=None):
+def invoke(tmp_path, rows, role="cross-lab-review", bead="test-1", child=False, head=None, review_head=None, round_head=None):
     ledger = tmp_path / "runs.jsonl"
     ledger.write_text("".join(json.dumps(r) + "\n" for r in rows))
     bindir = tmp_path / "bin"
@@ -35,6 +35,8 @@ def invoke(tmp_path, rows, role="cross-lab-review", bead="test-1", child=False, 
         bead_args += ["--head", head]
     if review_head is not None:
         bead_args += ["--review-head", review_head]
+    if round_head is not None:
+        bead_args += ["--round-head", round_head]
     return subprocess.run(["bash", str(ROOT / "scripts/dispatch.sh"),
                            "--role", role, *bead_args, "--producer-identity", "gpt-6.1-sol",
                            "-o", str(tmp_path / "review.md"),
