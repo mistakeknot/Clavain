@@ -316,7 +316,7 @@ capture_role_prompt() {
     export PROMPT_CAPTURE="$T/captured-prompt"
     run bash -c 'trap '\''printf "%s" "${PROMPT:-}" > "$PROMPT_CAPTURE"'\'' EXIT; source "$@"' _ \
         "$DISPATCH" --dry-run --role-resolved --role "$role" \
-        --to claude --model gpt-6-astra -C "$T/repo" "$@"
+        --to claude --model gpt-6-astra -C "$T/repo" -o "$T/out.md" "$@"
     [ "$status" -eq 0 ]
     captured_prompt="$(cat "$PROMPT_CAPTURE")"
 }

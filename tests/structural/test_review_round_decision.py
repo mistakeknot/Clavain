@@ -273,6 +273,7 @@ def test_outer_dispatch_forwards_head_to_actual_child(tmp_path, decision, role):
     result = subprocess.run(["bash", str(scripts / "dispatch.sh"), "--role", role,
         "--bead", "test-1", "--producer-identity", "gpt-6.1-sol",
         "--head" if role == "cross-lab-review" else "--review-head", HEAD,
+        "-o", str(tmp_path / "review.md"),
         "--prompt", "dummy"], env=env, capture_output=True, text=True, timeout=30)
     assert result.returncode == 1, result.stderr
     assert f"head {HEAD} decision dummy-decision" in result.stderr
