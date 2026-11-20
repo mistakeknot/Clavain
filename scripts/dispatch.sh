@@ -2962,6 +2962,16 @@ if _review_receipt_requested; then
   _review_receipt_prepare "${WORKDIR:-.}" || exit 1
 fi
 
+# All cross-lab reviews require a retained body, across backends and entry
+# modes, even without PR receipt flags. Validate those flags first so partial
+# sets keep their specific diagnostic, then refuse missing output before
+# routing/launch. Codex's JSONL status parser does not save the final body.
+if [[ "$ROLE" == cross-lab-review && -z "$OUTPUT" ]]; then
+  echo 'Error: cross-lab-review requires -o/--output-last-message <file> to retain the review and write its receipt' >&2
+  _dispatch_write_failure_class terminal_configuration
+  exit 1
+fi
+
 # A role is a complete Intercore-owned execution contract. The outer invocation
 # resolves it once, then invokes this script with the exact primary/fallback
 # profiles. Explicit engine/model/tier overrides would make the durable record
