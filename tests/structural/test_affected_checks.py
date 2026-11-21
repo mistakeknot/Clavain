@@ -57,16 +57,25 @@ def test_code_paths_select_full():
         assert pr(f)["mode"] == "full", f
 
 
-def test_docs_run_every_structural_test_and_skip_shell():
-    res = pr("CLAUDE.md")
+def test_docs_are_full():
+    for f in ("CLAUDE.md", "docs/guide-goal-shape.md", "README.md"):
+        assert pr(f)["mode"] == "full", f
+
+
+def test_test_change_mixed_with_code_is_full():
+    assert pr("tests/structural/test_agents.py", "scripts/dispatch.sh")["mode"] == "full"
+
+
+def test_changed_bats_runs_all_structural_tests():
+    res = pr("tests/shell/goal_shape_guide.bats")
     assert res["mode"] == "affected"
-    assert res["bats"] == []
-    assert "tests/structural/test_check_instruction_contract.py" in res["pytest"]
-    assert len(res["pytest"]) > 50
+    assert "tests/shell/goal_shape_guide.bats" in res["bats"]
+    assert "tests/structural/test_shell_suite_safety.py" in res["pytest"]
 
 
-def test_docs_mixed_with_code_is_full():
-    assert pr("CLAUDE.md", "scripts/dispatch.sh")["mode"] == "full"
+def test_discovery_skips_untracked_dependency_tests():
+    res = pr("tests/structural/test_agents.py")
+    assert not any("/.venv/" in t or "site-packages" in t for t in res["pytest"])
 
 
 def test_changed_test_pulls_in_its_importers():
@@ -76,7 +85,7 @@ def test_changed_test_pulls_in_its_importers():
 
 
 def test_missing_path_is_full():
-    res = pr(f"docs/{NOVEL}-gone.md")
+    res = pr(f"tests/structural/test_{NOVEL}_gone.py")
     assert res["mode"] == "full" and "deleted" in res["reason"]
 
 

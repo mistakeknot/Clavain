@@ -54,13 +54,6 @@ FULL_DIRS = ("skills/", "commands/", "agents/", "cmd/", "hooks/", "galiana/",
 GENERIC_NAMES = {"main.go", "SKILL.md", "README.md", "__init__.py", "index.md",
                  "CHANGELOG.md", "plugin.json", "SKILL.md.tmpl"}
 
-# Documentation-only paths: run the tests that cite them, nothing otherwise.
-DOC_PREFIXES = ("docs/",)
-DOC_NAMES = {"CLAUDE.md", "AGENTS.md", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "PHILOSOPHY.md",
-             "LICENSE", "THIRD-PARTY-NOTICES.md", "HANDOFF.md"}
-# Instruction files are checked by contract tests, which the structural tier
-# runs in full for any documentation-class change.
-NOT_DOCS = {"CLAUDE.md", "AGENTS.md"}
 
 
 def full(reason: str, changed: list[str]) -> dict:
@@ -81,18 +74,11 @@ def classify_test(path: str) -> str | None:
 
 
 def all_tests() -> list[str]:
-    out = []
-    for p in sorted(ROOT.glob("tests/**/*")):
-        rel = p.relative_to(ROOT).as_posix()
-        if "node_modules" in rel or "__pycache__" in rel:
-            continue
-        if p.is_file() and classify_test(rel):
-            out.append(rel)
-    for p in sorted(ROOT.glob("scripts/tests/*")):
-        rel = p.relative_to(ROOT).as_posix()
-        if p.is_file() and classify_test(rel):
-            out.append(rel)
-    return out
+    """Tracked test files only (never an installed dependency's tests)."""
+    out = subprocess.run(["git", "-C", str(ROOT), "ls-files"], check=True,
+                         capture_output=True, text=True).stdout.split("\n")
+    return sorted(r for r in out if r and (is_test(r) or r.startswith("scripts/tests/"))
+                  and "node_modules" not in r and classify_test(r))
 
 
 def _needles(path: str) -> tuple[str, set[str]]:
@@ -151,15 +137,15 @@ def consumers_of_test(path: str, tests: list[str]) -> set[str]:
 
 def select(changed: list[str]) -> dict:
     """Affected mode is deliberately narrow, because a citation search cannot
-    prove coverage when tests scan directories by glob. It covers only:
-    changed test modules (plus the tests that import them), and
-    documentation-class files (run every structural test, skip the shell
-    tier). Every other path selects the full suite."""
+    prove coverage when tests scan files by glob or read documentation. It
+    covers only pull requests that change test modules and nothing else: every
+    structural pytest file runs (several scan the whole test tree), plus the
+    changed bats files and the tests that import a changed module. Every other
+    path (code, docs, config, deletions) selects the full suite."""
     if not changed:
         return full("no changed files listed", changed)
     tests = all_tests()
     chosen: set[str] = set()
-    docs_changed = False
     for path in changed:
         name = Path(path).name
         if (path in FULL_NAMES or name in FULL_NAMES
@@ -169,25 +155,14 @@ def select(changed: list[str]) -> dict:
                         changed)
         if not (ROOT / path).exists():
             return full(f"file deleted or renamed: {path}", changed)
-        if is_test(path):
-            if not classify_test(path):
-                return full(f"unmapped test support file: {path}", changed)
-            chosen |= consumers_of_test(path, tests)
-            continue
-        is_doc = (path.startswith(DOC_PREFIXES) or name in DOC_NAMES
-                  or name in NOT_DOCS) and path.endswith((".md", ".txt", "LICENSE"))
-        if is_doc:
-            docs_changed = True
-            continue
-        return full(f"non-documentation path not covered by a proven mapping: {path}",
-                    changed)
-    if docs_changed:
-        # Policy checks glob docs and instruction files; run every structural
-        # test, and skip only the shell tier.
-        chosen |= {t for t in tests if classify_test(t) == "pytest"}
+        if not is_test(path) or not classify_test(path) or path not in tests:
+            return full(f"not a plain test module: {path}", changed)
+        chosen |= consumers_of_test(path, tests)
+    chosen |= {t for t in tests if classify_test(t) == "pytest"
+               and t.startswith("tests/structural/")}
     return {
         "mode": "affected",
-        "reason": "only test modules and documentation changed",
+        "reason": "only test modules changed",
         "pytest": sorted(t for t in chosen if classify_test(t) == "pytest"),
         "bats": sorted(t for t in chosen if classify_test(t) == "bats"),
         "changed": changed,
