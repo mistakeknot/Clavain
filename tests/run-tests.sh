@@ -9,6 +9,10 @@ set -euo pipefail
 #   ./tests/run-tests.sh --shell          # Tier 2 only (bats)
 #   ./tests/run-tests.sh --smoke          # Tier 3 only (claude subagents)
 #   ./tests/run-tests.sh --all            # All three tiers
+#   ./tests/run-tests.sh --affected BASE  # PR runs only: tests mapped to files changed since BASE;
+#                                         # falls back to Tiers 1+2 when anything is unmapped.
+#                                         # Never qualification evidence; the full suite stays
+#                                         # required on the merge head.
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FAILED=0
@@ -46,7 +50,31 @@ run_smoke() {
   "$PROJECT_ROOT/tests/smoke/run-smoke-tests.sh" || FAILED=1
 }
 
+run_affected() {
+  local base="${1:?--affected needs a base ref}" sel mode
+  sel="$(python3 -I "$PROJECT_ROOT/scripts/affected-checks.py" --event pull_request --base "$base")"
+  mode="$(python3 -I -c 'import json,sys;print(json.load(sys.stdin)["mode"])' <<<"$sel")"
+  echo "=== Affected-only selection: $mode ==="
+  python3 -I -c 'import json,sys;d=json.load(sys.stdin);print(d["reason"]);print("\n".join(d["pytest"]+d["bats"]))' <<<"$sel"
+  if [[ "$mode" == "full" ]]; then
+    run_structural
+    run_shell
+    return
+  fi
+  mapfile -t py < <(python3 -I -c 'import json,sys;print("\n".join(json.load(sys.stdin)["pytest"]))' <<<"$sel")
+  mapfile -t bt < <(python3 -I -c 'import json,sys;print("\n".join(json.load(sys.stdin)["bats"]))' <<<"$sel")
+  if [[ -n "${py[*]:-}" ]]; then
+    (cd "$PROJECT_ROOT" && uv run --project tests pytest "${py[@]}" -v --tb=short -n 0) || FAILED=1
+  fi
+  if [[ -n "${bt[*]:-}" ]]; then
+    (cd "$PROJECT_ROOT" && bats "${bt[@]}") || FAILED=1
+  fi
+}
+
 case "${1:-}" in
+  --affected)
+    run_affected "${2:-}"
+    ;;
   --structural)
     run_structural
     ;;
