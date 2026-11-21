@@ -37,75 +37,47 @@ def test_config_and_ci_changes_are_full():
         assert pr(f)["mode"] == "full", f
 
 
-def untracked(tmp_dir, name):
-    f = ROOT / tmp_dir / name
-    f.write_text("echo hi\n")
-    return f
 
 
-def test_unmapped_path_falls_back_to_full():
-    f = untracked("scripts", f"{NOVEL}-file.sh")
-    try:
-        res = pr(f"scripts/{f.name}")
-    finally:
-        f.unlink()
-    assert res["mode"] == "full"
-    assert "no test maps" in res["reason"]
-
-
-def test_one_unmapped_file_widens_a_mapped_pr():
-    f = untracked("scripts", f"{NOVEL}-file.sh")
-    try:
-        res = pr("tests/structural/test_agents.py", f"scripts/{f.name}")
-    finally:
-        f.unlink()
-    assert res["mode"] == "full"
 
 
 def test_changed_test_selects_itself():
     res = pr("tests/structural/test_agents.py")
     assert res["mode"] == "affected"
-    assert res["pytest"] == ["tests/structural/test_agents.py"]
+    assert "tests/structural/test_agents.py" in res["pytest"]
 
 
-def test_glob_tested_dirs_are_full():
-    for f in ("skills/using-clavain/SKILL.md", "commands/brainstorm.md",
-              "cmd/clavain-cli/children.go", "hooks/session-start.sh"):
+
+
+def test_code_paths_select_full():
+    for f in ("scripts/dispatch.sh", "scripts/script-lint.sh",
+              "skills/using-clavain/SKILL.md", "commands/brainstorm.md",
+              "cmd/clavain-cli/children.go", "hooks/session-start.sh",
+              "interlab.sh"):
         assert pr(f)["mode"] == "full", f
 
 
-def test_deleted_file_is_full():
-    res = pr(f"scripts/{NOVEL}-deleted.sh")
-    assert res["mode"] == "full" and "deleted" in res["reason"]
-
-
-def test_transitive_citation_is_followed():
-    # dispatch.sh is sourced or called by many scripts; the closure must pull in
-    # tests that cite only those callers, so the selection is wider than the
-    # tests citing dispatch.sh directly.
-    res = pr("scripts/dispatch.sh")
-    assert res["mode"] == "affected"
-    assert len(res["pytest"]) + len(res["bats"]) > 20
-
-
-def test_docs_only_selects_no_unrelated_tests():
-    f = untracked("docs", f"{NOVEL}-note.md")
-    try:
-        res = pr(f"docs/{f.name}")
-    finally:
-        f.unlink()
-    assert res["mode"] == "affected"
-    assert res["pytest"] == [] and res["bats"] == []
-
-
-def test_instruction_files_are_not_docs():
+def test_docs_run_every_structural_test_and_skip_shell():
     res = pr("CLAUDE.md")
     assert res["mode"] == "affected"
+    assert res["bats"] == []
     assert "tests/structural/test_check_instruction_contract.py" in res["pytest"]
+    assert len(res["pytest"]) > 50
 
 
-def test_removed_test_file_is_full():
-    assert pr(f"tests/structural/test_gone_{NOVEL}.py")["mode"] == "full"
+def test_docs_mixed_with_code_is_full():
+    assert pr("CLAUDE.md", "scripts/dispatch.sh")["mode"] == "full"
+
+
+def test_changed_test_pulls_in_its_importers():
+    res = pr("tests/structural/test_review_round_limit.py")
+    assert res["mode"] == "affected"
+    assert "tests/structural/test_review_round_decision.py" in res["pytest"]
+
+
+def test_missing_path_is_full():
+    res = pr(f"docs/{NOVEL}-gone.md")
+    assert res["mode"] == "full" and "deleted" in res["reason"]
 
 
 def test_runner_widens_when_selector_output_is_unusable(tmp_path):

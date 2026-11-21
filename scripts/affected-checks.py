@@ -56,9 +56,10 @@ GENERIC_NAMES = {"main.go", "SKILL.md", "README.md", "__init__.py", "index.md",
 
 # Documentation-only paths: run the tests that cite them, nothing otherwise.
 DOC_PREFIXES = ("docs/",)
-DOC_NAMES = {"README.md", "CHANGELOG.md", "CONTRIBUTING.md", "PHILOSOPHY.md",
+DOC_NAMES = {"CLAUDE.md", "AGENTS.md", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "PHILOSOPHY.md",
              "LICENSE", "THIRD-PARTY-NOTICES.md", "HANDOFF.md"}
-# Instruction files are checked by contract tests; never treat them as docs.
+# Instruction files are checked by contract tests, which the structural tier
+# runs in full for any documentation-class change.
 NOT_DOCS = {"CLAUDE.md", "AGENTS.md"}
 
 
@@ -133,33 +134,32 @@ def _cites(entry: tuple[str, set[str]], needles: tuple[str, set[str]]) -> bool:
     return path in text or not names.isdisjoint(toks)
 
 
-def referencing_tests(path: str, tests: list[str]) -> set[str]:
-    """Tests that cite the changed file, directly or through any file that
-    cites it (transitive closure over the tracked files)."""
+def consumers_of_test(path: str, tests: list[str]) -> set[str]:
+    """Test files that cite a changed test module, transitively (shared
+    helpers imported by other tests)."""
     texts = _text_files()
-    test_set = set(tests)
-    closure = {path}
-    needles = [_needles(path)]
-    frontier = [needles[0]]
+    seen = {path}
+    frontier = [path]
     while frontier:
-        cur = frontier.pop()
-        for rel, entry in texts.items():
-            if rel in closure or rel in test_set:
-                continue
-            if _cites(entry, cur):
-                closure.add(rel)
-                n = _needles(rel)
-                needles.append(n)
-                frontier.append(n)
-    return {t for t in tests if t in texts
-            and any(_cites(texts[t], n) for n in needles)}
+        needles = _needles(frontier.pop())
+        for t in tests:
+            if t not in seen and t in texts and _cites(texts[t], needles):
+                seen.add(t)
+                frontier.append(t)
+    return seen
 
 
 def select(changed: list[str]) -> dict:
+    """Affected mode is deliberately narrow, because a citation search cannot
+    prove coverage when tests scan directories by glob. It covers only:
+    changed test modules (plus the tests that import them), and
+    documentation-class files (run every structural test, skip the shell
+    tier). Every other path selects the full suite."""
     if not changed:
         return full("no changed files listed", changed)
     tests = all_tests()
     chosen: set[str] = set()
+    docs_changed = False
     for path in changed:
         name = Path(path).name
         if (path in FULL_NAMES or name in FULL_NAMES
@@ -167,28 +167,27 @@ def select(changed: list[str]) -> dict:
                 or path.endswith(FULL_SUFFIXES)):
             return full(f"config or shared test infrastructure changed: {path}",
                         changed)
-        if is_test(path):
-            if classify_test(path) and (ROOT / path).exists():
-                chosen.add(path)
-                continue
-            if not (ROOT / path).exists():
-                return full(f"test file removed or renamed: {path}", changed)
-            return full(f"unmapped test support file: {path}", changed)
-        if path.startswith(FULL_DIRS):
-            return full(f"shared or glob-tested directory changed: {path}",
-                        changed)
-        is_doc = (path.startswith(DOC_PREFIXES) or name in DOC_NAMES) \
-            and name not in NOT_DOCS and path.endswith((".md", ".txt", "LICENSE"))
         if not (ROOT / path).exists():
-            return full(f"file deleted: {path}", changed)
-        refs = referencing_tests(path, tests)
-        chosen.update(refs)
-        if refs or is_doc:
+            return full(f"file deleted or renamed: {path}", changed)
+        if is_test(path):
+            if not classify_test(path):
+                return full(f"unmapped test support file: {path}", changed)
+            chosen |= consumers_of_test(path, tests)
             continue
-        return full(f"no test maps to {path}", changed)
+        is_doc = (path.startswith(DOC_PREFIXES) or name in DOC_NAMES
+                  or name in NOT_DOCS) and path.endswith((".md", ".txt", "LICENSE"))
+        if is_doc:
+            docs_changed = True
+            continue
+        return full(f"non-documentation path not covered by a proven mapping: {path}",
+                    changed)
+    if docs_changed:
+        # Policy checks glob docs and instruction files; run every structural
+        # test, and skip only the shell tier.
+        chosen |= {t for t in tests if classify_test(t) == "pytest"}
     return {
         "mode": "affected",
-        "reason": "all changed paths mapped or documentation-only",
+        "reason": "only test modules and documentation changed",
         "pytest": sorted(t for t in chosen if classify_test(t) == "pytest"),
         "bats": sorted(t for t in chosen if classify_test(t) == "bats"),
         "changed": changed,
