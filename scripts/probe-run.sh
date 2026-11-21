@@ -33,14 +33,35 @@ command -v systemd-run >/dev/null || { echo "probe-run: systemd-run not found; r
 systemd-run --user --scope --quiet -p "TasksMax=$tasks" -- true >/dev/null 2>&1 \
   || { echo "probe-run: cannot start a TasksMax-capped user scope; refusing to run" >&2; exit 125; }
 
+# The wrapper itself enforces the deadline (rather than timeout(1)) so that a
+# timeout is distinguishable from a probe that was killed for another reason.
+unit="probe-run-$$-$RANDOM"
+flag="$(mktemp)"
+rm -f "$flag"
+trap 'rm -f "$flag"' EXIT
+
+systemd-run --user --scope --quiet --unit="$unit" -p "TasksMax=$tasks" -- "$@" &
+probe=$!
+(
+  sleep "$timeout_s"
+  : > "$flag"
+  systemctl --user kill --signal=SIGTERM "$unit.scope" 2>/dev/null || true
+  sleep 5
+  systemctl --user kill --signal=SIGKILL "$unit.scope" 2>/dev/null || true
+) &
+watchdog=$!
+
 rc=0
-SECONDS=0
-systemd-run --user --scope --quiet -p "TasksMax=$tasks" -- timeout --kill-after=5 "$timeout_s" "$@" || rc=$?
-# timeout returns 137 when it had to SIGKILL after the grace period.
-if [[ "$rc" -eq 137 && "$SECONDS" -ge "$timeout_s" ]]; then rc=124; fi
-case "$rc" in
-  0) ;;
-  124) echo "probe-run: timed out after ${timeout_s}s" >&2 ;;
-  *) echo "probe-run: probe exited with status $rc" >&2 ;;
-esac
+wait "$probe" || rc=$?
+pkill -P "$watchdog" 2>/dev/null || true
+kill "$watchdog" 2>/dev/null || true
+wait "$watchdog" 2>/dev/null || true
+
+if [[ "$rc" -ne 0 && -e "$flag" ]]; then
+  echo "probe-run: timed out after ${timeout_s}s" >&2
+  exit 124
+fi
+if [[ "$rc" -ne 0 ]]; then
+  echo "probe-run: probe exited with status $rc" >&2
+fi
 exit "$rc"

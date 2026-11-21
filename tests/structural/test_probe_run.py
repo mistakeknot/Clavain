@@ -36,11 +36,14 @@ def test_unknown_option():
 
 def scope_or_skip():
     """Skip when no user scope is available, unless PROBE_RUN_REQUIRE_SCOPE=1."""
+    required = os.environ.get("PROBE_RUN_REQUIRE_SCOPE") == "1"
     if not HAS_SCOPE:
+        if required:
+            pytest.fail("scope required but systemd-run is missing")
         pytest.skip("needs systemd-run")
     r = run("--", "true")
     if r.returncode == 125:
-        if os.environ.get("PROBE_RUN_REQUIRE_SCOPE") == "1":
+        if required:
             pytest.fail("scope required but unavailable: " + r.stderr)
         pytest.skip("user scope unavailable")
 
@@ -64,7 +67,22 @@ def test_cap_applies_to_descendants():
     )
     r = run("--tasks", "64", "--", "bash", "-c", code)
     assert r.returncode == 0 and r.stdout.strip() == "64", r.stderr
-    # Unbounded forking is stopped by the cap.
-    r = run("--tasks", "16", "--timeout", "20", "--", "bash", "-c",
-            "for i in $(seq 60); do sleep 20 & done; wait")
-    assert r.returncode != 0
+    # Unbounded forking is refused by the cap, observed from inside the probe.
+    prog = (
+        "import subprocess,sys\n"
+        "kids=[]; refused=0\n"
+        "for _ in range(100):\n"
+        "    try: kids.append(subprocess.Popen(['sleep','20']))\n"
+        "    except OSError: refused+=1; break\n"
+        "for k in kids: k.kill()\n"
+        "print('REFUSED' if refused else 'UNBOUNDED', len(kids))\n"
+    )
+    r = run("--tasks", "16", "--timeout", "60", "--", "python3", "-c", prog)
+    assert r.returncode == 0 and r.stdout.startswith("REFUSED"), r.stdout + r.stderr
+    assert int(r.stdout.split()[1]) < 16
+
+
+def test_independent_137_is_not_a_timeout():
+    scope_or_skip()
+    r = run("--timeout", "30", "--", "bash", "-c", "sleep 2; exit 137")
+    assert r.returncode == 137 and "timed out" not in r.stderr
