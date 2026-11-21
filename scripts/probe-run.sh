@@ -5,8 +5,8 @@
 #
 # Usage: probe-run.sh [--tasks N] [--timeout SECONDS] -- COMMAND [ARGS...]
 # Defaults: --tasks 256, --timeout 300.
-# Exit: the probe's own status; 124 on timeout (including a forced kill after
-# the grace period); 125 if a capped scope could not be started (the probe is
+# Exit: the probe's own status; 124 on timeout (whatever the probe's status
+# after the deadline); 125 if a capped scope could not be started (the probe is
 # then NOT run); 2 on usage errors.
 set -euo pipefail
 
@@ -37,10 +37,14 @@ systemd-run --user --scope --quiet -p "TasksMax=$tasks" -- true >/dev/null 2>&1 
 # timeout is distinguishable from a probe that was killed for another reason.
 unit="probe-run-$$-$RANDOM"
 flag="$(mktemp)"
-rm -f "$flag"
-trap 'rm -f "$flag"' EXIT
+started="$(mktemp)"
+rm -f "$flag" "$started"
+trap 'rm -f "$flag" "$started"' EXIT
 
-systemd-run --user --scope --quiet --unit="$unit" -p "TasksMax=$tasks" -- "$@" &
+# The inner shell drops a marker once the scope is running the probe, so a
+# scope start-up failure (no marker) can be told apart from a probe failure.
+systemd-run --user --scope --quiet --unit="$unit" -p "TasksMax=$tasks" -- \
+  sh -c ': > "$0"; exec "$@"' "$started" "$@" &
 probe=$!
 (
   sleep "$timeout_s"
@@ -57,9 +61,16 @@ pkill -P "$watchdog" 2>/dev/null || true
 kill "$watchdog" 2>/dev/null || true
 wait "$watchdog" 2>/dev/null || true
 
-if [[ "$rc" -ne 0 && -e "$flag" ]]; then
+if [[ -e "$flag" ]]; then
+  # Deadline fired: the grace period only applies to the leader, so remove
+  # anything left in the scope, and report a timeout whatever the exit status.
+  systemctl --user kill --signal=SIGKILL "$unit.scope" 2>/dev/null || true
   echo "probe-run: timed out after ${timeout_s}s" >&2
   exit 124
+fi
+if [[ "$rc" -ne 0 && ! -e "$started" ]]; then
+  echo "probe-run: capped scope failed to start; probe not run" >&2
+  exit 125
 fi
 if [[ "$rc" -ne 0 ]]; then
   echo "probe-run: probe exited with status $rc" >&2

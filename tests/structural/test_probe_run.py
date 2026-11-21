@@ -86,3 +86,17 @@ def test_independent_137_is_not_a_timeout():
     scope_or_skip()
     r = run("--timeout", "30", "--", "bash", "-c", "sleep 2; exit 137")
     assert r.returncode == 137 and "timed out" not in r.stderr
+
+
+def test_timeout_wins_even_if_probe_exits_zero_and_descendants_die():
+    scope_or_skip()
+    code = "trap 'exit 0' TERM; (trap '' TERM; sleep 30) & wait"
+    r = run("--timeout", "1", "--", "bash", "-c", code)
+    assert r.returncode == 124
+    leftover = subprocess.run(["pgrep", "-fx", "sleep 30"], capture_output=True, text=True)
+    assert leftover.stdout.strip() == ""
+
+
+def test_missing_command_is_a_probe_failure_not_scope_failure():
+    scope_or_skip()
+    assert run("--", "/nonexistent/probe-cmd").returncode == 127
