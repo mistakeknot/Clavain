@@ -45,17 +45,11 @@ FULL_NAMES = {
 FULL_SUFFIXES = ("run-tests.sh", ".bash", "conftest.py", "pyproject.toml",
                  "uv.lock", "package.json", "package-lock.json")
 
-# Directories whose contents are scanned by tests with globs, so a textual
-# reference search cannot see them. Directory to test files that glob them.
-DIR_MAP = {
-    "skills/": ["tests/structural/test_skills.py",
-                "tests/structural/test_cross_references.py",
-                "tests/structural/test_native_skill_selection.py"],
-    "commands/": ["tests/structural/test_commands.py",
-                  "tests/structural/test_cross_references.py"],
-    "agents/": ["tests/structural/test_agents.py",
-                "tests/structural/test_cross_references.py"],
-}
+# Directories read by many glob-based tests, or built as a package (the Go CLI):
+# a textual citation search cannot prove coverage of these, so any change under
+# them selects the full suite.
+FULL_DIRS = ("skills/", "commands/", "agents/", "cmd/", "hooks/", "galiana/",
+             "adapters/", "bin/")
 
 GENERIC_NAMES = {"main.go", "SKILL.md", "README.md", "__init__.py", "index.md",
                  "CHANGELOG.md", "plugin.json", "SKILL.md.tmpl"}
@@ -100,27 +94,65 @@ def all_tests() -> list[str]:
     return out
 
 
-def referencing_tests(path: str, tests: list[str]) -> set[str]:
-    """Tests whose text cites the changed file by repo path or basename."""
+def _needles(path: str) -> tuple[str, set[str]]:
+    """The repo path (substring match) and the bare names (token match)."""
     base = Path(path).name
     stem = Path(path).stem
-    pats = [re.compile(re.escape(path))]
-    # A bare basename is a weak signal: skip short or generic names and cmd/
-    # sources (a path citation is required for those).
-    if len(base) >= 6 and base not in GENERIC_NAMES and not path.startswith("cmd/"):
-        pats.append(re.compile(r"(?<![\w.-])" + re.escape(base) + r"(?![\w-])"))
-    if len(stem) >= 8 and stem != base and base not in GENERIC_NAMES \
-            and not path.startswith("cmd/"):
-        pats.append(re.compile(r"(?<![\w.-])" + re.escape(stem) + r"(?![\w])"))
-    hit = set()
-    for t in tests:
+    names = set()
+    # A bare basename is a weak signal: skip short or generic names.
+    if len(base) >= 6 and base not in GENERIC_NAMES:
+        names.add(base)
+        if len(stem) >= 8 and stem != base:
+            names.add(stem)
+    return path, names
+
+
+def _text_files() -> dict[str, tuple[str, set[str]]]:
+    out = subprocess.run(["git", "-C", str(ROOT), "ls-files"], check=True,
+                         capture_output=True, text=True).stdout.split("\n")
+    texts = {}
+    for rel in out:
+        if not rel or "node_modules" in rel:
+            continue
+        p = ROOT / rel
         try:
-            text = (ROOT / t).read_text(errors="replace")
+            if p.stat().st_size > 2_000_000:
+                continue
+            text = p.read_text(errors="replace")
         except OSError:
             continue
-        if any(p.search(text) for p in pats):
-            hit.add(t)
-    return hit
+        toks = {t.rstrip(".") for t in re.findall(r"[\w.-]+", text)}
+        toks |= set(re.findall(r"\w+", text))  # may over-match; only widens
+        texts[rel] = (text, toks)
+    return texts
+
+
+def _cites(entry: tuple[str, set[str]], needles: tuple[str, set[str]]) -> bool:
+    text, toks = entry
+    path, names = needles
+    return path in text or not names.isdisjoint(toks)
+
+
+def referencing_tests(path: str, tests: list[str]) -> set[str]:
+    """Tests that cite the changed file, directly or through any file that
+    cites it (transitive closure over the tracked files)."""
+    texts = _text_files()
+    test_set = set(tests)
+    closure = {path}
+    needles = [_needles(path)]
+    frontier = [needles[0]]
+    while frontier:
+        cur = frontier.pop()
+        for rel, entry in texts.items():
+            if rel in closure or rel in test_set:
+                continue
+            if _cites(entry, cur):
+                closure.add(rel)
+                n = _needles(rel)
+                needles.append(n)
+                frontier.append(n)
+    return {t for t in tests if t in texts
+            and any(_cites(texts[t], n) for n in needles)}
 
 
 def select(changed: list[str]) -> dict:
@@ -142,20 +174,16 @@ def select(changed: list[str]) -> dict:
             if not (ROOT / path).exists():
                 return full(f"test file removed or renamed: {path}", changed)
             return full(f"unmapped test support file: {path}", changed)
-        mapped = False
-        for prefix, files in DIR_MAP.items():
-            if path.startswith(prefix):
-                chosen.update(f for f in files if (ROOT / f).exists())
-                mapped = True
-        refs = referencing_tests(path, tests)
-        if refs:
-            chosen.update(refs)
-            mapped = True
-        if mapped:
-            continue
+        if path.startswith(FULL_DIRS):
+            return full(f"shared or glob-tested directory changed: {path}",
+                        changed)
         is_doc = (path.startswith(DOC_PREFIXES) or name in DOC_NAMES) \
             and name not in NOT_DOCS and path.endswith((".md", ".txt", "LICENSE"))
-        if is_doc:
+        if not (ROOT / path).exists():
+            return full(f"file deleted: {path}", changed)
+        refs = referencing_tests(path, tests)
+        chosen.update(refs)
+        if refs or is_doc:
             continue
         return full(f"no test maps to {path}", changed)
     return {

@@ -51,22 +51,43 @@ run_smoke() {
 }
 
 run_affected() {
-  local base="${1:?--affected needs a base ref}" sel mode
-  sel="$(python3 -I "$PROJECT_ROOT/scripts/affected-checks.py" --event pull_request --base "$base")"
-  mode="$(python3 -I -c 'import json,sys;print(json.load(sys.stdin)["mode"])' <<<"$sel")"
-  echo "=== Affected-only selection: $mode ==="
-  python3 -I -c 'import json,sys;d=json.load(sys.stdin);print(d["reason"]);print("\n".join(d["pytest"]+d["bats"]))' <<<"$sel"
-  if [[ "$mode" == "full" ]]; then
+  local base="${1:?--affected needs a base ref}" sel parsed mode py_list bats_list
+  local -a py bt
+  # Any failure to obtain or read the selection widens to the full suite; it
+  # never skips tests.
+  if ! sel="$(python3 -I "$PROJECT_ROOT/scripts/affected-checks.py" --event pull_request --base "$base")" \
+     || ! parsed="$(python3 -I -c '
+import json, sys
+d = json.load(sys.stdin)
+print(d["mode"])
+print(d["reason"])
+print(len(d["pytest"]))
+print(len(d["bats"]))
+for t in d["pytest"] + d["bats"]:
+    print(t)
+' <<<"$sel")"; then
+    echo "=== Affected-only selection unusable; running the full suite ==="
     run_structural
     run_shell
     return
   fi
-  mapfile -t py < <(python3 -I -c 'import json,sys;print("\n".join(json.load(sys.stdin)["pytest"]))' <<<"$sel")
-  mapfile -t bt < <(python3 -I -c 'import json,sys;print("\n".join(json.load(sys.stdin)["bats"]))' <<<"$sel")
-  if [[ -n "${py[*]:-}" ]]; then
+  mapfile -t lines <<<"$parsed"
+  mode="${lines[0]}"
+  echo "=== Affected-only selection: $mode ==="
+  echo "${lines[1]}"
+  if [[ "$mode" != "affected" ]]; then
+    run_structural
+    run_shell
+    return
+  fi
+  local npy="${lines[2]}" nbt="${lines[3]}"
+  py=("${lines[@]:4:npy}")
+  bt=("${lines[@]:$((4 + npy)):nbt}")
+  printf '%s\n' "${py[@]}" "${bt[@]}"
+  if (( npy > 0 )); then
     (cd "$PROJECT_ROOT" && uv run --project tests pytest "${py[@]}" -v --tb=short -n 0) || FAILED=1
   fi
-  if [[ -n "${bt[*]:-}" ]]; then
+  if (( nbt > 0 )); then
     (cd "$PROJECT_ROOT" && bats "${bt[@]}") || FAILED=1
   fi
 }
