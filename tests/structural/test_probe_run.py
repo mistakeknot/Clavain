@@ -1,4 +1,5 @@
 """probe-run.sh: argument handling and exit semantics (no scope needed)."""
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -24,19 +25,46 @@ def test_rejects_bad_numbers(flag):
     assert run(flag, "0", "--", "true").returncode == 2
 
 
+@pytest.mark.parametrize("flag", ["--tasks", "--timeout"])
+def test_missing_option_value(flag):
+    assert run(flag).returncode == 2
+
+
 def test_unknown_option():
     assert run("--bogus", "--", "true").returncode == 2
 
 
-@pytest.mark.skipif(not HAS_SCOPE, reason="needs systemd-run")
-def test_exit_codes_pass_through():
-    try:
-        ok = run("--", "true")
-    except subprocess.TimeoutExpired:
-        pytest.skip("scope unavailable")
-    if ok.returncode == 125 or "Failed to" in ok.stderr:
+def scope_or_skip():
+    """Skip when no user scope is available, unless PROBE_RUN_REQUIRE_SCOPE=1."""
+    if not HAS_SCOPE:
+        pytest.skip("needs systemd-run")
+    r = run("--", "true")
+    if r.returncode == 125:
+        if os.environ.get("PROBE_RUN_REQUIRE_SCOPE") == "1":
+            pytest.fail("scope required but unavailable: " + r.stderr)
         pytest.skip("user scope unavailable")
-    assert ok.returncode == 0
+
+
+def test_exit_codes_pass_through():
+    scope_or_skip()
+    assert run("--", "true").returncode == 0
     assert run("--", "bash", "-c", "exit 7").returncode == 7
     r = run("--timeout", "1", "--", "sleep", "10")
     assert r.returncode == 124 and "timed out" in r.stderr
+    # A probe that ignores SIGTERM is force-killed but still reports 124.
+    r = run("--timeout", "1", "--", "bash", "-c", "trap '' TERM; sleep 30")
+    assert r.returncode == 124
+
+
+def test_cap_applies_to_descendants():
+    scope_or_skip()
+    code = (
+        "cg=$(cut -d: -f3 /proc/self/cgroup); "
+        "(cat /sys/fs/cgroup$cg/pids.max)"
+    )
+    r = run("--tasks", "64", "--", "bash", "-c", code)
+    assert r.returncode == 0 and r.stdout.strip() == "64", r.stderr
+    # Unbounded forking is stopped by the cap.
+    r = run("--tasks", "16", "--timeout", "20", "--", "bash", "-c",
+            "for i in $(seq 60); do sleep 20 & done; wait")
+    assert r.returncode != 0
