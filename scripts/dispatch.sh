@@ -1996,10 +1996,12 @@ _dispatch_role_profile() {
         capacity_failed_seats+="$backend/$model"$'\n'
         echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
         ;;
-      insufficient_codex_version|unsupported_adapter)
+      insufficient_codex_version|unsupported_adapter|content_filter_refused)
         fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
         capacity_failure_class="$CLAVAIN_LAST_FAILURE_CLASS"
         HELD_SKIPPED_CANDIDATES="$(jq -cn --argjson s "$HELD_SKIPPED_CANDIDATES" --arg ref "$profile_ref" --arg c "$capacity_failure_class" '$s+[{profile_ref:$ref,failure_class:$c}]')"
+        # A refusal depends on the prompt, so the same seat is never tried again.
+        [[ "$CLAVAIN_LAST_FAILURE_CLASS" != content_filter_refused ]] || capacity_failed_seats+="$backend/$model"$'\n'
         echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
         ;;
       *)
@@ -2138,7 +2140,7 @@ _dispatch_prepare_review_packet() {
 # walks or returns its fallbacks (mk ruling 2026-09-25).
 _dispatch_tier_profile() {
   local tier="$1" policy candidates candidate backend model effort service minimum role
-  local rc=1 candidate_count=0 chain_rc=0
+  local rc=1 candidate_count=0 chain_rc=0 tier_refused_seats=$'\n'
   local -a resolved_args
 
   command -v python3 >/dev/null 2>&1 || {
@@ -2226,6 +2228,12 @@ _dispatch_tier_profile() {
       continue
     fi
 
+    # A seat that refused this prompt is never tried again through an alias.
+    if [[ "$tier_refused_seats" == *$'\n'"$backend/$model"$'\n'* ]]; then
+      echo "dispatch: tier candidate '$model' already refused this prompt; skipping" >&2
+      continue
+    fi
+
     resolved_args=(bash "${BASH_SOURCE[0]}" --to "$backend" --model "$model")
     [[ -n "$effort" ]] && resolved_args+=(--reasoning-effort "$effort")
     [[ -n "$service" ]] && resolved_args+=(--service-tier "$service")
@@ -2255,7 +2263,8 @@ _dispatch_tier_profile() {
     # invocation (mirrors _dispatch_role_profile).
     [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]] || return "$rc"
     case "$CLAVAIN_LAST_FAILURE_CLASS" in
-      quota_exhausted|rate_limited|model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter)
+      quota_exhausted|rate_limited|model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter|content_filter_refused)
+        [[ "$CLAVAIN_LAST_FAILURE_CLASS" != content_filter_refused ]] || tier_refused_seats+="$backend/$model"$'\n'
         echo "dispatch: tier '$tier' candidate '$model' unavailable ($CLAVAIN_LAST_FAILURE_CLASS); trying its declared fallback" >&2
         ;;
       *)
@@ -3762,7 +3771,7 @@ if [[ "$ENGINE" == "auto" ]]; then
       rc=$?
     fi
     case "$CLAVAIN_LAST_FAILURE_CLASS" in
-      model_unavailable|account_access_absent|insufficient_codex_version)
+      model_unavailable|account_access_absent|insufficient_codex_version|content_filter_refused)
         echo "dispatch: backend '$backend' unavailable for class '${TASK_CLASS:-default}' ($CLAVAIN_LAST_FAILURE_CLASS); trying next" >&2
         ;;
       *)

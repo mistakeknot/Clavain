@@ -782,3 +782,21 @@ def test_missing_vocabulary_cannot_break_provider_classification(tmp_path):
     ], text=True, capture_output=True)
     assert result.returncode != 0
     assert not artifact.exists()
+
+
+def test_content_filter_refusal_is_its_own_class():
+    # gpt-6.1-sol refusal of a guard-hook review prompt; the declared fallback
+    # chain must be walked, and the receipt must not call it an account gap.
+    message = ("This request was flagged for potentially high-risk cyber activity. "
+               "Apply for trusted access.")
+    events = [
+        {"type": "turn.started"},
+        {"type": "error", "message": message},
+        {"type": "turn.failed", "error": {"message": message}},
+    ]
+    assert provider_errors.classify(events) == "content_filter_refused"
+
+
+def test_other_unmatched_errors_stay_terminal():
+    events = [{"type": "turn.failed", "error": {"message": "something else broke"}}]
+    assert provider_errors.classify(events) == "terminal_error"
