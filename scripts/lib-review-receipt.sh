@@ -168,6 +168,24 @@ _review_receipt_verdict_word() {
   verdict_strict_word "$1"
 }
 
+# True only when a BLOCK may be recorded as PASS WITH NOTES: findings parsed
+# from the body with no P0/P1, every bracketed finding heading accounted for,
+# and no hold or blocker wording anywhere in the review text.
+_review_receipt_may_downgrade() {
+  local out="$1" fx_json="$2" flat headings rc=0
+  jq -e '.source == "body" and (.P0 | type) == "number" and (.P1 | type) == "number" and (.total | type) == "number" and .P0 == 0 and .P1 == 0' <<<"$fx_json" >/dev/null 2>&1 || return 1
+  headings="$(grep -Ec '^[[:space:]]*(#{1,6}|[-+*]|[0-9]+[.)])[[:space:]]+(\*\*|__)?\[' "$out" 2>/dev/null)" || headings=-1
+  [[ "$headings" =~ ^[0-9]+$ ]] || return 1
+  jq -e --argjson h "$headings" '.total >= $h' <<<"$fx_json" >/dev/null 2>&1 || return 1
+  flat="$(tr '\n\r\t' '   ' <"$out" 2>/dev/null | tr -s ' ')" || return 1
+  [[ -n "$flat" ]] || return 1
+  grep -Eiq "(do not|don't|must not|should not|shall not|cannot|can't|never|not to|not) (yet )?merg|merg(e|ing|ed)? (must|should|shall|needs to|has to|cannot|can't|is not|isn't|is blocked|waits?)|wait (to|before|until) merg|not (safe|ready|fit|ok|okay) (to|for) merg|merge[- ]?block|blocks? (the )?(merge|merging|release)|(hold|halt|pause|stop) (the |on )?(merge|merging)|data[ -]?loss|credential|secret|vulnerab|exploit|injection|privilege escalation|security (hole|issue|risk|flaw|bug)" <<<"$flat" && return 1
+  rc=$?
+  [[ $rc -eq 1 ]] || return 1
+  return 0
+}
+
+
 _review_receipt_verdict() {
   local out="$1" v
   v="$(_review_receipt_verdict_word "$out")" || return 1
@@ -273,8 +291,13 @@ _review_receipt_write() {
   # security hole, never downgrades whatever its label says: it stays BLOCK
   # until the reviewer clarifies. The scan is deliberately broad; a false hit
   # only keeps a BLOCK.
+  # Round-1 review (Clavain#224): the downgrade needs (a) every bracketed
+  # finding heading in the body to have parsed (a recognized P2 heading beside
+  # "[P1/blocker]" or "[UNKNOWN]" is incomplete evidence, not permission), and
+  # (b) a hold scan over whitespace-normalized text, so a wrapped "Do not\nmerge"
+  # is seen; a grep error counts as a hit. Both only ever keep a BLOCK.
   local block_downgraded=false
-  if [[ "$verdict" == BLOCK ]] && ! grep -Eiq "(do not|don't|must not|should not|cannot|can't) merge|not (safe|ready) to merge|merge[- ]?block|blocks? (the )?merge|hold (the )?merge|data[ -]?loss|credential|secret|vulnerab|exploit|injection|privilege escalation|security (hole|issue|risk|flaw|bug)" "$out" 2>/dev/null && jq -e '.source == "body" and (.P0 | type) == "number" and (.P1 | type) == "number" and .P0 == 0 and .P1 == 0' <<<"$fx_json" >/dev/null 2>&1; then
+  if [[ "$verdict" == BLOCK ]] && _review_receipt_may_downgrade "$out" "$fx_json"; then
     verdict="PASS WITH NOTES"
     block_downgraded=true
   fi

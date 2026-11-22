@@ -12,6 +12,7 @@ from review_round_decision import REVIEW_ROLES, DecisionRefused, claim
 
 def check(bead, ledger, reviews, head=None, check_only=False, role=None):
     failures = set()
+    cleared = set()  # attempts whose PR receipt was downgraded: one effective classification
     malformed = 0
 
     def consider(row, source):
@@ -34,6 +35,12 @@ def check(bead, ledger, reviews, head=None, check_only=False, role=None):
             failed = row.get("verdict_class") == "FAIL"
         elif kind == "cross-lab-review-receipt":
             failed = row.get("verdict") in ("BLOCK", "FAIL")
+            if row.get("block_downgraded") is True and not failed:
+                # The run receipt keeps the reviewer's raw FAIL; the PR receipt's
+                # effective PASS WITH NOTES for the same attempt cancels it.
+                key = (row.get("dispatch_id"), row.get("attempt_id"))
+                if all(key):
+                    cleared.add(key)
         else:
             return
         if failed:
@@ -69,6 +76,7 @@ def check(bead, ledger, reviews, head=None, check_only=False, role=None):
     if malformed:
         suffix = "s" if malformed != 1 else ""
         print(f"dispatch: skipped {malformed} malformed review history record{suffix}; counted only well-formed receipts", file=sys.stderr)
+    failures -= cleared
     if len(failures) < 3:
         return 0
     try:

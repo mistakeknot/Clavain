@@ -926,3 +926,42 @@ _reject_passing_suffix() {
     [ "$status" -eq 0 ]
     [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.json")" = BLOCK ]
 }
+
+# Clavain#224 review round 1: each of these stays BLOCK, one test per phrase.
+_stays_block() {
+    printf '%b' "$1" > "$OUT"
+    _review_receipt_prepare "$R"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ "$(jq -r .verdict "$f")" = BLOCK ]
+    [ "$(jq -r '.block_downgraded // "absent"' "$f")" = absent ]
+}
+
+@test "a P2 heading beside an unparsed [P1/blocker] heading stays BLOCK" {
+    _stays_block '### [P2] [style] naming (a.py:1)\nx\n\n### [P1/blocker] Deletes the production database (db.py:2)\ny\n\nVERDICT: FAIL\n'
+}
+
+@test "a P2 heading beside an [UNKNOWN] heading stays BLOCK" {
+    _stays_block '### [P2] [style] naming (a.py:1)\nx\n\n### [UNKNOWN] Deletes the production database (db.py:2)\ny\n\nVERDICT: FAIL\n'
+}
+
+@test "a wrapped 'Do not merge' hold stays BLOCK" {
+    _stays_block '### [P2] [bug] cleanup (a.py:1)\nDo not\nmerge until this is fixed.\n\nVERDICT: FAIL\n'
+}
+
+@test "'Merging must wait' stays BLOCK" {
+    _stays_block '### [P2] [bug] cleanup (a.py:1)\nMerging must wait until this is fixed.\n\nVERDICT: FAIL\n'
+}
+
+@test "'wait before merging' stays BLOCK" {
+    _stays_block '### [P2] [bug] cleanup (a.py:1)\nPlease wait before merging.\n\nVERDICT: FAIL\n'
+}
+
+@test "'hold the merge' stays BLOCK" {
+    _stays_block '### [P2] [bug] cleanup (a.py:1)\nHold the\nmerge for now.\n\nVERDICT: FAIL\n'
+}
+
+@test "'not safe to merge' stays BLOCK" {
+    _stays_block '### [P2] [bug] cleanup (a.py:1)\nThis is not safe to merge.\n\nVERDICT: FAIL\n'
+}
