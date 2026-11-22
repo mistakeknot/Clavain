@@ -37,6 +37,13 @@ CODEX_EXHAUSTED_429 = re.compile(r"^exceeded retry limit, last status: 429\b")
 CODEX_AT_CAPACITY = re.compile(r"\bmodel is at capacity\b", re.IGNORECASE)
 CODEX_ACCOUNT_UNSUPPORTED = re.compile(
     r"\bmodel is not supported when using Codex with a ChatGPT account\b", re.IGNORECASE)
+# A provider-side content filter refused this prompt on this seat (seen from
+# gpt-6.1-sol: "flagged for potentially high-risk cyber activity ... apply for
+# trusted access"). The refusal depends on the seat, so the declared fallback
+# walk tries the next seat with the prompt unchanged. It is its own class so a
+# receipt states the true cause, not account_access_absent.
+CONTENT_FILTER_REFUSED = re.compile(
+    r"\bflagged for potentially high[- ]risk cyber activity\b", re.IGNORECASE)
 STDERR_USAGE_LIMIT = re.compile(
     r"^(?:\x1b\[[0-9;]*m)*(?:ERROR\s*:\s*)?You[’']ve hit your usage limit\."
 )
@@ -195,13 +202,16 @@ def classify(events, stderr=""):
             target.add("rate_limited")
         elif isinstance(error, dict) and CODEX_ACCOUNT_UNSUPPORTED.search(str(error.get("message", ""))):
             target.add("account_access_absent")
+        elif isinstance(error, dict) and CONTENT_FILTER_REFUSED.search(str(error.get("message", ""))):
+            target.add("content_filter_refused")
         else:
             target.add("terminal_error")
     failures.update(transient_errors)
     if any(STDERR_USAGE_LIMIT.match(line.strip()) for line in stderr.splitlines()):
         failures.add("quota_exhausted")
     for failure in ("terminal_policy", "terminal_configuration", "terminal_error",
-                    "quota_exhausted", "rate_limited", "account_access_absent"):
+                    "quota_exhausted", "rate_limited", "account_access_absent",
+                    "content_filter_refused"):
         if failure in failures:
             return failure
     return ""

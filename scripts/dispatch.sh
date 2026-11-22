@@ -1996,7 +1996,7 @@ _dispatch_role_profile() {
         capacity_failed_seats+="$backend/$model"$'\n'
         echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
         ;;
-      insufficient_codex_version|unsupported_adapter)
+      insufficient_codex_version|unsupported_adapter|content_filter_refused)
         fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
         capacity_failure_class="$CLAVAIN_LAST_FAILURE_CLASS"
         HELD_SKIPPED_CANDIDATES="$(jq -cn --argjson s "$HELD_SKIPPED_CANDIDATES" --arg ref "$profile_ref" --arg c "$capacity_failure_class" '$s+[{profile_ref:$ref,failure_class:$c}]')"
@@ -2255,7 +2255,7 @@ _dispatch_tier_profile() {
     # invocation (mirrors _dispatch_role_profile).
     [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]] || return "$rc"
     case "$CLAVAIN_LAST_FAILURE_CLASS" in
-      quota_exhausted|rate_limited|model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter)
+      quota_exhausted|rate_limited|model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter|content_filter_refused)
         echo "dispatch: tier '$tier' candidate '$model' unavailable ($CLAVAIN_LAST_FAILURE_CLASS); trying its declared fallback" >&2
         ;;
       *)

@@ -32,6 +32,9 @@ assert_class() {
   [[ "$got" == "$want" ]] || fail "$label: expected '$want', got '$got' for: $text"
 }
 
+# A provider content-filter refusal is its own class so the fallback walk runs.
+assert_class "content filter refusal" "This request was flagged for potentially high-risk cyber activity. Apply for trusted access." content_filter_refused
+
 # --- False positives from mk-zz4m: must NOT classify as rate_limited -------
 
 assert_class "401 with x-ratelimit header (false positive)" \
