@@ -2000,6 +2000,8 @@ _dispatch_role_profile() {
         fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
         capacity_failure_class="$CLAVAIN_LAST_FAILURE_CLASS"
         HELD_SKIPPED_CANDIDATES="$(jq -cn --argjson s "$HELD_SKIPPED_CANDIDATES" --arg ref "$profile_ref" --arg c "$capacity_failure_class" '$s+[{profile_ref:$ref,failure_class:$c}]')"
+        # A refusal depends on the prompt, so the same seat is never tried again.
+        [[ "$CLAVAIN_LAST_FAILURE_CLASS" != content_filter_refused ]] || capacity_failed_seats+="$backend/$model"$'\n'
         echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
         ;;
       *)
@@ -3762,7 +3764,7 @@ if [[ "$ENGINE" == "auto" ]]; then
       rc=$?
     fi
     case "$CLAVAIN_LAST_FAILURE_CLASS" in
-      model_unavailable|account_access_absent|insufficient_codex_version)
+      model_unavailable|account_access_absent|insufficient_codex_version|content_filter_refused)
         echo "dispatch: backend '$backend' unavailable for class '${TASK_CLASS:-default}' ($CLAVAIN_LAST_FAILURE_CLASS); trying next" >&2
         ;;
       *)

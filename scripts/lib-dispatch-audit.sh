@@ -79,11 +79,12 @@ _classify_dispatch_failure() {
     #   trailing `[^0-9a-z]{0,15}` gap still refuses to bridge a traceback's
     #   own lowercase filename letters (status.py, http.py, code.py), so
     #   that false positive stays excluded.
-    # A provider content filter refused this prompt on this seat: walk the declared
-    # fallback with the prompt unchanged (its own class, never account access).
-    if grep -qiE 'flagged for potentially high[- ]risk cyber activity' "$stderr_file"; then echo content_filter_refused
-    elif grep -qiE 'http/[0-9.]+[[:space:]]+403\b|\b(status_code|status|code|http)[^0-9a-z]{0,15}403\b|\b403[^0-9a-z]{0,15}forbidden|forbidden|misalignment|policy[^[:alnum:]]+(block|den)' "$stderr_file"; then echo terminal_policy
+    if grep -qiE 'http/[0-9.]+[[:space:]]+403\b|\b(status_code|status|code|http)[^0-9a-z]{0,15}403\b|\b403[^0-9a-z]{0,15}forbidden|forbidden|misalignment|policy[^[:alnum:]]+(block|den)' "$stderr_file"; then echo terminal_policy
     elif grep -qiE 'http/[0-9.]+[[:space:]]+401\b|\b(status_code|status|code|http)[^0-9a-z]{0,15}401\b|\b401[^0-9a-z]{0,15}unauthor|unauthorized|unauthenticated|invalid_api_key|invalid[^0-9a-z]{1,10}x-api-key|authentication[^[:alnum:]]+fail' "$stderr_file"; then echo terminal_configuration
+    # A provider content filter refused this prompt on this seat: walk the declared
+    # fallback with the prompt unchanged (its own class, never account access). An
+    # explicit policy or authentication denial in the same output stays terminal.
+    elif grep -qiE 'flagged for potentially high[- ]risk cyber activity' "$stderr_file"; then echo content_filter_refused
     elif grep -qiE '429[[:space:]]+too many requests|too many requests[^0-9]{0,20}429|http/[0-9.]+[[:space:]]+429\b|(status_code|status|code|http)[^0-9a-z]{0,15}429\b|\berror[[:space:]]+429:|upstream responded[[:space:]]+429|rate_limit_exceeded|rate_limit_reached_error|rate limit reached for|rate_limit_error|rate[-_ ]?limited\b|rate[-_ ]limit[[:space:]]+exceeded' "$stderr_file"; then echo rate_limited
     elif grep -qiE 'not supported when using Codex with a ChatGPT account|not available (to|for) (this|your) account|account[^[:alnum:]]+access' "$stderr_file"; then echo account_access_absent
     elif grep -qiE 'model_not_found|model[^[:alnum:]]+(not found|does not exist|unavailable)|unknown model' "$stderr_file"; then echo model_unavailable

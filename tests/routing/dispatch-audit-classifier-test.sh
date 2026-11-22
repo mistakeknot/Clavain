@@ -34,6 +34,7 @@ assert_class() {
 
 # A provider content-filter refusal is its own class so the fallback walk runs.
 assert_class "content filter refusal" "This request was flagged for potentially high-risk cyber activity. Apply for trusted access." content_filter_refused
+assert_class "content filter refusal with a policy denial" "flagged for potentially high-risk cyber activity. HTTP 403 Forbidden: policy denied" terminal_policy
 
 # --- False positives from mk-zz4m: must NOT classify as rate_limited -------
 
