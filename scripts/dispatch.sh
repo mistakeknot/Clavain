@@ -4146,11 +4146,6 @@ else
   # passthrough below; other callers may still override it deliberately.
   CMD+=(-c "$(_seat_codex_env_args)")
   if _bb_pool_available codex; then
-    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
-      echo 'Error: budgeted pooled Codex lacks a request receipt adapter; refusing before provider launch' >&2
-      _dispatch_write_failure_class terminal_accounting
-      exit 1
-    fi
     _bb_codex_pool_token
     # Match BB's provider-codex launch contract. The hub token stays in env.
     export CODEX_OPENAI_BASE_URL="${BB_SERVER_URL%/}/api/v1/plugins/account-pool/http/v1"
@@ -4333,6 +4328,14 @@ with tempfile.TemporaryDirectory(dir=p) as d:
     done < <(compgen -e)
     CMD=(env "${SCRATCH_ENV_SCRUB[@]+"${SCRATCH_ENV_SCRUB[@]}"}" "TMPDIR=$SCRATCH_CODEX_TMPDIR" "${CMD[@]}")
   fi
+fi
+
+if [[ "$ENGINE" == codex && "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "${DISPATCH_TRANSPORT:-}" == direct-pooled ]]; then
+  _prepare_role_audit
+  CMD=(python3 "$DISPATCH_SCRIPT_DIR/codex_pool.py" --attempt "$ATTEMPT_ID"
+    --receipt "${CLAVAIN_REVIEW_EVENTS}.${ATTEMPT_ID}.pool-receipt.json"
+    --model "$MODEL" --policy "${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
+    --budget "${CLAVAIN_TOKEN_BUDGET:-0}" -- "${CMD[@]}")
 fi
 
 _hold_boundary
@@ -6084,10 +6087,9 @@ _finalize_dispatch_result() {
     failure_class="$(jq -r --arg attempt "$ATTEMPT_ID" 'select(.attempt_id == $attempt) | .failure_class // empty' "${OUTPUT}.receipt.json" 2>/dev/null || true)"
   fi
   if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "${DISPATCH_TRANSPORT:-}" =~ ^(direct-pooled|pool-exec)$ ]]; then
-    # Only the metered Claude adapter can admit a scoped pool attempt. Its
-    # terminal ledger must bind retained receipt bytes to this exact attempt.
-    if [[ "$ENGINE" != claude ]] || ! POOL_RECEIPT_JSON=$(python3 "$DISPATCH_SCRIPT_DIR/pool_receipt.py" \
-      --check-ledger "$CLAVAIN_REVIEW_EVENTS" --attempt "$ATTEMPT_ID"); then
+    # Both provider adapters must bind retained receipt bytes to this attempt.
+    if ! POOL_RECEIPT_JSON=$(python3 "$DISPATCH_SCRIPT_DIR/pool_receipt.py" \
+      --check-ledger "$CLAVAIN_REVIEW_EVENTS" --attempt "$ATTEMPT_ID" --provider "$ENGINE"); then
       exit_code=1
       failure_class=terminal_accounting
     fi
