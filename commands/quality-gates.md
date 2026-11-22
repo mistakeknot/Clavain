@@ -75,6 +75,10 @@ else
 fi
 ```
 
+**Review by risk (trial):** during the configured two-week window starting on the Pacific merge date, also run `{ git diff --no-renames --name-only HEAD; git diff --no-renames --cached --name-only; git ls-files --others --exclude-standard; } | python3 "${CLAVAIN_SOURCE_DIR:-${CLAVAIN_DIR:-${CLAUDE_PLUGIN_ROOT:-}}}/scripts/review_policy.py" decide`. It prints `skip`, `one-round` or `full`; any failure to run it means `full`. It changes how many cross-lab rounds a change gets, never whether `REVIEW_PATH=full` applies to a ship-class diff here.
+
+If the trial refuses another round, escalate to the review authority and record the decision. After approval, CLAVAIN_REVIEW_POLICY=off restores the baseline for one dispatch; the cumulative failure cap and signed decision requirements still apply. The refusal writes the private round-limit summary.
+
 **Small change shortcut:** If `DIFF_LINES < 20` and `CHANGED_FILES == 1` **and the block above printed `REVIEW_PATH=shortcut-eligible`**, resolve `fd-quality` through B2 in shadow mode, then run only that single fd-quality agent directly (Task tool, `subagent_type: "interflux:review:fd-quality"`, `model: "${FD_QUALITY_MODEL}"`). Include the diff in the prompt. Skip Phases 2-3. After agent returns, jump to Phase 4.
 
 **`REVIEW_PATH=full` overrides the size test.** A ship-class diff takes the full path however small it is — one line touching one hook script still runs Phases 2-3, because `fd-safety` is a mandatory reviewer for those surfaces and the shortcut is the one route that skips it. Do not shortcut on the grounds that the change looks trivial; that is the case the rule exists for.

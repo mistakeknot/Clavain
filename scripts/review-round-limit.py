@@ -9,6 +9,8 @@ import stat
 from pathlib import Path
 import sys
 
+import review_policy
+
 from review_round_decision import REVIEW_ROLES, DecisionRefused, claim
 
 
@@ -51,9 +53,43 @@ def downgraded(row, source):
                     for f in findings))
 
 
+def routine_allowance(policy, rounds):
+    """Total code-review rounds allowed for this bead under the trial, or None for the full cap.
+
+    The full 3-fix-round + 1-confirm cap (counted on failed rounds) applies unless
+    the review-by-risk trial is active, there is at least one cross-lab round on
+    record, and every one of those rounds has a complete path list that classifies
+    as routine. Then the allowance is 1 round in total (pass or fail), or 2 once a
+    round found a high-severity issue. A round whose findings are not on record
+    counts as high; a round with no paths, truncated paths or any ambiguity keeps
+    the full cap.
+    """
+    if not review_policy.trial_active(policy):
+        return None
+    code = [seen for seen in rounds.values() if seen["code"]]
+    if not code or any(seen["failed"] and not seen["code"] for seen in rounds.values()):
+        return None  # a failed plan-review or validation round keeps the full cap
+    paths = []
+    for seen in code:
+        if not seen["paths"] or seen["truncated"]:
+            return None
+        paths.extend(seen["paths"])
+    if review_policy.decide(paths, policy)["action"] != "one-round":
+        return None
+    high = any(seen["high"] or not seen["findings"] for seen in code if seen["failed"])
+    return 2 if high else 1
+
+
 def check(bead, ledger, reviews, head=None, check_only=False, role=None):
     failures = set()
     malformed = 0
+    rounds = {}
+    try:
+        policy = review_policy.load_policy()
+    except Exception:
+        policy = None
+    if not review_policy.valid_policy(policy):
+        print("dispatch: review policy config error; trial inactive, baseline applies", file=sys.stderr)
     evidence = {}
     veto = set()
     cancellation_off = False
@@ -85,6 +121,32 @@ def check(bead, ledger, reviews, head=None, check_only=False, role=None):
             # also count once; older receipts without IDs use their source path.
             key = (row.get("dispatch_id"), row.get("attempt_id"))
             failures.add(key if all(key) else (source,))
+        key = pair(row) or (source,)
+        seen = rounds.setdefault(key, dict(paths=set(), high=False, findings=False,
+                                           truncated=False, failed=False, code=False))
+        seen["failed"] |= failed
+        seen["code"] |= role == "cross-lab-review"
+        # Run receipts lack path/finding payloads; require a complete PR receipt
+        # for the same attempt before using reduced review.
+        if kind == "cross-lab-review-receipt":
+            paths = row.get("changed_paths")
+            if (not isinstance(paths, list) or not paths
+                    or not all(isinstance(p, str) and p for p in paths)
+                    or row.get("changed_paths_truncated")):
+                seen["truncated"] = True
+            else:
+                seen["paths"].update(paths)
+            found = row.get("findings")
+            total = row.get("findings_total")
+            if (not isinstance(found, list) or (failed and not found)
+                    or row.get("findings_source") in ("unknown", "conflict")
+                    or (total is not None and (type(total) is not int or total != len(found)))
+                    or row.get("findings_truncated")):
+                seen["high"] = True
+            else:
+                seen["findings"] = True
+                seen["high"] |= any(review_policy.is_high(
+                    item.get("severity") if isinstance(item, dict) else None, policy or {}) for item in found)
 
     def consume(raw, source):
         nonlocal malformed, cancellation_off
@@ -164,9 +226,14 @@ def check(bead, ledger, reviews, head=None, check_only=False, role=None):
                     and all(row.get("verdict_class") == "FAIL" for row in runs)
                     and all(downgraded(row, source) for row, source in prs)):
                 failures.remove(key)
-    if len(failures) < 3:
+    allowance = routine_allowance(policy, rounds) if role == "cross-lab-review" and not malformed and not cancellation_off else None
+    # The trial can only tighten admission; baseline cancellation and authority stay intact.
+    trial_refused = allowance is not None and sum(seen["code"] for seen in rounds.values()) >= allowance
+    if not trial_refused and len(failures) < 3:
         return 0
     try:
+        if trial_refused:
+            raise DecisionRefused("review-by-risk routine round limit reached")
         decision_id = claim(reviews, bead, head, len(failures), check_only=check_only, role=role)
     except DecisionRefused as error:
         print(f"dispatch: review round decision refused: {error}", file=sys.stderr)
@@ -179,6 +246,9 @@ def check(bead, ledger, reviews, head=None, check_only=False, role=None):
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     summary = directory / f"{bead}.md"
     body = (f"# Review round limit: {bead}\n\n"
+            + ("Review-by-risk routine round limit reached. Escalate to the review authority; "
+               "after a recorded decision, CLAVAIN_REVIEW_POLICY=off restores the baseline for one dispatch. "
+               "The baseline failure cap and signed decision requirements still apply.\n\n" if trial_refused else "") +
             f"{len(failures)} failed review rounds recorded across all heads and review roles.\n"
             "PASS and neutral rounds do not reset this cumulative count.\n"
             "Another review round is refused. Choose one option and record the decision on the bead.\n\n"

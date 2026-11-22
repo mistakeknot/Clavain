@@ -56,6 +56,18 @@ A review loop gets at most three fix rounds. Number the reviews per change, star
 - **Every escalated finding** names its trigger and its consequence, so the human can see which findings are overstated. A finding that needs two independent faults, or sits on a path nothing reaches, is often less severe than it is rated.
 - **A further round needs that human's ruling,** and the ruling names its scope. Never land with an open Critical or Important finding.
 
+### Review by risk (trial)
+
+During the configured two-week window starting on the Pacific merge date, `config/routing.yaml` `reasoning.review_policy` lowers the cap for low-risk changes. Ask the helper before requesting a review: `git diff --no-renames --name-only BASE..HEAD | python3 scripts/review_policy.py decide`. It prints `action`:
+
+- **skip** (doc-only; every path a named safe path): no cross-lab review. The author's check, the tests and CI carry the change.
+- **one-round** (explicitly listed presentation files: styles/theme.css and ui/spacing.css): one review round. A second runs only when round 1 found a high-severity finding (P1 or High; a finding with no severity counts as high). Otherwise fix the findings with their covering tests and land.
+- **full** (tests and harnesses, the keep-list: spend, credentials, sign-ins, payments, save formats and migrations, releases and publishes, instruction files, hooks, CI workflows, routing policy; also any change with no path list and any path no safe class names; the helper is an allow-list): the three fix rounds and the confirming review below, unchanged.
+
+`scripts/review-round-limit.py` enforces the one-round and two-round limits for routine changes only. One keep-list round on a bead keeps the whole bead on three. Frontier floors, reviewer independence and the seat tables are untouched, and a review that runs is dispatched as before. Roll back with `enabled: false` in the policy, `CLAVAIN_REVIEW_POLICY=off` for one dispatch, or by reverting the commit. The trial expires on its own after its last day.
+
+If the trial refuses another round, escalate to the review authority and record the decision. After approval, CLAVAIN_REVIEW_POLICY=off restores the baseline for one dispatch; the cumulative failure cap and signed decision requirements still apply. The refusal writes the private round-limit summary.
+
 Subagent-driven development's per-task loop keeps its own fix and ruling procedure. Its final review and executing-plans' final review keep their single fix round and scoped re-review, but a Critical or Important finding that survives them escalates to a human as a blocker, as in review 4 above; the controller never rules on it. This section governs every other review loop, cross-lab included. The re-review template asks reviewers to name the trigger and consequence behind each severity in every round. That makes ratings checkable; it does not lower any finding.
 
 **Integration:**
