@@ -153,6 +153,8 @@ MINIMUM_CODEX_VERSION=""
 FALLBACK_REASON=""
 PRODUCER_IDENTITY=""
 RR_REPO=""; RR_REPO_ID=""; RR_PR=""; RR_HEAD=""; RR_BASE=""
+REVIEW_HEAD=""
+ROUND_HEAD=""
 REVIEW_SCRATCH=false
 REVIEW_SCRATCH_DIR=""
 REVIEW_SCRATCH_TREE=""
@@ -1186,6 +1188,28 @@ _dispatch_cleanup_state() {
   [[ -z "$TOKEN_LEAK_HITS" ]] || rm -f "$TOKEN_LEAK_HITS" 2>/dev/null || true
   # The EXIT trap exits with this, so the status matches the committed receipt.
   DISPATCH_FINAL_RC="$_rc"
+  if [[ "${RUN_RECEIPT_ARMED:-false}" == true && "${ROLE_RESOLVED:-false}" == true ]]; then
+    # B6 observes only after today's dispatch completed. It cannot return a
+    # choice, change status, or hold the caller's output descriptors open.
+    (
+      # Drop inherited status pipes and lock descriptors as well as stdio.
+      # /dev/fd supplies the same inventory on hosts without procfs.
+      shadow_fd_dir="/proc/$BASHPID/fd"
+      [[ -d "$shadow_fd_dir" ]] || shadow_fd_dir=/dev/fd
+      for shadow_fd_path in "$shadow_fd_dir"/*; do
+        shadow_fd="${shadow_fd_path##*/}"
+        [[ "$shadow_fd" =~ ^[0-9]+$ ]] || continue
+        [[ "$shadow_fd" -le 2 ]] || exec {shadow_fd}>&-
+      done
+      jq -cn --argjson route "$RESOLVED_ROUTE_JSON" --arg native "$RESOLVED_PROFILE_REF" \
+        --arg role "$ROLE" --argjson exit_code "$_rc" --argjson prompt_chars "${#PROMPT}" \
+        '{route:$route,native:$native,role:$role,exit_code:$exit_code,prompt_chars:$prompt_chars}' |
+        # This detached reader and its descendants can outlive the scripts tree.
+        # Propagate suppression through clavain-cli to subsequent Python imports.
+        PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$DISPATCH_SCRIPT_DIR" python3 -B -m clavain_selector.learned_router_shadow \
+          "$DISPATCH_SCRIPT_DIR/.." "${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}" "${WORKDIR:-.}"
+    ) </dev/null >/dev/null 2>&1 &
+  fi
   if [[ "${CLAVAIN_HELD_SNAPSHOT_OWNER:-}" == "$$" ]]; then rm -f -- "${CLAVAIN_HELD_CONTEXT_SNAPSHOT:-}"; fi
   rm -f "$STATE_FILE" "${STATE_FILE}.tmp" 2>/dev/null || true
   if [[ -n "${INTERBAND_DISPATCH_FILE:-}" ]]; then
@@ -1254,6 +1278,11 @@ Options:
   --policy-profile <NAME>      Declared policy overlay (pilot requires campaign scope)
   --experiment-task-type <TYPE>  Sol experiment requires advisory-support-grouping; never a gate review
   --producer-identity <ID>      Producer backend/model identity for validator audit records
+  --review-head <SHA>           Exact lowercase 40-hex head for plan-review/validation
+                               round-limit decisions; no PR receipt flags
+  --round-head <SHA>            Exact lowercase 40-hex head for round-limit decisions
+                               in all three review roles; does not enable PR receipts.
+                               Must match --head and --review-head when supplied.
   --repo OWNER/NAME --repo-id ID --pr N --head SHA --base SHA
                                 Write a review receipt (cross-lab-review only; all five
                                 required; -C must hold both commits). One JSON file per
@@ -1967,10 +1996,12 @@ _dispatch_role_profile() {
         capacity_failed_seats+="$backend/$model"$'\n'
         echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
         ;;
-      insufficient_codex_version|unsupported_adapter)
+      insufficient_codex_version|unsupported_adapter|content_filter_refused)
         fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
         capacity_failure_class="$CLAVAIN_LAST_FAILURE_CLASS"
         HELD_SKIPPED_CANDIDATES="$(jq -cn --argjson s "$HELD_SKIPPED_CANDIDATES" --arg ref "$profile_ref" --arg c "$capacity_failure_class" '$s+[{profile_ref:$ref,failure_class:$c}]')"
+        # A refusal depends on the prompt, so the same seat is never tried again.
+        [[ "$CLAVAIN_LAST_FAILURE_CLASS" != content_filter_refused ]] || capacity_failed_seats+="$backend/$model"$'\n'
         echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
         ;;
       *)
@@ -2109,7 +2140,7 @@ _dispatch_prepare_review_packet() {
 # walks or returns its fallbacks (mk ruling 2026-09-25).
 _dispatch_tier_profile() {
   local tier="$1" policy candidates candidate backend model effort service minimum role
-  local rc=1 candidate_count=0 chain_rc=0
+  local rc=1 candidate_count=0 chain_rc=0 tier_refused_seats=$'\n'
   local -a resolved_args
 
   command -v python3 >/dev/null 2>&1 || {
@@ -2197,6 +2228,12 @@ _dispatch_tier_profile() {
       continue
     fi
 
+    # A seat that refused this prompt is never tried again through an alias.
+    if [[ "$tier_refused_seats" == *$'\n'"$backend/$model"$'\n'* ]]; then
+      echo "dispatch: tier candidate '$model' already refused this prompt; skipping" >&2
+      continue
+    fi
+
     resolved_args=(bash "${BASH_SOURCE[0]}" --to "$backend" --model "$model")
     [[ -n "$effort" ]] && resolved_args+=(--reasoning-effort "$effort")
     [[ -n "$service" ]] && resolved_args+=(--service-tier "$service")
@@ -2226,7 +2263,8 @@ _dispatch_tier_profile() {
     # invocation (mirrors _dispatch_role_profile).
     [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]] || return "$rc"
     case "$CLAVAIN_LAST_FAILURE_CLASS" in
-      quota_exhausted|rate_limited|model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter)
+      quota_exhausted|rate_limited|model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter|content_filter_refused)
+        [[ "$CLAVAIN_LAST_FAILURE_CLASS" != content_filter_refused ]] || tier_refused_seats+="$backend/$model"$'\n'
         echo "dispatch: tier '$tier' candidate '$model' unavailable ($CLAVAIN_LAST_FAILURE_CLASS); trying its declared fallback" >&2
         ;;
       *)
@@ -2547,6 +2585,24 @@ while [[ $# -gt 0 ]]; do
       esac
       shift 2
       ;;
+    --round-head)
+      require_arg "$1" "${2:-}"
+      ROUND_HEAD="$2"
+      [[ "$ROUND_HEAD" =~ ^[0-9a-f]{40}$ ]] || {
+        echo "Error: --round-head must be a full lowercase 40-hex commit sha" >&2
+        exit 1
+      }
+      shift 2
+      ;;
+    --review-head)
+      require_arg "$1" "${2:-}"
+      REVIEW_HEAD="$2"
+      [[ "$REVIEW_HEAD" =~ ^[0-9a-f]{40}$ ]] || {
+        echo "Error: --review-head must be a full lowercase 40-hex commit sha" >&2
+        exit 1
+      }
+      shift 2
+      ;;
     --review-scratch)
       REVIEW_SCRATCH=true
       shift
@@ -2763,6 +2819,41 @@ if [[ -n "$TIER" && "$ENGINE" != kimi && "${CLAVAIN_ROUTING_PRECHECK:-}" != "" &
   _dispatch_routing_precheck "" "${precheck_policy:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}" || exit 1
 fi
 
+# Head-only decisions never enable PR receipt mode. Reject incompatible flags
+# before the round-limit gate can consume a decision.
+if [[ -n "$ROUND_HEAD" ]]; then
+  case "$ROLE" in
+    cross-lab-review|plan-review|validation) ;;
+    *)
+      echo "Error: --round-head applies to --role cross-lab-review, plan-review or validation only" >&2
+      exit 1
+      ;;
+  esac
+  if [[ -n "$RR_HEAD" && "$RR_HEAD" != "$ROUND_HEAD" ]]; then
+    echo "Error: --round-head and --head must match" >&2
+    exit 1
+  fi
+  if [[ -n "$REVIEW_HEAD" && "$REVIEW_HEAD" != "$ROUND_HEAD" ]]; then
+    echo "Error: --round-head and --review-head must match" >&2
+    exit 1
+  fi
+fi
+if [[ -n "$REVIEW_HEAD" ]]; then
+  if [[ "$ROLE" != plan-review && "$ROLE" != validation ]]; then
+    echo "Error: --review-head applies to --role plan-review or validation only" >&2
+    exit 1
+  fi
+  if _review_receipt_requested; then
+    echo "Error: --review-head cannot be combined with --repo/--repo-id/--pr/--head/--base" >&2
+    exit 1
+  fi
+fi
+
+if _review_receipt_requested && [[ "$ROLE" != cross-lab-review ]]; then
+  echo "Error: --repo/--repo-id/--pr/--head/--base apply to --role cross-lab-review only" >&2
+  exit 1
+fi
+
 _resolve_dispatch_bead
 # Review budgets belong to beads, never PR heads. Check both the outer call
 # and resolved children, before role resolution or any provider launch.
@@ -2775,7 +2866,7 @@ case "${ROLE:-}" in
       [[ "$ROLE_RESOLVED" == true ]] || round_limit_args+=(--check-only)
       python3 "$DISPATCH_SCRIPT_DIR/review-round-limit.py" "$CLAVAIN_BEAD_ID" \
         "${CLAVAIN_DISPATCH_RECEIPT_FILE:-${XDG_STATE_HOME:-${HOME:-/nonexistent}/.local/state}/clavain/dispatch-receipts.jsonl}" \
-        "$(_review_receipt_dir)" --head "${RR_HEAD:-}" "${round_limit_args[@]}" || exit "$?"
+        "$(_review_receipt_dir)" --head "${ROUND_HEAD:-${REVIEW_HEAD:-${RR_HEAD:-}}}" --role "$ROLE" "${round_limit_args[@]}" || exit "$?"
     fi
     ;;
 esac
@@ -2907,11 +2998,17 @@ fi
 # Review receipt (mk-zek32): all five flags or none, cross-lab-review only.
 # Validated and derived before any model runs, so a bad flag fails fast.
 if _review_receipt_requested; then
-  if [[ "$ROLE" != cross-lab-review ]]; then
-    echo "Error: --repo/--repo-id/--pr/--head/--base apply to --role cross-lab-review only" >&2
-    exit 1
-  fi
   _review_receipt_prepare "${WORKDIR:-.}" || exit 1
+fi
+
+# All cross-lab reviews require a retained body, across backends and entry
+# modes, even without PR receipt flags. Validate those flags first so partial
+# sets keep their specific diagnostic, then refuse missing output before
+# routing/launch. Codex's JSONL status parser does not save the final body.
+if [[ "$ROLE" == cross-lab-review && -z "$OUTPUT" ]]; then
+  echo 'Error: cross-lab-review requires -o/--output-last-message <file> to retain the review and write its receipt' >&2
+  _dispatch_write_failure_class terminal_configuration
+  exit 1
 fi
 
 # A role is a complete Intercore-owned execution contract. The outer invocation
@@ -3674,7 +3771,7 @@ if [[ "$ENGINE" == "auto" ]]; then
       rc=$?
     fi
     case "$CLAVAIN_LAST_FAILURE_CLASS" in
-      model_unavailable|account_access_absent|insufficient_codex_version)
+      model_unavailable|account_access_absent|insufficient_codex_version|content_filter_refused)
         echo "dispatch: backend '$backend' unavailable for class '${TASK_CLASS:-default}' ($CLAVAIN_LAST_FAILURE_CLASS); trying next" >&2
         ;;
       *)
@@ -4026,10 +4123,15 @@ elif [[ "$ENGINE" == "claude" ]]; then
   fi
   if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
     DISPATCH_ID="${DISPATCH_ID:-$(_dispatch_audit_id)}"
+    pool_accounting_args=()
+    if [[ "${DISPATCH_TRANSPORT:-}" == direct-pooled ]]; then
+      _prepare_role_audit
+      pool_accounting_args=(--pool-receipt "${CLAVAIN_REVIEW_EVENTS}.${ATTEMPT_ID}.pool-receipt.json" --pool-attempt "$ATTEMPT_ID")
+    fi
     CMD=(python3 "$DISPATCH_SCRIPT_DIR/claude_usage.py"
       --events "$CLAVAIN_REVIEW_EVENTS" --dispatch "$DISPATCH_ID" --model "$MODEL"
       --policy "${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
-      --budget "${CLAVAIN_TOKEN_BUDGET:-0}" -- "${CMD[@]}")
+      --budget "${CLAVAIN_TOKEN_BUDGET:-0}" "${pool_accounting_args[@]}" -- "${CMD[@]}")
   fi
   # WORKDIR via cd and OUTPUT via tee at execution time, same as kimi
   # (claude -p prints the response on stdout; no -C/-o flags used).
@@ -4044,6 +4146,11 @@ else
   # passthrough below; other callers may still override it deliberately.
   CMD+=(-c "$(_seat_codex_env_args)")
   if _bb_pool_available codex; then
+    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
+      echo 'Error: budgeted pooled Codex lacks a request receipt adapter; refusing before provider launch' >&2
+      _dispatch_write_failure_class terminal_accounting
+      exit 1
+    fi
     _bb_codex_pool_token
     # Match BB's provider-codex launch contract. The hub token stays in env.
     export CODEX_OPENAI_BASE_URL="${BB_SERVER_URL%/}/api/v1/plugins/account-pool/http/v1"
@@ -5977,10 +6084,13 @@ _finalize_dispatch_result() {
     failure_class="$(jq -r --arg attempt "$ATTEMPT_ID" 'select(.attempt_id == $attempt) | .failure_class // empty' "${OUTPUT}.receipt.json" 2>/dev/null || true)"
   fi
   if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "${DISPATCH_TRANSPORT:-}" =~ ^(direct-pooled|pool-exec)$ ]]; then
-    # Hub traffic is proven, but no supported request-scoped account receipt is
-    # exposed. A budgeted pooled invocation cannot be accepted from guesses.
-    exit_code=1
-    failure_class=terminal_accounting
+    # Only the metered Claude adapter can admit a scoped pool attempt. Its
+    # terminal ledger must bind retained receipt bytes to this exact attempt.
+    if [[ "$ENGINE" != claude ]] || ! POOL_RECEIPT_JSON=$(python3 "$DISPATCH_SCRIPT_DIR/pool_receipt.py" \
+      --check-ledger "$CLAVAIN_REVIEW_EVENTS" --attempt "$ATTEMPT_ID"); then
+      exit_code=1
+      failure_class=terminal_accounting
+    fi
   fi
   # A terminal stderr denial dominates an earlier structured capacity error.
   # A stderr terminal_policy denial (an explicit policy block) is always

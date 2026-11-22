@@ -35,6 +35,15 @@ No arguments → analyze current unstaged + staged changes (`git diff` + `git di
 
 ## Phase 1: Analyze Changes
 
+For the LOG-ONLY review-exit callback, start a fresh run-local list
+`REVIEW_EXIT_VERDICT_FILES=()`. As this invocation produces verdicts (including
+flux-drive, plan conformance, and grounding), record their exact paths in that
+list. Carry the list explicitly across shell blocks. Include all verdicts
+produced this invocation; never fill the list by globbing `.clavain/verdicts`
+or by reusing a prior invocation's list. If the complete current-run list is
+unavailable, leave it empty so the observer records findings as unknown.
+This bookkeeping does not change the native gate's inputs or verdicts.
+
 ```bash
 git diff --name-only HEAD
 git diff --cached --name-only
@@ -66,7 +75,7 @@ else
 fi
 ```
 
-**Review by risk (trial, bead mk-h9541):** between 2026-11-18 and 2026-12-01, also run `{ git diff --no-renames --name-only HEAD; git diff --no-renames --cached --name-only; } | python3 "${CLAVAIN_SOURCE_DIR:-${CLAVAIN_DIR:-${CLAUDE_PLUGIN_ROOT:-}}}/scripts/review_policy.py" decide`. It prints `skip`, `one-round` or `full`; any failure to run it means `full`. It changes how many cross-lab rounds a change gets, never whether `REVIEW_PATH=full` applies to a ship-class diff here.
+**Review by risk (trial):** during the configured two-week window starting on the Pacific merge date, also run `{ git diff --no-renames --name-only HEAD; git diff --no-renames --cached --name-only; } | python3 "${CLAVAIN_SOURCE_DIR:-${CLAVAIN_DIR:-${CLAUDE_PLUGIN_ROOT:-}}}/scripts/review_policy.py" decide`. It prints `skip`, `one-round` or `full`; any failure to run it means `full`. It changes how many cross-lab rounds a change gets, never whether `REVIEW_PATH=full` applies to a ship-class diff here.
 
 **Small change shortcut:** If `DIFF_LINES < 20` and `CHANGED_FILES == 1` **and the block above printed `REVIEW_PATH=shortcut-eligible`**, resolve `fd-quality` through B2 in shadow mode, then run only that single fd-quality agent directly (Task tool, `subagent_type: "interflux:review:fd-quality"`, `model: "${FD_QUALITY_MODEL}"`). Include the diff in the prompt. Skip Phases 2-3. After agent returns, jump to Phase 4.
 
@@ -117,6 +126,21 @@ default it to `0` — absence of a clear success signal is a failure.
 
 ```bash
 export FLUX_DRIVE_STATUS="${FLUX_DRIVE_STATUS:-1}"
+```
+
+Log-only delegation shadow (silent, detached, a no-op unless `flux_triage` is `shadow`; it never changes the gate). The delegation above is fixed, so the native choice is that label. Carry the actual `DIFF_LINES`, `CHANGED_FILES` and `FLUX_DRIVE_STATUS` values from earlier shell blocks. Resolve the selected installation root as documented in `docs/reference/delegation-shadow.md`; the mode switch reads that root's `config/routing.yaml`. Leave `SHADOW_DECISION_TOKENS` unset unless you counted the main thread's own decision tokens (not diff or executor tokens).
+
+```bash
+SHADOW_CHOICE=delegate_flux_drive
+SHADOW_OUTCOME=""
+case "${FLUX_DRIVE_STATUS:-}" in
+    0) SHADOW_OUTCOME=success ;;
+    [1-9]*) SHADOW_OUTCOME=failure ;;
+esac
+SHADOW_ROOT="${CLAVAIN_SOURCE_DIR:-${CLAVAIN_DIR:-${CLAUDE_PLUGIN_ROOT:-}}}"
+if [ -n "$SHADOW_ROOT" ]; then
+python3 "$SHADOW_ROOT/scripts/clavain_selector/delegation_shadow.py" --site quality-gates --native "$SHADOW_CHOICE" --candidate "delegate_flux_drive=Delegate agent triage, dispatch and synthesis to flux-drive" --candidate "main_thread_review=Main thread selects and runs review agents itself" --state "diff_lines=${DIFF_LINES:-}" --state "changed_files=${CHANGED_FILES:-}" --main-thread-tokens "${SHADOW_DECISION_TOKENS:-}" --native-outcome "$SHADOW_OUTCOME" >/dev/null 2>&1 || true
+fi
 ```
 
 After flux-drive completes, its output directory contains `synthesis.md` and per-agent findings.
@@ -346,6 +370,7 @@ label as a corroborated one.
 `$GROUNDED` is in scope from Phase 3a0.
 
 ```bash
+REVIEW_EXIT_NATIVE=continue
 if [[ -z "$GROUNDED" ]]; then
     echo "quality-gates: NEEDS_VERIFICATION — the review synthesis stands, but no concrete signal corroborates it (test-pass-sha absent or stale vs HEAD; no fresh CONFORMANCE: PASS). Run the test suite; on pass: clavain-cli set-artifact \"$BEAD_ID\" test-pass-sha \"\$(git rev-parse HEAD)\" and re-enter Phase 3b. Not advancing phase." >&2
 fi
@@ -357,8 +382,27 @@ if [[ -n "$BEAD_ID" ]]; then
     elif ! clavain-cli enforce-gate "$BEAD_ID" "shipping" ""; then
         echo "Gate blocked: review findings stale or pre-conditions not met. Re-run /clavain:quality-gates, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
     else
-        clavain-cli advance-phase "$BEAD_ID" "shipping" "Quality gates passed (grounded: ${GROUNDED})" ""
+        clavain-cli advance-phase "$BEAD_ID" "shipping" "Quality gates passed (grounded: ${GROUNDED})" "" && REVIEW_EXIT_NATIVE=exit
     fi
+fi
+```
+
+After choosing the native gate result, record a LOG-ONLY early-exit observation.
+The native block above sets `REVIEW_EXIT_NATIVE=exit` only after a successful
+phase advance; grounding, gate or advance failures keep it `continue`. Keep the same
+`REVIEW_EXIT_LOOP_ID` for all rounds of this change. Missing IDs skip observation.
+This callback never changes a gate or excuses a required review round.
+
+```bash
+if [[ -n "${REVIEW_EXIT_LOOP_ID:-${CLAVAIN_BEAD_ID:-}}" && -n "${REVIEW_EXIT_NATIVE:-}" ]]; then
+  REVIEW_EXIT_VERDICT_ARGS=()
+  for verdict_file in "${REVIEW_EXIT_VERDICT_FILES[@]}"; do
+    REVIEW_EXIT_VERDICT_ARGS+=(--verdict-file "$verdict_file")
+  done
+  ( python3 "${CLAUDE_PLUGIN_ROOT}/scripts/review_exit_shadow.py" \
+      --project "$PWD" --loop "${REVIEW_EXIT_LOOP_ID:-$CLAVAIN_BEAD_ID}" \
+      --native "$REVIEW_EXIT_NATIVE" "${REVIEW_EXIT_VERDICT_ARGS[@]}" \
+      </dev/null >/dev/null 2>&1 & ) || true
 fi
 ```
 

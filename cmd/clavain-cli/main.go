@@ -17,6 +17,8 @@ func main() {
 
 	var err error
 	switch cmd {
+	case "decide":
+		err = cmdDecide(args)
 	case "review":
 		err = cmdReview(args)
 	case "prepare":
@@ -297,6 +299,9 @@ func printHelp() {
 // helpText is the top-level usage. TestHelpListsEveryCommand keeps it in step
 // with the command switch in main.
 const helpText = `Usage: clavain-cli <command> [args...]
+
+  decide [--config routing.yaml] [--plugin-root DIR] [--project-root DIR]
+                                Observe a typed JSON question on stdin (log-only)
 
 Gate / Phase:
   advance-phase       <bead_id> <phase> <reason> <artifact_path>

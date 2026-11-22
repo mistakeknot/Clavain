@@ -81,6 +81,10 @@ _classify_dispatch_failure() {
     #   that false positive stays excluded.
     if grep -qiE 'http/[0-9.]+[[:space:]]+403\b|\b(status_code|status|code|http)[^0-9a-z]{0,15}403\b|\b403[^0-9a-z]{0,15}forbidden|forbidden|misalignment|policy[^[:alnum:]]+(block|den)' "$stderr_file"; then echo terminal_policy
     elif grep -qiE 'http/[0-9.]+[[:space:]]+401\b|\b(status_code|status|code|http)[^0-9a-z]{0,15}401\b|\b401[^0-9a-z]{0,15}unauthor|unauthorized|unauthenticated|invalid_api_key|invalid[^0-9a-z]{1,10}x-api-key|authentication[^[:alnum:]]+fail' "$stderr_file"; then echo terminal_configuration
+    # A provider content filter refused this prompt on this seat: walk the declared
+    # fallback with the prompt unchanged (its own class, never account access). An
+    # explicit policy or authentication denial in the same output stays terminal.
+    elif grep -qiE 'flagged for potentially high[- ]risk cyber activity' "$stderr_file"; then echo content_filter_refused
     elif grep -qiE '429[[:space:]]+too many requests|too many requests[^0-9]{0,20}429|http/[0-9.]+[[:space:]]+429\b|(status_code|status|code|http)[^0-9a-z]{0,15}429\b|\berror[[:space:]]+429:|upstream responded[[:space:]]+429|rate_limit_exceeded|rate_limit_reached_error|rate limit reached for|rate_limit_error|rate[-_ ]?limited\b|rate[-_ ]limit[[:space:]]+exceeded' "$stderr_file"; then echo rate_limited
     elif grep -qiE 'not supported when using Codex with a ChatGPT account|not available (to|for) (this|your) account|account[^[:alnum:]]+access' "$stderr_file"; then echo account_access_absent
     elif grep -qiE 'model_not_found|model[^[:alnum:]]+(not found|does not exist|unavailable)|unknown model' "$stderr_file"; then echo model_unavailable
@@ -188,6 +192,7 @@ _role_audit_context() {
   fi
   jq -cn --argjson route "${RESOLVED_ROUTE_JSON:-null}" --argjson profile "${RESOLVED_PROFILE_JSON:-null}" \
     --argjson review_packet "$review_packet" \
+    --argjson pool_receipt "${POOL_RECEIPT_JSON:-null}" \
     --arg dispatch_id "$DISPATCH_ID" --arg attempt_id "$ATTEMPT_ID" --arg state "$state" \
     --arg retry_id "${CLAVAIN_RETRY_ID:-}" --arg account "unknown" \
     --arg backend "$ENGINE" --arg model "$MODEL" --arg effort "$REASONING_EFFORT" \
@@ -237,7 +242,8 @@ _role_audit_context() {
         + (if $intercept | type == "object" then {intercept_evidence:$intercept} else {} end)
         + (if $intercept_error != "" then {intercept_evidence_error:$intercept_error} else {} end))}
       + (if $enrollment != "" then {task_envelope:{enrollment_id:$enrollment,manifest_sha256:$manifest,cohort_id:$cohort}} else {} end)
-      + (if $review_packet != null then {review_packet:$review_packet} else {} end)' | _augment_dispatch_receipt
+      + (if $review_packet != null then {review_packet:$review_packet} else {} end)
+      + (if $pool_receipt != null then {pool_receipt:$pool_receipt} else {} end)' | _augment_dispatch_receipt
 }
 
 _record_role_routing_decision() {
@@ -364,6 +370,8 @@ _build_dispatch_run_receipt() {
   local u
   for u in "$usage_json" "{}"; do  # a bad usage object must not lose the base receipt
     line="$(jq -cn --argjson observed "$observed" --argjson usage "$u" --arg role "$ROLE" --arg backend "${ENGINE:-}" --arg model "${MODEL:-}" \
+      --arg head "${ROUND_HEAD:-${REVIEW_HEAD:-${RR_HEAD:-}}}" \
+      --argjson pool_receipt "${POOL_RECEIPT_JSON:-null}" \
       --arg effort "${REASONING_EFFORT:-}" --arg producer "${PRODUCER_IDENTITY:-}" \
       --arg bead "${CLAVAIN_BEAD_ID:-}" --arg ctx "$ctx_hash" \
       --arg thread "${BB_THREAD_ID:-}" --arg session "${DISPATCH_SESSION_ID:-}" \
@@ -382,7 +390,9 @@ _build_dispatch_run_receipt() {
        tokens_in: (if $tin == "" then null else ($tin|tonumber) end),
        tokens_out: (if $tout == "" then null else ($tout|tonumber) end)}
       + (if $verdict_class != "" then {verdict_class:$verdict_class} else {} end)
+      + (if ($head | test("^[0-9a-f]{40}$")) then {head_sha:$head} else {} end)
       + $observed
+      + (if $pool_receipt != null then {pool_receipt:$pool_receipt} else {} end)
       + ($usage | {usage_status, usage_basis, usage_note, tokens_in, tokens_out, tokens_cached_in,
                    tokens_cache_write_in, tokens_reasoning_out} | with_entries(select(.value != null)))')"
     [[ -n "$line" ]] && break

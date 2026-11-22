@@ -94,6 +94,12 @@ case "${FAKE_CODEX_MODE:-success}" in
       exit 1
     fi
     ;;
+  contentfilter)
+    if [[ "$model" == "gpt-6-astra" ]]; then
+      echo '{"type":"error","error":{"message":"This request was flagged for potentially high-risk cyber activity. Apply for trusted access."}}' >&2
+      exit 1
+    fi
+    ;;
   policy403)
     echo 'stream error: unexpected status 403 Forbidden: misalignment policy blocked request' >&2
     exit 1
@@ -180,6 +186,18 @@ done < "$FAKE_CODEX_LOG"
 [[ "${#attempts[@]}" == "2" ]] || fail "account-access fallback attempts=${#attempts[@]}, want 2"
 [[ "${attempts[0]}" == "gpt-6-astra" && "${attempts[1]}" == "gpt-6-sol" ]] \
   || fail "account-access fallback order was: ${attempts[*]}"
+
+: > "$FAKE_CODEX_LOG"
+filter_out="$(FAKE_CODEX_MODE=contentfilter bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" 2>&1)" \
+  || { echo "$filter_out" >&2; fail "content-filter refusal did not walk the declared fallback"; }
+attempts=()
+while IFS= read -r attempt; do
+  attempts+=("$attempt")
+done < "$FAKE_CODEX_LOG"
+[[ "${#attempts[@]}" == "2" && "${attempts[0]}" == "gpt-6-astra" && "${attempts[1]}" == "gpt-6-sol" ]] \
+  || fail "content-filter fallback order was: ${attempts[*]}"
+contains "$filter_out" 'content_filter_refused'
+contains "$(cat "$FAKE_IC_LOG")" '--fallback-reason=content_filter_refused'
 
 : > "$FAKE_CODEX_LOG"
 set +e

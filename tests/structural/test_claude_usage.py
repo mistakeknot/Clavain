@@ -33,7 +33,7 @@ def events():
     ]
 
 
-def dispatch(tmp_path, stream, *, exit_code=0, stderr="", budget=10000, via=None, cancel=False, governed=False):
+def dispatch(tmp_path, stream, *, exit_code=0, stderr="", budget=10000, via=None, cancel=False, governed=False, pool_env=None):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     fixture = tmp_path / "provider.json"
@@ -45,6 +45,8 @@ from pathlib import Path
 if '--version' in sys.argv:
     print('2.1.267 (Claude Code)'); sys.exit(0)
 sys.stdin.read()
+if os.environ.get('EXPECTED_POOL_TOKEN'):
+    assert os.environ.get('ANTHROPIC_AUTH_TOKEN') == os.environ['EXPECTED_POOL_TOKEN']
 session = sys.argv[sys.argv.index('--session-id')+1] if '--session-id' in sys.argv else 'legacy'
 with open(os.environ['CALLS'], 'a') as f: f.write('called\\n')
 for event in json.loads(Path(os.environ['FIXTURE']).read_text()):
@@ -64,6 +66,13 @@ sys.exit(int(os.environ['PROVIDER_EXIT']))
            "CLAVAIN_REQUIRE_USAGE": "1", "CLAVAIN_BB_DIRECT_POOL": "0", "CLAVAIN_REVIEW_EVENTS": str(ledger),
            "CLAVAIN_TOKEN_BUDGET": str(budget), "CLAVAIN_DISPATCH_ID": "fixture-dispatch",
            "CLAVAIN_CONTEXT_GATEWAY_MODE": "off"}
+    if pool_env:
+        env.update(pool_env)
+        host = json.loads((ROOT/'config/bb-integration.json').read_text())['allowed_host_ids'][0]
+        bb = bin_dir / 'bb'
+        bb.write_text('#!/usr/bin/env python3\nimport json\nprint(' + repr(json.dumps(dict(thread=dict(id='fixture-thread', environment=dict(hostId=host))))) + ')\n')
+        bb.chmod(0o755)
+        env['BB_CLI'] = str(bb)
     cmd = ["bash", str(ROOT / "scripts/dispatch.sh"), "--to", "claude", "--model", MODEL,
            "-C", str(tmp_path), "-o", str(output)]
     if governed:
@@ -94,6 +103,60 @@ sys.exit(int(os.environ['PROVIDER_EXIT']))
                               capture_output=True, text=True, timeout=30)
     records = [json.loads(line) for line in ledger.read_text().splitlines()] if ledger.exists() else []
     return proc, output, records
+
+
+@pytest.mark.requires_ic
+@pytest.mark.parametrize("mode", ["success", "refused", "missing-account", "wrong-totals", "provider-fail"])
+def test_pooled_dispatch_admits_before_spending_and_retains_attribution(tmp_path, mode):
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    import threading
+    calls = []
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_): pass
+        def do_GET(self):
+            self.send_response(200); self.end_headers()
+            self.wfile.write(json.dumps(dict(threadId="fixture-thread", availability=dict(claude=True, codex=True))).encode())
+        def do_POST(self):
+            action = self.path.rsplit("/", 1)[-1]
+            calls.append(action)
+            payload = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            assert self.headers['x-bb-account-pool-token'] == 'synthetic-host-token'
+            self.send_response(503 if mode == 'refused' else 200); self.end_headers()
+            if mode == 'refused': return
+            data = dict(version=1, id='a'*32, host_id='fixture-host', attempt_id=payload['attempt_id'], provider='claude')
+            if action == 'begin':
+                data.update(token='synthetic-scoped-token', expires_at=9999999999999)
+            else:
+                data.update(sealed=True, valid=True, complete=True, requests=[dict(id=1, kind='inference', state='finished', hops=[dict(index=1, account_id='fixture-account', provider='claude', status=200, state='complete', model=MODEL, usage=dict(input_tokens=10, output_tokens=9, cache_read_input_tokens=30, cache_creation_input_tokens=20))])])
+                if mode == 'missing-account': data['requests'][0]['hops'][0]['account_id'] = None
+                if mode == 'wrong-totals': data['requests'][0]['hops'][0]['usage']['input_tokens'] = 11
+            self.wfile.write(json.dumps(data).encode())
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    origin = 'http://127.0.0.1:' + str(server.server_port)
+    try:
+        proc, _, records = dispatch(tmp_path, events(), exit_code=7 if mode == 'provider-fail' else 0, pool_env=dict(
+            BB_SERVER_URL=origin, BB_THREAD_ID='fixture-thread', CLAVAIN_BB_DIRECT_POOL='1',
+            ANTHROPIC_BASE_URL=origin+'/api/v1/plugins/account-pool/http',
+            ANTHROPIC_AUTH_TOKEN='synthetic-host-token', CODEX_POOL_AUTH_TOKEN='',
+            EXPECTED_POOL_TOKEN='synthetic-scoped-token'))
+    finally:
+        server.shutdown(); server.server_close(); thread.join()
+    if mode == 'success':
+        assert proc.returncode == 0, proc.stderr
+        assert calls == ['begin', 'finalize']
+        ref = records[-1]['pool_receipt']
+        data = json.loads(Path(ref['path']).read_text())
+        assert data['requests'][0]['hops'][0]['account_id'] == 'fixture-account'
+    elif mode == 'refused':
+        assert proc.returncode != 0
+        assert calls == ['begin']
+        assert not (tmp_path/'calls').exists()
+    else:
+        assert proc.returncode != 0
+        assert calls == ['begin', 'finalize']
+        assert records[-1]['status'] != 'success'
 
 
 @pytest.mark.requires_ic
@@ -149,6 +212,116 @@ def test_invalid_thinking_breakdown_blocks_success(tmp_path, thinking, location)
     proc, _, records = dispatch(tmp_path, stream)
     assert proc.returncode != 0
     assert records[-1]["terminal"] and not records[-1]["complete"]
+
+
+@pytest.fixture
+def meter():
+    spec = importlib.util.spec_from_file_location("claude_usage_meter", ROOT / "scripts/claude_usage.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    class LocalMeter(module.Meter):
+        def identity(self, model):
+            return model
+
+    return LocalMeter(MODEL, "dispatch", "invocation", "$SESSION", "unused")
+
+
+def tool_record(name="Bash", source="stream", tool_id="tool-parent"):
+    block = dict(type="tool_use", id=tool_id, name=name, input={})
+    if source == "stream":
+        return dict(type="stream_event", event=dict(
+            type="content_block_start", index=0, content_block=block))
+    return dict(type="assistant", message=dict(
+        id="msg1", model=MODEL, usage=events()[1]["event"]["message"]["usage"],
+        content=[block]))
+
+
+def tool_heartbeat(parent="tool-parent"):
+    # Real provider shape: tool_use_id is a heartbeat ID, parent is the Bash call.
+    return dict(type="tool_progress", tool_use_id=parent + "-heartbeat-0",
+                tool_name="Bash", parent_tool_use_id=parent,
+                elapsed_time_seconds=30, heartbeat=True, session_id="$SESSION",
+                uuid="00000000-0000-4000-8000-000000000000")
+
+
+@pytest.mark.parametrize("source", ["stream", "assistant"])
+@pytest.mark.parametrize("name", ["Bash", "Read", "Grep"])
+@pytest.mark.parametrize("child_kind", ["tool_progress", "user", "stream_event"])
+def test_known_ordinary_tool_parent_is_not_subagent(meter, source, name, child_kind):
+    meter.event(tool_record(name, source))
+    child = tool_heartbeat()
+    child["type"] = child_kind
+    meter.event(child)
+
+
+@pytest.mark.parametrize("source", ["stream", "assistant"])
+@pytest.mark.parametrize("name", ["Agent", "Task"])
+def test_subagent_tool_call_and_children_rejected(meter, source, name):
+    with pytest.raises(ValueError, match="subagent activity"):
+        meter.event(tool_record(name, source))
+    # Even after a caller catches the first error, its child cannot be accepted.
+    with pytest.raises(ValueError):
+        meter.event(tool_heartbeat())
+
+
+@pytest.mark.parametrize("child_kind", ["tool_progress", "assistant", "user", "stream_event"])
+def test_unknown_parent_fails_closed_despite_ordinary_tool_name(meter, child_kind):
+    meter.event(tool_record())
+    child = tool_heartbeat("unseen-parent")
+    child["type"] = child_kind
+    with pytest.raises(ValueError):
+        meter.event(child)
+
+
+def test_duplicate_tool_records_agree_and_conflicts_fail_closed(meter):
+    meter.event(tool_record())
+    meter.event(tool_record(source="assistant"))
+    meter.event(tool_heartbeat())
+    with pytest.raises(ValueError):
+        meter.event(tool_record("Read"))
+
+
+@pytest.mark.parametrize("field", ["id", "name"])
+@pytest.mark.parametrize("bad", [None, "", True, ["Bash"]])
+def test_invalid_tool_identity_fails_closed(meter, field, bad):
+    event = tool_record()
+    event["event"]["content_block"][field] = bad
+    with pytest.raises(ValueError, match="tool use identity"):
+        meter.event(event)
+
+
+def test_subagent_call_under_known_ordinary_parent_is_rejected(meter):
+    meter.event(tool_record())
+    event = tool_record("Agent", tool_id="agent-call")
+    event["parent_tool_use_id"] = "tool-parent"
+    with pytest.raises(ValueError, match="subagent activity"):
+        meter.event(event)
+    with pytest.raises(ValueError, match="subagent activity"):
+        meter.event(tool_heartbeat("agent-call"))
+
+
+@pytest.mark.requires_ic
+def test_bash_heartbeat_dispatch_reconciles_without_changing_usage(tmp_path):
+    stream = events()
+    stream[2:2] = [tool_record(), tool_record(source="assistant"), tool_heartbeat()]
+    proc, output, records = dispatch(tmp_path, stream)
+    assert proc.returncode == 0, proc.stderr
+    assert records[-1]["complete"] and records[-1]["budget_tokens"] == 69
+    assert output.read_text() == "Reviewed.\nVERDICT: PASS\n"
+
+
+@pytest.mark.requires_ic
+@pytest.mark.parametrize("parent", ["Agent", "Task", "unknown"])
+def test_subagent_or_unknown_parent_dispatch_never_passes(tmp_path, parent):
+    stream = events()
+    inserted = ([tool_record(parent)] if parent != "unknown" else [])
+    stream[2:2] = inserted + [tool_heartbeat()]
+    proc, output, records = dispatch(tmp_path, stream)
+    assert proc.returncode != 0
+    assert records[-1]["terminal"] and not records[-1]["complete"]
+    assert records[-1]["status"] == "accounting_error"
+    assert "STATUS: pass" not in Path(str(output) + ".verdict").read_text()
 
 
 def load_counts():

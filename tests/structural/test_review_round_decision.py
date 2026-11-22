@@ -62,7 +62,7 @@ def decision(tmp_path):
     return path, key
 
 
-def gate(tmp_path, decision, head=HEAD, count=3):
+def gate(tmp_path, decision, head=HEAD, count=3, role=None, check_only=False):
     ledger = tmp_path / "runs.jsonl"
     if not ledger.exists():
         ledger.write_text("".join(json.dumps(receipt(attempt=str(i))) + "\n" for i in range(count)))
@@ -70,6 +70,10 @@ def gate(tmp_path, decision, head=HEAD, count=3):
             str(ledger), str(tmp_path / "reviews")]
     if head is not None:
         args += ["--head", head]
+    if role is not None:
+        args += ["--role", role]
+    if check_only:
+        args += ["--check-only"]
     return dummy_run(args, decision[1])
 
 
@@ -244,7 +248,9 @@ def test_consumed_notice_requires_new_decision(tmp_path, decision):
     assert "new decision" in result.stderr
 
 
-def test_outer_dispatch_forwards_head_to_actual_child(tmp_path, decision):
+@pytest.mark.parametrize("role", ["cross-lab-review", "plan-review", "validation"])
+@pytest.mark.parametrize("round_head", [False, True])
+def test_outer_dispatch_forwards_head_to_actual_child(tmp_path, decision, role, round_head):
     import shutil
     # Copy scripts only; the receipt derivation stub avoids any repository or
     # remote lookup. Fake routing cannot reach a provider: the child fails its
@@ -253,7 +259,9 @@ def test_outer_dispatch_forwards_head_to_actual_child(tmp_path, decision):
     shutil.copytree(ROOT / "scripts", scripts, ignore=shutil.ignore_patterns("__pycache__"))
     shutil.copytree(ROOT / "config", tmp_path / "config")
     with (scripts / "lib-review-receipt.sh").open("a") as stream:
-        stream.write("\n_review_receipt_prepare() { return 0; }\n")
+        # A round-only head must never activate PR receipt preparation.
+        stream.write("\n_review_receipt_prepare() { return " +
+                     ("88" if round_head else "0") + "; }\n")
     dummy_python(tmp_path, decision[1])
     route = dict(profile_ref="dummy", profile=dict(backend="codex", model="dummy"))
     ic = tmp_path / "bin/ic"
@@ -265,8 +273,10 @@ def test_outer_dispatch_forwards_head_to_actual_child(tmp_path, decision):
     env.update(PATH=str(tmp_path / "bin") + os.pathsep + env["PATH"],
         CLAVAIN_DISPATCH_RECEIPT_FILE=str(ledger),
         CLAVAIN_REVIEW_RECEIPT_DIR=str(tmp_path / "reviews"), CLAVAIN_ROUTING_PRECHECK="0")
-    result = subprocess.run(["bash", str(scripts / "dispatch.sh"), "--role", "cross-lab-review",
-        "--bead", "test-1", "--producer-identity", "gpt-6.1-sol", "--head", HEAD,
+    result = subprocess.run(["bash", str(scripts / "dispatch.sh"), "--role", role,
+        "--bead", "test-1", "--producer-identity", "gpt-6.1-sol",
+        "--round-head" if round_head else "--head" if role == "cross-lab-review" else "--review-head", HEAD,
+        "-o", str(tmp_path / "review.md"),
         "--prompt", "dummy"], env=env, capture_output=True, text=True, timeout=30)
     assert result.returncode == 1, result.stderr
     assert f"head {HEAD} decision dummy-decision" in result.stderr
@@ -291,3 +301,212 @@ def test_concurrent_writers_publish_one_complete_decision(tmp_path, decision):
     assert sorted(r.returncode for r in results) == [0, 26]
     assert decision[0].stat().st_mode & 0o777 == 0o600
     assert gate(tmp_path, decision).returncode == 0
+
+
+@pytest.mark.parametrize("role", ["plan-review", "validation"])
+def test_head_only_decision_consumed_once(tmp_path, decision, role):
+    dummy_python(tmp_path, decision[1])
+    rows = [receipt(attempt=str(i)) for i in range(3)]
+    outer = invoke(tmp_path, rows, role=role, review_head=HEAD)
+    assert outer.returncode == 1, outer.stderr
+    assert "could not resolve dispatch role" in outer.stderr
+    child = invoke(tmp_path, rows, role=role, review_head=HEAD, child=True)
+    assert child.returncode == 1, child.stderr
+    assert "accepting one extra review round" in child.stderr
+    assert "requires an immutable policy hash" in child.stderr
+    second = invoke(tmp_path, rows, role=role, review_head=HEAD, child=True)
+    assert second.returncode == 25, second.stderr
+    assert "consumed" in second.stderr
+
+
+@pytest.mark.parametrize("role", ["plan-review", "validation"])
+def test_head_only_without_decision_refuses(tmp_path, role):
+    rows = [receipt(attempt=str(i)) for i in range(3)]
+    result = invoke(tmp_path, rows, role=role, review_head=HEAD)
+    assert result.returncode == 25, result.stderr
+
+
+@pytest.mark.parametrize("head", ["", "short", "a" * 39, "a" * 41, "A" * 40, "g" * 40])
+@pytest.mark.parametrize("role", ["plan-review", "validation"])
+def test_head_only_bad_hex_refuses(tmp_path, role, head):
+    result = invoke(tmp_path, [], role=role, review_head=head)
+    assert result.returncode == 1, result.stderr
+    assert "--review-head" in result.stderr
+
+
+@pytest.mark.parametrize("role", ["cross-lab-review", "planning"])
+def test_head_only_wrong_role_refuses(tmp_path, role):
+    result = invoke(tmp_path, [], role=role, review_head=HEAD)
+    assert result.returncode == 1, result.stderr
+    assert "--review-head applies to --role plan-review or validation only" in result.stderr
+
+
+@pytest.mark.parametrize("role", ["plan-review", "validation"])
+def test_head_only_cannot_mix_receipt_head(tmp_path, decision, role):
+    dummy_python(tmp_path, decision[1])
+    result = invoke(tmp_path, [receipt(attempt=str(i)) for i in range(3)],
+                    role=role, head=HEAD, review_head=HEAD, child=True)
+    assert result.returncode == 1, result.stderr
+    assert "--review-head cannot be combined" in result.stderr
+    assert gate(tmp_path, decision).returncode == 0
+
+
+@pytest.mark.parametrize("role", ["plan-review", "validation"])
+@pytest.mark.parametrize("child", [False, True])
+def test_receipt_head_wrong_role_keeps_decision(tmp_path, decision, role, child):
+    # Only child=True cases fail on the old code; outer calls never consume.
+    dummy_python(tmp_path, decision[1])
+    result = invoke(tmp_path, [receipt(attempt=str(i)) for i in range(3)],
+                    role=role, head=HEAD, child=child)
+    assert result.returncode == 1, result.stderr
+    assert "apply to --role cross-lab-review only" in result.stderr
+    assert "accepting one extra review round" not in result.stderr
+    assert gate(tmp_path, decision).returncode == 0
+
+
+
+@pytest.mark.parametrize("role", ["cross-lab-review", "plan-review", "validation"])
+def test_round_head_consumes_once_then_refuses(tmp_path, decision, role):
+    dummy_python(tmp_path, decision[1])
+    rows = [receipt(attempt=str(i)) for i in range(3)]
+    first = invoke(tmp_path, rows, role=role, round_head=HEAD, child=True)
+    assert first.returncode == 1, first.stderr
+    assert "accepting one extra review round" in first.stderr
+    assert "requires an immutable policy hash" in first.stderr
+    second = invoke(tmp_path, rows, role=role, round_head=HEAD, child=True)
+    assert second.returncode == 25, second.stderr
+    assert "consumed" in second.stderr
+
+
+@pytest.mark.parametrize("role", ["cross-lab-review", "plan-review", "validation"])
+@pytest.mark.parametrize("head", ["", "short", "a" * 39, "a" * 41, "A" * 40, "g" * 40])
+def test_round_head_rejects_malformed_head(tmp_path, role, head):
+    result = invoke(tmp_path, [], role=role, round_head=head)
+    assert result.returncode == 1, result.stderr
+    assert "--round-head" in result.stderr
+    assert "requires a value" in result.stderr or "lowercase 40-hex" in result.stderr
+
+
+@pytest.mark.parametrize("role", ["cross-lab-review", "plan-review", "validation"])
+@pytest.mark.parametrize("child", [False, True])
+@pytest.mark.parametrize("head", [None, "b" * 40])
+def test_round_head_mismatch_or_absence_keeps_decision(tmp_path, decision, role, child, head):
+    dummy_python(tmp_path, decision[1])
+    result = invoke(tmp_path, [receipt(attempt=str(i)) for i in range(3)],
+                    role=role, round_head=head, child=child)
+    assert result.returncode == 25, result.stderr
+    assert ("no exact review head" if head is None else
+            "decision bead or head mismatch") in result.stderr
+    assert gate(tmp_path, decision).returncode == 0
+
+
+@pytest.mark.parametrize("child", [False, True])
+@pytest.mark.parametrize("flag", ["head", "review_head"])
+def test_conflicting_round_head_flags_keep_decision(tmp_path, decision, child, flag):
+    dummy_python(tmp_path, decision[1])
+    role = "cross-lab-review" if flag == "head" else "plan-review"
+    result = invoke(tmp_path, [receipt(attempt=str(i)) for i in range(3)],
+                    role=role, round_head=HEAD, child=child, **{flag: "b" * 40})
+    assert result.returncode == 1, result.stderr
+    assert "--round-head" in result.stderr and "must match" in result.stderr
+    assert gate(tmp_path, decision).returncode == 0
+
+
+def test_matching_round_and_receipt_heads_claim_same_decision(tmp_path, decision):
+    dummy_python(tmp_path, decision[1])
+    result = invoke(tmp_path, [receipt(attempt=str(i)) for i in range(3)],
+                    head=HEAD, round_head=HEAD, child=True)
+    assert "accepting one extra review round" in result.stderr
+    assert gate(tmp_path, decision).returncode == 25
+
+
+@pytest.mark.parametrize("role", ["plan-review", "validation"])
+def test_matching_round_and_review_heads_keep_compatibility(tmp_path, decision, role):
+    dummy_python(tmp_path, decision[1])
+    result = invoke(tmp_path, [receipt(attempt=str(i)) for i in range(3)],
+                    role=role, review_head=HEAD, round_head=HEAD, child=True)
+    assert "accepting one extra review round" in result.stderr
+    assert gate(tmp_path, decision).returncode == 25
+
+
+def test_round_head_rejects_non_review_role(tmp_path):
+    result = invoke(tmp_path, [], role="planning", round_head=HEAD)
+    assert result.returncode == 1, result.stderr
+    assert "--round-head applies to" in result.stderr
+
+
+def bind_decision_role(decision, role):
+    data = json.loads(decision[0].read_text())
+    data["role"] = role
+    data["mac"] = hmac.new(decision[1].read_bytes(), json.dumps(
+        {k: v for k, v in data.items() if k != "mac"}, sort_keys=True,
+        separators=(",", ":"), ensure_ascii=True).encode(), hashlib.sha256).hexdigest()
+    decision[0].write_text(json.dumps(data))
+
+
+@pytest.mark.parametrize("role", ["plan-review", "validation", "cross-lab-review"])
+def test_role_bound_decision_wrong_role_preserves_right_role_claim(tmp_path, decision, role):
+    bind_decision_role(decision, role)
+    for other in (None, "plan-review", "validation", "cross-lab-review"):
+        if other == role:
+            continue
+        for check_only in (False, True):
+            result = gate(tmp_path, decision, role=other, check_only=check_only)
+            assert result.returncode == 25, result.stderr
+            assert "role mismatch" in result.stderr
+    assert gate(tmp_path, decision, role=role, check_only=True).returncode == 0
+    assert gate(tmp_path, decision, role=role).returncode == 0
+    assert gate(tmp_path, decision, role=role).returncode == 25
+
+
+@pytest.mark.parametrize("role", [None, "", "planning", 3, []])
+def test_invalid_bound_role_refuses_without_consuming(tmp_path, decision, role):
+    bind_decision_role(decision, role)
+    assert gate(tmp_path, decision, role="plan-review").returncode == 25
+    bind_decision_role(decision, "plan-review")
+    assert gate(tmp_path, decision, role="plan-review").returncode == 0
+
+
+@pytest.mark.parametrize("role", ["plan-review", "validation", "cross-lab-review"])
+def test_writer_optional_role(tmp_path, decision, role):
+    decision[0].unlink()
+    args = [str(ROOT / "scripts/review-round-decision.py"),
+            "--reviews-dir", str(tmp_path / "reviews"), "--bead", "test-1", "--head", HEAD,
+            "--accepted-failures", "3", "--ruling", "dummy stated limit", "--role", role]
+    result = dummy_run(args, decision[1])
+    assert result.returncode == 0, result.stderr
+    assert json.loads(decision[0].read_text())["role"] == role
+    assert gate(tmp_path, decision, role=role).returncode == 0
+
+
+def test_bound_role_tamper_fails_mac(tmp_path, decision):
+    bind_decision_role(decision, "plan-review")
+    data = json.loads(decision[0].read_text())
+    data["role"] = "validation"
+    decision[0].write_text(json.dumps(data))
+    result = gate(tmp_path, decision, role="validation")
+    assert result.returncode == 25, result.stderr
+    assert "MAC mismatch" in result.stderr
+
+
+def test_dispatch_plumbs_role_before_claim(tmp_path, decision):
+    bind_decision_role(decision, "plan-review")
+    dummy_python(tmp_path, decision[1])
+    rows = [receipt(attempt=str(i)) for i in range(3)]
+    for child in (False, True):
+        wrong = invoke(tmp_path, rows, role="validation", review_head=HEAD, child=child)
+        assert wrong.returncode == 25, wrong.stderr
+        assert "role mismatch" in wrong.stderr
+    right = invoke(tmp_path, rows, role="plan-review", review_head=HEAD, child=True)
+    assert "accepting one extra review round" in right.stderr
+    assert gate(tmp_path, decision, role="plan-review").returncode == 25
+
+
+def test_unbound_plan_review_claim_blocks_cross_lab_review(tmp_path, decision):
+    dummy_python(tmp_path, decision[1])
+    rows = [receipt(attempt=str(i)) for i in range(3)]
+    first = invoke(tmp_path, rows, role="plan-review", review_head=HEAD, child=True)
+    assert "accepting one extra review round" in first.stderr
+    later = invoke(tmp_path, rows, role="cross-lab-review", head=HEAD, child=True)
+    assert later.returncode == 25, later.stderr
+    assert "consumed" in later.stderr

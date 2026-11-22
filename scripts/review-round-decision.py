@@ -11,7 +11,7 @@ import stat
 import tempfile
 import uuid
 
-from review_round_decision import key_bytes, mac, validate
+from review_round_decision import REVIEW_ROLES, key_bytes, mac, validate
 
 
 def main():
@@ -21,10 +21,13 @@ def main():
     parser.add_argument("--head", required=True)
     parser.add_argument("--accepted-failures", type=int, required=True)
     parser.add_argument("--ruling", required=True)
+    parser.add_argument("--role", choices=sorted(REVIEW_ROLES), help="limit this decision to one review role")
     args = parser.parse_args()
     data = dict(schema_version=1, decision_id=str(uuid.uuid4()), bead=args.bead,
                 head=args.head, accepted_failures=args.accepted_failures, authority="vizier",
                 ruling=args.ruling, decided_at=datetime.now(timezone.utc).isoformat(), mac="0" * 64)
+    if args.role is not None:
+        data["role"] = args.role
     validate(data)
     data["mac"] = mac(data, key_bytes())
     directory = args.reviews_dir / "round-limits/decisions"

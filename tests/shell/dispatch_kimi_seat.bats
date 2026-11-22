@@ -113,7 +113,7 @@ agent_file_of() {
 
 @test "kimi seat: cross-lab-review and plan-review seats get the same profile" {
     for role in cross-lab-review plan-review; do
-        run bash "$DISPATCH" --dry-run --role "$role" --role-resolved --to kimi --model kimi-code/k3 -C "$T/repo" "prompt"
+        run bash "$DISPATCH" --dry-run --role "$role" --role-resolved --to kimi --model kimi-code/k3 -C "$T/repo" -o "$T/out.md" "prompt"
         [ "$status" -eq 0 ]
         f="$(agent_file_of "$output")"
         grep -q '^tools: \[Bash, Read, Glob, Grep\]$' "$f"
@@ -442,7 +442,7 @@ agent_file_of() {
 
 @test "kimi seat: --kimi-unsafe is refused for the review roles" {
     for role in validation cross-lab-review plan-review; do
-        run bash "$DISPATCH" --dry-run --role "$role" --role-resolved --to kimi --kimi-unsafe --model kimi-code/k3 -C "$T/repo" "prompt"
+        run bash "$DISPATCH" --dry-run --role "$role" --role-resolved --to kimi --kimi-unsafe --model kimi-code/k3 -C "$T/repo" -o "$T/out.md" "prompt"
         [ "$status" -ne 0 ]
         [[ "$output" == *"--kimi-unsafe is not allowed with --role $role"* ]]
     done

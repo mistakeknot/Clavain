@@ -19,12 +19,14 @@ otherwise every candidate entry is reduced to `{id_sha256, payload_sha256}`.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import datetime as dt
 import fcntl
 import hashlib
 import json
 import math
 import os
+import stat
 import uuid
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -35,6 +37,7 @@ from clavain_selector.contract import MAX_CANDIDATES, Candidate, Point, Provenan
 
 SCHEMA = "clavain.selector.decision"
 SCHEMA_VERSION = 1
+PROJECT_LOG_MAX_BYTES = 8 * 1024 * 1024
 
 _VALID_APPLIED = ("native", "emitted")
 _SUMMARY_MAX_CHARS = 96
@@ -305,13 +308,21 @@ def _ensure_dir(path: Path) -> None:
         raise RecordUnwritable(f"could not create directory {path}: {exc}") from exc
 
 
-def _append_line(path: Path, line: str) -> None:
-    _ensure_dir(path.parent)
+def _append_line(path: Path, line: str, *, parent_fd: int | None = None) -> None:
+    if parent_fd is None:
+        _ensure_dir(path.parent)
     try:
-        fd = os.open(str(path), os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+        flags = os.O_APPEND | os.O_CREAT | os.O_WRONLY
+        if parent_fd is not None:
+            flags |= os.O_NOFOLLOW | os.O_NONBLOCK
+        fd = os.open(str(path) if parent_fd is None else path.name, flags, 0o600, dir_fd=parent_fd)
     except OSError as exc:
         raise RecordUnwritable(f"could not open {path}: {exc}") from exc
     try:
+        if parent_fd is not None:
+            import stat
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise RecordUnwritable('record target must be regular')
         try:
             os.fchmod(fd, 0o600)
         except OSError:
@@ -342,14 +353,126 @@ def _append_line(path: Path, line: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def append_record(record: Mapping[str, Any], *, record_dir: str | Path | None = None) -> Path:
+def append_record(record: Mapping[str, Any], *, record_dir: str | Path | None = None,
+                  project_root: str | Path | None = None,
+                  max_bytes: int | None = None) -> Path:
     """Append one decision record as a JSONL line; returns the file written."""
+    if max_bytes is not None and project_root is None:
+        raise ValueError('max_bytes requires project_root')
     resolved_dir = _resolve_record_dir(record_dir)
     created_at = record.get("created_at")
     when = _parse_iso(created_at) if created_at else dt.datetime.now(dt.timezone.utc)
     path = resolved_dir / _day_filename(when)
-    _append_line(path, json.dumps(record, sort_keys=True, ensure_ascii=True))
+    line = json.dumps(record, sort_keys=True, ensure_ascii=True)
+    if project_root is None:
+        _append_line(path, line)
+    else:
+        # Project-owned logs use pinned directory descriptors. No component
+        # below the project may follow a symlink, even during concurrent swaps.
+        root = Path(project_root).resolve()
+        if resolved_dir.absolute() != root / '.clavain' / 'decisions':
+            raise RecordUnwritable('unexpected project record directory')
+        with _project_directory(root) as directory_fd:
+            _ensure_project_ignore(directory_fd)
+            _check_project_capacity(directory_fd, len((line + "\n").encode("utf-8")), max_bytes)
+            _append_line(path, line, parent_fd=directory_fd)
     return path
+
+
+class LogCapacityExhausted(RecordUnwritable):
+    """Insufficient bounded log space to admit a hosted call."""
+
+
+@contextmanager
+def _project_directory(root, *, nonblocking=False):
+    descriptors = []
+    try:
+        descriptors.append(os.open(root, os.O_RDONLY | os.O_DIRECTORY))
+        for component in ('.clavain', 'decisions'):
+            try:
+                os.mkdir(component, mode=0o700, dir_fd=descriptors[-1])
+            except FileExistsError:
+                pass
+            descriptors.append(os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                       dir_fd=descriptors[-1]))
+        fcntl.flock(descriptors[-1], fcntl.LOCK_EX | (fcntl.LOCK_NB if nonblocking else 0))
+        yield descriptors[-1]
+    except OSError as exc:
+        raise RecordUnwritable('unsafe or unavailable project record path') from exc
+    finally:
+        for fd in reversed(descriptors):
+            os.close(fd)
+
+
+def _ensure_project_ignore(directory_fd):
+    """Publish a complete decisions/.gitignore so logs stay out of git status.
+
+    Exclusive temporary creation and linking inside the pinned directory: an existing file,
+    symlink or directory is never touched or followed.
+    """
+    # Publish a complete file without replacing any existing operator content.
+    temporary = '.gitignore-' + uuid.uuid4().hex
+    try:
+        ignore_fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                            0o600, dir_fd=directory_fd)
+        try:
+            with os.fdopen(ignore_fd, 'w', encoding='utf-8') as ignore:
+                ignore.write('*\n!.gitignore\n')
+                ignore.flush()
+                os.fsync(ignore.fileno())
+            try:
+                os.link(temporary, '.gitignore', src_dir_fd=directory_fd,
+                        dst_dir_fd=directory_fd, follow_symlinks=False)
+            except FileExistsError:
+                pass
+        finally:
+            os.unlink(temporary, dir_fd=directory_fd)
+    except OSError as exc:
+        raise RecordUnwritable('could not publish project ignore file') from exc
+
+
+def _check_project_capacity(directory_fd, needed, max_bytes):
+    if max_bytes is None:
+        return
+    total = 0
+    for name in os.listdir(directory_fd):
+        info = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        if name.endswith('.jsonl') and stat.S_ISREG(info.st_mode):
+            total += info.st_size
+    if total + needed > max_bytes:
+        raise LogCapacityExhausted('project record byte cap reached')
+
+
+@contextmanager
+def admit_project_record(project_root, *, max_bytes, reserve_bytes):
+    """Pin and lock capacity until the final append; busy admission fails closed.
+
+    Public project appenders take this same directory lock, even for another
+    day file. No capacity can be consumed between admission and accounting.
+    The yielded writer must be used inside this context, without reacquiring
+    its lock. Disk failure or process death remains outside this guarantee.
+    """
+    root = Path(project_root).resolve()
+    with _project_directory(root, nonblocking=True) as directory_fd:
+        _ensure_project_ignore(directory_fd)
+        _check_project_capacity(directory_fd, reserve_bytes, max_bytes)
+        active = True
+        def append(record):
+            if not active:
+                raise RecordUnwritable('expired record admission')
+            line = json.dumps(record, sort_keys=True, ensure_ascii=True)
+            size = len((line + "\n").encode('utf-8'))
+            if size > reserve_bytes:
+                raise RecordUnwritable('accounting record exceeds admission bound')
+            _check_project_capacity(directory_fd, size, max_bytes)
+            when = _parse_iso(record['created_at']) if record.get('created_at') else dt.datetime.now(dt.timezone.utc)
+            path = root / '.clavain/decisions' / _day_filename(when)
+            _append_line(path, line, parent_fd=directory_fd)
+            return path
+        try:
+            yield append
+        finally:
+            active = False
 
 
 def append_outcome(
@@ -374,7 +497,32 @@ def append_outcome(
         "note": _truncate(note, 200) if note else None,
     }
     path = _outcomes_dir(resolved_dir) / _day_filename(when)
-    _append_line(path, json.dumps(entry, sort_keys=True, ensure_ascii=True))
+    # Trust ancestors above .clavain (or the configured record parent),
+    # resolving that anchor once; pin and refuse links below it.
+    descriptors = []
+    try:
+        absolute = path.absolute()
+        parent = absolute.parent
+        anchor = parent.parent.parent if parent.parent.name == '.clavain' else parent.parent
+        anchor = anchor.resolve()
+        anchor.mkdir(parents=True, exist_ok=True, mode=0o700)
+        descriptors.append(os.open(anchor, os.O_RDONLY | os.O_DIRECTORY))
+        components = ('.clavain', 'outcomes') if parent.parent.name == '.clavain' else ('outcomes',)
+        for component in components:
+            try:
+                os.mkdir(component, mode=0o700, dir_fd=descriptors[-1])
+            except FileExistsError:
+                pass
+            descriptors.append(os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                       dir_fd=descriptors[-1]))
+        os.fchmod(descriptors[-1], 0o700)
+        _append_line(path, json.dumps(entry, sort_keys=True, ensure_ascii=True),
+                     parent_fd=descriptors[-1])
+    except OSError as exc:
+        raise RecordUnwritable('unsafe outcome path') from exc
+    finally:
+        for fd in reversed(descriptors):
+            os.close(fd)
     return path
 
 

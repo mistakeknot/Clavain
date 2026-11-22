@@ -56,9 +56,9 @@ A review loop gets at most three fix rounds. Number the reviews per change, star
 - **Every escalated finding** names its trigger and its consequence, so the human can see which findings are overstated. A finding that needs two independent faults, or sits on a path nothing reaches, is often less severe than it is rated.
 - **A further round needs that human's ruling,** and the ruling names its scope. Never land with an open Critical or Important finding.
 
-### Review by risk (trial, bead mk-h9541)
+### Review by risk (trial)
 
-From 2026-11-18 through 2026-12-01, `config/routing.yaml` `reasoning.review_policy` lowers the cap for low-risk changes. Ask the helper before requesting a review: `git diff --no-renames --name-only BASE..HEAD | python3 scripts/review_policy.py decide` (add `--prototype` for a declared one-shot prototype). It prints `action`:
+During the configured two-week window starting on the Pacific merge date, `config/routing.yaml` `reasoning.review_policy` lowers the cap for low-risk changes. Ask the helper before requesting a review: `git diff --no-renames --name-only BASE..HEAD | python3 scripts/review_policy.py decide` (add `--prototype` for a declared one-shot prototype). It prints `action`:
 
 - **skip** (text-only, doc-only, test-only, one-shot prototype; every path a named safe path): no cross-lab review. The author's check, the tests and CI carry the change.
 - **one-round** (routine code under a named source directory): one review round. A second runs only when round 1 found a high-severity finding (P1 or High; a finding with no severity counts as high). Otherwise fix the findings with their covering tests and land.

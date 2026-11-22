@@ -1,4 +1,4 @@
-"""Review-by-risk trial (bead mk-h9541): class decisions, window, rollback and the round gate."""
+"""Review-by-risk trial: class decisions, window, rollback and the round gate."""
 import datetime
 import importlib.util
 import json
@@ -14,7 +14,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 import review_policy as rp  # noqa: E402
 
-POLICY = yaml.safe_load((ROOT / "config/routing.yaml").read_text())["reasoning"]["review_policy"]
+SHIPPED_POLICY = yaml.safe_load((ROOT / "config/routing.yaml").read_text())["reasoning"]["review_policy"]
+POLICY = dict(SHIPPED_POLICY, merge_day="2026-11-18")
 IN = "2026-11-20"
 
 
@@ -23,9 +24,10 @@ def act(paths, today=IN, prototype=False, policy=POLICY):
 
 
 def test_shipped_policy_is_a_two_week_window():
-    first, last = rp._day(POLICY["first_day"]), rp._day(POLICY["last_day"])
-    assert (last - first).days == 13 and POLICY["bead"] == "mk-h9541" and POLICY["enabled"] is True
-    assert POLICY["routine"]["max_rounds"] == 1
+    assert SHIPPED_POLICY['merge_day'] is None
+    assert not rp.trial_active(SHIPPED_POLICY)
+    assert POLICY['routine']['max_rounds'] == 1
+
 
 
 @pytest.mark.parametrize("paths,klass", [
@@ -107,7 +109,7 @@ def test_window_edges(today, live):
 
 def test_rollback_flag_env_and_bad_window(monkeypatch):
     assert act(["docs/a.md"], policy=dict(POLICY, enabled=False))["action"] == "full"
-    assert act(["docs/a.md"], policy=dict(POLICY, last_day="soon"))["action"] == "full"
+    assert act(["docs/a.md"], policy=dict(POLICY, merge_day="soon"))["action"] == "full"
     assert act(["docs/a.md"], policy=None)["action"] == "full"
     monkeypatch.setenv("CLAVAIN_REVIEW_POLICY", "off")
     assert act(["docs/a.md"])["action"] == "full"
@@ -153,7 +155,8 @@ def gate(tmp_path, rows, monkeypatch, today=IN, off=False, bead="b-1"):
     spec = importlib.util.spec_from_file_location("rrl", ROOT / "scripts/review-round-limit.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    return mod.check(bead, tmp_path / "none.jsonl", tmp_path / "reviews", check_only=True)
+    monkeypatch.setattr(rp, "load_policy", lambda: POLICY)
+    return mod.check(bead, tmp_path / "none.jsonl", tmp_path / "reviews", check_only=True, role="cross-lab-review")
 
 
 CODE = ["src/app.go"]
@@ -370,7 +373,7 @@ def test_report_leaves_out_merges_whose_follow_up_is_not_over(monkeypatch):
     assert got["merged"] == 1 and got["merged_follow_up_incomplete"] == 1
 
 
-# ---- round 2 of the cross-lab review (bead mk-h9541) ----
+# ---- round 2 of the cross-lab review ----
 
 @pytest.mark.parametrize("path", [
     "config/agent-instructions.md", "config/codex-instructions.md", "config/anything.yaml",
@@ -398,7 +401,7 @@ def test_decide_cli_has_no_date_override():
     lambda p: p.pop("trial"),
     lambda p: p.pop("bead"),
     lambda p: p.pop("enabled"),
-    lambda p: p.pop("first_day"),
+    lambda p: p.pop("merge_day"),
 ])
 def test_invalid_policy_block_is_not_an_active_trial(mutate):
     bad = json.loads(json.dumps(POLICY, default=str))
@@ -458,3 +461,38 @@ def test_report_token_share_is_unknown_when_runs_lack_usage(monkeypatch):
     assert rtr.tokens(14)["review_share"] == 0.1
     del data["by_role"]["execution"]["runs_no_usage"]  # a missing count is unknown, not zero
     assert rtr.tokens(14)["review_share"] is None
+
+@pytest.mark.parametrize('path', ['README.py', 'README.json', 'LICENSE.sh', 'CHANGELOG.yaml', 'src/gate.py', 'src/dispatch.ts', 'src/routing.js'])
+def test_unsafe_names_never_reduce(path):
+    assert act([path])['action'] == 'full'
+
+
+def test_known_empty_findings_are_in_metric_denominator():
+    report = load_report()
+    rows = [dict(repo='o/r', pr=1, dispatch_id='d', attempt_id='a', head_sha='a'*40,
+                 findings=[], findings_source='body', changed_paths=['src/a.go'])]
+    result = report.summarize(report.per_change(rows, POLICY))['all']
+    assert result['findings_changed_code_per_round'] == 0
+
+@pytest.mark.parametrize('role', ['plan-review', 'validation', None])
+def test_routine_limit_does_not_block_other_roles(tmp_path, monkeypatch, role):
+    assert gate(tmp_path, [passed('a', CODE)], monkeypatch) == 25
+    spec = importlib.util.spec_from_file_location('rrl_other', ROOT / 'scripts/review-round-limit.py')
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.check('b-1', tmp_path / 'none.jsonl', tmp_path / 'reviews', role=role) == 0
+
+
+def test_trial_cannot_bypass_baseline_on_malformed_history(tmp_path, monkeypatch):
+    rows = [failed(c, CODE, ['P3']) for c in 'abc']
+    assert gate(tmp_path, rows, monkeypatch) == 25
+    (tmp_path / 'reviews/o__r/broken.json').write_text('{')
+    spec = importlib.util.spec_from_file_location('rrl_broken', ROOT / 'scripts/review-round-limit.py')
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.check('b-1', tmp_path / 'none.jsonl', tmp_path / 'reviews', role='cross-lab-review') == 25
+
+
+def test_incomplete_trial_evidence_does_not_allow_fourth_failure(tmp_path, monkeypatch):
+    rows = [failed(c, CODE, ['P3'], changed_paths_truncated=True) for c in 'abc']
+    assert gate(tmp_path, rows, monkeypatch) == 25

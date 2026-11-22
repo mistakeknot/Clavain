@@ -358,3 +358,119 @@ def test_unwritable_raises(tmp_path):
             append_record(build_record(**_base_kwargs()), record_dir=record_dir)
     finally:
         os.chmod(record_dir.parent, 0o700)
+
+@pytest.mark.parametrize('component', ['.clavain', 'outcomes', 'dayfile'])
+def test_outcome_refuses_symlinks(tmp_path, component):
+    import datetime as dt
+    root = tmp_path / 'project'
+    root.mkdir()
+    outside = tmp_path / 'outside'
+    outside.mkdir(mode=0o755)
+    parent = root / '.clavain'
+    if component == '.clavain':
+        parent.symlink_to(outside, target_is_directory=True)
+    else:
+        parent.mkdir()
+        if component == 'outcomes':
+            (parent / 'outcomes').symlink_to(outside, target_is_directory=True)
+        else:
+            (parent / 'outcomes').mkdir()
+            (parent / 'outcomes' / (dt.datetime.now(dt.timezone.utc).date().isoformat() + '.jsonl')).symlink_to(outside / 'data')
+    with pytest.raises(RecordUnwritable):
+        append_outcome('synthetic-id', 'verified', record_dir=parent / 'decisions')
+    assert list(outside.iterdir()) == []
+    assert stat.S_IMODE(outside.stat().st_mode) == 0o755
+
+
+def test_project_log_cap_spans_day_files(tmp_path):
+    directory = tmp_path / '.clavain/decisions'
+    first = {'created_at': '2026-01-01T00:00:00Z', 'value': 'synthetic'}
+    second = dict(first, created_at='2026-01-02T00:00:00Z')
+    size = len((json.dumps(first, sort_keys=True, ensure_ascii=True) + '\n').encode())
+    append_record(first, record_dir=directory, project_root=tmp_path, max_bytes=size)
+    with pytest.raises(RecordUnwritable):
+        append_record(second, record_dir=directory, project_root=tmp_path, max_bytes=size)
+    assert read_records(record_dir=directory) == [first]
+    assert sum(p.stat().st_size for p in directory.glob('*.jsonl')) == size
+
+
+def test_outcome_allows_symlink_above_trusted_project(tmp_path):
+    real = tmp_path / 'real'
+    real.mkdir()
+    alias = tmp_path / 'alias'
+    alias.symlink_to(real, target_is_directory=True)
+    path = append_outcome('synthetic', 'verified', record_dir=alias / '.clavain/decisions')
+    assert path.exists()
+    assert json.loads(path.read_text())['decision_id'] == 'synthetic'
+
+
+def test_cap_requires_project_root(tmp_path):
+    with pytest.raises(ValueError):
+        append_record({}, record_dir=tmp_path, max_bytes=1)
+
+
+def test_project_gitignore_without_repository_ignore(tmp_path):
+    import subprocess
+    subprocess.run(['git', 'init', '-q', str(tmp_path)], check=True)
+    directory = tmp_path / '.clavain/decisions'
+    path = append_record({}, record_dir=directory, project_root=tmp_path)
+    ignore = directory / '.gitignore'
+    assert ignore.read_text() == '*\n!.gitignore\n'
+    before = ignore.stat()
+    append_record({}, record_dir=directory, project_root=tmp_path)
+    assert ignore.stat().st_mtime_ns == before.st_mtime_ns
+    assert not (tmp_path / '.gitignore').exists()
+    result = subprocess.run(['git', '-C', str(tmp_path), 'check-ignore', str(path)],
+                            capture_output=True, text=True)
+    assert result.returncode == 0
+    result = subprocess.run(['git', '-C', str(tmp_path), 'check-ignore', str(ignore)],
+                            capture_output=True, text=True)
+    assert result.returncode == 1
+
+
+@pytest.mark.parametrize('existing', ['different', 'symlink', 'dangling', 'directory'])
+def test_project_gitignore_preserves_existing(tmp_path, existing):
+    directory = tmp_path / '.clavain/decisions'
+    directory.mkdir(parents=True)
+    ignore = directory / '.gitignore'
+    outside = tmp_path / 'outside'
+    if existing == 'different':
+        ignore.write_text('custom\n')
+    elif existing == 'directory':
+        ignore.mkdir()
+    else:
+        if existing == 'symlink':
+            outside.write_text('untouched\n')
+        ignore.symlink_to(outside)
+    before = ignore.lstat()
+    append_record({}, record_dir=directory, project_root=tmp_path)
+    assert ignore.lstat() == before
+    if existing == 'different':
+        assert ignore.read_text() == 'custom\n'
+    elif existing == 'symlink':
+        assert outside.read_text() == 'untouched\n'
+    elif existing == 'dangling':
+        assert not outside.exists()
+
+
+def test_failed_ignore_publication_can_retry(tmp_path, monkeypatch):
+    from clavain_selector import records
+    original = records.os.fsync
+    def fail(fd):
+        raise OSError('synthetic disk failure')
+    monkeypatch.setattr(records.os, 'fsync', fail)
+    directory = tmp_path / '.clavain/decisions'
+    with pytest.raises(RecordUnwritable):
+        append_record({}, record_dir=directory, project_root=tmp_path)
+    assert not (directory / '.gitignore').exists()
+    assert not list(directory.glob('.gitignore-*'))
+    monkeypatch.setattr(records.os, 'fsync', original)
+    append_record({}, record_dir=directory, project_root=tmp_path)
+    assert (directory / '.gitignore').read_text() == '*\n!.gitignore\n'
+
+
+def test_admission_creates_ignore(tmp_path):
+    from clavain_selector import records
+    with records.admit_project_record(tmp_path, max_bytes=1000, reserve_bytes=100) as write:
+        write({})
+    assert (tmp_path / '.clavain/decisions/.gitignore').read_text() == '*\n!.gitignore\n'

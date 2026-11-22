@@ -56,3 +56,9 @@ bin/clavain-cli-go
 .clavain/gate.db
 .clavain/setup-verified
 .remote-source
+
+# Local shadow observations and later outcome records
+.clavain/decisions/
+.clavain/outcomes/
+# Local decide validation scratch files (not produced by the command)
+.clavain/decide-*

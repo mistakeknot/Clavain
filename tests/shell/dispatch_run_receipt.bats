@@ -75,6 +75,15 @@ governed() {
     ! grep -q 'SECRET-PROMPT-TEXT' "$T/state/receipts.jsonl"
 }
 
+@test "run receipt emits a checked head and omits an unbound head" {
+    run governed --round-head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .head_sha "$T/state/receipts.jsonl")" = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ]
+    run governed
+    [ "$status" -eq 0 ]
+    tail -1 "$T/state/receipts.jsonl" | jq -e 'has("head_sha") | not'
+}
+
 @test "a failed backend records outcome failed and keeps its exit status" {
     FAKE_EXIT=3 run governed
     [ "$status" -ne 0 ]

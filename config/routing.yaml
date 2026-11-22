@@ -23,6 +23,13 @@
 # Per task CLASS, an ordered backend list; first that succeeds wins (free-first).
 # A class is added ONLY after its parity eval passes (executor-parity-eval).
 # Unmapped class -> `default` (safe: paid/stronger).
+# S1 design choice: opt-in observations only; enforce is rejected by decide.
+decision_models:
+  flux_triage: {backend: heuristic, mode: shadow}
+  route: {backend: heuristic, mode: shadow}
+  review_exit: {backend: heuristic, mode: shadow}
+  learned_router: {backend: heuristic, mode: shadow}
+
 executor_routing:
   mode: enforce            # off | shadow | enforce
   classes:
@@ -129,13 +136,14 @@ reasoning:
   # scripts/review-round-limit.py; route-spawn.sh and ic ignore it.
   # Rollback: set `enabled: false` (or export CLAVAIN_REVIEW_POLICY=off), or
   # revert the commit that added this block. The trial also expires on its own
-  # the day after `last_day`; nothing needs to be turned off.
+  # 14 days after `merge_day`; nothing needs to be turned off.
   review_policy:
     trial: review-by-risk
     bead: mk-h9541
     enabled: true
-    first_day: 2026-11-18
-    last_day: 2026-12-01
+    # Set to the actual America/Los_Angeles merge date during the merge step.
+    # Null keeps full review; end is derived as merge_day + 13 days inclusive.
+    merge_day: null
     # Routine = code under a named source directory (src, app, apps, web, ui,
     # components, pages, public, styles, assets, examples). Allow-list: a path no
     # safe class names (docs, tests, routine source) keeps full review.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Review-by-risk trial policy (bead mk-h9541): decide how much review a change gets.
+"""Review-by-risk trial policy: decide how much review a change gets.
 
 Reads `reasoning.review_policy` from config/routing.yaml. It only lowers the number
 of review rounds or skips cross-lab review for low-risk changes; it never changes
@@ -45,6 +45,7 @@ KEEP_RE = re.compile("|".join([
     r"(^|/)plugin\.json$", r"(^|/)marketplace[^/]*\.json$",         # releases and publishes
     r"(^|/)config/", r"(^|/)units/", r"(^|/)schemas?/",             # configuration, units and schemas
     r"(^|/)review[-_]policy",                                       # this policy
+    r"dispatch|routing|gate",
     r"instruction", r"contract",                                    # managed operating contract and instruction text
     r"(^|/)docs/canon/",                                            # canon: routing and reasoning rules
     r"(^|/)policies/",                                              # fleet instruction and approval files
@@ -63,13 +64,13 @@ KEEP_RE = re.compile("|".join([
     r"billing", r"payment", r"stripe", r"invoice", r"checkout", r"spend", r"quota", r"budget",
 ]), re.IGNORECASE)
 
-# Allow-list (rework, bead mk-h9541): reduced review is for paths a named safe class names, and
+# Allow-list (rework): reduced review is for paths a named safe class names, and
 # only when no keep-list pattern matches either. A path no class names keeps full review, so a
 # surface nobody listed is never reviewed less by accident.
 #   docs: prose under a docs/ directory, or a root README/CHANGELOG/LICENSE
 #   tests: files under a tests directory or named like a test
 #   routine source: code and asset files under a named source directory
-DOC_RE = re.compile(r"(^|/)docs?/.*\.(md|mdx|rst|adoc|txt)$|^(README|CHANGELOG|LICENSE)[^/]*$", re.IGNORECASE)
+DOC_RE = re.compile(r"(^|/)docs?/.*\.(md|mdx|rst|adoc|txt)$|^(README|CHANGELOG|LICENSE)(\.(md|rst|txt|adoc))?$", re.IGNORECASE)
 TEST_RE = re.compile(r"(^|/)(tests?|__tests__|e2e)/[^/]+(/[^/]+)*\.[a-z0-9]+$|\.(test|spec)\.[a-z]+$|(^|/)test_[^/]*\.py$|_test\.(go|py)$", re.IGNORECASE)
 CODE_EXT = r"(ts|tsx|js|jsx|mjs|css|scss|html|svg|png|jpg|jpeg|gif|webp|py|go|rs|gd|lua|cs|java|kt|swift|c|h|cpp)"
 ROUTINE_RE = re.compile(rf"^(src|app|apps|web|ui|components|pages|public|styles|assets|examples)/(.+/)?[^/]+\.{CODE_EXT}$", re.IGNORECASE)
@@ -121,7 +122,7 @@ def valid_policy(policy):
     for key in ("trial", "bead"):
         if not isinstance(policy.get(key), str) or not policy[key].strip():
             return False
-    for key in ("first_day", "last_day"):
+    for key in ("merge_day",):
         if key not in policy:
             return False
     return True
@@ -136,13 +137,14 @@ def today_pacific():
 
 
 def trial_active(policy, today=None):
-    """True only inside [first_day, last_day] with the trial enabled and the block complete."""
+    """True only from merge_day through merge_day + 13 days inclusive with the trial enabled and the block complete."""
     if not valid_policy(policy) or policy.get("enabled") is not True:
         return False
     if os.environ.get("CLAVAIN_REVIEW_POLICY", "").lower() in ("off", "0", "false", "no"):
         return False
     try:
-        first, last = _day(policy["first_day"]), _day(policy["last_day"])
+        first = _day(policy["merge_day"])
+        last = first + datetime.timedelta(days=13)
     except (KeyError, ValueError, TypeError):
         return False  # an unreadable window is never an active trial
     today = today or today_pacific()

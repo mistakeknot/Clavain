@@ -9,6 +9,8 @@ import pwd
 import stat
 from datetime import datetime
 
+REVIEW_ROLES = {"cross-lab-review", "plan-review", "validation"}
+
 
 class DecisionRefused(ValueError):
     """A readable decision is unsafe, inapplicable, or already consumed."""
@@ -21,8 +23,10 @@ def identifier(value):
 def validate(data):
     fields = {"schema_version", "decision_id", "bead", "head", "accepted_failures",
               "authority", "ruling", "decided_at", "mac"}
-    if not isinstance(data, dict) or set(data) != fields:
+    if not isinstance(data, dict) or set(data) not in (fields, fields | {"role"}):
         raise DecisionRefused("invalid decision fields")
+    if "role" in data and (not isinstance(data["role"], str) or data["role"] not in REVIEW_ROLES):
+        raise DecisionRefused("invalid decision role")
     if type(data["schema_version"]) is not int or data["schema_version"] != 1:
         raise DecisionRefused("unsupported decision schema")
     if not identifier(data["bead"]) or not identifier(data["decision_id"]):
@@ -78,7 +82,7 @@ def mac(data, key):
     return hmac.new(key, canonical.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def claim(reviews, bead, head, failures, *, check_only=False):
+def claim(reviews, bead, head, failures, *, check_only=False, role=None):
     if not identifier(bead):
         raise DecisionRefused("invalid bead")
     directory = reviews / "round-limits/decisions"
@@ -97,6 +101,8 @@ def claim(reviews, bead, head, failures, *, check_only=False):
         raise DecisionRefused("decision failure count mismatch")
     if not hmac.compare_digest(data["mac"], mac(data, key_bytes())):
         raise DecisionRefused("decision MAC mismatch")
+    if "role" in data and data["role"] != role:
+        raise DecisionRefused("decision role mismatch")
     # A digest keeps marker names bounded; identical IDs always claim one inode.
     marker = directory / (hashlib.sha256(data["decision_id"].encode()).hexdigest() + ".consumed")
     if check_only:

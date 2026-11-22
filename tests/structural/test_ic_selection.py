@@ -1,6 +1,6 @@
 """Absent `ic` must deselect visibly, never silently, and never vacuously.
 
-Sylveste-psey: tests/structural/test_claude_usage.py has 48 cases; 30 of them
+Sylveste-psey: tests/structural/test_claude_usage.py has 93 cases; 39 of them
 drive scripts/claude_usage.py, whose meter calls `ic --json route identity` and
 fails closed when the binary is missing. A hosted runner has no `ic`, so from
 75fed68 onward Tier 1 died before Tier 2 bats was ever reached.
@@ -21,8 +21,8 @@ import pytest
 
 TESTS_DIR = Path(__file__).resolve().parents[1]
 ACCOUNTING = "structural/test_claude_usage.py"
-EXPECTED_DEPENDENT = 30
-EXPECTED_TOTAL = 48
+EXPECTED_DEPENDENT = 39
+EXPECTED_TOTAL = 93
 IC_FREE_CASE = "test_zaka_rejected_before_any_model_call"
 
 
@@ -85,7 +85,7 @@ def test_the_accounting_file_still_has_the_expected_cohort():
 
 @pytest.mark.requires_ic
 def test_exactly_the_dependent_cases_carry_the_marker():
-    """The marker must cover the 30 that need ic and must not cover the ones that
+    """The marker must cover the 39 that need ic and must not cover the ones that
     do not -- marking the module would take the ic-free cases down with it."""
     marked = run_pytest(["--collect-only", "-q", "-m", "requires_ic", ACCOUNTING])
     assert marked.returncode == 0, marked.stdout + marked.stderr

@@ -1,6 +1,11 @@
-# Review by risk: two-week trial (bead mk-h9541)
+# Review by risk: two-week trial
 
-Window: 2026-11-18 through 2026-12-01 (inclusive). The policy lives in
+Window: two weeks starting on the actual merge date in America/Los_Angeles.
+The merge step sets the single `reasoning.review_policy.merge_day` config value
+to that Pacific calendar date (`YYYY-MM-DD`). It is null until then, which keeps
+full review active. The last day is derived as `merge_day + 13 days`, inclusive;
+on day 14 the trial expires. No separately maintained end date is needed.
+The policy lives in
 `config/routing.yaml` under `reasoning.review_policy`; the decision helper is
 `scripts/review_policy.py` and the round limit is enforced in
 `scripts/review-round-limit.py` (called by `scripts/dispatch.sh` before any
@@ -14,7 +19,7 @@ review seat starts).
 
 Reduced review is an allow-list. A change is reduced only when every changed path is a named safe path
 and no keep-list pattern matches any path. The named safe paths are: prose under a `docs/` directory and
-a root README, CHANGELOG or LICENSE; files under a tests directory or named like a test; and code and
+an exact root README, CHANGELOG or LICENSE (bare or with `.md`, `.rst`, `.txt`, `.adoc`); files under a tests directory or named like a test; and code and
 asset files (`ts tsx js jsx mjs css scss html svg png jpg jpeg gif webp py go rs gd lua cs java kt swift c h cpp`)
 under `src/`, `app/`, `apps/`, `web/`, `ui/`, `components/`, `pages/`, `public/`, `styles/`, `assets/`
 or `examples/`. A declared one-shot prototype may also hold web and media assets (`html css js jsx ts tsx
@@ -30,7 +35,7 @@ reviewer independence and the seat tables are not touched.
 
 - Set `enabled: false` in `review_policy` (one line), or revert the commit that added the block.
 - Export `CLAVAIN_REVIEW_POLICY=off` for a single dispatch.
-- Do nothing: after `last_day` the policy reports `full` for every change.
+- Do nothing: 14 days after `merge_day` the policy reports `full` for every change.
 
 ## Measure
 
@@ -38,16 +43,17 @@ reviewer independence and the seat tables are not touched.
 report per window on the same definitions (rounds per change, findings that changed code per round, review
 tokens as a share of tokens, reverts and fix PRs within 7 days of merge).
 
-    python3 -I scripts/review-trial-report.py --label baseline --since 2026-11-02 --until 2026-11-15 --out baseline.json
-    python3 -I scripts/review-trial-report.py --label trial --since 2026-11-18 --until 2026-12-01 --out trial.json
-    python3 -I scripts/review-trial-report.py --compare baseline.json trial.json
+Read the start date from `reasoning.review_policy.merge_day`; derive the last day
+by adding 13 days. Pass those dates as `--since` and `--until` to
+`scripts/review-trial-report.py --label trial --out trial.json` on the last day
+(Pacific). The token window counts back from the day it runs, so a later first
+run shifts it off the trial. Take a matching two-week baseline immediately before
+that start date. Compare with `--compare baseline.json trial.json`.
 
-Run the trial report on 2026-12-01, the window's last day (Pacific time): the token window counts back from the day it runs, so a later first run would shift it off the trial.
-Merges from the last week of the trial have not had their 7 follow-up days yet, so the first run lists them
-as `merged_follow_up_incomplete` and leaves them out of the escape rate. Run it again on 2026-12-09 for the
-final escape rate, reusing the first run's token share:
-
-    python3 -I scripts/review-trial-report.py --label trial --since 2026-11-18 --until 2026-12-01 --tokens-from trial.json --out trial-final.json
+Merges in the final week lack seven follow-up days at the first report. They stay
+`merged_follow_up_incomplete` and outside the escape rate. Run again eight days
+after the last day with the same `--since` and `--until`, plus
+`--tokens-from trial.json --out trial-final.json`, to retain the original token share.
 
 The policy helper reads paths from `git diff --no-renames --name-only`, because a rename hides its old path
 (a protected file renamed to a `.md` name would otherwise look like a doc). A path it cannot trust

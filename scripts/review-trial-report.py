@@ -102,7 +102,7 @@ def per_change(rows, policy):
             rounds.setdefault((row.get("dispatch_id"), row.get("attempt_id"), row.get("head_sha")), row)
         ordered = list(rounds.values())
         paths = sorted({p for r in ordered for p in (r.get("changed_paths") or []) if isinstance(p, str)})
-        decision = review_policy.decide(paths, {**policy, "enabled": True, "first_day": "2000-01-01", "last_day": "2999-12-31"}) if policy else None
+        decision = review_policy.decide(paths, {**policy, "enabled": True, "merge_day": review_policy.today_pacific()}) if policy else None
         klass = decision["action"] if decision else "unknown"
         if not paths:
             klass = "no-paths"
@@ -110,7 +110,7 @@ def per_change(rows, policy):
         changed = with_findings = without = unknown_heads = 0
         for n, row in enumerate(ordered):
             found = row.get("findings")
-            if not isinstance(found, list) or not found or row.get("findings_source") == "unknown":
+            if not isinstance(found, list) or row.get("findings_source") == "unknown":
                 without += 1
                 continue
             with_findings += 1

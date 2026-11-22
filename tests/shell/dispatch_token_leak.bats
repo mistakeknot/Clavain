@@ -275,6 +275,7 @@ mock_scripts() {
     # a private copy of scripts/ whose flere worker and bb seat worker are stubs
     mkdir -p "$T/mock"
     cp -r "$ROOT/scripts" "$T/mock/scripts"
+    find "$T/mock/scripts" -type d -name __pycache__ -exec rm -r {} +
     local d
     for d in config .claude-plugin docs hooks; do
         [[ ! -e "$ROOT/$d" ]] || ln -s "$ROOT/$d" "$T/mock/$d"
@@ -416,6 +417,34 @@ W
     [ "$status" -ne 0 ]
     ! grep -qF "$DUMMY" "$T/out.md" "$T/out.md.receipt.json"
     [ -f "$T/out.md.token-leak.json" ]
+}
+
+@test "detached shadow observer disables bytecode writes before importing copied scripts" {
+    mock_scripts
+    # Report the actual interpreter setting, including when the caller permits
+    # bytecode. Publish atomically so the parent only reads a complete result.
+    cat > "$T/mock/scripts/clavain_selector/learned_router_shadow.py" <<'W'
+import os, sys, subprocess
+path = os.environ["SHADOW_BYTECODE_LOG"]
+child = subprocess.check_output([sys.executable, "-c",
+    "import sys; print(sys.dont_write_bytecode)"], text=True).strip()
+with open(path + ".tmp", "w") as stream:
+    stream.write(str(sys.dont_write_bytecode) + ":" + child)
+os.replace(path + ".tmp", path)
+W
+    export SHADOW_BYTECODE_LOG="$T/shadow-bytecode"
+    unset PYTHONDONTWRITEBYTECODE
+    DISPATCH="$MOCK_DISPATCH"
+    run governed
+    [ "$status" -eq 0 ]
+    # The observer deliberately outlives dispatch; synchronize on its report.
+    for ((i=0; i<200; i++)); do
+        [[ ! -f "$SHADOW_BYTECODE_LOG" ]] || break
+        sleep 0.05
+    done
+    [ -f "$SHADOW_BYTECODE_LOG" ]
+    [ "$(cat "$SHADOW_BYTECODE_LOG")" = True:True ]
+    [ -z "$(find "$T/mock/scripts" -name __pycache__ -print -quit)" ]
 }
 
 # ---- scan after the last write ---------------------------------------------

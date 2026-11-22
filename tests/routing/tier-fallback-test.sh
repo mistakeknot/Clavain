@@ -52,6 +52,10 @@ if [[ "${FAKE_CODEX_MODE:-success}" == rate429_all ]]; then
   echo '{"type":"turn.failed","error":{"message":"exceeded retry limit, last status: 429 Too Many Requests"}}'
   exit 1
 fi
+if [[ "${FAKE_CODEX_MODE:-success}" == refuse_all ]]; then
+  echo "This request was flagged for potentially high-risk cyber activity." >&2
+  exit 1
+fi
 echo '{"type":"task_complete","last_agent_message":"ok"}'
 FAKE_CODEX
 
@@ -135,6 +139,16 @@ run_tier_rate429() {
 run_tier_rate429 fast
 [[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6.1-sol" ]] || fail "fast/429: expected one gpt-6.1-sol Codex attempt before fallback, got: $(cat "$FAKE_CODEX_LOG")"
 grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-sonnet-5-5" || fail "fast/429: rate_limited did not reach claude-sonnet-5-5, got: $(cat "$FAKE_CLAUDE_LOG")"
+
+# A content-filter refusal walks the tier chain to the next seat and never
+# retries the refused one. (No shipped tier repeats a seat today; the walk's
+# refused-seat guard is defensive against a future alias.)
+: > "$FAKE_CODEX_LOG"; : > "$FAKE_CLAUDE_LOG"
+FAKE_CODEX_MODE=refuse_all bash "$ROOT/scripts/dispatch.sh" --tier deep \
+  -C "$TMP_ROOT/work" -o "$TMP_ROOT/answer-refuse.md" "hi" >/dev/null 2>&1 || true
+[[ -s "$FAKE_CODEX_LOG" ]] || fail "refusal: codex was never tried"
+[[ -z "$(sort "$FAKE_CODEX_LOG" | uniq -d)" ]] || fail "refusal: a refused seat was retried: $(cat "$FAKE_CODEX_LOG")"
+grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-opus-5-5" || fail "refusal: did not reach claude-opus-5-5, got: $(cat "$FAKE_CLAUDE_LOG")"
 
 echo "PASS: bare --tier dispatch reaches its declared Claude fallback on quota_exhausted"
 
