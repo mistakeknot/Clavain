@@ -85,6 +85,11 @@ def actionable(finding):
 
 
 def per_change(rows, policy):
+    today = review_policy.today_pacific()
+    classification_available = (today is not None and review_policy.valid_policy(policy)
+                                and os.environ.get("CLAVAIN_REVIEW_POLICY", "").lower() not in ("off", "0", "false", "no"))
+    if not classification_available:
+        print("warning: policy classification unavailable (config, Pacific zone or policy override); classes unknown", file=sys.stderr)
     changes = collections.defaultdict(list)
     for row in rows:
         pr, bead = row.get("pr"), row.get("bead_id")
@@ -102,7 +107,7 @@ def per_change(rows, policy):
             rounds.setdefault((row.get("dispatch_id"), row.get("attempt_id"), row.get("head_sha")), row)
         ordered = list(rounds.values())
         paths = sorted({p for r in ordered for p in (r.get("changed_paths") or []) if isinstance(p, str)})
-        decision = review_policy.decide(paths, {**policy, "enabled": True, "merge_day": review_policy.today_pacific()}) if policy else None
+        decision = review_policy.decide(paths, {**policy, "enabled": True, "merge_day": today.isoformat()}, today=today) if classification_available else None
         klass = decision["action"] if decision else "unknown"
         if not paths:
             klass = "no-paths"

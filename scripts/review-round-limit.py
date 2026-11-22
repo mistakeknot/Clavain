@@ -88,6 +88,8 @@ def check(bead, ledger, reviews, head=None, check_only=False, role=None):
         policy = review_policy.load_policy()
     except Exception:
         policy = None
+    if not review_policy.valid_policy(policy):
+        print("dispatch: review policy config error; trial inactive, baseline applies", file=sys.stderr)
     evidence = {}
     veto = set()
     cancellation_off = False
@@ -135,7 +137,10 @@ def check(bead, ledger, reviews, head=None, check_only=False, role=None):
             else:
                 seen["paths"].update(paths)
             found = row.get("findings")
-            if (not isinstance(found, list) or row.get("findings_source") == "unknown"
+            total = row.get("findings_total")
+            if (not isinstance(found, list) or (failed and not found)
+                    or row.get("findings_source") in ("unknown", "conflict")
+                    or (total is not None and (type(total) is not int or total != len(found)))
                     or row.get("findings_truncated")):
                 seen["high"] = True
             else:
@@ -223,12 +228,12 @@ def check(bead, ledger, reviews, head=None, check_only=False, role=None):
                 failures.remove(key)
     allowance = routine_allowance(policy, rounds) if role == "cross-lab-review" and not malformed and not cancellation_off else None
     # The trial can only tighten admission; baseline cancellation and authority stay intact.
-    if allowance is not None and sum(seen["code"] for seen in rounds.values()) >= allowance:
-        print("dispatch: review-by-risk routine round limit reached", file=sys.stderr)
-        return 25
-    if len(failures) < 3:
+    trial_refused = allowance is not None and sum(seen["code"] for seen in rounds.values()) >= allowance
+    if not trial_refused and len(failures) < 3:
         return 0
     try:
+        if trial_refused:
+            raise DecisionRefused("review-by-risk routine round limit reached")
         decision_id = claim(reviews, bead, head, len(failures), check_only=check_only, role=role)
     except DecisionRefused as error:
         print(f"dispatch: review round decision refused: {error}", file=sys.stderr)
@@ -241,6 +246,9 @@ def check(bead, ledger, reviews, head=None, check_only=False, role=None):
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     summary = directory / f"{bead}.md"
     body = (f"# Review round limit: {bead}\n\n"
+            + ("Review-by-risk routine round limit reached. Escalate to the review authority; "
+               "after a recorded decision, CLAVAIN_REVIEW_POLICY=off restores the baseline for one dispatch. "
+               "The baseline failure cap and signed decision requirements still apply.\n\n" if trial_refused else "") +
             f"{len(failures)} failed review rounds recorded across all heads and review roles.\n"
             "PASS and neutral rounds do not reset this cumulative count.\n"
             "Another review round is refused. Choose one option and record the decision on the bead.\n\n"

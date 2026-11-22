@@ -34,8 +34,8 @@ def test_shipped_policy_is_a_two_week_window():
     (["README.md", "docs/a.md"], "doc-only"),
     (["tests/x/test_a.py"], "test-only"),
     (["README.md", "tests/x/test_a.py"], "text-only"),
-    (["src/app.go"], "routine"),
-    (["README.md", "src/app.go"], "routine"),
+    (["styles/theme.css"], "routine"),
+    (["README.md", "styles/theme.css"], "routine"),
 ])
 def test_classes(paths, klass):
     assert act(paths)["class"] == klass
@@ -65,7 +65,7 @@ def test_keep_list_wins_over_every_skip_class(path):
 def test_allow_list_unnamed_paths_keep_full_review(path):
     """Only a path a safe class names is reduced; every other path, listed or not, keeps full review."""
     for kw in ({}, {"prototype": True}):
-        for paths in ([path], ["docs/a.md", path], ["src/app.go", path]):
+        for paths in ([path], ["docs/a.md", path], ["styles/theme.css", path]):
             got = act(paths, **kw)
             assert (got["class"], got["action"], got["max_rounds"]) == ("keep", "full", 3), (paths, kw, got)
 
@@ -92,8 +92,8 @@ def test_cli_splits_only_on_newline(tmp_path):
 def test_skip_and_one_round_actions():
     assert act(["docs/a.md"])["action"] == "skip"
     assert act(["tests/test_a.py"])["action"] == "skip"
-    assert act(["src/app.go"], prototype=True)["action"] == "skip"
-    assert act(["src/app.go"])["action"] == "one-round"
+    assert act(["styles/theme.css"], prototype=True)["action"] == "skip"
+    assert act(["styles/theme.css"])["action"] == "one-round"
 
 
 def test_no_paths_is_full_review():
@@ -102,7 +102,7 @@ def test_no_paths_is_full_review():
 
 @pytest.mark.parametrize("today,live", [("2026-11-17", False), ("2026-11-18", True), ("2026-12-01", True), ("2026-12-02", False)])
 def test_window_edges(today, live):
-    assert act(["src/a.go"], today)["trial_active"] is live
+    assert act(["styles/theme.css"], today)["trial_active"] is live
     if not live:
         assert act(["docs/a.md"], today)["action"] == "full"
 
@@ -159,7 +159,7 @@ def gate(tmp_path, rows, monkeypatch, today=IN, off=False, bead="b-1"):
     return mod.check(bead, tmp_path / "none.jsonl", tmp_path / "reviews", check_only=True, role="cross-lab-review")
 
 
-CODE = ["src/app.go"]
+CODE = ["styles/theme.css"]
 KEEP = ["src/auth/login.go"]
 
 
@@ -245,7 +245,7 @@ def test_rename_hides_the_protected_source_unless_renames_are_off(tmp_path):
 ])
 def test_incomplete_or_invalid_policy_is_no_trial(broken):
     policy = {k: v for k, v in dict(POLICY, **broken).items() if v is not None}
-    for paths in (["docs/a.md"], ["src/app.go"]):
+    for paths in (["docs/a.md"], ["styles/theme.css"]):
         got = act(paths, policy=policy)
         assert (got["action"], got["max_rounds"], got["trial_active"]) == ("full", 3, False)
 
@@ -280,7 +280,7 @@ def test_unreadable_time_zone_is_no_trial(monkeypatch):
 def test_missing_keys_are_no_trial():
     for key in ("routine", "skip_classes", "keep_list"):
         policy = {k: v for k, v in POLICY.items() if k != key}
-        assert act(["src/app.go"], policy=policy)["action"] == "full"
+        assert act(["styles/theme.css"], policy=policy)["action"] == "full"
 
 
 def test_the_date_comes_only_from_the_clock(monkeypatch):
@@ -325,7 +325,7 @@ def test_report_counts_rounds_and_changed_code(tmp_path, monkeypatch):
     rtr = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(rtr)
 
-    def row(att, head, sevs, paths=("src/a.go",)):
+    def row(att, head, sevs, paths=("styles/theme.css",)):
         return dict(kind="cross-lab-review-receipt", repo="o/r", pr="1", dispatch_id="d", attempt_id=att,
                     head_sha=head, created_at="2026-11-20T00:00:00Z", findings_source="structured",
                     findings=[dict(severity=s) for s in sevs], changed_paths=list(paths), verdict="BLOCK")
@@ -346,7 +346,7 @@ def load_report():
 def test_report_keeps_unknown_unknown():
     rtr = load_report()
     row = dict(kind="cross-lab-review-receipt", repo="o/r", pr="1", dispatch_id="d", attempt_id="a", head_sha="h1",
-               created_at="2026-11-20T00:00:00Z", findings_source="unknown", findings=[], changed_paths=["src/a.go"],
+               created_at="2026-11-20T00:00:00Z", findings_source="unknown", findings=[], changed_paths=["styles/theme.css"],
                verdict="BLOCK")
     out = rtr.summarize(rtr.per_change([row], POLICY))["all"]
     assert out["findings_changed_code_per_round"] is None and out["rounds_without_findings"] == 1
@@ -418,7 +418,7 @@ def test_raw_path_evidence_is_validated_before_cleanup(paths):
 
 def test_round_gate_treats_a_malformed_path_entry_as_unknown(tmp_path, monkeypatch):
     row = failed("a", CODE, ["P3"])
-    row["changed_paths"] = ["src/a.go", None]
+    row["changed_paths"] = ["styles/theme.css", None]
     assert gate(tmp_path, [row], monkeypatch) == 0
 
 
@@ -433,7 +433,7 @@ def test_report_missing_head_is_not_a_code_change():
     def row(attempt, head):
         return dict(kind="cross-lab-review-receipt", repo="o/r", pr="1", dispatch_id="d" + attempt, attempt_id=attempt,
                     head_sha=head, created_at="2026-11-20T0%s:00:00Z" % attempt, findings_source="parsed",
-                    findings=[{"severity": "P1"}], changed_paths=["src/a.go"], verdict="BLOCK")
+                    findings=[{"severity": "P1"}], changed_paths=["styles/theme.css"], verdict="BLOCK")
     out = rtr.summarize(rtr.per_change([row("1", None), row("2", "h2")], POLICY))["all"]
     assert out["findings_changed_code"] == 0 and out["rounds_with_findings"] == 1
     assert out["rounds_unknown_heads"] == 1
@@ -470,7 +470,7 @@ def test_unsafe_names_never_reduce(path):
 def test_known_empty_findings_are_in_metric_denominator():
     report = load_report()
     rows = [dict(repo='o/r', pr=1, dispatch_id='d', attempt_id='a', head_sha='a'*40,
-                 findings=[], findings_source='body', changed_paths=['src/a.go'])]
+                 findings=[], findings_source='body', changed_paths=['styles/theme.css'])]
     result = report.summarize(report.per_change(rows, POLICY))['all']
     assert result['findings_changed_code_per_round'] == 0
 
@@ -496,3 +496,52 @@ def test_trial_cannot_bypass_baseline_on_malformed_history(tmp_path, monkeypatch
 def test_incomplete_trial_evidence_does_not_allow_fourth_failure(tmp_path, monkeypatch):
     rows = [failed(c, CODE, ['P3'], changed_paths_truncated=True) for c in 'abc']
     assert gate(tmp_path, rows, monkeypatch) == 25
+
+@pytest.mark.parametrize('path', ['src/password_reset.ts', 'src/signup.tsx', 'src/apiKeys.ts',
+    'app/settings.py', 'src/config.ts', 'src/subscription/refund.ts', 'src/pricing.ts',
+    'src/lib/crypto.ts', 'src/admin/users.ts', 'src/unknown.ts',
+    'tests/structural/test_review_policy.py', 'tests/structural/test_review_round_limit.py'])
+def test_sensitive_and_unnamed_source_requires_full_review(path):
+    assert act([path])['action'] == 'full'
+
+@pytest.mark.parametrize('extra', [dict(findings=[], findings_total=0),
+    dict(findings_source='conflict', findings_total=3), dict(findings_total=4)])
+def test_incomplete_failed_findings_allow_second_round(tmp_path, monkeypatch, extra):
+    row = failed('a', CODE, ['P2'])
+    row.update(extra)
+    assert gate(tmp_path, [row], monkeypatch) == 0
+    assert gate(tmp_path/'two', [row, passed('b', CODE)], monkeypatch) == 25
+
+@pytest.mark.parametrize('value', [20261120, '20261120', '2026-W47-5', datetime.date(2026,11,20)])
+def test_merge_day_requires_calendar_string(value):
+    assert not rp.trial_active(dict(POLICY, merge_day=value), rp._day(IN))
+
+@pytest.mark.parametrize('routine', [[], {'max_rounds':1, 'second_round_if_severity':5}])
+@pytest.mark.parametrize('inactive', [dict(enabled=False), dict(merge_day=None)])
+def test_inactive_bad_routine_preserves_baseline(tmp_path, monkeypatch, routine, inactive, capsys):
+    bad = dict(POLICY, routine=routine, **inactive)
+    monkeypatch.setattr(rp, 'load_policy', lambda: bad)
+    spec = importlib.util.spec_from_file_location('bad_rrl', ROOT / 'scripts/review-round-limit.py')
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    reviews = tmp_path / 'reviews/o__r'
+    reviews.mkdir(parents=True)
+    (reviews/'1.json').write_text(json.dumps(failed('a', CODE, ['P2'])))
+    for role in ('cross-lab-review', 'plan-review', 'validation', None):
+        assert mod.check('b-1', tmp_path/'none', tmp_path/'reviews', role=role) == 0
+    assert 'config' in capsys.readouterr().err.lower()
+
+
+def test_trial_refusal_writes_summary(tmp_path, monkeypatch):
+    assert gate(tmp_path, [passed('a', CODE)], monkeypatch) == 25
+    assert 'CLAVAIN_REVIEW_POLICY=off' in (tmp_path/'reviews/round-limits/b-1.md').read_text()
+
+@pytest.mark.parametrize('unavailable', ['zone', 'override'])
+def test_report_flags_unavailable_classification(monkeypatch, unavailable, capsys):
+    if unavailable == 'zone':
+        monkeypatch.setattr(rp, 'today_pacific', lambda: None)
+    else:
+        monkeypatch.setenv('CLAVAIN_REVIEW_POLICY', 'off')
+    rows = [dict(repo='o/r', pr=1, dispatch_id='d', attempt_id='a', changed_paths=CODE)]
+    assert load_report().per_change(rows, POLICY)['o/r#1']['klass'] == 'unknown'
+    assert 'classification' in capsys.readouterr().err

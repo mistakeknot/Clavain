@@ -44,7 +44,7 @@ KEEP_RE = re.compile("|".join([
     r"(^|/)(scripts|bin)/[^/]*(release|publish|install|deploy|sign)[^/]*$",
     r"(^|/)plugin\.json$", r"(^|/)marketplace[^/]*\.json$",         # releases and publishes
     r"(^|/)config/", r"(^|/)units/", r"(^|/)schemas?/",             # configuration, units and schemas
-    r"(^|/)review[-_]policy",                                       # this policy
+    r"(^|/)(test_)?review[-_](policy|round_limit)",                    # gate and its regression tests
     r"dispatch|routing|gate",
     r"instruction", r"contract",                                    # managed operating contract and instruction text
     r"(^|/)docs/canon/",                                            # canon: routing and reasoning rules
@@ -69,11 +69,11 @@ KEEP_RE = re.compile("|".join([
 # surface nobody listed is never reviewed less by accident.
 #   docs: prose under a docs/ directory, or a root README/CHANGELOG/LICENSE
 #   tests: files under a tests directory or named like a test
-#   routine source: code and asset files under a named source directory
+#   routine: explicit presentation files; unknown source files retain full review
 DOC_RE = re.compile(r"(^|/)docs?/.*\.(md|mdx|rst|adoc|txt)$|^(README|CHANGELOG|LICENSE)(\.(md|rst|txt|adoc))?$", re.IGNORECASE)
 TEST_RE = re.compile(r"(^|/)(tests?|__tests__|e2e)/[^/]+(/[^/]+)*\.[a-z0-9]+$|\.(test|spec)\.[a-z]+$|(^|/)test_[^/]*\.py$|_test\.(go|py)$", re.IGNORECASE)
-CODE_EXT = r"(ts|tsx|js|jsx|mjs|css|scss|html|svg|png|jpg|jpeg|gif|webp|py|go|rs|gd|lua|cs|java|kt|swift|c|h|cpp)"
-ROUTINE_RE = re.compile(rf"^(src|app|apps|web|ui|components|pages|public|styles|assets|examples)/(.+/)?[^/]+\.{CODE_EXT}$", re.IGNORECASE)
+# Design choice: begin with two named presentation files, never a source-directory wildcard.
+ROUTINE_RE = re.compile(r"^(styles/theme\.css|ui/spacing\.css)$")
 # A declared one-shot prototype may also hold web and media assets at any depth outside the keep-list.
 PROTOTYPE_RE = re.compile(r"\.(html|css|js|jsx|ts|tsx|mjs|svg|png|jpg|jpeg|gif|webp|ogg|wav|mp3|glb|gltf)$", re.IGNORECASE)
 
@@ -88,9 +88,9 @@ def load_policy(config=None):
 
 
 def _day(value):
-    if isinstance(value, datetime.date):
-        return value
-    return datetime.date.fromisoformat(str(value))
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
+        raise ValueError("merge_day must be a YYYY-MM-DD string")
+    return datetime.date.fromisoformat(value)
 
 
 SKIP_CLASSES = {"text-only", "doc-only", "test-only", "one-shot-prototype"}
@@ -192,7 +192,7 @@ def classify_paths(paths, prototype=False):
         return "test-only", "every path is a test"
     if all(DOC_RE.search(p) or TEST_RE.search(p) for p in paths):
         return "text-only", "only docs and tests changed"
-    return "routine", "every path is a named safe path (code under a named source directory)"
+    return "routine", "every path is documentation, tests or an explicitly listed presentation file"
 
 
 def decide(paths, policy, prototype=False, today=None):
@@ -213,7 +213,9 @@ def decide(paths, policy, prototype=False, today=None):
 
 def is_high(severity, policy):
     """Unknown or missing severity counts as high: a missing label may only add a round."""
-    levels = {str(x).lower() for x in (policy.get("routine") or {}).get("second_round_if_severity", [])}
+    if not valid_policy(policy):
+        return True
+    levels = {x.lower() for x in policy["routine"]["second_round_if_severity"]}
     if not isinstance(severity, str) or not severity.strip():
         return True
     head = re.split(r"[\s(/,:;-]", severity.strip(), 1)[0].lower()
