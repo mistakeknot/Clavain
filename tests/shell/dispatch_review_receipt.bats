@@ -573,7 +573,7 @@ _reject_passing_suffix() {
 
 @test "a 900-finding review (over 200000 bytes of findings JSON) still writes a receipt" {
     pad="$(printf 'w%.0s' $(seq 1 190))"
-    { for i in $(seq 1 900); do printf '### [P2] [other] finding %04d %s in `scripts/a.sh:%d`\n' "$i" "$pad" "$i"; done
+    { for i in $(seq 1 900); do printf '### [%s] [other] finding %04d %s in `scripts/a.sh:%d`\n' "$([[ $i -eq 1 ]] && echo P1 || echo P2)" "$i" "$pad" "$i"; done
       printf '\nVERDICT: FAIL\n'; } > "$OUT"
     [ "$(python3 "$BATS_TEST_DIRNAME/../../scripts/receipt-findings.py" --detail "$OUT" | wc -c)" -gt 200000 ]
     _review_receipt_prepare "$R"
@@ -887,4 +887,32 @@ _reject_passing_suffix() {
         run _review_receipt_effective "$f"
         [ "$status" -ne 0 ]
     done
+}
+
+@test "FAIL with only P2/P3 findings is recorded PASS WITH NOTES and marked downgraded" {
+    printf '### [P2] [style] naming (a.py:1)\nx\n\n### [P3] [nit] typo (b.py:2)\ny\n\nVERDICT: FAIL\n' > "$OUT"
+    _review_receipt_prepare "$R"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ "$(jq -r .verdict "$f")" = "PASS WITH NOTES" ]
+    [ "$(jq -r .block_downgraded "$f")" = true ]
+}
+
+@test "FAIL with a P1 finding stays BLOCK and is not marked downgraded" {
+    printf '### [P1] [bug] data loss (a.py:1)\nx\n\nVERDICT: FAIL\n' > "$OUT"
+    _review_receipt_prepare "$R"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ "$(jq -r .verdict "$f")" = BLOCK ]
+    [ "$(jq -r '.block_downgraded // "absent"' "$f")" = absent ]
+}
+
+@test "FAIL with no parseable findings stays BLOCK" {
+    printf 'it is bad\n\nVERDICT: FAIL\n' > "$OUT"
+    _review_receipt_prepare "$R"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.json")" = BLOCK ]
 }

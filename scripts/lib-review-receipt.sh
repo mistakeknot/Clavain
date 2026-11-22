@@ -263,6 +263,18 @@ _review_receipt_write() {
   fx_json="$(python3 "$_rr_here/receipt-findings.py" --detail "$out" 2>/dev/null)" || fx_json=""
   jq -e 'type == "object"' <<<"$fx_json" >/dev/null 2>&1 || fx_json='{"source":"unknown","total":null,"findings":[]}'
 
+  # Only P0 or P1 findings can BLOCK (bead mk-u5vxj.1). A FAIL/BLOCK word whose
+  # findings are parsed from the body, counted, and include no P0 or P1 is
+  # recorded as PASS WITH NOTES, with the reviewer's own word kept in
+  # verdict_raw and block_downgraded set; the lower findings are follow-up
+  # tasks, not a blocked round. Unknown or conflicting findings never
+  # downgrade: a BLOCK stays a BLOCK unless the counts prove it is not.
+  local block_downgraded=false
+  if [[ "$verdict" == BLOCK ]] && jq -e '.source == "body" and (.P0 | type) == "number" and (.P1 | type) == "number" and .P0 == 0 and .P1 == 0' <<<"$fx_json" >/dev/null 2>&1; then
+    verdict="PASS WITH NOTES"
+    block_downgraded=true
+  fi
+
   # No review-derived text goes on the jq command line (OS argument limit):
   # findings and changed paths are read from process substitutions; the rest
   # are fixed-size identities, hashes and a one-line shortstat.
@@ -284,7 +296,7 @@ _review_receipt_write() {
   tmp="$(jq -n --arg repo "$RR_REPO" --arg repo_id "$RR_REPO_ID" --argjson pr "$RR_PR" \
     --arg head "$RR_HEAD" --arg head_tree "$RR_HEAD_TREE" --arg base "$RR_BASE" \
     --arg merge_tree "$RR_MERGE_TREE" --arg stat "$RR_DIFF_STAT" --arg dsha "$RR_DIFF_SHA256" \
-    --arg producer "$PRODUCER_IDENTITY" --arg reviewer "$reviewer" --arg verdict "$verdict" --arg verdict_raw "$verdict_raw" \
+    --arg producer "$PRODUCER_IDENTITY" --arg reviewer "$reviewer" --arg verdict "$verdict" --arg verdict_raw "$verdict_raw" --argjson downgraded "$block_downgraded" \
     --arg temp_root "${REVIEW_CODEX_TMPDIR:-}" \
     --arg bead "${CLAVAIN_BEAD_ID:-}" \
     --arg policy "$policy_hash" --arg did "${DISPATCH_ID:-}" --arg aid "${ATTEMPT_ID:-}" \
@@ -302,6 +314,7 @@ _review_receipt_write() {
      findings_source: (if $fx.source == "unknown" then "unknown" elif $fx.source == "conflict" then "conflict" else "body" end),
      findings_total: (if $fx.source == "unknown" then null else $fx.total end),
      changed_paths: ($cp[0].paths // [])}
+    + (if $downgraded then {block_downgraded: true} else {} end)
     + (if $scratch_tree != "" then {scratch_tree: $scratch_tree} else {} end)
     + (if ($cp[0].total // 0) > 200 then {changed_paths_truncated: true} else {} end)
     + (if (($fx.findings // []) | length) > 200 then {findings_truncated: true} else {} end)
