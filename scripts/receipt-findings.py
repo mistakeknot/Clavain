@@ -270,7 +270,7 @@ SEVERE_WORD = re.compile(r"\bP[01]\b|\bcritical\b|\bblock(?:er|ers|ing)\b|\bunkn
 SEVERE_ALIASES = "|".join(re.escape(key) for key, value in SEVERITY.items() if value in ("P0", "P1"))
 SEVERE_LABEL = re.compile(
     r"(?:^|[\[(:;—–-]|\bseverity\s*:)\s*(?:" + SEVERE_ALIASES + r")"
-    r"(?=\s*(?:$|[]:—–-])|[-_ ]severity\b)"
+    r"(?=\s*(?:$|[\])}.,;:—–」】〕』〉》-])|[-_ ]severity\b)"
     r"|\b(?:" + SEVERE_ALIASES + r")(?=\s*:|[-_ ]severity\b)", re.I,
 )
 

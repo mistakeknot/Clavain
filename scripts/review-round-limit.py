@@ -119,7 +119,11 @@ def check(bead, ledger, reviews, head=None, check_only=False, role=None):
             if directory.is_symlink():
                 malformed += 1
                 cancellation_off = True
-                continue
+                # A readable linked repository may contain the only record
+                # of failed reviews. Keep baseline counting through it while
+                # cancellation is off; an unreadable target is history error.
+                if not directory.is_dir():
+                    raise OSError("unreadable linked review directory")
             if not directory.is_dir():
                 continue
             for path in sorted(directory.glob("*.json")):

@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 
@@ -13,6 +14,12 @@ spec = importlib.util.spec_from_file_location("receipt_findings", SCRIPTS / "rec
 parser = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(parser)
 LOW = "### [P2] [style-naming] naming (a.py:1)\n"
+PUNCTUATED_LABELS = [
+    "VERDICT: FAIL (high)",
+    "VERDICT: FAIL — High.",
+    "VERDICT: BLOCK: high, auth bypass",
+    "- Auth bypass remains, severity: high.",
+]
 HOSTILE = [
     "### [P1]: 0-day SQL injection (auth.py:42)",
     "### P1: 0-day SQL injection (auth.py:42)",
@@ -29,7 +36,7 @@ HOSTILE = [
     "- findings", "High: auth bypass", "[High] auth bypass",
     "Severity: High — auth bypass", "Ｐ１: auth bypass", "P\u200b1: auth bypass",
     "### [P2] Parser drops findings: on wrap (x.py:1)",
-]
+] + PUNCTUATED_LABELS
 
 
 @pytest.mark.parametrize("fragment", HOSTILE[:6])
@@ -94,12 +101,26 @@ def test_writer_keeps_hostile_body_blocked(writer, fragment):
     assert "block_downgraded" not in result
 
 
-@pytest.mark.parametrize("explanation", ["high-severity auth bypass", "[High] auth bypass",
+@pytest.mark.parametrize("explanation", PUNCTUATED_LABELS + ["high-severity auth bypass", "[High] auth bypass",
                                           "the high-severity auth bypass", "contains High: auth bypass",
                                           "Ｐ１ auth bypass", "P\u200b1 auth bypass", "Critical: loss"])
 def test_writer_scans_verdict_explanation(writer, explanation):
     write, _ = writer
-    assert write(LOW + "\nVERDICT: FAIL - " + explanation + "\n")["verdict"] == "BLOCK"
+    # Exercise the exact reported verdicts as well as explanatory suffixes.
+    if explanation.startswith("VERDICT:"):
+        body = LOW + "\n" + explanation + "\n"
+    elif explanation.startswith("- "):
+        body = LOW + explanation + "\n\nVERDICT: FAIL\n"
+    else:
+        body = LOW + "\nVERDICT: FAIL - " + explanation + "\n"
+    assert write(body)["verdict"] == "BLOCK"
+
+
+@pytest.mark.parametrize("closing", [")", ".", ",", ";", "]", "}", "】", "」"])
+def test_high_label_punctuation_followers(tmp_path, closing):
+    path = tmp_path / "review.md"
+    path.write_text(LOW + "\nVERDICT: FAIL (High" + closing + "\n")
+    assert parser.strict_clean(path) is False
 
 
 @pytest.mark.parametrize("raw", ["FAIL", "fail", "FAIL.", "BLOCK: two P2 follow-ups"])
@@ -209,6 +230,44 @@ def test_malformed_matching_block_vetoes_pair_in_any_order(tmp_path, reverse):
     assert "cancellation" in result.stderr
 
 
+def test_veto_preserves_failure_when_only_ancillary_field_is_malformed(tmp_path):
+    # Every cancellation field is valid; only consider()'s type validation
+    # rejects this companion. Removing the veto must expose cancellation.
+    malformed = dict(pr_row(), verdict_class=[])
+    result = counter(tmp_path, [run_row(str(i)) for i in range(3)], [pr_row(), malformed])
+    assert result.returncode == 25
+
+
+def test_conflicting_pass_run_preserves_the_failed_attempt(tmp_path):
+    rows = [run_row(str(i)) for i in range(3)]
+    rows.append(dict(run_row(), verdict_class="PASS"))
+    assert counter(tmp_path, rows, [pr_row()]).returncode == 25
+
+
+@pytest.mark.parametrize("severity", ["P0", "P1", "Critical", "High"])
+def test_heading_guard_retains_block_without_lexical_scans(tmp_path, monkeypatch, severity):
+    # Isolate the independent structural guard: zero declarations are omitted
+    # from counts, and lexical checks are a separate layer of protection.
+    monkeypatch.setattr(parser, "SEVERE_WORD", re.compile(r"(?!x)x"))
+    monkeypatch.setattr(parser, "SEVERE_LABEL", re.compile(r"(?!x)x"))
+    path = tmp_path / "review.md"
+    path.write_text(LOW + f"### [{severity}]: 0\n\nVERDICT: FAIL\n")
+    assert parser.heading_counts(parser.visible_lines(path.read_text()))["total"] == 1
+    assert parser.strict_clean(path) is False
+
+
+def test_symlinked_repository_directory_keeps_its_three_block_receipts(tmp_path):
+    def special(directory):
+        target = tmp_path / "real-receipts"
+        directory.rename(target)
+        directory.symlink_to(target, target_is_directory=True)
+    prs = [dict(pr_row(), attempt_id=str(i), verdict="BLOCK") for i in range(3)]
+    result = counter(tmp_path, [], prs, special=special)
+    assert result.returncode == 25
+    assert "3 failed review rounds" in result.stderr
+    assert "cancellation is off" in result.stderr
+
+
 @pytest.mark.parametrize("kind", ["symlink", "directory", "filename", "legacy"])
 def test_unverifiable_binding_or_receipt_entry_preserves_failures(tmp_path, kind):
     rows = [run_row(str(i)) for i in range(3)]
@@ -231,7 +290,21 @@ def test_unverifiable_binding_or_receipt_entry_preserves_failures(tmp_path, kind
 def test_real_writer_receipt_controls_round_count(writer, tmp_path, fragment):
     write, head = writer
     result = write(LOW + (fragment or "") + "\n\nVERDICT: FAIL\n")
-    outcome = counter(tmp_path, [run_row(str(i), head) for i in range(3)])
+    audit = subprocess.run(["bash", "-c", '''
+source "$1/lib-verdict.sh"
+source "$1/lib-dispatch-audit.sh"
+ROLE=cross-lab-review ENGINE=claude MODEL=fixture REASONING_EFFORT=high
+PRODUCER_IDENTITY=fixture-producer DISPATCH_ID=d CLAVAIN_BEAD_ID=test-1
+ROUND_HEAD="$3" OUTPUT="$2" DISPATCH_RESULT_READY=true
+VIA="" PROVIDER_EVENTS="" SUMMARY_FILE="" STARTED_TS=1700000000
+CLAVAIN_DECISION_CONTEXT="" CLAVAIN_REQUIRE_USAGE=0 EXPERIMENT_ENTRY=""
+for ATTEMPT_ID in 0 1 2; do _build_dispatch_run_receipt 0 || exit; done
+''', "_", str(SCRIPTS), str(tmp_path / "review.md"), head],
+                           text=True, capture_output=True, check=True)
+    rows = [json.loads(line) for line in audit.stdout.splitlines()]
+    assert len(rows) == 3
+    assert all(row["verdict_class"] == "FAIL" and row["head_sha"] == head for row in rows)
+    outcome = counter(tmp_path, rows)
     assert outcome.returncode == (25 if fragment else 0), result
 
 
