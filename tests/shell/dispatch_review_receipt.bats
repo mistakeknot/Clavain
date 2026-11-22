@@ -899,14 +899,12 @@ _reject_passing_suffix() {
     [ "$(jq -r .block_downgraded "$f")" = true ]
 }
 
-@test "FAIL with a P2 finding whose text asks for a hold stays BLOCK" {
+@test "a recognised P2 finding is P2 whatever its prose says: the reviewer's severity label decides" {
     printf '### [P2] [bug] cleanup (a.py:1)\nthis permits data loss; do not merge\n\nVERDICT: FAIL\n' > "$OUT"
     _review_receipt_prepare "$R"
     run _review_receipt_write "$OUT" 0
     [ "$status" -eq 0 ]
-    f="$T/reviews/o__r/7-$HEAD_SHA.json"
-    [ "$(jq -r .verdict "$f")" = BLOCK ]
-    [ "$(jq -r '.block_downgraded // "absent"' "$f")" = absent ]
+    [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.json")" = "PASS WITH NOTES" ]
 }
 
 @test "FAIL with a P1 finding stays BLOCK and is not marked downgraded" {
@@ -927,7 +925,8 @@ _reject_passing_suffix() {
     [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.json")" = BLOCK ]
 }
 
-# Clavain#224 review round 1: each of these stays BLOCK, one test per phrase.
+# Clavain#224 review rounds 1-2: a finding-shaped line the parser did not read as
+# a P2/P3 heading keeps the BLOCK, whatever else parsed beside it.
 _stays_block() {
     printf '%b' "$1" > "$OUT"
     _review_receipt_prepare "$R"
@@ -938,30 +937,45 @@ _stays_block() {
     [ "$(jq -r '.block_downgraded // "absent"' "$f")" = absent ]
 }
 
-@test "a P2 heading beside an unparsed [P1/blocker] heading stays BLOCK" {
-    _stays_block '### [P2] [style] naming (a.py:1)\nx\n\n### [P1/blocker] Deletes the production database (db.py:2)\ny\n\nVERDICT: FAIL\n'
+_P2S='### [P2] [style] naming (a.py:1)\nx\n\n### P2 another naming issue\nx\n\n'
+
+@test "two P2 headings do not compensate for an unparsed [P1/blocker] heading" {
+    _stays_block "${_P2S}### [P1/blocker] Deletes production database (db.py:2)\ny\n\nVERDICT: FAIL\n"
+}
+@test "two P2 headings do not compensate for an [UNKNOWN] heading" {
+    _stays_block "${_P2S}### [UNKNOWN] Deletes production database (db.py:2)\ny\n\nVERDICT: FAIL\n"
+}
+@test "a bare bold heading beside a P2 stays BLOCK" {
+    _stays_block "${_P2S}**Deletes production database**\ny\n\nVERDICT: FAIL\n"
+}
+@test "a 'Finding:' heading beside a P2 stays BLOCK" {
+    _stays_block "${_P2S}Finding: deletes production database\ny\n\nVERDICT: FAIL\n"
+}
+@test "a wrapped marker beside a P2 stays BLOCK" {
+    _stays_block "${_P2S}### [P1\n/blocker] Deletes production database\ny\n\nVERDICT: FAIL\n"
+}
+@test "a full-width bracket heading beside a P2 stays BLOCK" {
+    _stays_block "${_P2S}### ［P1］ Deletes production database\ny\n\nVERDICT: FAIL\n"
+}
+@test "prose naming P1 beside a P2 stays BLOCK" {
+    _stays_block "${_P2S}This is really a P1 and deletes production data.\n\nVERDICT: FAIL\n"
+}
+@test "a recognised P1 beside P2s stays BLOCK" {
+    _stays_block "${_P2S}### [P1] [bug] data loss (db.py:2)\ny\n\nVERDICT: FAIL\n"
 }
 
-@test "a P2 heading beside an [UNKNOWN] heading stays BLOCK" {
-    _stays_block '### [P2] [style] naming (a.py:1)\nx\n\n### [UNKNOWN] Deletes the production database (db.py:2)\ny\n\nVERDICT: FAIL\n'
+@test "a clean P2/P3-only review with a Summary heading is still downgraded" {
+    printf '## Summary\nSmall issues.\n\n### [P2] [style] naming (a.py:1)\nx\n\n- [P3] [nit] typo (b.py:2)\n\nVERDICT: FAIL\n' > "$OUT"
+    _review_receipt_prepare "$R"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.json")" = "PASS WITH NOTES" ]
 }
 
-@test "a wrapped 'Do not merge' hold stays BLOCK" {
-    _stays_block '### [P2] [bug] cleanup (a.py:1)\nDo not\nmerge until this is fixed.\n\nVERDICT: FAIL\n'
-}
-
-@test "'Merging must wait' stays BLOCK" {
-    _stays_block '### [P2] [bug] cleanup (a.py:1)\nMerging must wait until this is fixed.\n\nVERDICT: FAIL\n'
-}
-
-@test "'wait before merging' stays BLOCK" {
-    _stays_block '### [P2] [bug] cleanup (a.py:1)\nPlease wait before merging.\n\nVERDICT: FAIL\n'
-}
-
-@test "'hold the merge' stays BLOCK" {
-    _stays_block '### [P2] [bug] cleanup (a.py:1)\nHold the\nmerge for now.\n\nVERDICT: FAIL\n'
-}
-
-@test "'not safe to merge' stays BLOCK" {
-    _stays_block '### [P2] [bug] cleanup (a.py:1)\nThis is not safe to merge.\n\nVERDICT: FAIL\n'
+@test "strict-clean refuses a missing file and a body with no findings" {
+    run python3 "$BATS_TEST_DIRNAME/../../scripts/receipt-findings.py" --strict-clean "$T/nope.md"
+    [ "$status" -eq 1 ]
+    printf 'all good\n\nVERDICT: FAIL\n' > "$OUT"
+    run python3 "$BATS_TEST_DIRNAME/../../scripts/receipt-findings.py" --strict-clean "$OUT"
+    [ "$status" -eq 1 ]
 }

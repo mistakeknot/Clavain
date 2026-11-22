@@ -243,7 +243,69 @@ def extract_detail(path: Path, resolve_conflict: bool = True) -> dict:
     return {**counts, "findings": findings}
 
 
+# A line that looks like a finding or a section heading: a Markdown heading, a
+# bold-led line, a bracketed or "Finding:"-style line, or a list item led by
+# one. Brackets include the full-width and CJK forms.
+_OPEN = "\\[\uff3b\u3010\u300c\u3014\u300e(\uff08"
+CANDIDATE = re.compile(
+    r"^(?:#{1,6}\s|(?:\*\*|__)|[" + _OPEN + r"]"
+    r"|(?:[-+*\u2022]|\d+[.)])\s+(?:\*\*|__)?[" + _OPEN + r"]"
+    r"|(?:[-+*\u2022]|\d+[.)])\s+(?:\*\*|__)?(?:finding|issue|severity|blocker)\b"
+    r"|(?:finding|issue|severity|blocker)s?\b)",
+    re.IGNORECASE,
+)
+BENIGN_HEADING = re.compile(
+    r"^#{1,6}\s*(?:summary|findings?|notes?|overview|verdict|review|scope|conclusion|tests?)\s*:?\s*$",
+    re.IGNORECASE,
+)
+SEVERE_WORD = re.compile(r"\bP[01]\b|\bcritical\b|\bblock(?:er|ers|ing)\b|\bunknown\b", re.IGNORECASE)
+
+
+def strict_clean(path: Path) -> bool:
+    """True only when the body is a complete list of P2/P3 findings: P0 and P1
+    counts are zero, every finding-shaped line parsed as a P2/P3 heading, and no
+    line mentions P0, P1, critical, blocker or unknown outside the stated
+    FINDINGS counts. A finding the parser cannot read keeps a BLOCK; the check
+    never reads the reviewer's wording about merging."""
+    try:
+        body = path.read_text()
+    except (OSError, UnicodeError):
+        return False
+    lines = visible_lines(body)
+    counts = heading_counts(lines)
+    if not counts or counts["P0"] or counts["P1"] or not counts["total"]:
+        return False
+    for raw in lines:
+        line = raw.strip()
+        if not line or VERDICT_FINDINGS.match(line):
+            continue
+        match = FINDING_HEADING.match(line)
+        if match:
+            severity = SEVERITY[next(g for g in match.groups() if g is not None).lower()]
+            rest = line[match.end():]
+            if re.match(r"^(?:\*\*|__)?\s*:\s*(?:0|none|n/?a)\b", rest, re.IGNORECASE):
+                continue
+            if severity in ("P0", "P1"):
+                return False
+            if SEVERE_WORD.search(rest):
+                return False
+            continue
+        if CANDIDATE.match(line) and not BENIGN_HEADING.match(line):
+            # "VERDICT: ..." and "--- VERDICT ---" are not candidates; anything else is.
+            if re.match(r"^(?:verdict\s*:|---)", line, re.IGNORECASE):
+                continue
+            return False
+        if SEVERE_WORD.search(line):
+            return False
+    return True
+
+
 def main() -> int:
+    if len(sys.argv) == 3 and sys.argv[1] == "--strict-clean":
+        try:
+            return 0 if strict_clean(Path(sys.argv[2])) else 1
+        except Exception:
+            return 1
     args = [a for a in sys.argv[1:] if a != "--detail"]
     detail = len(args) != len(sys.argv) - 1
     result: dict = {**UNKNOWN, "findings": []} if detail else UNKNOWN.copy()

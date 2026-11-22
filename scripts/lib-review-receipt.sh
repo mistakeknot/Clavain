@@ -169,20 +169,15 @@ _review_receipt_verdict_word() {
 }
 
 # True only when a BLOCK may be recorded as PASS WITH NOTES: findings parsed
-# from the body with no P0/P1, every bracketed finding heading accounted for,
-# and no hold or blocker wording anywhere in the review text.
+# from the body with no P0/P1, and the structural check in receipt-findings.py
+# (--strict-clean) finds every finding-shaped line parsed as a P2/P3 heading and
+# no line naming P0/P1/critical/blocker/unknown. The reviewer's wording about
+# merging is not read: an unreadable finding keeps the BLOCK, never the reverse.
 _review_receipt_may_downgrade() {
-  local out="$1" fx_json="$2" flat headings rc=0
+  local out="$1" fx_json="$2" here
   jq -e '.source == "body" and (.P0 | type) == "number" and (.P1 | type) == "number" and (.total | type) == "number" and .P0 == 0 and .P1 == 0' <<<"$fx_json" >/dev/null 2>&1 || return 1
-  headings="$(grep -Ec '^[[:space:]]*(#{1,6}|[-+*]|[0-9]+[.)])[[:space:]]+(\*\*|__)?\[' "$out" 2>/dev/null)" || headings=-1
-  [[ "$headings" =~ ^[0-9]+$ ]] || return 1
-  jq -e --argjson h "$headings" '.total >= $h' <<<"$fx_json" >/dev/null 2>&1 || return 1
-  flat="$(tr '\n\r\t' '   ' <"$out" 2>/dev/null | tr -s ' ')" || return 1
-  [[ -n "$flat" ]] || return 1
-  grep -Eiq "(do not|don't|must not|should not|shall not|cannot|can't|never|not to|not) (yet )?merg|merg(e|ing|ed)? (must|should|shall|needs to|has to|cannot|can't|is not|isn't|is blocked|waits?)|wait (to|before|until) merg|not (safe|ready|fit|ok|okay) (to|for) merg|merge[- ]?block|blocks? (the )?(merge|merging|release)|(hold|halt|pause|stop) (the |on )?(merge|merging)|data[ -]?loss|credential|secret|vulnerab|exploit|injection|privilege escalation|security (hole|issue|risk|flaw|bug)" <<<"$flat" && return 1
-  rc=$?
-  [[ $rc -eq 1 ]] || return 1
-  return 0
+  here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || return 1
+  python3 "$here/receipt-findings.py" --strict-clean "$out" >/dev/null 2>&1
 }
 
 
