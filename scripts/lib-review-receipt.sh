@@ -269,8 +269,12 @@ _review_receipt_write() {
   # verdict_raw and block_downgraded set; the lower findings are follow-up
   # tasks, not a blocked round. Unknown or conflicting findings never
   # downgrade: a BLOCK stays a BLOCK unless the counts prove it is not.
+  # A finding whose text asks for a hold, or names data loss, a credential or
+  # security hole, never downgrades whatever its label says: it stays BLOCK
+  # until the reviewer clarifies. The scan is deliberately broad; a false hit
+  # only keeps a BLOCK.
   local block_downgraded=false
-  if [[ "$verdict" == BLOCK ]] && jq -e '.source == "body" and (.P0 | type) == "number" and (.P1 | type) == "number" and .P0 == 0 and .P1 == 0' <<<"$fx_json" >/dev/null 2>&1; then
+  if [[ "$verdict" == BLOCK ]] && ! grep -Eiq "(do not|don't|must not|should not|cannot|can't) merge|not (safe|ready) to merge|merge[- ]?block|blocks? (the )?merge|hold (the )?merge|data[ -]?loss|credential|secret|vulnerab|exploit|injection|privilege escalation|security (hole|issue|risk|flaw|bug)" "$out" 2>/dev/null && jq -e '.source == "body" and (.P0 | type) == "number" and (.P1 | type) == "number" and .P0 == 0 and .P1 == 0' <<<"$fx_json" >/dev/null 2>&1; then
     verdict="PASS WITH NOTES"
     block_downgraded=true
   fi

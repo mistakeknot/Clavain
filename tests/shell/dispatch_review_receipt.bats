@@ -899,6 +899,16 @@ _reject_passing_suffix() {
     [ "$(jq -r .block_downgraded "$f")" = true ]
 }
 
+@test "FAIL with a P2 finding whose text asks for a hold stays BLOCK" {
+    printf '### [P2] [bug] cleanup (a.py:1)\nthis permits data loss; do not merge\n\nVERDICT: FAIL\n' > "$OUT"
+    _review_receipt_prepare "$R"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ "$(jq -r .verdict "$f")" = BLOCK ]
+    [ "$(jq -r '.block_downgraded // "absent"' "$f")" = absent ]
+}
+
 @test "FAIL with a P1 finding stays BLOCK and is not marked downgraded" {
     printf '### [P1] [bug] data loss (a.py:1)\nx\n\nVERDICT: FAIL\n' > "$OUT"
     _review_receipt_prepare "$R"
