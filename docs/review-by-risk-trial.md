@@ -13,19 +13,19 @@ review seat starts).
 
 | Change class | Review |
 |---|---|
-| text-only, doc-only, test-only, declared one-shot prototype, when every path is a named safe path | none; the author's check, tests and CI carry it |
-| routine: code under a named source directory | one cross-lab round; a second only after a P1/High finding (no severity counts as high) |
+| doc-only, when every path is a named safe path | none; the author's check, tests and CI carry it |
+| routine: `styles/theme.css` and `ui/spacing.css`, optionally with docs | one cross-lab round; a second only after a P1/High finding (no severity counts as high) |
 | everything else: the keep-list (spend, credentials, sign-ins, payments, save formats and migrations, releases and publishes, instruction files, hooks, CI workflows, routing policy) and any path no safe class names | unchanged: three fix rounds and a confirming review |
 
 Reduced review is an allow-list. A change is reduced only when every changed path is a named safe path
 and no keep-list pattern matches any path. The named safe paths are: prose under a `docs/` directory and
-an exact root README, CHANGELOG or LICENSE (bare or with `.md`, `.rst`, `.txt`, `.adoc`); files under a tests directory or named like a test; and code and
-asset files (`ts tsx js jsx mjs css scss html svg png jpg jpeg gif webp py go rs gd lua cs java kt swift c h cpp`)
-under `src/`, `app/`, `apps/`, `web/`, `ui/`, `components/`, `pages/`, `public/`, `styles/`, `assets/`
-or `examples/`. A declared one-shot prototype may also hold web and media assets (`html css js jsx ts tsx
-mjs svg png jpg jpeg gif webp ogg wav mp3 glb gltf`) anywhere outside the keep-list. Anything else, for
-example scripts, tools, `cmd/`, shell, JSON or YAML, dependency manifests, or markdown outside `docs/`,
-keeps full review, whether or not a keep-list pattern names it. The keep-list still wins over every safe path.
+an exact root README, CHANGELOG or LICENSE (bare or with `.md`, `.rst`, `.txt`, `.adoc`);
+and the two exact presentation paths `styles/theme.css` and `ui/spacing.css`.
+Tests and test harnesses always keep full review, including files under test directories,
+files named like tests, and their configuration. Declaring `--prototype` grants no reduction;
+unknown source and asset paths keep full review. Anything else, for example scripts, tools,
+`cmd/`, shell, JSON or YAML, dependency manifests, or markdown outside `docs/`, keeps full
+review, whether or not a keep-list pattern names it. The keep-list still wins over every safe path.
 
 A change with no changed-path list is unclassifiable and keeps full review. One
 keep-list round on a bead keeps the whole bead on the full cap. Frontier floors,

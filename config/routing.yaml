@@ -144,9 +144,9 @@ reasoning:
     # Set to the actual America/Los_Angeles merge date during the merge step.
     # Null keeps full review; end is derived as merge_day + 13 days inclusive.
     merge_day: null
-    # Routine = code under a named source directory (src, app, apps, web, ui,
-    # components, pages, public, styles, assets, examples). Allow-list: a path no
-    # safe class names (docs, tests, routine source) keeps full review.
+    # Routine = only styles/theme.css and ui/spacing.css, optionally with docs.
+    # Tests and harnesses keep full review. Unknown paths keep full review;
+    # declaring a prototype never widens the safe-file list.
     routine:
       max_rounds: 1
       # A second round runs only when the first found one of these. A failed
@@ -154,7 +154,7 @@ reasoning:
       # only add a round, never remove one.
       second_round_if_severity: [P1, High, Critical, Blocker]
     # Skip class: no cross-lab review. The author's check, tests and CI carry
-    # the change. Applies only when every changed path is in the class.
+    # the change. Only doc-only is emitted; legacy class names remain schema-compatible.
     skip_classes: [text-only, doc-only, test-only, one-shot-prototype]
     # Keep-list: full review, the 3-fix-round + 1-confirm cap, unchanged.
     # A keep-list path wins over every other rule. An unclassifiable change

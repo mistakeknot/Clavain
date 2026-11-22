@@ -32,8 +32,8 @@ def test_shipped_policy_is_a_two_week_window():
 
 @pytest.mark.parametrize("paths,klass", [
     (["README.md", "docs/a.md"], "doc-only"),
-    (["tests/x/test_a.py"], "test-only"),
-    (["README.md", "tests/x/test_a.py"], "text-only"),
+    (["tests/x/test_a.py"], "keep"),
+    (["README.md", "tests/x/test_a.py"], "keep"),
     (["styles/theme.css"], "routine"),
     (["README.md", "styles/theme.css"], "routine"),
 ])
@@ -70,8 +70,8 @@ def test_allow_list_unnamed_paths_keep_full_review(path):
             assert (got["class"], got["action"], got["max_rounds"]) == ("keep", "full", 3), (paths, kw, got)
 
 
-def test_prototype_allows_web_assets_but_not_scripts():
-    assert act(["index.html", "game.js", "art/ship.png"], prototype=True)["action"] == "skip"
+def test_prototype_does_not_widen_safe_paths():
+    assert act(["index.html", "game.js", "art/ship.png"], prototype=True)["action"] == "full"
     assert act(["index.html", "run.sh"], prototype=True)["action"] == "full"
 
 
@@ -91,8 +91,8 @@ def test_cli_splits_only_on_newline(tmp_path):
 
 def test_skip_and_one_round_actions():
     assert act(["docs/a.md"])["action"] == "skip"
-    assert act(["tests/test_a.py"])["action"] == "skip"
-    assert act(["styles/theme.css"], prototype=True)["action"] == "skip"
+    assert act(["tests/test_a.py"])["action"] == "full"
+    assert act(["styles/theme.css"], prototype=True)["action"] == "one-round"
     assert act(["styles/theme.css"])["action"] == "one-round"
 
 
@@ -545,3 +545,50 @@ def test_report_flags_unavailable_classification(monkeypatch, unavailable, capsy
     rows = [dict(repo='o/r', pr=1, dispatch_id='d', attempt_id='a', changed_paths=CODE)]
     assert load_report().per_change(rows, POLICY)['o/r#1']['klass'] == 'unknown'
     assert 'classification' in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("path", [
+    "src/password_reset.ts", "src/apiKeys.ts", "src/pricing.ts",
+    "src/subscription/refund.ts", "src/lib/crypto.ts", "src/admin/users.ts",
+    "src/config.ts", "app/settings.ts", "server.js", "api/handler.ts",
+    "scripts/build.js", "deep/unknown/component.tsx", "game.js",
+])
+def test_prototype_cannot_skip_unknown_code(path):
+    assert act([path], prototype=True)["action"] == "full"
+
+
+@pytest.mark.parametrize("path", [
+    "tests/structural/test_review_round_decision.py",
+    "tests/structural/test_review_downgrade_safety.py",
+    "tests/shell/review_round.bats", "tests/shell/lib_verdict.bats",
+    "tests/structural/conftest.py", "tests/pyproject.toml", "tests/run-tests.sh",
+    "tests/new_gate_check.py", "nested/__tests__/decision.ts",
+    "e2e/admission.spec.ts", "other/cancel.test.js", "new_test.go",
+    "docs/tests/harness.md", "conftest.py", "pytest.ini", "tox.ini",
+    "run-tests.sh",
+])
+def test_tests_and_harness_always_get_full_review(path):
+    for prototype in (False, True):
+        assert act([path], prototype=prototype)["action"] == "full"
+
+
+def test_quality_gate_command_includes_untracked_protected_file(tmp_path):
+    import re
+    text = (ROOT / "commands/quality-gates.md").read_text()
+    command = re.search(r'also run `([^`]+)`', text).group(1)
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs/a.md").write_text("before")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.com",
+                    "commit", "-qm", "initial"], cwd=tmp_path, check=True)
+    (tmp_path / "docs/a.md").write_text("after")
+    (tmp_path / "hooks").mkdir()
+    (tmp_path / "hooks/new.sh").write_text("exit 0")
+    cfg = tmp_path.parent / "untracked-command-policy.yaml"
+    cfg.write_text(yaml.safe_dump({"reasoning": {"review_policy": dict(
+        POLICY, merge_day=rp.today_pacific().isoformat())}}))
+    env = dict(os.environ, CLAVAIN_SOURCE_DIR=str(ROOT), CLAVAIN_ROUTING_POLICY=str(cfg))
+    out = subprocess.run(["bash", "-c", command], cwd=tmp_path, env=env,
+                         capture_output=True, text=True, check=True)
+    assert json.loads(out.stdout)["action"] == "full"

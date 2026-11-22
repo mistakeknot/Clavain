@@ -68,14 +68,13 @@ KEEP_RE = re.compile("|".join([
 # only when no keep-list pattern matches either. A path no class names keeps full review, so a
 # surface nobody listed is never reviewed less by accident.
 #   docs: prose under a docs/ directory, or a root README/CHANGELOG/LICENSE
-#   tests: files under a tests directory or named like a test
+#   tests and harnesses always keep full review
 #   routine: explicit presentation files; unknown source files retain full review
 DOC_RE = re.compile(r"(^|/)docs?/.*\.(md|mdx|rst|adoc|txt)$|^(README|CHANGELOG|LICENSE)(\.(md|rst|txt|adoc))?$", re.IGNORECASE)
 TEST_RE = re.compile(r"(^|/)(tests?|__tests__|e2e)/[^/]+(/[^/]+)*\.[a-z0-9]+$|\.(test|spec)\.[a-z]+$|(^|/)test_[^/]*\.py$|_test\.(go|py)$", re.IGNORECASE)
 # Design choice: begin with two named presentation files, never a source-directory wildcard.
 ROUTINE_RE = re.compile(r"^(styles/theme\.css|ui/spacing\.css)$")
-# A declared one-shot prototype may also hold web and media assets at any depth outside the keep-list.
-PROTOTYPE_RE = re.compile(r"\.(html|css|js|jsx|ts|tsx|mjs|svg|png|jpg|jpeg|gif|webp|ogg|wav|mp3|glb|gltf)$", re.IGNORECASE)
+
 
 
 def load_policy(config=None):
@@ -161,7 +160,7 @@ def ambiguous(path):
 
 
 def classify_paths(paths, prototype=False):
-    """Return (class, reason). Classes: keep, routine, text-only, doc-only, test-only, one-shot-prototype.
+    """Return (class, reason). Classes: keep, routine, doc-only.
 
     A change is reduced only when every path is a named safe path and none is on the keep-list."""
     if not isinstance(paths, (list, tuple)):
@@ -174,25 +173,19 @@ def classify_paths(paths, prototype=False):
     odd = [p for p in paths if ambiguous(p)]
     if odd:
         return "keep", f"ambiguous path (backslash, absolute, dot segment or control character): {odd[0]!r}; unclassifiable changes keep full review"
-    hit = [p for p in paths if KEEP_RE.search(p)]
+    # Test and harness changes can disable verification; path names cannot prove
+    # that they are independent of the review gate. Keep them all in full review.
+    hit = [p for p in paths if KEEP_RE.search(p) or TEST_RE.search(p)]
     if hit:
         return "keep", f"keep-list path: {hit[0]}"
-    named = lambda p: bool(DOC_RE.search(p) or TEST_RE.search(p) or ROUTINE_RE.search(p))
-    if prototype:
-        unnamed = [p for p in paths if not (named(p) or PROTOTYPE_RE.search(p))]
-        if unnamed:
-            return "keep", f"path no safe class names: {unnamed[0]}; full review"
-        return "one-shot-prototype", "declared one-shot prototype; every path is a named safe path"
+    named = lambda p: bool(DOC_RE.search(p) or ROUTINE_RE.search(p))
+    # Legacy --prototype is accepted for compatibility but grants no reduction.
     unnamed = [p for p in paths if not named(p)]
     if unnamed:
         return "keep", f"path no safe class names: {unnamed[0]}; full review"
     if all(DOC_RE.search(p) for p in paths):
         return "doc-only", "every path is documentation"
-    if all(TEST_RE.search(p) for p in paths):
-        return "test-only", "every path is a test"
-    if all(DOC_RE.search(p) or TEST_RE.search(p) for p in paths):
-        return "text-only", "only docs and tests changed"
-    return "routine", "every path is documentation, tests or an explicitly listed presentation file"
+    return "routine", "every path is documentation or an explicitly listed presentation file"
 
 
 def decide(paths, policy, prototype=False, today=None):
@@ -228,7 +221,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
     d = sub.add_parser("decide")
-    d.add_argument("--prototype", action="store_true", help="declare a one-shot prototype")
+    d.add_argument("--prototype", action="store_true", help="legacy compatibility flag; does not change review classification")
     d.add_argument("--config")
     args = parser.parse_args(argv)
     policy = load_policy(args.config)
