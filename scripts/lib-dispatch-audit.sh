@@ -370,6 +370,7 @@ _build_dispatch_run_receipt() {
   local u
   for u in "$usage_json" "{}"; do  # a bad usage object must not lose the base receipt
     line="$(jq -cn --argjson observed "$observed" --argjson usage "$u" --arg role "$ROLE" --arg backend "${ENGINE:-}" --arg model "${MODEL:-}" \
+      --arg head "${ROUND_HEAD:-${REVIEW_HEAD:-${RR_HEAD:-}}}" \
       --argjson pool_receipt "${POOL_RECEIPT_JSON:-null}" \
       --arg effort "${REASONING_EFFORT:-}" --arg producer "${PRODUCER_IDENTITY:-}" \
       --arg bead "${CLAVAIN_BEAD_ID:-}" --arg ctx "$ctx_hash" \
@@ -389,6 +390,7 @@ _build_dispatch_run_receipt() {
        tokens_in: (if $tin == "" then null else ($tin|tonumber) end),
        tokens_out: (if $tout == "" then null else ($tout|tonumber) end)}
       + (if $verdict_class != "" then {verdict_class:$verdict_class} else {} end)
+      + (if ($head | test("^[0-9a-f]{40}$")) then {head_sha:$head} else {} end)
       + $observed
       + (if $pool_receipt != null then {pool_receipt:$pool_receipt} else {} end)
       + ($usage | {usage_status, usage_basis, usage_note, tokens_in, tokens_out, tokens_cached_in,
