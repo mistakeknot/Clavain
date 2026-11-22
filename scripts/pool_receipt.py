@@ -33,6 +33,9 @@ def validate(data, attempt, provider="claude"):
                 request.get("kind") in ("inference", "metadata") and request.get("state") == "finished")
         hops = request.get("hops")
         require(isinstance(hops, list) and 0 < len(hops) <= 32)
+        # Account selection and authorization are enforced by the authenticated
+        # pool server. Admission supplies no expected account ID; the client
+        # validates attribution exists, not that an account was preselected.
         for j, hop in enumerate(hops, 1):
             require(isinstance(hop, dict) and hop.get("index") == j and
                     isinstance(hop.get("account_id"), str) and bool(hop["account_id"]) and
@@ -110,6 +113,8 @@ class PoolAttempt:
     def finish(self, totals):
         for _ in range(20):
             data = self.request("finalize", dict(version=1, id=self.id, attempt_id=self.attempt))
+            if not isinstance(data, dict):
+                raise ValueError("pool finalize response must be an object")
             if data.get("complete") is True:
                 break
             time.sleep(.1)
@@ -138,18 +143,31 @@ def check_ledger(path, attempt, provider="claude"):
     record = None
     with open(path) as ledger:
         for line in ledger:
-            candidate = json.loads(line)
-            ref = candidate.get("pool_receipt", {})
-            if ref.get("attempt_id") == attempt and candidate.get("terminal") is True:
+            try:
+                candidate = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(candidate, dict):
+                continue
+            ref = candidate.get("pool_receipt")
+            # Claude usage records predate the distinct Codex terminal type.
+            correlated = candidate.get("attempt_id") == attempt
+            if provider == "claude" and isinstance(ref, dict):
+                correlated = correlated or ref.get("attempt_id") == attempt
+            if (correlated and ((provider == "claude" and candidate.get("terminal") is True) or
+                                (provider == "codex" and candidate.get("type") == "pool.accounting"))):
                 record = candidate
-    if not record or record.get("complete") is not True or record.get("status") != "success":
+    if (not record or record.get("terminal") is not True or
+            record.get("complete") is not True or record.get("status") != "success"):
         raise ValueError("missing successful correlated pool accounting")
-    ref = record["pool_receipt"]
+    ref = record.get("pool_receipt")
+    if not isinstance(ref, dict) or ref.get("attempt_id") != attempt:
+        raise ValueError("missing correlated pool receipt reference")
     raw = Path(ref["path"]).read_bytes()
     if hashlib.sha256(raw).hexdigest() != ref["sha256"]:
         raise ValueError("pool evidence hash mismatch")
     data = json.loads(raw)
-    if data.get("id") != ref["id"] or validate(data, attempt, provider) != {k: record[k] for k in FIELDS}:
+    if not isinstance(data, dict) or data.get("id") != ref["id"] or validate(data, attempt, provider) != {k: record[k] for k in FIELDS}:
         raise ValueError("pool evidence does not reconcile")
     return ref
 

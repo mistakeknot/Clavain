@@ -13,6 +13,7 @@ import signal
 import subprocess
 import sys
 import time
+import tempfile
 
 from pool_receipt import FIELDS, PoolAttempt
 
@@ -42,6 +43,8 @@ def run(args):
         event = json.loads(line)
         if not isinstance(event, dict):
             raise ValueError('invalid Codex event')
+        if event.get('type') == 'pool.accounting' or 'pool_receipt' in event:
+            raise ValueError('reserved pool event from child')
         kind = event.get('type')
         if kind == 'turn.started':
             if started != done:
@@ -65,9 +68,10 @@ def run(args):
         elif kind in ('turn.failed', 'error'):
             raise ValueError('Codex provider failed')
 
+    stderr_file = tempfile.TemporaryFile()
     try:
         command = args.command[1:] if args.command[:1] == ['--'] else args.command
-        child = subprocess.Popen(command, stdin=sys.stdin, stdout=subprocess.PIPE, env=pool.child_env())
+        child = subprocess.Popen(command, stdin=sys.stdin, stdout=subprocess.PIPE, stderr=stderr_file, env=pool.child_env())
         pending = b''
         stopping_at = None
         with selectors.DefaultSelector() as sel:
@@ -86,14 +90,20 @@ def run(args):
                     if not data:
                         sel.unregister(key.fileobj)
                         break
-                    sys.stdout.buffer.write(data)
-                    sys.stdout.buffer.flush()
                     pending += data
                     while b'\n' in pending:
                         line, pending = pending.split(b'\n', 1)
                         try:
                             if len(line) > 8 << 20:
                                 raise ValueError('oversized Codex event')
+                            event = json.loads(line)
+                            if isinstance(event, dict) and (event.get('type') == 'pool.accounting' or 'pool_receipt' in event):
+                                raise ValueError('reserved pool event from child')
+                            if any(token.encode() in line or json.dumps(token)[1:-1].encode() in line
+                                   for token in (pool.host_token, pool.scoped)):
+                                raise ValueError('authentication material in child output')
+                            sys.stdout.buffer.write(line + b'\n')
+                            sys.stdout.buffer.flush()
                             consume(line)
                         except (ValueError, KeyError, TypeError):
                             error = 'invalid or incomplete Codex accounting'
@@ -112,6 +122,30 @@ def run(args):
             child.wait()
         rc = child.returncode if child is not None else 127
     try:
+        # Scan with the scoped bearer in memory; dispatch only knows the host
+        # bearer. Never send the scoped value through argv or the ledger.
+        with tempfile.TemporaryDirectory() as scratch:
+            err_path = Path(scratch) / 'stderr'
+            stderr_file.seek(0)
+            err_path.write_bytes(stderr_file.read())
+            files = [str(err_path)]
+            for i, arg in enumerate(command[:-1]):
+                if arg in ('-o', '--output-last-message'):
+                    output = Path(command[i+1])
+                    if output.exists():
+                        files.append(str(output))
+            scan = subprocess.run([sys.executable, '-I', str(Path(__file__).with_name('token-leak-scan.py')),
+                                   'scan', '--hits', str(Path(scratch)/'hits'), '--', *files],
+                                  env=pool.child_env(), capture_output=True, timeout=10)
+            if scan.returncode:
+                error = 'authentication material or unscannable child output'
+            sys.stderr.buffer.write(err_path.read_bytes() if scan.returncode in (0, 3) else b'')
+            sys.stderr.buffer.flush()
+    except (OSError, ValueError, subprocess.SubprocessError):
+        error = 'child output scan unavailable'
+    finally:
+        stderr_file.close()
+    try:
         ref = pool.finish(total)
         data = json.loads(Path(ref['path']).read_text())
         for request in data['requests']:
@@ -122,7 +156,7 @@ def run(args):
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         error = 'pool request accounting unavailable or unreconciled'
     success = not (error or rc or cancelled[0] or budget_hit) and 0 < started == done
-    record = dict(type='pool.accounting', terminal=True, complete=success,
+    record = dict(type='pool.accounting', attempt_id=args.attempt, terminal=True, complete=success,
                   status='success' if success else 'accounting_error', backend_exit=rc, **total)
     if ref is not None:
         record['pool_receipt'] = ref
