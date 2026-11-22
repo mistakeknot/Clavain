@@ -4,15 +4,63 @@ import argparse
 import json
 import fcntl
 import os
+import re
+import stat
 from pathlib import Path
 import sys
 
 from review_round_decision import REVIEW_ROLES, DecisionRefused, claim
 
 
+HEAD = re.compile(r"[0-9a-f]{40}")
+PR_FILE = re.compile(r"([1-9][0-9]*)-([0-9a-f]{40})(?:\.([2-9]|[1-9][0-9]+))?\.json")
+
+
+def fail_word(raw):
+    """FAIL class from lib-verdict.sh; parity tested against its public reader."""
+    return isinstance(raw, str) and re.match(r"^(FAIL|BLOCK)($|[\s:;.,(].*)", raw.strip(), re.I) is not None
+
+
+def bound_head(row):
+    return isinstance(row.get("head_sha"), str) and HEAD.fullmatch(row["head_sha"]) is not None
+
+
+def eligible(row):
+    route = row.get("resolved_route")
+    profiles = [row.get("policy_profile"), route.get("policy_profile") if isinstance(route, dict) else None]
+    return not (row.get("experimental") is True or row.get("gate_review_eligible") is False
+                or row.get("experiment_arm") is not None
+                or any(isinstance(p, str) and p.startswith("experiment-") for p in profiles))
+
+
+def downgraded(row, source):
+    name = PR_FILE.fullmatch(Path(source).name)
+    findings = row.get("findings")
+    return (name is not None and type(row.get("pr")) is int
+            and int(name.group(1)) == row["pr"] and name.group(2) == row.get("head_sha")
+            and row.get("verdict") == "PASS WITH NOTES" and row.get("block_downgraded") is True
+            and fail_word(row.get("verdict_raw")) and row.get("findings_source") == "body"
+            and type(row.get("findings_total")) is int and row["findings_total"] > 0
+            and isinstance(findings, list) and len(findings) == row["findings_total"]
+            and row.get("findings_truncated", False) is False
+            and all(isinstance(f, dict) and f.get("severity") in ("P2", "P3")
+                    and isinstance(f.get("class"), str) and bool(f["class"])
+                    and isinstance(f.get("summary"), str) and bool(f["summary"])
+                    and "file" in f and (f["file"] is None or isinstance(f["file"], str))
+                    and "line" in f and (f["line"] is None or type(f["line"]) is int and f["line"] > 0)
+                    for f in findings))
+
+
 def check(bead, ledger, reviews, head=None, check_only=False, role=None):
     failures = set()
     malformed = 0
+    evidence = {}
+    veto = set()
+    cancellation_off = False
+
+    def pair(row):
+        key = (row.get("dispatch_id"), row.get("attempt_id"))
+        return key if all(isinstance(value, str) and value for value in key) else None
 
     def consider(row, source):
         if row.get("schema_version") != 1:
@@ -23,11 +71,7 @@ def check(bead, ledger, reviews, head=None, check_only=False, role=None):
         role = row.get("role")
         if not isinstance(role, str) or row.get("bead_id") != bead or role not in REVIEW_ROLES:
             return
-        route = row.get("resolved_route")
-        profiles = [row.get("policy_profile"), route.get("policy_profile") if isinstance(route, dict) else None]
-        if (row.get("experimental") is True or row.get("gate_review_eligible") is False
-                or row.get("experiment_arm") is not None
-                or any(isinstance(p, str) and p.startswith("experiment-") for p in profiles)):
+        if not eligible(row):
             return
         kind = row.get("kind")
         if kind == "dispatch-run-receipt":
@@ -43,14 +87,22 @@ def check(bead, ledger, reviews, head=None, check_only=False, role=None):
             failures.add(key if all(key) else (source,))
 
     def consume(raw, source):
-        nonlocal malformed
+        nonlocal malformed, cancellation_off
+        row = None
         try:
             row = json.loads(raw)
             if not isinstance(row, dict):
                 raise ValueError("invalid receipt object")
+            key = pair(row)
+            if key:
+                evidence.setdefault(key, []).append((row, source))
             consider(row, source)
         except (ValueError, RecursionError):
             malformed += 1
+            if isinstance(row, dict) and pair(row) and isinstance(row.get("bead_id"), str):
+                veto.add(pair(row))
+            else:
+                cancellation_off = True
 
     if ledger.exists():
         # Cooperate with _append_dispatch_run_receipt's exclusive flock. Hold
@@ -63,12 +115,43 @@ def check(bead, ledger, reviews, head=None, check_only=False, role=None):
                     if line.strip():
                         consume(line, f"{ledger}:{n + 1}")
     if reviews.exists():
-        for path in sorted(reviews.glob("*/*.json")):
-            if path.is_file() and not path.is_symlink():
+        for directory in sorted(reviews.iterdir()):
+            if directory.is_symlink():
+                malformed += 1
+                cancellation_off = True
+                continue
+            if not directory.is_dir():
+                continue
+            for path in sorted(directory.glob("*.json")):
+                # Never follow a contradictory receipt through a link, or
+                # silently omit a directory/FIFO where a receipt should be.
+                if not stat.S_ISREG(path.lstat().st_mode):
+                    malformed += 1
+                    cancellation_off = True
+                    continue
                 consume(path.read_bytes(), str(path))
     if malformed:
         suffix = "s" if malformed != 1 else ""
-        print(f"dispatch: skipped {malformed} malformed review history record{suffix}; counted only well-formed receipts", file=sys.stderr)
+        scope = "all attempts" if cancellation_off else "affected attempts"
+        print(f"dispatch: skipped {malformed} malformed review history record{suffix}; cancellation is off for {scope}; counted only well-formed receipts", file=sys.stderr)
+    if not cancellation_off:
+        for key, records in evidence.items():
+            if key not in failures or key in veto:
+                continue
+            rows = [row for row, _ in records]
+            first = rows[0]
+            if not all(type(row.get("schema_version")) is int and row["schema_version"] == 1
+                       and row.get("bead_id") == bead and row.get("role") in REVIEW_ROLES
+                       and row.get("role") == first.get("role") and bound_head(row)
+                       and row["head_sha"] == first.get("head_sha") and eligible(row)
+                       for row in rows):
+                continue
+            runs = [row for row in rows if row.get("kind") == "dispatch-run-receipt"]
+            prs = [(row, source) for row, source in records if row.get("kind") == "cross-lab-review-receipt"]
+            if (runs and prs and len(runs) + len(prs) == len(rows)
+                    and all(row.get("verdict_class") == "FAIL" for row in runs)
+                    and all(downgraded(row, source) for row, source in prs)):
+                failures.remove(key)
     if len(failures) < 3:
         return 0
     try:

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 
@@ -109,6 +110,18 @@ FILE_LINE = re.compile(r"`?([A-Za-z0-9_./@+-]+\.[A-Za-z0-9]+|[A-Za-z0-9_./@+-]*/
 SUMMARY_MAX = 200
 
 
+def zero_declaration(line: str, rest: str) -> bool:
+    """Complete empty-count text, allowing balanced bold and one final period.
+
+    Shared with strict validation; title prefixes are never count evidence.
+    Reporting also feeds the dispatch sidecar and routing audit.
+    """
+    if any(line.count(marker) % 2 for marker in ("**", "__")):
+        return False
+    rest = rest.replace("**", "").replace("__", "")
+    return bool(re.fullmatch(r"\s*:\s*(?:0|none(?:\s+found)?|n/?a)\.?\s*", rest, re.I))
+
+
 def heading_findings(lines: list[str]) -> list[dict[str, str]]:
     """Return one {severity, rest} record per finding heading (same rules as
     the historical heading counter, which is now derived from this list)."""
@@ -118,7 +131,7 @@ def heading_findings(lines: list[str]) -> list[dict[str, str]]:
         match = FINDING_HEADING.match(line)
         if not match:
             continue
-        if re.match(r"^(?:\*\*|__)?\s*:\s*(?:0|none|n/?a)\b", line[match.end():], re.IGNORECASE):
+        if zero_declaration(line, line[match.end():]):
             continue
         # A severity section immediately introducing tagged children is not an
         # additional finding — but only when the heading carries no text of
@@ -243,7 +256,83 @@ def extract_detail(path: Path, resolve_conflict: bool = True) -> dict:
     return {**counts, "findings": findings}
 
 
+_OPEN = "\\[\uff3b\u3010\u300c\u3014\u300e(\uff08"
+CANDIDATE = re.compile(
+    r"^(?:#{1,6}\s|(?:\*\*|__)|[" + _OPEN + r"]"
+    r"|(?:[-+*\u2022]|\d+[.)])\s+(?:\*\*|__)?[" + _OPEN + r"]"
+    r"|(?:[-+*\u2022]|\d+[.)])\s+(?:\*\*|__)?(?:finding|issue|severity|blocker)s?\b"
+    r"|(?:finding|issue|severity|blocker)s?\b)", re.I,
+)
+BENIGN_HEADING = re.compile(
+    r"^#{1,6}\s*(?:summary|findings?|notes?|overview|verdict|review|scope|conclusion|tests?)\s*:?\s*$", re.I,
+)
+SEVERE_WORD = re.compile(r"\bP[01]\b|\bcritical\b|\bblock(?:er|ers|ing)\b|\bunknown\b", re.I)
+SEVERE_ALIASES = "|".join(re.escape(key) for key, value in SEVERITY.items() if value in ("P0", "P1"))
+SEVERE_LABEL = re.compile(
+    r"(?:^|[\[(:;—–-]|\bseverity\s*:)\s*(?:" + SEVERE_ALIASES + r")"
+    r"(?=\s*(?:$|[]:—–-])|[-_ ]severity\b)"
+    r"|\b(?:" + SEVERE_ALIASES + r")(?=\s*:|[-_ ]severity\b)", re.I,
+)
+
+
+def normalized_line(line: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFKC", line)
+                   if unicodedata.category(c) != "Cf").strip()
+
+
+def undecorated(line: str) -> str:
+    line = re.sub(r"^(?:#{1,6}\s+|[-+*•]\s+|\d+[.)]\s+)", "", line)
+    return line.replace("**", "").replace("__", "").strip()
+
+
+def strict_clean(path: Path) -> bool:
+    """Accept only complete lower-severity evidence; errors retain BLOCK."""
+    lines = [normalized_line(line) for line in visible_lines(path.read_text())]
+    counts = heading_counts(lines)
+    if not counts or counts["P0"] or counts["P1"] or not counts["total"]:
+        return False
+    for line in lines:
+        if not line:
+            continue
+        plain = undecorated(line)
+        # Bare section headings are not declarations; titles containing a
+        # declaration marker conservatively retain BLOCK.
+        if re.fullmatch(r"findings\s*:", plain, re.I):
+            continue
+        if re.search(r"\bfindings\s*:", plain, re.I):
+            declaration = VERDICT_FINDINGS.fullmatch(plain)
+            if not declaration:
+                return False
+            declared = [int(declaration.group(i) or 0) for i in range(2, 6)]
+            if (int(declaration.group(1)) != sum(declared)
+                    or declared != [counts[key] for key in ("P0", "P1", "P2", "P3")]):
+                return False
+            continue
+        # Scan the entire line, including the final verdict explanation,
+        # before any candidate or zero-declaration exception.
+        if SEVERE_WORD.search(line) or SEVERE_LABEL.search(plain):
+            return False
+        match = FINDING_HEADING.match(line)
+        if match:
+            severity = SEVERITY[next(g for g in match.groups() if g is not None).lower()]
+            if severity in ("P0", "P1"):
+                return False
+            if zero_declaration(line, line[match.end():]):
+                continue
+            continue
+        if CANDIDATE.match(line) and not BENIGN_HEADING.fullmatch(line):
+            return False
+    return True
+
+
 def main() -> int:
+    if "--strict-clean" in sys.argv[1:]:
+        if len(sys.argv) != 3 or sys.argv[1] != "--strict-clean":
+            return 1
+        try:
+            return 0 if strict_clean(Path(sys.argv[2])) else 1
+        except Exception:
+            return 1
     args = [a for a in sys.argv[1:] if a != "--detail"]
     detail = len(args) != len(sys.argv) - 1
     result: dict = {**UNKNOWN, "findings": []} if detail else UNKNOWN.copy()
