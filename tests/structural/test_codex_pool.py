@@ -11,6 +11,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.requires_ic
 @pytest.mark.parametrize("source", ["native", "borrowed"])
 @pytest.mark.parametrize("mode", ["success", "refused", "missing-account", "wrong-totals",
                                   "wrong-provider", "wrong-model", "unknown-hop", "provider-fail",
