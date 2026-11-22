@@ -2,7 +2,6 @@
 import importlib.util
 import json
 import os
-import re
 import string
 from pathlib import Path
 import subprocess
@@ -145,16 +144,105 @@ def test_high_label_punctuation_followers(tmp_path, closing):
     assert parser.strict_clean(path) is False
 
 
-@pytest.mark.parametrize("raw", ["FAIL", "fail", "FAIL.", "BLOCK: two P2 follow-ups"])
-def test_writer_positive_label_only_residual_and_benign_heading(writer, raw):
+@pytest.mark.parametrize("raw", ["FAIL", "fail", "FAIL.", "BLOCK", "BLOCK: two P2 follow-ups"])
+@pytest.mark.parametrize("residual", ["Do not merge; data loss. Major: auth bypass.",
+                                      "Rename the helper for readability.", None])
+def test_writer_lower_only_residual_and_benign_heading(writer, raw, residual):
     write, _ = writer
-    result = write("## Findings:\n" + LOW + "Do not merge; data loss. Major: auth bypass.\n\nVERDICT: " + raw)
-    # The conservative evidence scan also blocks lower-severity words in an
-    # explanation. Raw FAIL-class recognition remains a separate contract.
-    expected = "BLOCK" if "P2" in raw else "PASS WITH NOTES"
+    result = write("## Findings:\n" + LOW + (residual or "") + "\n\nVERDICT: " + raw)
+    # A hold phrase or severity word anywhere keeps BLOCK, and so does a
+    # lower-severity label in a verdict explanation. Raw FAIL-class
+    # recognition remains a separate contract.
+    expected = "BLOCK" if "P2" in raw or (residual and "merge" in residual) else "PASS WITH NOTES"
     assert result["verdict"] == expected
     assert result["verdict_raw"] == raw
     assert result.get("block_downgraded", False) is (expected == "PASS WITH NOTES")
+
+
+# One table per closed bypass class. Each fragment follows LOW; a fragment
+# without its own VERDICT line is followed by a plain "VERDICT: FAIL". Every
+# entry must keep BLOCK through strict validation and through the real writer.
+CLOSED_CLASSES = {
+    "parentheses": ["VERDICT: FAIL (high)", "VERDICT: FAIL (High)", "Auth bypass (high).",
+                    "Auth bypass (P1)", "Auth bypass (severity high)", "（High）auth bypass"],
+    "punctuation": ["VERDICT: FAIL — High.", "High! auth", "High? auth", "High... auth",
+                    "auth bypass; high", "VERDICT: FAIL: high", "High—auth bypass",
+                    "VERDICT: FAIL / high / auth bypass", 'VERDICT: FAIL "high"',
+                    "auth bypass, severity: high.", "H\\igh auth bypass"],
+    "emphasis": ["- *High*: auth bypass remains", "- _High_: auth bypass remains",
+                 "* *High*: auth bypass", "Hi**gh** auth bypass", "Hi_gh_ auth bypass",
+                 "VERDICT: FAIL — *high*: auth bypass", "~~High~~ auth bypass",
+                 "Auth bypass is `high`", "***High*** auth bypass"],
+    "table-cell": ["| High | auth bypass |", "| auth bypass | High |", "|High|auth|",
+                   "| P1 | auth bypass |", "| severity | high |", "auth | high"],
+    "comma": ["VERDICT: FAIL, high, auth bypass", "auth bypass, high", "high,auth bypass",
+              "VERDICT: BLOCK: high, auth bypass"],
+    "mixed-labels": ["### [P2] [P1] leak (a.py:1)", "### P2/P1 leak (a.py:1)",
+                     "### [P3] High: leak (a.py:1)", "### [P2] leak — Severity: High (a.py:1)",
+                     "Severity: High", "- [P2] (P1) leak", "### [P2] Critical leak (a.py:1)",
+                     "### [P3] [test-gap] P0 regression (a.py:1)", "### [Medium] [High] leak"],
+    "hold-phrases": ["Do not merge", "Do not\nmerge", "Do **not** merge", "Do not *merge*",
+                     "Merging must wait until this is fixed", "This must be fixed before merging",
+                     "DNM", "Hold this PR", "Please do not land this", "Don't ship this",
+                     "Wait for the fix", "VERDICT: FAIL — do not merge", "M e r g e later",
+                     "mer-\nge later", "This blocks the release", "Do not integrate this",
+                     "Don't integrate this", "Rejected until fixed", "Stop and fix this first"],
+    "encodings": ["&#72;igh auth bypass", "&amp;#72;igh auth bypass", "Hi<b></b>gh auth bypass",
+                  "<b>High</b> auth bypass", "Нigh auth bypass", "Ｈｉｇｈ auth bypass",
+                  "Hi\u200bgh auth bypass", "HighSeverity auth bypass", "two P1s remain",
+                  "Sev-1 auth bypass", "P-1 auth bypass", "Priority 0", "S1 outage",
+                  "H i g h auth bypass", "Severe auth bypass", "Major: auth bypass",
+                  "Urgent auth bypass", "Important: auth bypass", "%48igh auth bypass",
+                  "Priority one"],
+}
+CLOSED_CASES = [(name, fragment) for name, fragments in CLOSED_CLASSES.items()
+                for fragment in fragments]
+
+
+def closed_body(fragment):
+    # The verdict parser needs a blank line before the closing VERDICT line.
+    if fragment.startswith("VERDICT:"):
+        return LOW + "\n" + fragment + "\n"
+    return LOW + fragment + "\n\nVERDICT: FAIL\n"
+
+
+@pytest.mark.parametrize("name,fragment", CLOSED_CASES)
+def test_closed_class_keeps_block_in_strict_check(tmp_path, name, fragment):
+    path = tmp_path / "review.md"
+    path.write_text(closed_body(fragment))
+    assert parser.strict_clean(path) is False
+
+
+@pytest.mark.parametrize("name,fragment", CLOSED_CASES)
+def test_closed_class_keeps_block_through_writer(writer, name, fragment):
+    write, _ = writer
+    result = write(closed_body(fragment))
+    assert result["verdict"] == "BLOCK"
+    assert "block_downgraded" not in result
+
+
+@pytest.mark.parametrize("fragment", ["```\nx\n```", "~~~\nx\n~~~", "<!-- note -->", "a\x00b"])
+def test_unreadable_markup_keeps_block_in_strict_check(tmp_path, fragment):
+    path = tmp_path / "review.md"
+    path.write_text(closed_body(fragment))
+    assert parser.strict_clean(path) is False
+
+
+@pytest.mark.parametrize("body", [
+    LOW + "\nVERDICT: FAIL\n",
+    LOW + "Rename the helper for readability.\n\nVERDICT: BLOCK\n",
+    "### [P3] [test-gap] add a test (b.py:2)\n" + LOW + "\nVERDICT: FAIL.\n",
+    "## Findings:\n" + LOW + "The name reads poorly in a.py; a clearer one helps.\n\nVERDICT: fail\n",
+    "- [P2] naming (a.py:1)\n- [P3] spacing (a.py:2)\n\nVERDICT: FAIL\n",
+])
+def test_lower_only_controls_still_downgrade(writer, tmp_path, body):
+    path = tmp_path / "control.md"
+    path.write_text(body)
+    assert parser.strict_clean(path) is True
+    write, _ = writer
+    result = write(body)
+    assert result["verdict"] == "PASS WITH NOTES"
+    assert result["block_downgraded"] is True
 
 
 @pytest.mark.parametrize("alias", list(parser.SEVERITY) + ["blocker", "blockers", "blocking", "unknown"])
@@ -294,8 +382,7 @@ def test_conflicting_pass_run_preserves_the_failed_attempt(tmp_path):
 def test_heading_guard_retains_block_without_lexical_scans(tmp_path, monkeypatch, severity):
     # Isolate the independent structural guard: zero declarations are omitted
     # from counts, and lexical checks are a separate layer of protection.
-    monkeypatch.setattr(parser, "SEVERE_WORD", re.compile(r"(?!x)x"))
-    monkeypatch.setattr(parser, "LABEL_WORDS", frozenset())
+    monkeypatch.setattr(parser, "severe_evidence", lambda fragments: False)
     path = tmp_path / "review.md"
     path.write_text(LOW + f"### [{severity}]: 0\n\nVERDICT: FAIL\n")
     assert parser.heading_counts(parser.visible_lines(path.read_text()))["total"] == 1
@@ -314,16 +401,68 @@ def test_symlinked_repository_directory_keeps_its_three_block_receipts(tmp_path)
     assert "cancellation is off" in result.stderr
 
 
-def test_unreadable_repository_directory_is_history_error(tmp_path):
+def _unreadable(mode):
     def special(directory):
-        directory.chmod(0)
+        directory.chmod(mode)
+    return special
+
+
+def _linked(target_kind):
+    def special(directory):
+        target = directory.parent.parent / "real-receipts"
+        if target_kind == "missing":
+            pass
+        elif target_kind == "file":
+            target.write_text("{}")
+        else:
+            directory.rename(target)
+            target.chmod(0)
+            directory.mkdir()
+        if directory.exists():
+            for entry in directory.iterdir():
+                entry.unlink()
+            directory.rmdir()
+        directory.symlink_to(target)
+    return special
+
+
+def _dangling_root(path_name):
+    def special(directory):
+        root = directory.parent.parent / path_name
+        if root.exists():
+            if root.is_dir():
+                for entry in root.rglob("*"):
+                    if entry.is_file():
+                        entry.unlink()
+                for entry in sorted(root.rglob("*"), reverse=True):
+                    entry.rmdir()
+                root.rmdir()
+            else:
+                root.unlink()
+        root.symlink_to(directory.parent.parent / "missing-target")
+    return special
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="permission bits do not bind root")
+@pytest.mark.parametrize("case,special", [
+    ("unreadable folder 000", _unreadable(0)),
+    ("unreadable folder 300", _unreadable(0o300)),
+    ("unreadable folder 400", _unreadable(0o400)),
+    ("symlinked folder, dangling", _linked("missing")),
+    ("symlinked folder, unreadable target", _linked("unreadable")),
+    ("symlinked folder, file target", _linked("file")),
+    ("dangling receipts root", _dangling_root("reviews")),
+    ("dangling ledger", _dangling_root("runs.jsonl")),
+])
+def test_unreadable_history_is_history_error(tmp_path, case, special):
     prs = [dict(pr_row(), attempt_id=str(i), verdict="BLOCK") for i in range(3)]
-    directory = tmp_path / "reviews" / "o__r"
     try:
         result = counter(tmp_path, [], prs, special=special)
     finally:
-        directory.chmod(0o700)
-    assert result.returncode == 26
+        for path in [tmp_path / "reviews" / "o__r", tmp_path / "real-receipts"]:
+            if path.is_dir() and not path.is_symlink():
+                path.chmod(0o700)
+    assert result.returncode == 26, (case, result.stderr)
     assert "cannot verify review round history" in result.stderr
 
 

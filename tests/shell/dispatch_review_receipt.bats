@@ -35,12 +35,22 @@ teardown() { rm -rf "$T"; }
     [ "$(jq -r .block_downgraded "$f")" = true ]
 }
 
-@test "a recognised P2 finding is P2 whatever its prose says: the reviewer's severity label decides" {
-    printf '### [P2] [bug] cleanup (a.py:1)\nthis permits data loss; do not merge\n\nVERDICT: FAIL\n' > "$OUT"
+@test "a P2 finding with neutral prose downgrades a raw FAIL" {
+    printf '### [P2] [bug] cleanup (a.py:1)\nthe helper name is unclear\n\nVERDICT: FAIL\n' > "$OUT"
     _review_receipt_prepare "$R"
     run _review_receipt_write "$OUT" 0
     [ "$status" -eq 0 ]
     [ "$(jq -r .verdict "$T/reviews/o__r/7-$HEAD_SHA.json")" = "PASS WITH NOTES" ]
+}
+
+@test "a hold phrase in a P2 finding's body keeps BLOCK" {
+    printf '### [P2] [bug] cleanup (a.py:1)\nthis permits data loss; do not merge\n\nVERDICT: FAIL\n' > "$OUT"
+    _review_receipt_prepare "$R"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ "$(jq -r .verdict "$f")" = BLOCK ]
+    [ "$(jq -r '.block_downgraded // "absent"' "$f")" = absent ]
 }
 
 @test "FAIL with a P1 finding stays BLOCK and is not marked downgraded" {

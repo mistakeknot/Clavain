@@ -104,7 +104,9 @@ def check(bead, ledger, reviews, head=None, check_only=False, role=None):
             else:
                 cancellation_off = True
 
-    if ledger.exists():
+    # A dangling link where history should be is unreadable history (exit
+    # 26), never an empty one: exists() alone would silently drop it.
+    if ledger.exists() or ledger.is_symlink():
         # Cooperate with _append_dispatch_run_receipt's exclusive flock. Hold
         # a shared lock for the whole read so a live append cannot be torn.
         fd = os.open(f"{ledger}.lock", os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600)
@@ -114,7 +116,7 @@ def check(bead, ledger, reviews, head=None, check_only=False, role=None):
                 for n, line in enumerate(stream):
                     if line.strip():
                         consume(line, f"{ledger}:{n + 1}")
-    if reviews.exists():
+    if reviews.exists() or reviews.is_symlink():
         with os.scandir(reviews) as entries:
             directories = sorted(Path(entry.path) for entry in entries)
         for directory in directories:
