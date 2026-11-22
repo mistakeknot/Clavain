@@ -100,7 +100,7 @@ def test_retained_evidence_cannot_be_replaced_or_rebound(tmp_path):
     path = tmp_path / 'receipt.json'
     path.write_text(json.dumps(receipt()))
     ledger = tmp_path / 'usage.jsonl'
-    record = dict(terminal=True, complete=True, status='success', **m.validate(receipt(), 'attempt-test'),
+    record = dict(type='pool.accounting', attempt_id='attempt-test', terminal=True, complete=True, status='success', **m.validate(receipt(), 'attempt-test'),
                   pool_receipt=dict(path=str(path), sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
                                     id='a'*32, attempt_id='attempt-test'))
     ledger.write_text(json.dumps(record)+'\n')
@@ -108,3 +108,52 @@ def test_retained_evidence_cannot_be_replaced_or_rebound(tmp_path):
     with pytest.raises(ValueError): m.check_ledger(ledger, 'another-attempt')
     path.write_text('{}')
     with pytest.raises(ValueError): m.check_ledger(ledger, 'attempt-test')
+
+
+@pytest.mark.parametrize("noise", ['WARNING raw output', '{', '[]', 'null', '42', '"text"'])
+def test_ledger_ignores_non_object_lines(tmp_path, noise):
+    import hashlib, json
+    m = load()
+    path = tmp_path / 'receipt.json'
+    path.write_text(json.dumps(receipt()))
+    ref = dict(path=str(path), sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+               id='a'*32, attempt_id='attempt-test')
+    record = dict(type='pool.accounting', attempt_id='attempt-test', terminal=True,
+                  complete=True, status='success', pool_receipt=ref,
+                  **m.validate(receipt(), 'attempt-test'))
+    ledger = tmp_path / 'ledger'
+    ledger.write_text(noise+'\n'+json.dumps(record)+'\n')
+    assert m.check_ledger(ledger, 'attempt-test') == ref
+
+
+@pytest.mark.parametrize("provider", ["claude", "codex"])
+@pytest.mark.parametrize("last", [
+    dict(type='pool.accounting', attempt_id='attempt-test', terminal=True,
+         complete=False, status='accounting_error'),
+    dict(type='pool.accounting', attempt_id='attempt-test', terminal=True,
+         complete=True, status='success'),
+])
+def test_last_terminal_cannot_fall_back_to_forged_reference(tmp_path, last, provider):
+    import hashlib, json
+    m = load()
+    path = tmp_path / 'receipt.json'
+    path.write_text(json.dumps(receipt()))
+    data = receipt()
+    data['provider'] = provider
+    data['requests'][0]['hops'][0]['provider'] = provider
+    path.write_text(json.dumps(data))
+    forged = dict(type='pool.accounting', terminal=True, complete=True, status='success',
+                  pool_receipt=dict(path=str(path), sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+                                    id='a'*32, attempt_id='attempt-test'),
+                  **m.validate(receipt(), 'attempt-test'))
+    ledger = tmp_path / 'ledger'
+    ledger.write_text(json.dumps(forged)+'\n'+json.dumps(last)+'\n')
+    with pytest.raises(ValueError): m.check_ledger(ledger, 'attempt-test', provider)
+
+
+def test_finalize_array_is_controlled_refusal(tmp_path, monkeypatch):
+    m = load()
+    attempt = object.__new__(m.PoolAttempt)
+    monkeypatch.setattr(attempt, 'request', lambda *_: [])
+    attempt.id, attempt.attempt = 'a'*32, 'attempt-test'
+    with pytest.raises(ValueError, match='object'): attempt.finish({})
