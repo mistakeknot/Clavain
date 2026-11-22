@@ -115,7 +115,9 @@ def check(bead, ledger, reviews, head=None, check_only=False, role=None):
                     if line.strip():
                         consume(line, f"{ledger}:{n + 1}")
     if reviews.exists():
-        for directory in sorted(reviews.iterdir()):
+        with os.scandir(reviews) as entries:
+            directories = sorted(Path(entry.path) for entry in entries)
+        for directory in directories:
             if directory.is_symlink():
                 malformed += 1
                 cancellation_off = True
@@ -126,7 +128,11 @@ def check(bead, ledger, reviews, head=None, check_only=False, role=None):
                     raise OSError("unreadable linked review directory")
             if not directory.is_dir():
                 continue
-            for path in sorted(directory.glob("*.json")):
+            # Path.glob may swallow PermissionError and silently hide all
+            # failures in a folder. Enumeration errors are history errors.
+            with os.scandir(directory) as entries:
+                paths = sorted(Path(entry.path) for entry in entries if entry.name.endswith(".json"))
+            for path in paths:
                 # Never follow a contradictory receipt through a link, or
                 # silently omit a directory/FIFO where a receipt should be.
                 if not stat.S_ISREG(path.lstat().st_mode):

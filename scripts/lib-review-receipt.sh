@@ -272,14 +272,17 @@ _review_receipt_write() {
 
   # Design choice: complete body findings labeled only P2/P3 may turn a raw
   # FAIL-class verdict into PASS WITH NOTES. Keep the raw verdict as evidence.
-  # Unparsed finding-shaped lines and recognized severe/unknown labels keep
-  # BLOCK. Only parser aliases (P0-P3, Critical/High/Medium/Low) plus the
+  # Unparsed finding-shaped lines and normalized whole-word severity aliases
+  # keep BLOCK. Only parser aliases (P0-P3, Critical/High/Medium/Low) plus the
   # blocker/unknown vocabulary are recognized; Major, Severe, Sev-1, S1 and
   # lookalike letters in prose are outside this label check. Hold, data-loss,
   # credential and security prose alone do not determine severity; there is no
   # whitespace-normalized hold scan. Unknown/conflicting evidence never grants
-  # a downgrade. An in-block count declaration has extractor source verdict,
-  # so it cannot downgrade even though its serialized findings_source is body.
+  # a downgrade. A parsed heading's leading P2/P3 label is exempt, but aliases
+  # anywhere else, even lower-severity words in prose or a verdict explanation,
+  # conservatively retain BLOCK. An in-block count declaration has extractor
+  # source verdict, so it cannot downgrade even though its serialized
+  # findings_source is body.
   local block_downgraded=false
   if [[ "$verdict" == BLOCK ]] && _review_receipt_may_downgrade "$out" "$fx_json"; then
     verdict="PASS WITH NOTES"

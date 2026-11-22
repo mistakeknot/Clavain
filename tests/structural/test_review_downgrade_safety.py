@@ -3,6 +3,7 @@ import importlib.util
 import json
 import os
 import re
+import string
 from pathlib import Path
 import subprocess
 
@@ -20,6 +21,13 @@ PUNCTUATED_LABELS = [
     "VERDICT: BLOCK: high, auth bypass",
     "- Auth bypass remains, severity: high.",
 ]
+STRUCTURAL_LABELS = [
+    "- *High*: auth bypass remains", "- _High_: auth bypass remains",
+    "| High | auth bypass |", "VERDICT: FAIL, high, auth bypass",
+    "* *High*: auth bypass", "VERDICT: FAIL — *high*: auth bypass",
+    "VERDICT: FAIL / high / auth bypass", 'VERDICT: FAIL "high"',
+    "VERDICT: FAIL `high`", "High! auth",
+]
 HOSTILE = [
     "### [P1]: 0-day SQL injection (auth.py:42)",
     "### P1: 0-day SQL injection (auth.py:42)",
@@ -36,7 +44,7 @@ HOSTILE = [
     "- findings", "High: auth bypass", "[High] auth bypass",
     "Severity: High — auth bypass", "Ｐ１: auth bypass", "P\u200b1: auth bypass",
     "### [P2] Parser drops findings: on wrap (x.py:1)",
-] + PUNCTUATED_LABELS
+] + PUNCTUATED_LABELS + STRUCTURAL_LABELS
 
 
 @pytest.mark.parametrize("fragment", HOSTILE[:6])
@@ -70,7 +78,7 @@ def writer(tmp_path):
     subprocess.run(["git", "-C", str(repo), "commit", "-qam", "head"], check=True)
     head = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
 
-    def write(body):
+    def write(body, expect_format_rejection=False):
         output = tmp_path / "review.md"
         output.write_text(body)
         env = dict(os.environ, CLAVAIN_REVIEW_RECEIPT_DIR=str(tmp_path / "reviews"),
@@ -85,8 +93,14 @@ VALIDATOR_RELATIONSHIP=different-model
 _review_receipt_prepare "$2" && _review_receipt_write "$5" 0
 ''', "_", str(SCRIPTS), str(repo), head, base, str(output), "a" * 64],
                                 env=env, text=True, capture_output=True)
+        receipt = tmp_path / "reviews" / "o__r" / f"7-{head}.json"
+        if expect_format_rejection:
+            assert result.returncode != 0
+            assert "invalid review output format" in result.stderr
+            assert not receipt.exists()
+            return None
         assert result.returncode == 0, result.stderr
-        return json.loads((tmp_path / "reviews" / "o__r" / f"7-{head}.json").read_text())
+        return json.loads(receipt.read_text())
     return write, head
 
 
@@ -101,19 +115,27 @@ def test_writer_keeps_hostile_body_blocked(writer, fragment):
     assert "block_downgraded" not in result
 
 
-@pytest.mark.parametrize("explanation", PUNCTUATED_LABELS + ["high-severity auth bypass", "[High] auth bypass",
+@pytest.mark.parametrize("explanation", PUNCTUATED_LABELS + STRUCTURAL_LABELS + ["high-severity auth bypass", "[High] auth bypass",
                                           "the high-severity auth bypass", "contains High: auth bypass",
                                           "Ｐ１ auth bypass", "P\u200b1 auth bypass", "Critical: loss"])
-def test_writer_scans_verdict_explanation(writer, explanation):
+def test_writer_scans_verdict_explanation(writer, tmp_path, explanation):
     write, _ = writer
     # Exercise the exact reported verdicts as well as explanatory suffixes.
     if explanation.startswith("VERDICT:"):
         body = LOW + "\n" + explanation + "\n"
-    elif explanation.startswith("- "):
+    elif explanation in STRUCTURAL_LABELS or explanation.startswith("- "):
         body = LOW + explanation + "\n\nVERDICT: FAIL\n"
     else:
         body = LOW + "\nVERDICT: FAIL - " + explanation + "\n"
-    assert write(body)["verdict"] == "BLOCK"
+    path = tmp_path / "strict-review.md"
+    path.write_text(body)
+    assert parser.strict_clean(path) is False
+    if explanation == "VERDICT: FAIL `high`":
+        # This closing format is independently refused by the verdict parser;
+        # strict-clean still must reject it if called on its own.
+        assert write(body, expect_format_rejection=True) is None
+    else:
+        assert write(body)["verdict"] == "BLOCK"
 
 
 @pytest.mark.parametrize("closing", [")", ".", ",", ";", "]", "}", "】", "」"])
@@ -127,9 +149,33 @@ def test_high_label_punctuation_followers(tmp_path, closing):
 def test_writer_positive_label_only_residual_and_benign_heading(writer, raw):
     write, _ = writer
     result = write("## Findings:\n" + LOW + "Do not merge; data loss. Major: auth bypass.\n\nVERDICT: " + raw)
-    assert result["verdict"] == "PASS WITH NOTES"
+    # The conservative evidence scan also blocks lower-severity words in an
+    # explanation. Raw FAIL-class recognition remains a separate contract.
+    expected = "BLOCK" if "P2" in raw else "PASS WITH NOTES"
+    assert result["verdict"] == expected
     assert result["verdict_raw"] == raw
-    assert result["block_downgraded"] is True
+    assert result.get("block_downgraded", False) is (expected == "PASS WITH NOTES")
+
+
+@pytest.mark.parametrize("alias", list(parser.SEVERITY) + ["blocker", "blockers", "blocking", "unknown"])
+def test_every_severity_alias_in_non_heading_evidence_blocks(tmp_path, alias):
+    path = tmp_path / "review.md"
+    path.write_text(LOW + f"The assessment was / `{alias}` / after inspection.\n\nVERDICT: FAIL\n")
+    assert parser.strict_clean(path) is False
+
+
+@pytest.mark.parametrize("separator", list(string.punctuation) + ["☂", "•", "…", "※"])
+def test_arbitrary_separators_cannot_hide_severity_words(tmp_path, separator):
+    path = tmp_path / "review.md"
+    path.write_text(LOW + f'\nVERDICT: FAIL {separator}High{separator} evidence\n')
+    assert parser.strict_clean(path) is False
+
+
+@pytest.mark.parametrize("zero_width", ["\u200b", "\u200c", "\u200d", "\u2060", "\ufeff", "\u034f", "\ufe0f"])
+def test_zero_width_and_nfkc_labels_cannot_hide_severity(tmp_path, zero_width):
+    path = tmp_path / "review.md"
+    path.write_text(LOW + f'\nVERDICT: FAIL / Ｈｉ{zero_width}ｇｈ / evidence\n')
+    assert parser.strict_clean(path) is False
 
 
 def test_verdict_block_source_is_serialized_body_but_never_downgraded(writer):
@@ -249,7 +295,7 @@ def test_heading_guard_retains_block_without_lexical_scans(tmp_path, monkeypatch
     # Isolate the independent structural guard: zero declarations are omitted
     # from counts, and lexical checks are a separate layer of protection.
     monkeypatch.setattr(parser, "SEVERE_WORD", re.compile(r"(?!x)x"))
-    monkeypatch.setattr(parser, "SEVERE_LABEL", re.compile(r"(?!x)x"))
+    monkeypatch.setattr(parser, "LABEL_WORDS", frozenset())
     path = tmp_path / "review.md"
     path.write_text(LOW + f"### [{severity}]: 0\n\nVERDICT: FAIL\n")
     assert parser.heading_counts(parser.visible_lines(path.read_text()))["total"] == 1
@@ -266,6 +312,19 @@ def test_symlinked_repository_directory_keeps_its_three_block_receipts(tmp_path)
     assert result.returncode == 25
     assert "3 failed review rounds" in result.stderr
     assert "cancellation is off" in result.stderr
+
+
+def test_unreadable_repository_directory_is_history_error(tmp_path):
+    def special(directory):
+        directory.chmod(0)
+    prs = [dict(pr_row(), attempt_id=str(i), verdict="BLOCK") for i in range(3)]
+    directory = tmp_path / "reviews" / "o__r"
+    try:
+        result = counter(tmp_path, [], prs, special=special)
+    finally:
+        directory.chmod(0o700)
+    assert result.returncode == 26
+    assert "cannot verify review round history" in result.stderr
 
 
 @pytest.mark.parametrize("kind", ["symlink", "directory", "filename", "legacy"])

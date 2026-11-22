@@ -267,17 +267,19 @@ BENIGN_HEADING = re.compile(
     r"^#{1,6}\s*(?:summary|findings?|notes?|overview|verdict|review|scope|conclusion|tests?)\s*:?\s*$", re.I,
 )
 SEVERE_WORD = re.compile(r"\bP[01]\b|\bcritical\b|\bblock(?:er|ers|ing)\b|\bunknown\b", re.I)
-SEVERE_ALIASES = "|".join(re.escape(key) for key, value in SEVERITY.items() if value in ("P0", "P1"))
-SEVERE_LABEL = re.compile(
-    r"(?:^|[\[(:;—–-]|\bseverity\s*:)\s*(?:" + SEVERE_ALIASES + r")"
-    r"(?=\s*(?:$|[\])}.,;:—–」】〕』〉》-])|[-_ ]severity\b)"
-    r"|\b(?:" + SEVERE_ALIASES + r")(?=\s*:|[-_ ]severity\b)", re.I,
-)
+LABEL_WORDS = frozenset(SEVERITY) | {"blocker", "blockers", "blocking", "unknown"}
 
 
 def normalized_line(line: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFKC", line)
-                   if unicodedata.category(c) != "Cf").strip()
+                   if unicodedata.category(c) != "Cf" and c != "\u034f"
+                   and not 0xFE00 <= ord(c) <= 0xFE0F
+                   and not 0xE0100 <= ord(c) <= 0xE01EF).strip()
+
+
+def evidence_words(line: str) -> set[str]:
+    """All punctuation is a separator, never a list of accepted wrappers."""
+    return set("".join(c if c.isalnum() else " " for c in normalized_line(line).lower()).split())
 
 
 def undecorated(line: str) -> str:
@@ -308,15 +310,23 @@ def strict_clean(path: Path) -> bool:
                     or declared != [counts[key] for key in ("P0", "P1", "P2", "P3")]):
                 return False
             continue
-        # Scan the entire line, including the final verdict explanation,
-        # before any candidate or zero-declaration exception.
-        if SEVERE_WORD.search(line) or SEVERE_LABEL.search(plain):
+        # Keep the existing severe-word guard even on heading text. The
+        # structural heading guard remains independent of the word checks.
+        if SEVERE_WORD.search(line):
             return False
         match = FINDING_HEADING.match(line)
         if match:
             severity = SEVERITY[next(g for g in match.groups() if g is not None).lower()]
             if severity in ("P0", "P1"):
                 return False
+        # Exempt only a parsed heading's own leading lower-severity label.
+        # Any alias in the remaining evidence, including the complete verdict
+        # explanation, conservatively retains BLOCK. This also blocks lower
+        # severity words in prose; punctuation/emphasis cannot hide labels.
+        evidence = line[match.end():] if match else line
+        if LABEL_WORDS.intersection(evidence_words(evidence)):
+            return False
+        if match:
             if zero_declaration(line, line[match.end():]):
                 continue
             continue
