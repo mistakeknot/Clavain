@@ -216,3 +216,60 @@ def test_no_ids_count_individual_receipts_and_summary_write_error_is_closed(tmp_
     (tmp_path / "reviews").mkdir()
     (tmp_path / "reviews" / "round-limits").write_text("dummy obstruction")
     assert invoke(tmp_path, rows).returncode == 26
+
+
+# Past the budget check the stub `ic` cannot resolve the role: exit 1 with this message.
+NOT_REFUSED = 1
+PAST_BUDGET = "could not resolve dispatch role"
+
+
+def _pr_receipt(attempt, downgraded):
+    return dict(schema_version=1, kind="cross-lab-review-receipt", role="cross-lab-review",
+                bead_id="test-1", verdict="PASS WITH NOTES" if downgraded else "BLOCK",
+                dispatch_id="d", attempt_id=attempt,
+                **({"block_downgraded": True} if downgraded else {}))
+
+
+def _write_pr_receipts(tmp_path, rows):
+    d = tmp_path / "reviews" / "o__r"
+    d.mkdir(parents=True)
+    for i, row in enumerate(rows):
+        (d / f"{i}-h.json").write_text(json.dumps(row))
+
+
+def test_downgraded_pr_receipts_cancel_their_run_receipt_failures(tmp_path):
+    rows = [dict(receipt(attempt=str(i)), head_sha=str(i)) for i in range(3)]
+    _write_pr_receipts(tmp_path, [_pr_receipt(str(i), True) for i in range(3)])
+    result = invoke(tmp_path, rows)
+    assert result.returncode == NOT_REFUSED and PAST_BUDGET in result.stderr, result.stderr
+
+
+def test_a_real_block_still_counts_beside_downgraded_ones(tmp_path):
+    rows = [dict(receipt(attempt=str(i)), head_sha=str(i)) for i in range(5)]
+    _write_pr_receipts(tmp_path, [_pr_receipt("0", True), _pr_receipt("1", True)])
+    assert invoke(tmp_path, rows).returncode == 25
+
+
+def test_flagged_receipt_without_a_pass_with_notes_verdict_does_not_cancel(tmp_path):
+    rows = [dict(receipt(attempt=str(i)), head_sha=str(i)) for i in range(3)]
+    flagged = [dict(_pr_receipt(str(i), True), verdict=v) for i, v in enumerate(["UNKNOWN", "PASS", "BLOCK"])]
+    _write_pr_receipts(tmp_path, flagged)
+    assert invoke(tmp_path, rows).returncode == 25
+
+
+def test_flagged_receipt_with_no_verdict_does_not_cancel(tmp_path):
+    rows = [dict(receipt(attempt=str(i)), head_sha=str(i)) for i in range(3)]
+    flagged = [{k: v for k, v in _pr_receipt(str(i), True).items() if k != "verdict"} for i in range(3)]
+    _write_pr_receipts(tmp_path, flagged)
+    assert invoke(tmp_path, rows).returncode == 25
+
+
+def test_a_real_block_for_the_same_attempt_beats_a_downgraded_receipt(tmp_path):
+    rows = [dict(receipt(attempt=str(i)), head_sha=str(i)) for i in range(3)]
+    d = tmp_path / "reviews" / "o__r"
+    d.mkdir(parents=True)
+    for i in range(3):
+        (d / f"{i}-a.json").write_text(json.dumps(_pr_receipt(str(i), True)))
+    for i in range(3):
+        (d / f"{i}-b.json").write_text(json.dumps(_pr_receipt(str(i), False)))
+    assert invoke(tmp_path, rows).returncode == 25
