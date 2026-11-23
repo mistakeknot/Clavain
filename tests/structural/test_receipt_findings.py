@@ -351,3 +351,32 @@ def test_detail_bounds_text_and_removes_windows_home(tmp_path):
     assert 'example' not in finding['summary']
     assert len(finding['summary']) == 200
     assert finding['file'] is None
+
+
+def test_long_dash_heading_is_sanitised_promptly(tmp_path):
+    path = tmp_path / 'review.md'
+    path.write_text('### [P1] ' + 'a-' * 32768 + '\nVERDICT: FAIL\n')
+    result = subprocess.run(['python3', str(SCRIPT), '--detail', str(path)],
+                            text=True, capture_output=True, check=True, timeout=0.75)
+    assert len(json.loads(result.stdout)['findings'][0]['summary']) <= 200
+
+
+@pytest.mark.parametrize('location', ['scripts/a.sh:3', 'scripts/a.py'])
+def test_real_location_wins_over_slash_prose(tmp_path, location):
+    finding = detail(tmp_path, f'### [P1] Retry and/or fallback missing in {location}\n')['findings'][0]
+    assert finding['file'] == location.split(':')[0]
+    assert finding['line'] == (3 if ':' in location else None)
+
+
+def test_access_key_shape_is_redacted(tmp_path):
+    key = 'AKIA' + 'Z' * 16
+    finding = detail(tmp_path, f'### [P1] Exposed {key}\n')['findings'][0]
+    assert key not in finding['summary']
+    assert '[redacted]' in finding['summary']
+
+
+@pytest.mark.parametrize('location', ['/opt/x/a.py:3', '../a.py:3'])
+def test_absolute_and_traversal_locations_are_rejected(tmp_path, location):
+    finding = detail(tmp_path, f'### [P1] Bad location ({location})\n')['findings'][0]
+    assert finding['file'] is None
+    assert finding['line'] is None
