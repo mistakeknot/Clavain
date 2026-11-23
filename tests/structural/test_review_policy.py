@@ -24,8 +24,12 @@ def act(paths, today=IN, prototype=False, policy=POLICY):
 
 
 def test_shipped_policy_is_a_two_week_window():
-    assert SHIPPED_POLICY['merge_day'] is None
-    assert not rp.trial_active(SHIPPED_POLICY)
+    assert SHIPPED_POLICY['merge_day'] == '2026-11-22'
+    assert rp.valid_policy(SHIPPED_POLICY)
+    assert rp.trial_active(SHIPPED_POLICY, today=datetime.date(2026, 11, 22))
+    assert rp.trial_active(SHIPPED_POLICY, today=datetime.date(2026, 12, 5))
+    assert not rp.trial_active(SHIPPED_POLICY, today=datetime.date(2026, 12, 6))
+    assert not rp.trial_active(SHIPPED_POLICY, today=datetime.date(2026, 11, 21))
     assert POLICY['routine']['max_rounds'] == 1
 
 
