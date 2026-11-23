@@ -110,6 +110,30 @@ CLASSES = (
 CLASS_TAG = re.compile(r"^(?:\*\*|__)?\[([A-Za-z][A-Za-z _-]*)\](?:\*\*|__)?\s*")
 FILE_LINE = re.compile(r"`?([A-Za-z0-9_./@+-]+\.[A-Za-z0-9]+|[A-Za-z0-9_./@+-]*/[A-Za-z0-9_.@+-]+)(?::(\d+))?`?(?=[\s,;:)\]]|$)")
 SUMMARY_MAX = 200
+SANITISE_INPUT_MAX = 4096
+
+
+def safe_finding_text(text: str) -> str:
+    """Lossy audit copy only; verdict validation always reads the original.
+
+    Redact credential-shaped values and private locations before truncation.
+    This is deliberately conservative: ambiguous long tokens are not useful
+    audit prose. Never copy a finding's free-form body into a receipt.
+    """
+    text = html.unescape(urllib.parse.unquote(text[:SANITISE_INPUT_MAX]))
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+    text = "".join(c if not unicodedata.category(c).startswith("C") else " " for c in text)
+    text = re.sub(r"(?i)(?:https?://|ssh://)\S+", "[redacted]", text)
+    text = re.sub(r"(?i)(?:/(?:home|users|root|private|tmp|var)/|~/|[a-z]:\\Users\\)\S+", "[private-path]", text)
+    text = re.sub(
+        r"(?i)\b(?:[\w-]{0,40}?(?:token|secret|password|passwd|api[_-]?key)|authorization)"
+        r"\s*[:=]\s*(?:[\"'][^\"']*[\"']|\S+)",
+        "[redacted]", text,
+    )
+    text = re.sub(r"(?i)\b(?:bearer\s+\S+|(?:sk-|gh[pousr]_|github_pat_)[\w-]+)", "[redacted]", text)
+    text = re.sub(r"\bAKIA[0-9A-Z]{16}\b", "[redacted]", text)
+    text = re.sub(r"(?<![\w/])[A-Za-z0-9_+=-]{32,}(?![\w/])", "[redacted]", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def zero_declaration(line: str, rest: str) -> bool:
@@ -169,11 +193,19 @@ def parse_finding(record: dict[str, str]) -> dict[str, str | int | None]:
             cls = name
         rest = rest[tag.end():]
     rest = re.sub(r"^[\]:\-–—\s]+", "", rest)
-    summary = re.sub(r"\s+", " ", re.sub(r"(?:\*\*|__)", "", rest)).strip()
+    summary = safe_finding_text(re.sub(r"(?:\*\*|__)", "", rest))
     file_name: str | None = None
     line_no: int | None = None
-    for hit in FILE_LINE.finditer(summary):
+    # Prefer explicit locations over slash-containing prose such as and/or.
+    hits = sorted(FILE_LINE.finditer(summary), key=lambda hit: not (
+        hit.group(2) or re.search(r"\.[A-Za-z0-9]+$", hit.group(1))))
+    for hit in hits:
         candidate = hit.group(1)
+        # Locations in audit records must be repository-relative, never a
+        # suffix extracted from an absolute or traversing path.
+        if (candidate.startswith(("/", "~")) or ".." in candidate.split("/")
+                or len(candidate) > 240):
+            continue
         if hit.group(2) or "/" in candidate or re.search(r"\.(?:sh|py|go|rs|md|ya?ml|json|toml|bats|ts|js)$", candidate):
             file_name = candidate
             line_no = int(hit.group(2)) if hit.group(2) else None

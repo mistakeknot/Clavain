@@ -674,7 +674,8 @@ _reject_passing_suffix() {
 }
 
 @test "a 900-finding review (over 200000 bytes of findings JSON) still writes a receipt" {
-    pad="$(printf 'w%.0s' $(seq 1 190))"
+    # Use prose-sized words: opaque long tokens are intentionally redacted.
+    pad="$(printf 'word %.0s' $(seq 1 38))"
     { for i in $(seq 1 900); do printf '### [%s] [other] finding %04d %s in `scripts/a.sh:%d`\n' "$([[ $i -eq 1 ]] && echo P1 || echo P2)" "$i" "$pad" "$i"; done
       printf '\nVERDICT: FAIL\n'; } > "$OUT"
     [ "$(python3 "$BATS_TEST_DIRNAME/../../scripts/receipt-findings.py" --detail "$OUT" | wc -c)" -gt 200000 ]
@@ -989,4 +990,50 @@ _reject_passing_suffix() {
         run _review_receipt_effective "$f"
         [ "$status" -ne 0 ]
     done
+}
+
+@test "audit metadata persists safe finding text location and exact diff base" {
+    printf '### [P1] [logic-correctness] Missing binding (scripts/review_policy.py:214)\n\nVERDICT: FAIL\n' > "$OUT"
+    _review_receipt_prepare "$R"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    [ "$(jq -r .base_sha "$f")" = "$BASE" ]
+    [ "$(jq -r .head_sha "$f")" = "$HEAD_SHA" ]
+    [ "$(jq -r '.findings[0].summary' "$f")" = 'Missing binding (scripts/review_policy.py:214)' ]
+    [ "$(jq -r '.findings[0].severity' "$f")" = P1 ]
+    [ "$(jq -r '.findings[0].file' "$f")" = scripts/review_policy.py ]
+    [ "$(jq -r '.findings[0].line' "$f")" = 214 ]
+}
+
+@test "audit metadata redacts home paths credentials and control characters" {
+    local fake_key
+    fake_key="sk-proj-$(printf 'x%.0s' {1..40})"
+    printf '### [P1] token=example-secret-value /home/example/private/review.py:12 %s \033[31mproblem\033[0m\n\nVERDICT: FAIL\n' "$fake_key" > "$OUT"
+    _review_receipt_prepare "$R"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -eq 0 ]
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    run jq -e '.findings[0] | (.file == null and .line == null and (.summary | length <= 200) and (.summary | test("example-secret|/home/|sk-proj-|\\u001b") | not))' "$f"
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .verdict "$f")" = BLOCK ]
+}
+
+@test "malformed audit output writes no receipt" {
+    printf '### [P1] exposed text (scripts/a.py:1)\nVERDICT: PASS\ntrailing contradiction\n' > "$OUT"
+    _review_receipt_prepare "$R"
+    run _review_receipt_write "$OUT" 0
+    [ "$status" -ne 0 ]
+    [ ! -e "$T/reviews/o__r/7-$HEAD_SHA.json" ]
+}
+
+@test "legacy receipt without findings remains readable in its diff scope" {
+    _review_receipt_prepare "$R"
+    _review_receipt_write "$OUT" 0
+    f="$T/reviews/o__r/7-$HEAD_SHA.json"
+    jq 'del(.findings,.findings_source,.findings_total)' "$f" > "$T/legacy.json"
+    mv "$T/legacy.json" "$f"
+    run _review_receipt_effective "$f"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$f" ]
 }
