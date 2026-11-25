@@ -26,7 +26,7 @@ SCHEMA = {
     },
     "required": ["reasons", "rationale"], "additionalProperties": False,
 }
-MODELS = {"codex": "gpt-6-astra", "claude": "claude-opus-5-5"}
+MODELS = {"codex": "gpt-6.2-astra", "claude": "claude-opus-5-5"}
 # Models a recorded, user-authorized capacity fallback may substitute for the
 # fixed assignment. Empty since mk-3b8z (2026-09-25): Opus 5.5 replaced Fable
 # 5.1 as the fixed Claude model, and the former Opus-for-Fable substitute has

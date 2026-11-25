@@ -452,7 +452,7 @@ W
 review() {
     bash "$DISPATCH" --role cross-lab-review --role-resolved --resolved-profile-ref p1 \
         --resolved-route-json "{\"policy_hash\":\"$POLICY_HASH\"}" \
-        --resolved-profile-json '{"profile_ref":"p1"}' --producer-identity gpt-6.1-sol \
+        --resolved-profile-json '{"profile_ref":"p1"}' --producer-identity gpt-6.2-sol \
         --to claude --model claude-opus-5-5 --reasoning-effort high -C "$T/repo" \
         --prompt-file "$T/prompt.md" -o "$T/out.md" \
         --repo o/r --repo-id R_x --pr 7 --head "$HEADSHA" --base "$BASESHA" "$@"

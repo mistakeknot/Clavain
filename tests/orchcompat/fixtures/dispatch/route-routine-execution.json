@@ -13,8 +13,8 @@
     "fallbacks": [
      "routine-sonnet"
     ],
-    "model": "gpt-6.1-sol",
-    "model_identity": "gpt-6.1-sol",
+    "model": "gpt-6.2-sol",
+    "model_identity": "gpt-6.2-sol",
     "reasoning_effort": "medium",
     "role": "routine-execution",
     "service_tier": "standard"

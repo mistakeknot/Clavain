@@ -111,7 +111,7 @@ latest_receipt() {
 
 OPUS="claude-code claude-opus-5-5 medium"
 SONNET="claude-code claude-sonnet-5-5 medium"
-ASTRA="codex gpt-6-astra medium"
+ASTRA="codex gpt-6.2-astra medium"
 
 # --- mk-h73i: all 15 table slugs resolve coordinator-seat to the fleet
 # Sonnet default. No project carries a coordinator-seat override any more —
@@ -233,7 +233,7 @@ expect 3 "" "unparseable policy"
 # every project and this section exercises Opus-headed fallback.
 RC=0; OUT="$(FAKE_POOL=claude-down bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$ASTRA" "lane with the Claude pool exhausted"
-jq -e '.fallbacks_evaluated == true and (.available_models | index("claude-opus-5-5") | not) and (.available_models | index("gpt-6-astra"))' <<< "$(latest_receipt)" >/dev/null \
+jq -e '.fallbacks_evaluated == true and (.available_models | index("claude-opus-5-5") | not) and (.available_models | index("gpt-6.2-astra"))' <<< "$(latest_receipt)" >/dev/null \
   || fail "receipt must record the probed available_models"
 RC=0; OUT="$(FAKE_POOL=error bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$OPUS" "lane with the pool unreachable"
@@ -282,7 +282,7 @@ expect 0 "$ASTRA" "lane with the Claude pool exhausted"
 grep -q "fallback from .* to " "$TMP_ROOT/stderr" || fail "a provider change must be announced on stderr"
 RC=0; OUT="$(FAKE_POOL=codex-down bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$OPUS" "lane with the Codex pool exhausted"
-jq -e '.fallbacks_evaluated == true and (.available_models | index("gpt-6-astra") | not) and (.available_models | index("claude-opus-5-5"))' <<< "$(latest_receipt)" >/dev/null \
+jq -e '.fallbacks_evaluated == true and (.available_models | index("gpt-6.2-astra") | not) and (.available_models | index("claude-opus-5-5"))' <<< "$(latest_receipt)" >/dev/null \
   || fail "a Codex outage must drop Codex models only"
 # The fake pool has ready kimi and main accounts; bb still cannot spawn them.
 RC=0; OUT="$(bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
@@ -332,7 +332,7 @@ expect 3 "" "policy without reasoning.projects"
 
 # --- Rule-6 round (coordinator ruling 2026-09-27).
 # mk ruling: never gpt-5.6-sol. With Claude exhausted every spawn role lands
-# on gpt-6-astra medium; with no eligible seat it fails closed.
+# on gpt-6.2-astra medium; with no eligible seat it fails closed.
 for args in "--role lane --lineage L1" "--role main-session" "--role coordinator-seat --project autosigil" "--role coordinator-seat --project clavain"; do
   # shellcheck disable=SC2086
   RC=0; OUT="$(FAKE_POOL=claude-down bash "$SCRIPT" $args 2>"$TMP_ROOT/stderr")" || RC=$?
@@ -423,7 +423,7 @@ canned() {
     FAKE_MODEL="$1" FAKE_IDENTITY="$2" bash "$SCRIPT" --role routine-execution 2>"$TMP_ROOT/stderr")" || RC=$?
 }
 for pair in "chain-a chain-a" "gpt-5.6-sol-high gpt-5.6-sol-high" "GPT-5.6-SOL@high GPT-5.6-SOL@high" \
-    "openai/gpt-5.6-sol openai/gpt-5.6-sol" "gpt-6-astra gpt-5.6-sol" "gpt-5.6-sol gpt-6-astra" "gpt-6-astra chain-b"; do
+    "openai/gpt-5.6-sol openai/gpt-5.6-sol" "gpt-6.2-astra gpt-5.6-sol" "gpt-5.6-sol gpt-6.2-astra" "gpt-6.2-astra chain-b"; do
   read -r model identity <<<"$pair"
   canned "$model" "$identity"
   expect 3 "" "ic returning model=$model identity=$identity is refused"
@@ -432,7 +432,7 @@ done
 canned loop-a loop-a
 expect 3 "" "an alias cycle fails closed"
 grep -qi "cycle" "$TMP_ROOT/stderr" || fail "an alias cycle must be reported as a cycle"
-for pair in "gpt-6-sol gpt-6-sol" "gpt-6-sol gpt-6-sol-high" "gpt-6.1-sol gpt-6.1-sol" "fine-a fine-a"; do
+for pair in "gpt-6-sol gpt-6-sol" "gpt-6-sol gpt-6-sol-high" "gpt-6.2-sol gpt-6.2-sol" "fine-a fine-a"; do
   read -r model identity <<<"$pair"
   canned "$model" "$identity"
   expect 0 "codex $identity medium" "GPT-6 Sol ($pair) is allowed"

@@ -20,8 +20,8 @@ def inputs(tmp_path):
                   "coord": {"model": "sonnet", "reasoning_effort": "medium"},
                   "exec": {"model": "claude-sonnet-5-5", "reasoning_effort": "high",
                            "fallbacks": ["sol"]},
-                  "sol": {"model": "gpt-6.1-sol", "reasoning_effort": "medium"}}}}
-    released = {"models": [{"id": "claude-sonnet-5-5"}, {"id": "gpt-6.1-sol"}]}
+                  "sol": {"model": "gpt-6.2-sol", "reasoning_effort": "medium"}}}}
+    released = {"models": [{"id": "claude-sonnet-5-5"}, {"id": "gpt-6.2-sol"}]}
     seats = {"seats": [{"thread": "thr_test", "role": "coordination",
                         "model": "claude-sonnet-5-5", "reasoning_effort": "medium"}]}
     return tmp_path, policy, released, seats
@@ -68,13 +68,13 @@ def test_unused_retired_alias_pin_fails(inputs):
 
 
 def test_retired_seat_alias_fails(inputs):
-    inputs[1]["dispatch"]["model_aliases"]["gpt-6-sol"] = "gpt-6.1-sol"
+    inputs[1]["dispatch"]["model_aliases"]["gpt-6-sol"] = "gpt-6.2-sol"
     inputs[3]["seats"][0].update(role="routine-execution", model="gpt-6-sol")
     assert "retired-pin" in {f["kind"] for f in report(run(inputs), 1)["findings"]}
 
 
 def test_seat_drift_fails(inputs):
-    inputs[3]["seats"][0]["model"] = "gpt-6.1-sol"
+    inputs[3]["seats"][0]["model"] = "gpt-6.2-sol"
     result = report(run(inputs), 1)
     assert any(f["kind"] == "seat-drift" for f in result["findings"])
     assert all(c[:3] == ["bd", "--actor", "clavain-coord"] for c in result["bead_commands"])
@@ -87,7 +87,7 @@ def test_effort_must_match_table(inputs, effort, kind):
 
 
 def test_fallback_seat_and_receipt_match(inputs):
-    inputs[3]["receipts"] = [{"role": "routine-execution", "model": "gpt-6.1-sol",
+    inputs[3]["receipts"] = [{"role": "routine-execution", "model": "gpt-6.2-sol",
                               "reasoning_effort": "medium", "thread": "thr_exec"}]
     report(run(inputs), 0)
     inputs[3]["receipts"][0]["reasoning_effort"] = "high"
@@ -149,7 +149,7 @@ def test_real_policy_copy(inputs):
 
 def test_profile_override_and_alias_cycle(inputs):
     inputs[1]["reasoning"] = {"profiles": {"pilot": {"roles": {"coordination": "sol"}}}}
-    inputs[3]["seats"][0].update(policy_profile="pilot", model="gpt-6.1-sol")
+    inputs[3]["seats"][0].update(policy_profile="pilot", model="gpt-6.2-sol")
     report(run(inputs), 0)
     inputs[1]["dispatch"]["model_aliases"] = {"sonnet": "other", "other": "sonnet"}
     report(run(inputs), 2)
@@ -180,7 +180,7 @@ def test_units_are_read_only_templates():
 
 
 def test_filing_is_opt_in(inputs, monkeypatch):
-    inputs[3]["seats"][0]["model"] = "gpt-6.1-sol"
+    inputs[3]["seats"][0]["model"] = "gpt-6.2-sol"
     fake = inputs[0] / "bd"
     log = inputs[0] / "calls"
     fake.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$BD_TEST_LOG"\n')
@@ -200,7 +200,7 @@ def test_filing_is_opt_in(inputs, monkeypatch):
 def with_project(inputs, **extra):
     """Real schema: project_profiles maps slug -> profile name; the scoped profile lives in profiles."""
     policy = inputs[1]
-    policy["dispatch"]["tiers"]["proj"] = {"model": "gpt-6.1-sol", "reasoning_effort": "high"}
+    policy["dispatch"]["tiers"]["proj"] = {"model": "gpt-6.2-sol", "reasoning_effort": "high"}
     policy["reasoning"] = {
         "projects": ["clavain", "autarch"],
         "profiles": {"project-clavain": {"scope": "project:clavain", "roles": {"coordination": "proj"}}},
@@ -210,7 +210,7 @@ def with_project(inputs, **extra):
 
 def test_scoped_project_profile_is_valid_and_selects_candidates(inputs):
     with_project(inputs)
-    inputs[3]["seats"][0].update(project="clavain", model="gpt-6.1-sol", reasoning_effort="high")
+    inputs[3]["seats"][0].update(project="clavain", model="gpt-6.2-sol", reasoning_effort="high")
     report(run(inputs), 0)
     # Another project and the fleet row still follow the base table.
     inputs[3]["seats"][0].update(project="autarch", model="claude-sonnet-5-5", reasoning_effort="medium")
@@ -325,7 +325,7 @@ def test_empty_seat_evidence_is_unknown_not_clean(inputs, seats):
 
 
 def test_receipt_only_evidence_is_known(inputs):
-    seats = {"seats": [], "receipts": [{"role": "routine-execution", "model": "gpt-6.1-sol",
+    seats = {"seats": [], "receipts": [{"role": "routine-execution", "model": "gpt-6.2-sol",
                                         "reasoning_effort": "medium"}]}
     changed = (inputs[0], inputs[1], inputs[2], seats)
     assert report(run(changed, "--strict"), 0)["status"] == "clean"

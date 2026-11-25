@@ -78,7 +78,7 @@ sys.exit(int(os.environ['PROVIDER_EXIT']))
     if governed:
         subprocess.run(["ic", "init"], cwd=tmp_path, check=True, capture_output=True)
         cmd = ["bash", str(ROOT / "scripts/dispatch.sh"), "--role", "plan-review",
-               "--producer-identity", "gpt-6-astra", "-C", str(tmp_path), "-o", str(output)]
+               "--producer-identity", "gpt-6.2-astra", "-C", str(tmp_path), "-o", str(output)]
     if via:
         cmd += ["--via", via]
     if cancel:

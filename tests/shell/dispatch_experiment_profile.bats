@@ -40,7 +40,7 @@ def option(name, default=None):
     return default
 
 arms = {
-    "experiment-mk-d0h1j.1-sol-medium": ("codex", "gpt-6.1-sol", "medium"),
+    option("--policy-profile"): ("codex", "gpt-6.2-sol", "medium"),
 }
 profile = option("--policy-profile")
 backend, model, effort = arms[profile]
@@ -49,7 +49,7 @@ reasons = context.get("reasons", [])
 if any(reason != "difficult-verification" for reason in reasons):
     effort = "high"
 producer = option("--producer-identity")
-aliases = {"opus": "claude-opus-5-5", "sol": "gpt-6.1-sol", "astra": "gpt-6-astra"}
+aliases = {"opus": "claude-opus-5-5", "sol": "gpt-6.2-sol", "astra": "gpt-6.2-astra"}
 canonical = aliases.get(producer, producer)
 for prefix in ("anthropic/", "openai/"):
     if canonical.startswith(prefix):
@@ -111,7 +111,7 @@ teardown() { rm -rf "$T"; }
 arm() {
     ARM="$1"; PRODUCER="$2"
     PROFILE="experiment-mk-d0h1j.1-$ARM"
-    ENGINE=codex; MODEL=gpt-6.1-sol; EFFORT=medium
+    ENGINE=codex; MODEL=gpt-6.2-sol; EFFORT=medium
 }
 outer() {
     local -a producer=()
@@ -137,7 +137,7 @@ refused() { [ "$status" -eq 2 ]; [ ! -e "$T/backend" ]; }
     [[ "$output" == *"unregistered experiment"* ]]
 }
 @test "outer reaches Sol with exact effort and strict complete evidence" {
-    for spec in 'sol-medium astra' 'sol-medium openai/gpt-6-astra'; do
+    for spec in 'sol-medium astra' 'sol-medium openai/gpt-6.2-astra'; do
         read -r a p <<< "$spec"; arm "$a" "$p"
         rm -f "$T/backend" "$T/receipts"
         run outer
@@ -167,7 +167,7 @@ refused() { [ "$status" -eq 2 ]; [ ! -e "$T/backend" ]; }
     refused
     run child --engine codex
     refused
-    run child -m gpt-6.1-sol
+    run child -m gpt-6.2-sol
     refused
     run child -c model_reasoning_effort=high
     refused
@@ -193,7 +193,7 @@ refused() { [ "$status" -eq 2 ]; [ ! -e "$T/backend" ]; }
     done
 }
 @test "canonical producer aliases refuse same lab for the Sol arm" {
-    for p in sol gpt-6.1-sol openai/gpt-6.1-sol; do
+    for p in sol gpt-6.2-sol openai/gpt-6.2-sol; do
         arm sol-medium "$p"; run outer; refused
     done
 }
@@ -373,7 +373,7 @@ WRAP
 }
 
 @test "fresh canonical producer guard refuses non-Astra aliases independently of resolver exclusion" {
-    for spec in 'sol-medium astra gpt-6.1-sol sol' 'sol-medium astra gpt-6.1-sol openai/gpt-6.1-sol' 'sol-medium astra gpt-6.1-sol gpt-6.1-sol'; do
+    for spec in 'sol-medium astra gpt-6.2-sol sol' 'sol-medium astra gpt-6.2-sol openai/gpt-6.2-sol' 'sol-medium astra gpt-6.2-sol gpt-6.2-sol'; do
         read -r a p canonical raw <<< "$spec"
         arm "$a" "$p"; route
         ROUTE="$(jq -c --arg p "$raw" --arg m "$canonical" '.producer_identity=$p | .producer_model=$m' <<< "$ROUTE")"
@@ -428,17 +428,17 @@ WRAP
 }
 
 @test "Astra aliases are admitted only as experimental advisory support" {
-    for producer in astra gpt-6-astra openai/gpt-6-astra; do
+    for producer in astra gpt-6.2-astra openai/gpt-6.2-astra; do
         arm sol-medium "$producer"
         rm -f "$T/backend" "$T/receipts"
         run outer
         [ "$status" -eq 0 ]
         jq -se 'all(.[]; .experimental==true and .gate_review_eligible==false and
-          .experiment_task_type=="advisory-support-grouping" and .producer_model=="gpt-6-astra")' "$T/receipts"
+          .experiment_task_type=="advisory-support-grouping" and .producer_model=="gpt-6.2-astra")' "$T/receipts"
     done
 }
 @test "advisory scope cannot become adjudication or another bead" {
-    arm sol-medium gpt-6-astra
+    arm sol-medium gpt-6.2-astra
     TASK_TYPE=adjudication run outer; refused
     run outer --bead mk-other; refused
     run outer --experiment-task-type advisory-support-grouping; refused
@@ -446,7 +446,7 @@ WRAP
 @test "registry contains only the task-scoped advisory Sol arm" {
     jq -e 'keys==["experiment-mk-d0h1j.1-sol-medium"] and
       all(.[]; .bead=="mk-d0h1j.1" and .task_type=="advisory-support-grouping" and
-        .expires=="2026-12-31T00:00:00Z" and .assert.model=="gpt-6.1-sol" and .producer_model=="gpt-6-astra")' "$ROOT/config/experiment-profiles.json"
+        .expires=="2026-12-31T00:00:00Z" and .assert.model=="gpt-6.2-sol" and .producer_model=="gpt-6.2-astra")' "$ROOT/config/experiment-profiles.json"
 }
 
 @test "Astra-only profile refuses other-lab producers in outer and resolved dispatch" {

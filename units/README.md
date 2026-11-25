@@ -48,7 +48,7 @@ The released-model snapshot is JSON with a nonempty `models` array:
 {
   "models": [
     {"id": "claude-sonnet-5-5"},
-    {"id": "gpt-6.1-sol"},
+    {"id": "gpt-6.2-sol"},
     {"id": "claude-sonnet-6", "better_than": ["claude-sonnet-5-5"]}
   ]
 }
@@ -73,7 +73,7 @@ The seat snapshot normalizes BB threads and dispatch receipts into these fields:
   ],
   "receipts": [
     {"thread": "thr_execution", "role": "routine-execution",
-     "model": "gpt-6.1-sol", "reasoning_effort": "medium",
+     "model": "gpt-6.2-sol", "reasoning_effort": "medium",
      "profile_ref": "routine-sol", "policy_profile": "default"}
   ]
 }
@@ -99,7 +99,7 @@ resolution. Context-elevated dispatch receipts need their actual effective role
 and an applicable table entry; the checker does not claim to replay that context.
 
 Default retired IDs are `gpt-6`, `gpt-6-sol`, `gpt-5.6-sol`, `claude-sonnet-5`,
-and `sonnet-5`. Astra (`gpt-6-astra`) remains valid. `--retired-models FILE`
+and `sonnet-5`. Astra (`gpt-6.2-astra`) remains valid. `--retired-models FILE`
 replaces this list with a JSON array of case-sensitive glob patterns, for example
 `["gpt-5.6-sol*", "claude-sonnet-5"]`. A model appearing in both the retired and
 released lists still fails. Neither input is edited.

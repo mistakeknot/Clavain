@@ -128,8 +128,8 @@ for role in validation cross-lab-review; do
 
   # Codex-lab producer, Claude out of quota: the walk must not review with the
   # producer's own model even though nothing else is left.
-  FAKE_CODEX_MODE=success FAKE_CLAUDE_QUOTA="claude-opus-5-5 claude-sonnet-5-5" run_review "$role" gpt-6.1-sol
-  never_reviewed_by "$role, Sol producer, Claude out" gpt-6.1-sol
+  FAKE_CODEX_MODE=success FAKE_CLAUDE_QUOTA="claude-opus-5-5 claude-sonnet-5-5" run_review "$role" gpt-6.2-sol
+  never_reviewed_by "$role, Sol producer, Claude out" gpt-6.2-sol
 done
 
 echo "PASS: validation and cross-lab-review keep reviewer independence and record capacity_substitute under quota failover"

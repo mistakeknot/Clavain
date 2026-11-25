@@ -3,7 +3,7 @@ tools or edit files. This is a short instruction-discovery probe, not a request
 to implement work.
 
 A new shared agent dispatch admission capability changes foundational
-invariants and needs replay experiments. Its plan was authored by gpt-6-astra.
+invariants and needs replay experiments. Its plan was authored by gpt-6.2-astra.
 
 Reply with only a JSON object containing policy_sha256 and policy_selection
 from your loaded managed Clavain installation receipt (use null if absent),

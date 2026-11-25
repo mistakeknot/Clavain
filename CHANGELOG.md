@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Move all Astra and Sol routing seats to GPT-6.2, retaining efforts and fallback
+  order. Update frontier eligibility, experiment bindings, roster identities and
+  routing examples. Older roster identities remain available for attribution.
+- Live effort-floor resolution requires the GPT-6.2 effort ladder from Intercore
+  PR #72; installations without that support may reject floored seats.
+
 ## 0.6.334
 
 Summary of changes merged since 0.6.333.

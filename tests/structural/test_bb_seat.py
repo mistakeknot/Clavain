@@ -35,7 +35,7 @@ if a[:1]==['status']: value={'thread':{'id':'thr_parent','environment':{'hostId'
 elif a[:2]==['pool','status']: value={'accounts':[{'id':'fixture-'+p,'provider':p,'enabled':True,'sevenDayUtilization':v,'fiveHourUtilization':.1} for p,v in [('codex',.8),('claude',.2)]]}
 elif a[:2]==['project','list']: value=[{'id':'proj_fixture','sources':[{'hostId':'host_pda34naxgq','path':str(root/'work')}]}]
 elif a[:2]==['provider','list']: value=[{'id':p,'available':True,'capabilities':{'permissionModes':['auto']},'serviceTiers':[{'id':'default'}]} for p in ('codex','claude-code')]
-elif a[:2]==['provider','models']: value=[{'id':m,'supportedReasoningEfforts':[{'reasoningEffort':e} for e in es]} for m,es in [('gpt-6-astra',['xhigh']),('claude-sonnet-5-5',['medium','high','max']),('claude-opus-5-5',['medium','high'])]]
+elif a[:2]==['provider','models']: value=[{'id':m,'supportedReasoningEfforts':[{'reasoningEffort':e} for e in es]} for m,es in [('gpt-6.2-astra',['xhigh']),('claude-sonnet-5-5',['medium','high','max']),('claude-opus-5-5',['medium','high'])]]
 elif a[:2]==['thread','spawn']:
  sys.stdin.read()
  if '--plan' in a: (root/'plan-mode').touch()
@@ -89,8 +89,8 @@ print(json.dumps(value))
     env=dict(os.environ,BB_CLI=str(cli),BB_THREAD_ID='thr_parent',BB_SERVER_URL='https://bb.example',
              FIXTURE=str(tmp_path),CLAVAIN_INTERCORE_DB=str(database),CLAVAIN_BB_STATE_DIR=str(tmp_path/'state'),CLAVAIN_REQUIRE_USAGE='0')
     def run(mode='completed',role='deep-execution',attempt='attempt_one',extra_env=None,
-            backend='codex',model='gpt-6-astra',effort='xhigh',extra_args=(),via_dispatch=False,
-            sandbox=None,producer_identity='gpt-6-astra'):
+            backend='codex',model='gpt-6.2-astra',effort='xhigh',extra_args=(),via_dispatch=False,
+            sandbox=None,producer_identity='gpt-6.2-astra'):
         if via_dispatch:
             context=tmp_path/'decision.json'
             context.write_text(json.dumps({'reasons':[], 'rationale':'fixture'}))

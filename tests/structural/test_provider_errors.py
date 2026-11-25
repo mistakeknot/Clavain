@@ -171,7 +171,7 @@ def test_codex_exhausted_429_retries_is_rate_limited():
 
 @pytest.mark.parametrize("message,expected", [
     ("Selected model is at capacity. Please try a different model.", "rate_limited"),
-    ('{"detail":"The \'gpt-6.1-sol\' model is not supported when using Codex with a ChatGPT account."}',
+    ('{"detail":"The \'gpt-6.2-sol\' model is not supported when using Codex with a ChatGPT account."}',
      "account_access_absent"),
     ("model server exploded", "terminal_error"),
 ])
@@ -785,7 +785,7 @@ def test_missing_vocabulary_cannot_break_provider_classification(tmp_path):
 
 
 def test_content_filter_refusal_is_its_own_class():
-    # gpt-6.1-sol refusal of a guard-hook review prompt; the declared fallback
+    # gpt-6.2-sol refusal of a guard-hook review prompt; the declared fallback
     # chain must be walked, and the receipt must not call it an account gap.
     message = ("This request was flagged for potentially high-risk cyber activity. "
                "Apply for trusted access.")

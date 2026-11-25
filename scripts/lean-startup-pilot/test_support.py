@@ -35,7 +35,7 @@ def test_later_stages_preserve_bound_decision_and_all_readiness_files(tmp_path):
     (tmp_path/'initial.stdout').write_text('derived')
     transcript=tmp_path/'native.jsonl'
     rows=[dict(type='session_meta',payload=dict(id='subject',source='exec',thread_source='user')),
-          dict(type='turn_context',payload=dict(turn_id='turn',model='gpt-6-astra',effort='high',approval_policy='never',sandbox_policy={'type':'read-only'})),
+          dict(type='turn_context',payload=dict(turn_id='turn',model='gpt-6.2-astra',effort='high',approval_policy='never',sandbox_policy={'type':'read-only'})),
           dict(type='response_item',payload=dict(type='message',role='assistant',phase='final_answer',id='message',content=[dict(type='output_text',text=json.dumps(value))]))]
     transcript.write_text(''.join(json.dumps(row)+'\n' for row in rows))
     digest=readiness.bind_decision('codex',transcript,'subject',value)['decision_sha256']
@@ -90,7 +90,7 @@ def test_prospective_enrollment_uses_real_intercore_without_acceptance(tmp_path)
     script=Path(__file__).resolve().parents[1]/'task-delivery.py'
     delivery.write(tmp_path/'delivery-config.json',dict(script=str(script),script_sha256=delivery.digest(script),db=str(db),parent_session_id='test-fixture-parent'))
     delivery.write(tmp_path/'manifest.json',dict(cohort_id='test-only',cohort_kind='correctness',subject_limit=12,
-        order=[dict(host='codex',scenario='small-edit',condition='candidate')]*12,model_effort={'codex':['gpt-6-astra','high']}))
+        order=[dict(host='codex',scenario='small-edit',condition='candidate')]*12,model_effort={'codex':['gpt-6.2-astra','high']}))
     folder=tmp_path/'case';folder.mkdir();profile=tmp_path/'profile';profile.mkdir();sources=tmp_path/'sources';sources.mkdir()
     (profile/'config.toml').write_text('fixture')
     enrollment=delivery.before_launch(tmp_path,0,folder,profile,sources,[sys.executable])

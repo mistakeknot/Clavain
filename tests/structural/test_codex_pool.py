@@ -37,12 +37,12 @@ def test_budgeted_codex_pool(tmp_path, mode, source, no_gawk=False):
                 data.update(token='synthetic-scoped-token', expires_at=9999999999999)
             else:
                 hop = dict(index=1, account_id='fixture-account', provider='codex', status=200,
-                           state='complete', model='gpt-6-astra', usage=dict(input_tokens=10,
+                           state='complete', model='gpt-6.2-astra', usage=dict(input_tokens=10,
                            output_tokens=9, cache_read_input_tokens=30, cache_creation_input_tokens=0))
                 if mode == 'missing-account': hop['account_id'] = None
                 if mode == 'wrong-totals': hop['usage']['input_tokens'] = 11
                 if mode == 'wrong-provider': hop['provider'] = 'claude'
-                if mode == 'wrong-model': hop['model'] = 'gpt-6.1-sol'
+                if mode == 'wrong-model': hop['model'] = 'gpt-6.2-sol'
                 if mode == 'unknown-hop': hop['state'] = 'unknown'
                 data.update(sealed=True, valid=True, complete=True, requests=[dict(
                     id=1, kind='inference', state='finished', hops=[hop])])
@@ -102,7 +102,7 @@ sys.exit(7 if os.environ['MODE'] == 'provider-fail' else 0)
                    ANTHROPIC_BASE_URL=env['BB_SERVER_URL']+'/api/v1/plugins/account-pool/http')
     try:
         proc = subprocess.run(['bash', str(ROOT/'scripts/dispatch.sh'), '--to', 'codex',
-            '--model', 'gpt-6-astra', '-s', 'read-only', '-C', str(tmp_path), '-o', str(tmp_path/'review.md'),
+            '--model', 'gpt-6.2-astra', '-s', 'read-only', '-C', str(tmp_path), '-o', str(tmp_path/'review.md'),
             'Review this fixture only'], env=env, cwd=tmp_path, capture_output=True, text=True, timeout=30)
     finally:
         server.shutdown(); server.server_close(); thread.join()

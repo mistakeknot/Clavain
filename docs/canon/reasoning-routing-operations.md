@@ -427,7 +427,7 @@ observed:
    already reaches a distinct eligible seat.
 
 ```bash
-scripts/capacity-fallback.sh --seat gpt-6-astra \
+scripts/capacity-fallback.sh --seat gpt-6.2-astra \
   --context .clavain/decisions/<plan>.json \
   --evidence .clavain/capacity/<date>-astra-usage-limit.md \
   --role plan-review --producer-identity claude-opus-5-5
@@ -541,7 +541,7 @@ unavailable, non-accepting or timed-out status probes and child hosts record
 `fallbacks_evaluated: false`. Providers with pool routing disabled count as up.
 A family counts as exhausted by bb's own rule (the pool `switchThreshold`,
 default 0.98) only when every up Claude account has an active family window.
-With Claude exhausted, spawn roles fall back to gpt-6-astra medium. route-spawn
+With Claude exhausted, spawn roles fall back to gpt-6.2-astra medium. route-spawn
 refuses gpt-5.6-sol for every role, by any alias or case (mk 2026-09-27);
 GPT-6.1 Sol is allowed (legacy GPT-6 Sol still is). With no eligible seat, exit 3: do not spawn.
 The probe timeout is `ROUTE_SPAWN_POOL_TIMEOUT` seconds (default 20); the resolver

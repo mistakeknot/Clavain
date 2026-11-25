@@ -72,7 +72,7 @@ jq -e '.dispatch.roles | to_entries | all(.value != "coordinator-seat-opus")' <<
 
 # mk ruling 2026-09-27: no spawn chain (lane, main-session, coordinator-seat,
 # or any profile override of them) ever reaches gpt-5.6-sol. Claude exhaustion
-# lands on gpt-6-astra medium.
+# lands on gpt-6.2-astra medium.
 python3 - "$POLICY" <<'NOSOL' || fail "a spawn role chain reaches gpt-5.6-sol"
 import sys, yaml
 cfg = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
@@ -97,7 +97,7 @@ assert not bad, f"spawn chains reach gpt-5.6-sol via {bad}"
 assert "main-session-sol" not in tiers, "main-session-sol must be removed"
 for head in ("main-sonnet", "coordinator-seat-sonnet"):
     last = tiers[tiers[head]["fallbacks"][-1]]
-    assert (last["backend"], last["model"], last["reasoning_effort"]) == ("codex", "gpt-6-astra", "medium"), head
+    assert (last["backend"], last["model"], last["reasoning_effort"]) == ("codex", "gpt-6.2-astra", "medium"), head
 print("no spawn chain reaches gpt-5.6-sol")
 NOSOL
 

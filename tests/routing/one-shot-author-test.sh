@@ -80,14 +80,14 @@ for context in routine floored; do
     "$context: Fable-produced validation must reorder to a non-Claude seat"
   r="$(resolve plan-review "$ctx" "$FABLE")"
   check "$r" '
-    .profile_ref == "review-astra" and .profile.model_identity == "gpt-6-astra"
+    .profile_ref == "review-astra" and .profile.model_identity == "gpt-6.2-astra"
     and .fallback_reason == "cross_lab_reorder"
     and ([.fallback_chain[].profile_ref] == ["review-opus"])
   ' "$context: Fable-produced plan-review must prefer Astra and retain Opus"
 done
 
 # 5. An OpenAI-produced plan still goes to Opus 5.5: it stays the plan-review seat.
-r="$(resolve plan-review "$WORK/routine.json" gpt-6.1-sol)"
+r="$(resolve plan-review "$WORK/routine.json" gpt-6.2-sol)"
 check "$r" '.profile_ref == "review-opus" and .profile.model_identity == "claude-opus-5-5"' \
   "OpenAI-produced plan-review must stay on Opus 5.5"
 
