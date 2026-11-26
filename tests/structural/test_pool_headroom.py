@@ -28,7 +28,7 @@ def core(value, *args):
 
 
 def route():
-    return {'profile_ref': 'routine-sol', 'profile': {'backend': 'codex', 'model': 'gpt-6.1-sol'},
+    return {'profile_ref': 'routine-sol', 'profile': {'backend': 'codex', 'model': 'gpt-6.2-sol'},
             'fallback_chain': [{'profile_ref': 'routine-sonnet', 'profile': {
                 'backend': 'claude', 'model': 'claude-sonnet-5-5'}}]}
 
@@ -71,7 +71,7 @@ def test_unreachable_cli_is_unknown(tmp_path):
 def test_unknown_family_cannot_be_overtaken_by_its_provider_fallback():
     snapshot = core({'accounts': [account('codex', .7),
         account('claude', None, None, familyWeekly={'opus': {'utilization': .1}})]})
-    resolved = {'profile_ref': 'astra', 'profile': {'backend': 'codex', 'model': 'gpt-6-astra'},
+    resolved = {'profile_ref': 'astra', 'profile': {'backend': 'codex', 'model': 'gpt-6.2-astra'},
                 'fallback_chain': [{'profile_ref': family, 'profile': {
                     'backend': 'claude', 'model': 'claude-' + family}} for family in ('fable', 'opus')]}
     assert advise(snapshot, 'deep-execution', resolved)['headroom_reorder'] is None
@@ -101,7 +101,7 @@ def test_limit_windows_and_disabled_accounts():
         dict(account('codex', 0), enabled=False)]}
     snapshot = core(fixture)
     assert snapshot['providers']['codex']['soonest_reset'] == 1790388000419
-    assert advise(snapshot)['exclude'] == ['gpt-6.1-sol']
+    assert advise(snapshot)['exclude'] == ['gpt-6.2-sol']
 
 
 def test_best_account_is_family_specific_and_unknown_is_not_exhausted():
@@ -116,7 +116,7 @@ def test_best_account_is_family_specific_and_unknown_is_not_exhausted():
 
 def test_floor_and_switch_boundary():
     assert advise(core({'accounts': [account('codex', .9, .97)]}))['exclude'] == []
-    assert advise(core({'accounts': [account('codex', .9, .98)]}))['exclude'] == ['gpt-6.1-sol']
+    assert advise(core({'accounts': [account('codex', .9, .98)]}))['exclude'] == ['gpt-6.2-sol']
 
 
 def test_reorder_retains_ic_profile():
@@ -132,7 +132,7 @@ def test_cross_provider_preference_preserves_each_providers_policy_order():
     fixture['accounts'][0]['sevenDayUtilization'] = .7
     fixture['accounts'][1]['sevenDayUtilization'] = .1
     fixture['accounts'][1]['familyWeekly'] = {'fable': {'utilization': .5}, 'opus': {'utilization': .1}}
-    resolved = {'profile_ref': 'astra', 'profile': {'backend': 'codex', 'model': 'gpt-6-astra'},
+    resolved = {'profile_ref': 'astra', 'profile': {'backend': 'codex', 'model': 'gpt-6.2-astra'},
                 'fallback_chain': [{'profile_ref': family, 'profile': {
                     'backend': 'claude', 'model': 'claude-' + family}} for family in ('fable', 'opus')]}
     result = advise(core(fixture), 'deep-execution', resolved)
@@ -146,7 +146,7 @@ def test_coordination_follows_headroom_to_sol():
     fixture['accounts'][1]['sevenDayUtilization'] = .8
     resolved = {'profile_ref': 'coordination-sonnet', 'profile': {'backend': 'claude', 'model': 'claude-sonnet-5-5'},
                 'fallback_chain': [{'profile_ref': 'coordination-sol', 'profile': {
-                    'backend': 'codex', 'model': 'gpt-6.1-sol'}}]}
+                    'backend': 'codex', 'model': 'gpt-6.2-sol'}}]}
     result = advise(core(fixture), 'coordination', resolved)
     assert [c['profile_ref'] for c in result['candidates']] == ['coordination-sol', 'coordination-sonnet']
 

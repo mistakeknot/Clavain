@@ -85,7 +85,7 @@ def writer(tmp_path):
         result = subprocess.run(["bash", "-c", '''
 source "$1/lib-review-receipt.sh"
 RR_REPO=o/r RR_REPO_ID=R_test RR_PR=7 RR_HEAD="$3" RR_BASE="$4"
-PRODUCER_IDENTITY=claude-sonnet-5-5 MODEL=gpt-6.1-sol CAPACITY_SUBSTITUTE_JSON=""
+PRODUCER_IDENTITY=claude-sonnet-5-5 MODEL=gpt-6.2-sol CAPACITY_SUBSTITUTE_JSON=""
 DISPATCH_ID=d ATTEMPT_ID=0 CLAVAIN_BEAD_ID=test-1
 RESOLVED_ROUTE_JSON="{\\"policy_hash\\":\\"$6\\"}"
 VALIDATOR_RELATIONSHIP=different-model

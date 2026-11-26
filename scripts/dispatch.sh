@@ -2288,10 +2288,10 @@ _experiment_refuse() { echo "Error: $*" >&2; exit 2; }
 _experiment_registry() { jq -ce 'if type=="object" and length>0 and all(.[]; type=="object" and (.tier|type=="string") and (.tier|length>0)) then . else error("invalid") end' "$DISPATCH_SCRIPT_DIR/../config/experiment-profiles.json" 2>/dev/null; }
 _experiment_producer_check() {
   [[ -n "$EXPERIMENT_ENTRY" ]] || return 0
-  [[ "$(jq -r .producer_model <<< "$EXPERIMENT_ENTRY")" == gpt-6-astra ]] ||
+  [[ "$(jq -r .producer_model <<< "$EXPERIMENT_ENTRY")" == gpt-6.2-astra ]] ||
     _experiment_refuse 'experiment registry must require canonical Astra'
-  jq -e '.producer_model=="gpt-6-astra"' <<< "$1" >/dev/null ||
-    _experiment_refuse 'experiment producer refused: requires canonical gpt-6-astra'
+  jq -e '.producer_model=="gpt-6.2-astra"' <<< "$1" >/dev/null ||
+    _experiment_refuse 'experiment producer refused: requires canonical gpt-6.2-astra'
 }
 _experiment_tier_guard() {
   local profile
@@ -2421,7 +2421,7 @@ _experiment_entry() {
   arm_lab="$(_dispatch_model_lab "$MODEL")"
   if [[ "$CLAVAIN_POLICY_PROFILE" == experiment-mk-d0h1j.1-sol-medium &&
         "$CLAVAIN_BEAD_ID" == mk-d0h1j.1 && "$EXPERIMENT_TASK_TYPE" == advisory-support-grouping &&
-        "$producer_model" == gpt-6-astra && "$MODEL" == gpt-6.1-sol ]]; then
+        "$producer_model" == gpt-6.2-astra && "$MODEL" == gpt-6.2-sol ]]; then
     : # Task-scoped advisory exception (mk-47vtm.10); never gate review evidence.
   else
     [[ -n "$arm_lab" && "$arm_lab" != "$EXPERIMENT_PRODUCER_LAB" ]] || _experiment_refuse 'experiment same-lab producer refused'

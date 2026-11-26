@@ -84,7 +84,7 @@ def configure(base, case, host):
     if host == 'codex':
         (profile/'.codex/auth.json').symlink_to('/Users/sma/.codex/auth.json')
         # Native discovery, auth and session persistence share this isolated profile.
-        (profile/'.codex/config.toml').write_text('model = "gpt-6-astra"\nmodel_reasoning_effort = "high"\napproval_policy = "never"\nsandbox_mode = "workspace-write"\nweb_search = "disabled"\n[skills]\nmax_context_tokens = 10000\n')
+        (profile/'.codex/config.toml').write_text('model = "gpt-6.2-astra"\nmodel_reasoning_effort = "high"\napproval_policy = "never"\nsandbox_mode = "workspace-write"\nweb_search = "disabled"\n[skills]\nmax_context_tokens = 10000\n')
     else:
         (profile/'.claude/.credentials.json').symlink_to('/home/mk/.claude/.credentials.json')
         # project,local settings intentionally exclude user skill discovery.
@@ -199,7 +199,7 @@ def _case_run(base, number, phase='all'):
         folder,fixture,profile,sources,env = configure(base,case,host)
     prompt = SCENARIOS[case['scenario']][0]
     if host == 'codex':
-        cmd = ['/Users/sma/.local/bin/codex','exec','--skip-git-repo-check','--json','-m','gpt-6-astra','-c','model_reasoning_effort="high"','-s','workspace-write']
+        cmd = [str(Path.home()/'.local/bin/codex'),'exec','--skip-git-repo-check','--json','-m','gpt-6.2-astra','-c','model_reasoning_effort="high"','-s','workspace-write']
     else:
         sid = str(uuid.uuid4())
         cmd = ['/home/mk/.local/bin/claude','--model',manifest['model_effort']['claude'][0],'--effort','high','--setting-sources','project,local','--strict-mcp-config','--plugin-dir',str(sources/'clavain'),'--plugin-dir',str(sources/'intertest'),'--permission-mode','dontAsk','--allowedTools','Bash,Read,Edit,Write,Skill,Glob,Grep','--disallowedTools','Agent,WebFetch,WebSearch','--max-turns','20','--session-id',sid,'--output-format','stream-json','--verbose','-p']
@@ -260,7 +260,7 @@ def _case_run(base, number, phase='all'):
     if case['scenario']=='resume' and sid and all(stage.get('exit_code')==0 for stage in result['stages'][:2]):
         followup='Resume the active task from HANDOFF.md: fix the README heading spelling now. Preserve the reserved file and verify the completed edit.'
         if host == 'codex':
-            second = ['/Users/sma/.local/bin/codex','exec','resume',sid,'--skip-git-repo-check','--json','-m','gpt-6-astra','-c','model_reasoning_effort="high"']
+            second = [str(Path.home()/'.local/bin/codex'),'exec','resume',sid,'--skip-git-repo-check','--json','-m','gpt-6.2-astra','-c','model_reasoning_effort="high"']
         else:
             if cmd[cmd.index('--session-id')+1]!=sid:
                 raise ValueError('Claude request and bound session identity differ')

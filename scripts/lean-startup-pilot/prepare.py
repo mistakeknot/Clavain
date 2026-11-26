@@ -61,7 +61,7 @@ def main():
     manifest=dict(schema_version=1,cohort_id=args.cohort_id,cohort_kind='correctness',subject_limit=12,
         pins={'candidate':pins},snapshots=snapshots,
         order=[dict(host=host,scenario=scenario,condition='candidate') for host in ('codex','claude') for scenario in runner.SCENARIOS],
-        model_effort={'codex':['gpt-6-astra','high'],'claude':[args.claude_model,'high']},launch_mode='native-two-phase',
+        model_effort={'codex':['gpt-6.2-astra','high'],'claude':[args.claude_model,'high']},launch_mode='native-two-phase',
         original_comparison=str(args.frozen_evidence),original_manifest_sha256=delivery.digest(args.frozen_evidence/'manifest.json'),
         efficiency='inconclusive; correctness-only cohort',requires_completed_native_compaction=True)
     harness=args.base/'sources/candidate/clavain/scripts/lean-startup-pilot'

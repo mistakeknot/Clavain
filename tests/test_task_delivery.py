@@ -23,7 +23,7 @@ def subject():
 def enrollment():
     return dict(schema_version=1, cohort_id="c", cohort_kind="internal-tooling", enrollment_id="e",
                 bead_id="b", objective="Implement accounting", enrolled_at="2026-09-05T12:00:00Z",
-                manifest_sha256="a" * 64, role="main-integrator", model="gpt-6-astra",
+                manifest_sha256="a" * 64, role="main-integrator", model="gpt-6.2-astra",
                 parent_session_id="parent", implementation_dispatched=False,
                 evidence_kind="prospective_manual_enrollment", execution_status="enrolled",
                 independent_acceptance="pending")
@@ -31,7 +31,7 @@ def enrollment():
 
 def decision(kind, context, ident=548):
     return dict(id=ident, rule_matched=f"measured-delivery-{kind}", context_json=json.dumps(context),
-                selected_model=context.get("model", "gpt-6-astra"), agent=context.get("role", "main-integrator"),
+                selected_model=context.get("model", "gpt-6.2-astra"), agent=context.get("role", "main-integrator"),
                 session_id=context.get("session_id", context.get("parent_session_id")),
                 bead_id=context.get("bead_id", "b"), decided_at=1788609600)
 
@@ -39,7 +39,7 @@ def decision(kind, context, ident=548):
 def binding():
     return dict(enrollment_id="e", cohort_id="c", manifest_sha256="a" * 64,
                 provider="codex", session_id="s", thread_id="s", attempt_id="a1", role="deep-execution",
-                model="gpt-6-astra", configuration_sha256="b" * 64, executable="/bin/codex",
+                model="gpt-6.2-astra", configuration_sha256="b" * 64, executable="/bin/codex",
                 executable_sha256="c" * 64, evidence_path="/evidence/s.jsonl")
 
 
@@ -71,7 +71,7 @@ def test_conflicting_enrollment_reuse_is_rejected():
 
 def test_same_model_or_producer_cannot_accept_own_task():
     receipt = dict(enrollment_id="e", cohort_id="c", status="accepted", reviewer_identity="p",
-                   producer_identity="p", reviewer_model="gpt-6-astra", producer_model="gpt-6-astra",
+                   producer_identity="p", reviewer_model="gpt-6.2-astra", producer_model="gpt-6.2-astra",
                    evidence_refs=["review.json"])
     with pytest.raises(ValueError, match="independent"):
         subject().validate_record("acceptance", receipt, [decision("enrollment", enrollment())])
@@ -82,7 +82,7 @@ def test_same_model_or_producer_cannot_accept_own_task():
 
 def test_acceptance_keeps_independent_identity_and_decision_evidence():
     receipt = dict(enrollment_id="e", cohort_id="c", status="accepted", reviewer_identity="reviewer",
-                   producer_identity="parent", reviewer_model="claude-fable-5-1", producer_model="gpt-6-astra",
+                   producer_identity="parent", reviewer_model="claude-fable-5-1", producer_model="gpt-6.2-astra",
                    evidence_refs=["review.json"], reviewer_binding_decision_id=550)
     review_binding = binding() | dict(session_id="reviewer", thread_id="reviewer", model="claude-fable-5-1", role="validation")
     records = [decision("enrollment", enrollment()), decision("binding", review_binding, 550), decision("acceptance", receipt, 551)]
@@ -155,7 +155,7 @@ def test_dispatch_audit_is_composed_into_attempts_without_fabricated_native_iden
     dispatched = dict(cohort_id="c", enrollment_id="e", dispatch_id="d1", role="deep-execution")
     audit = dict(id=550, rule_matched="dispatch-profile", dispatch_id="d1", context_json=json.dumps(dict(
         dispatch_id="d1", attempt_id="a1", state="failed", terminal=True,
-        execution=dict(backend="codex", model="gpt-6-astra", session_id=""),
+        execution=dict(backend="codex", model="gpt-6.2-astra", session_id=""),
         result=dict(failure_class="terminal_error"))))
     records = [decision("enrollment", enrollment()), decision("dispatch-request", dispatched, 549), audit]
     manifest = subject().export_manifest(records, "c")
@@ -277,7 +277,7 @@ def test_terminal_attempt_cannot_be_replaced_by_second_execution_receipt():
 
 def test_latest_audit_native_identity_is_used_and_all_lifecycle_rows_retained():
     requested = dict(cohort_id="c", enrollment_id="e", dispatch_id="d1", role="deep-execution")
-    initial = dict(dispatch_id="d1", attempt_id="a1", state="started", execution=dict(backend="codex", model="gpt-6-astra"))
+    initial = dict(dispatch_id="d1", attempt_id="a1", state="started", execution=dict(backend="codex", model="gpt-6.2-astra"))
     terminal = initial | dict(state="failed", execution=initial["execution"] | dict(session_id="actual", thread_id="actual"))
     records = [decision("enrollment", enrollment()), decision("dispatch-request", requested, 549)]
     for ident, audit in [(550, initial), (551, terminal)]:
@@ -330,7 +330,7 @@ def test_binding_correction_cannot_reassign_to_another_task():
 
 def test_acceptance_cannot_lie_about_producer_model():
     receipt = dict(enrollment_id="e", cohort_id="c", status="accepted", reviewer_identity="integrator",
-        producer_identity="child", reviewer_model="gpt-6-astra", producer_model="declared-other", evidence_refs=["review.json"])
+        producer_identity="child", reviewer_model="gpt-6.2-astra", producer_model="declared-other", evidence_refs=["review.json"])
     with pytest.raises(ValueError, match="independent"):
         subject().validate_record("acceptance", receipt, [decision("enrollment", enrollment())])
 
@@ -415,7 +415,7 @@ def test_enrolled_dispatch_rejects_provider_and_feature_overrides(flags):
 def test_enrolled_dispatch_rejects_ambient_usage_backend_fallback(monkeypatch):
     monkeypatch.setenv("CLAVAIN_REQUIRE_USAGE", "1")
     with pytest.raises(ValueError, match="environment"):
-        subject().prepare_dispatch([decision("enrollment", enrollment())], "e", "validation", ["--producer-identity", "codex/gpt-6-astra", "prompt"])
+        subject().prepare_dispatch([decision("enrollment", enrollment())], "e", "validation", ["--producer-identity", "codex/gpt-6.2-astra", "prompt"])
 
 
 @pytest.mark.parametrize("field", ["enrollment_id", "cohort_id", "manifest_sha256"])
@@ -440,7 +440,7 @@ def test_acceptance_record_requires_native_reviewer_proof(tmp_path, gap):
         stop_reason="end_turn", content=[dict(type="text", text="fixture")],
         usage=core | dict(iterations=[core | dict(type="message")], output_tokens_details=dict(thinking_tokens=0),
             cache_creation=dict(ephemeral_1h_input_tokens=0, ephemeral_5m_input_tokens=0))))]
-    if gap == "identity": entries[1]["message"]["model"] = "gpt-6-astra"
+    if gap == "identity": entries[1]["message"]["model"] = "gpt-6.2-astra"
     if gap == "invalid": entries[1]["message"]["usage"]["output_tokens"] = -1
     path = tmp_path / "reviewer.jsonl"
     if gap != "missing": path.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
@@ -448,7 +448,7 @@ def test_acceptance_record_requires_native_reviewer_proof(tmp_path, gap):
         role="validation", evidence_path=str(path))
     if gap == "configuration": reviewer.update(configuration_sha256=None, identity_coverage="incomplete", missing_identity_reason="not recorded")
     receipt = dict(enrollment_id="e", cohort_id="c", status="accepted", reviewer_identity="reviewer",
-        producer_identity="parent", reviewer_model="claude-fable-5-1", producer_model="gpt-6-astra",
+        producer_identity="parent", reviewer_model="claude-fable-5-1", producer_model="gpt-6.2-astra",
         reviewer_binding_decision_id=550, evidence_refs=["review.json"])
     records = [decision("enrollment", enrollment()), decision("binding", reviewer, 550)]
     if gap == "conflict": records.append(decision("binding", reviewer | dict(attempt_id="conflicting-attempt"), 552))
@@ -469,7 +469,7 @@ def test_compact_provider_overrides_rejected(flags):
 
 def test_disabled_ambient_usage_fallback_keeps_normal_role_dispatch(monkeypatch):
     monkeypatch.setenv("CLAVAIN_REQUIRE_USAGE", "0")
-    assert subject().prepare_dispatch([decision("enrollment", enrollment())], "e", "validation", ["--producer-identity", "codex/gpt-6-astra"])[0][3] == "validation"
+    assert subject().prepare_dispatch([decision("enrollment", enrollment())], "e", "validation", ["--producer-identity", "codex/gpt-6.2-astra"])[0][3] == "validation"
 
 
 @pytest.mark.parametrize("key", ["OPENAI_BASE_URL", "CODEX_HOME", "ANTHROPIC_BASE_URL", "CLAUDE_CONFIG_DIR"])
@@ -514,7 +514,7 @@ def test_dropping_known_host_metadata_keeps_unknown_reserved_selectors_rejected(
 def test_dispatch_request_does_not_mislabel_producer_as_selected_reviewer_model():
     _, _, receipt = subject().prepare_dispatch([decision("enrollment", enrollment())], "e", "validation", ["prompt"])
     assert receipt.get("model") is None
-    assert receipt["producer_model"] == "gpt-6-astra"
+    assert receipt["producer_model"] == "gpt-6.2-astra"
 
 
 def test_binding_requires_absolute_native_evidence_path():

@@ -10,7 +10,7 @@ setup() {
     export CODEX_HOME="$T/codex"
     TID=01a0f12b-4441-7732-b494-da5347122cea
     mkdir -p "$CODEX_HOME/sessions/2026/09/30"
-    ENGINE=codex MODEL=gpt-6.1-sol REASONING_EFFORT=high SERVICE_TIER=standard SANDBOX=read-only
+    ENGINE=codex MODEL=gpt-6.2-sol REASONING_EFFORT=high SERVICE_TIER=standard SANDBOX=read-only
     DISPATCH_SESSION_ID=s ATTEMPT_ID=attempt-1 DISPATCH_ID=d-1 CHECKOUT_BEFORE= WORKDIR="$T"
     OUTPUT="$T/out.md" PROVIDER_EVENTS="$T/events.jsonl" DISPATCH_RESULT_READY=true VIA=
     # shellcheck disable=SC1090
@@ -29,21 +29,21 @@ rollout() {  # rollout MODEL [THREAD_ID]
 exec_of() { _role_audit_context "$1" "${2:-0}" "${3:-success}" | jq -c '.execution'; }
 
 @test "direct exec: completed receipt carries the observed model from the session rollout" {
-    rollout gpt-6.1-sol
+    rollout gpt-6.2-sol
     run exec_of completed
     [ "$status" -eq 0 ]
-    [ "$(jq -r .model <<< "$output")" = gpt-6.1-sol ]
-    [ "$(jq -r .observed_model <<< "$output")" = gpt-6.1-sol ]
+    [ "$(jq -r .model <<< "$output")" = gpt-6.2-sol ]
+    [ "$(jq -r .observed_model <<< "$output")" = gpt-6.2-sol ]
     [ "$(jq -r .observed_source <<< "$output")" = codex-session-rollout ]
     [ "$(jq -r .observed_model_matches_requested <<< "$output")" = true ]
 }
 
 @test "direct exec: a different observed model is recorded as such, and failed runs are covered too" {
-    rollout gpt-6-astra
+    rollout gpt-6.2-astra
     run exec_of failed 1 terminal_error
     [ "$status" -eq 0 ]
-    [ "$(jq -r .model <<< "$output")" = gpt-6.1-sol ]
-    [ "$(jq -r .observed_model <<< "$output")" = gpt-6-astra ]
+    [ "$(jq -r .model <<< "$output")" = gpt-6.2-sol ]
+    [ "$(jq -r .observed_model <<< "$output")" = gpt-6.2-astra ]
     [ "$(jq -r .observed_model_matches_requested <<< "$output")" = false ]
 }
 
@@ -57,7 +57,7 @@ exec_of() { _role_audit_context "$1" "${2:-0}" "${3:-success}" | jq -c '.executi
 }
 
 @test "a broken helper degrades to unknown instead of failing the receipt" {
-    rollout gpt-6.1-sol
+    rollout gpt-6.2-sol
     DISPATCH_SCRIPT_DIR="$T/no-such-dir"
     run exec_of completed
     [ "$status" -eq 0 ]
@@ -69,10 +69,10 @@ exec_of() { _role_audit_context "$1" "${2:-0}" "${3:-success}" | jq -c '.executi
 # "unknown"), so this only proves the branch would honour one if BB attested it.
 @test "bb transport: a receipt that does attest a model is honoured (synthetic)" {
     VIA=bb
-    jq -cn '{attempt_id:"attempt-1",actual_model:"gpt-6.1-sol",actual_effort:"high"}' > "$OUTPUT.receipt.json"
+    jq -cn '{attempt_id:"attempt-1",actual_model:"gpt-6.2-sol",actual_effort:"high"}' > "$OUTPUT.receipt.json"
     run exec_of completed
     [ "$status" -eq 0 ]
-    [ "$(jq -r .observed_model <<< "$output")" = gpt-6.1-sol ]
+    [ "$(jq -r .observed_model <<< "$output")" = gpt-6.2-sol ]
     [ "$(jq -r .observed_source <<< "$output")" = bb-seat-receipt ]
     [ "$(jq -r .observed_model_matches_requested <<< "$output")" = true ]
 }
@@ -88,14 +88,14 @@ exec_of() { _role_audit_context "$1" "${2:-0}" "${3:-success}" | jq -c '.executi
 
 @test "bb transport: a receipt left by another attempt is ignored" {
     VIA=bb
-    jq -cn '{attempt_id:"someone-else",actual_model:"gpt-6.1-sol",actual_effort:"high"}' > "$OUTPUT.receipt.json"
+    jq -cn '{attempt_id:"someone-else",actual_model:"gpt-6.2-sol",actual_effort:"high"}' > "$OUTPUT.receipt.json"
     run exec_of completed
     [ "$(jq -r .observed_model <<< "$output")" = unknown ]
     [ "$(jq -r .observed_reason <<< "$output")" = "no bb seat receipt for this attempt" ]
 }
 
 @test "started state, zaka transport and non-codex engines carry no observed-model claim" {
-    rollout gpt-6.1-sol
+    rollout gpt-6.2-sol
     run exec_of started
     [ "$(jq 'has("observed_model")' <<< "$output")" = false ]
     VIA=zaka run exec_of completed
@@ -105,7 +105,7 @@ exec_of() { _role_audit_context "$1" "${2:-0}" "${3:-success}" | jq -c '.executi
 }
 
 @test "a hung observed-model helper is bounded and degrades to unknown" {
-    rollout gpt-6.1-sol
+    rollout gpt-6.2-sol
     mkdir -p "$T/slow"
     printf '#!/usr/bin/env python3\nimport time\ntime.sleep(300)\n' > "$T/slow/codex-observed-model.py"
     DISPATCH_SCRIPT_DIR="$T/slow" OBSERVED_MODEL_TIMEOUT=1 run exec_of completed

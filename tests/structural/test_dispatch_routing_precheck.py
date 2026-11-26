@@ -17,8 +17,8 @@ SCRIPTS = ROOT / "scripts"
 POLICY = {"dispatch": {
     "roles": {"routine-execution": "exec"},
     "tiers": {"exec": {"model": "claude-sonnet-5-5", "reasoning_effort": "high", "fallbacks": ["sol"]},
-              "sol": {"model": "gpt-6.1-sol", "reasoning_effort": "medium", "backend": "codex"}}}}
-RELEASED = {"models": [{"id": "claude-sonnet-5-5"}, {"id": "gpt-6.1-sol"}]}
+              "sol": {"model": "gpt-6.2-sol", "reasoning_effort": "medium", "backend": "codex"}}}}
+RELEASED = {"models": [{"id": "claude-sonnet-5-5"}, {"id": "gpt-6.2-sol"}]}
 SEAT = {"role": "routine-execution", "model": "claude-sonnet-5-5", "reasoning_effort": "high"}
 
 
@@ -136,7 +136,7 @@ def test_enabled_with_absent_checker_cannot_bypass(harness):
 # Round 2: replayed decisions and bare policy tiers must not bypass the guard.
 def resolved_args(decision, role=None):
     args = ["--role-resolved", "--resolved-route-json", json.dumps(decision),
-            "--to", "codex", "--model", "gpt-6.1-sol"]
+            "--to", "codex", "--model", "gpt-6.2-sol"]
     if role is not None:
         args += ["--role", role]
     return args
@@ -224,7 +224,7 @@ def test_tier_checks_discovered_policy(harness):
     assert '"subject": "tier:exec"' in result.stderr and '"kind": "retired-pin"' in result.stderr
 
 
-@pytest.mark.parametrize("model", ["gpt-5.6-sol", "claude-sonnet-5", "gpt-6-astra", "unknown-model"])
+@pytest.mark.parametrize("model", ["gpt-5.6-sol", "claude-sonnet-5", "gpt-6.2-astra", "unknown-model"])
 def test_replayed_execution_model_must_match_role(harness, model):
     run, enabled, *_ = harness
     args = resolved_args({"requested_role": "routine-execution"})
@@ -237,7 +237,7 @@ def test_replayed_execution_model_must_match_role(harness, model):
     ["--resolved-profile-ref", "ghost"],
     ["--reasoning-effort", "high"],
     ["--resolved-profile-json", '{"profile_ref":"sol","profile":{"model":"gpt-5.6-sol"}}'],
-    ["--resolved-profile-json", '{"profile_ref":"exec","profile":{"model":"gpt-6.1-sol"}}'],
+    ["--resolved-profile-json", '{"profile_ref":"exec","profile":{"model":"gpt-6.2-sol"}}'],
     ["--resolved-profile-json", '{"profile_ref":"sol","profile":{"role":"validation"}}'],
     ["--resolved-profile-json", '{'],
     ["--resolved-profile-json", '[]'],
@@ -255,7 +255,7 @@ def test_replayed_declared_fallback_is_allowed(harness):
                 "profile": {"role": "routine-execution", "model": "claude-sonnet-5-5"}}
     args = resolved_args(decision) + ["--resolved-profile-ref", "sol", "--reasoning-effort", "medium",
         "--resolved-profile-json", json.dumps({"profile_ref": "sol", "profile": {
-            "role": "routine-execution", "model": "gpt-6.1-sol", "backend": "codex",
+            "role": "routine-execution", "model": "gpt-6.2-sol", "backend": "codex",
             "reasoning_effort": "medium"}})]
     result, _ = run(args=args, **enabled())
     assert '"status": "clean"' in result.stderr
@@ -290,7 +290,7 @@ def test_role_precheck_audits_environment_overrides(harness, var):
 def test_replayed_profile_retired_alias_cannot_hide_behind_current_model(harness, field):
     run, enabled, files, _ = harness
     policy = json.loads(json.dumps(POLICY))
-    policy["dispatch"]["model_aliases"] = {"gpt-5.6-sol": "gpt-6.1-sol"}
+    policy["dispatch"]["model_aliases"] = {"gpt-5.6-sol": "gpt-6.2-sol"}
     files["routing.yaml"].write_text(yaml.safe_dump(policy))
     args = resolved_args({"requested_role": "routine-execution"}) + [
         "--resolved-profile-json", json.dumps({"profile_ref": "sol", "profile": {field: "gpt-5.6-sol"}})]

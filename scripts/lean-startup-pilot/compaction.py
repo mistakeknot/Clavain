@@ -48,7 +48,7 @@ def codex(binary, session, folder, fixture, env):
         try:
             rpc(1,'initialize',{'clientInfo':{'name':'lean-startup-correctness','version':'1'},'capabilities':{'experimentalApi':True}})
             send({'method':'initialized','params':{}})
-            resumed=rpc(2,'thread/resume',{'threadId':session,'cwd':str(fixture),'model':'gpt-6-astra',
+            resumed=rpc(2,'thread/resume',{'threadId':session,'cwd':str(fixture),'model':'gpt-6.2-astra',
                 'approvalPolicy':'never','sandbox':'workspace-write'})
             if resumed.get('thread',{}).get('id') != session: raise ValueError('resumed wrong native session')
             # Completion may arrive before the acknowledgment; observe every event.

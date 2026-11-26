@@ -23,7 +23,7 @@ setup() {
     cat > "$T/bin/ic" <<'SH'
 #!/usr/bin/env bash
 if [[ "$*" == *"route list"* ]]; then echo '[]'
-elif [[ "$*" == *"route identity"* ]]; then echo '{"model_identity":"gpt-6.1-sol"}'
+elif [[ "$*" == *"route identity"* ]]; then echo '{"model_identity":"gpt-6.2-sol"}'
 elif [[ "$*" == *"route record"* ]]; then exit 0
 else exit 3; fi
 SH
@@ -32,7 +32,7 @@ SH
     OUT="$T/out.md"
     POLICY_HASH="$(sha256sum "$BATS_TEST_DIRNAME/../../config/routing.yaml" | cut -d' ' -f1)"
     ROUTE_JSON="$(jq -n --arg h "$POLICY_HASH" \
-        '{policy_hash:$h, profile_ref:"primary", profile:{backend:"codex",model:"gpt-6.1-sol",model_identity:"gpt-6.1-sol"}}')"
+        '{policy_hash:$h, profile_ref:"primary", profile:{backend:"codex",model:"gpt-6.2-sol",model_identity:"gpt-6.2-sol"}}')"
     RECEIPT_FLAGS=(--repo o/r --repo-id R_abc123 --pr 7 --head "$HEAD_SHA" --base "$BASE")
 }
 
@@ -89,7 +89,7 @@ EOF
 
 run_scratch() {
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --role-resolved --role cross-lab-review \
-        --to codex --model gpt-6.1-sol --resolved-route-json "$ROUTE_JSON" \
+        --to codex --model gpt-6.2-sol --resolved-route-json "$ROUTE_JSON" \
         --review-scratch --producer-identity claude-sonnet-5-5 "${RECEIPT_FLAGS[@]}" -C "$R" \
         --prompt-file "$T/prompt.md" -o "$OUT" "$@"
 }
@@ -111,7 +111,7 @@ scratch_dirs() { find "$T/scratchroot" -maxdepth 1 -name 'clavain-review-scratch
 @test "rejected for a role other than cross-lab-review" {
     fake_codex_plain
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --dry-run --role-resolved --role validation \
-        --to codex --model gpt-6.1-sol --resolved-route-json "$ROUTE_JSON" \
+        --to codex --model gpt-6.2-sol --resolved-route-json "$ROUTE_JSON" \
         --review-scratch "${RECEIPT_FLAGS[@]}" -C "$R" --prompt-file "$T/prompt.md" -o "$OUT"
     [ "$status" -ne 0 ]
     [[ "$output" == *"cross-lab-review only"* ]]
@@ -120,7 +120,7 @@ scratch_dirs() { find "$T/scratchroot" -maxdepth 1 -name 'clavain-review-scratch
 @test "rejected without the receipt flags" {
     fake_codex_plain
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --dry-run --role-resolved --role cross-lab-review \
-        --to codex --model gpt-6.1-sol --resolved-route-json "$ROUTE_JSON" \
+        --to codex --model gpt-6.2-sol --resolved-route-json "$ROUTE_JSON" \
         --review-scratch -C "$R" --prompt-file "$T/prompt.md" -o "$OUT"
     [ "$status" -ne 0 ]
     [[ "$output" == *"receipt flags"* ]]
@@ -129,7 +129,7 @@ scratch_dirs() { find "$T/scratchroot" -maxdepth 1 -name 'clavain-review-scratch
 @test "rejected with a partial set of receipt flags" {
     fake_codex_plain
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --dry-run --role-resolved --role cross-lab-review \
-        --to codex --model gpt-6.1-sol --resolved-route-json "$ROUTE_JSON" \
+        --to codex --model gpt-6.2-sol --resolved-route-json "$ROUTE_JSON" \
         --review-scratch --repo o/r --pr 7 -C "$R" --prompt-file "$T/prompt.md" -o "$OUT"
     [ "$status" -ne 0 ]
 }
@@ -137,7 +137,7 @@ scratch_dirs() { find "$T/scratchroot" -maxdepth 1 -name 'clavain-review-scratch
 @test "rejected without -C and with a wider sandbox" {
     fake_codex_plain
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --dry-run --role-resolved --role cross-lab-review \
-        --to codex --model gpt-6.1-sol --resolved-route-json "$ROUTE_JSON" \
+        --to codex --model gpt-6.2-sol --resolved-route-json "$ROUTE_JSON" \
         --review-scratch "${RECEIPT_FLAGS[@]}" --prompt-file "$T/prompt.md" -o "$OUT"
     [ "$status" -ne 0 ]
     [[ "$output" == *"-C"* ]]
@@ -150,9 +150,9 @@ scratch_dirs() { find "$T/scratchroot" -maxdepth 1 -name 'clavain-review-scratch
     printf '#!/usr/bin/env bash\ncat >/dev/null\nexit 0\n' > "$T/bin/claude"; chmod +x "$T/bin/claude"
     local claude_route
     claude_route="$(jq -n --arg h "$POLICY_HASH" \
-        '{policy_hash:$h, profile_ref:"primary", profile:{backend:"claude",model:"gpt-6-astra",model_identity:"gpt-6-astra"}}')"
+        '{policy_hash:$h, profile_ref:"primary", profile:{backend:"claude",model:"gpt-6.2-astra",model_identity:"gpt-6.2-astra"}}')"
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --dry-run --role-resolved --role cross-lab-review \
-        --to claude --model gpt-6-astra --resolved-route-json "$claude_route" \
+        --to claude --model gpt-6.2-astra --resolved-route-json "$claude_route" \
         --review-scratch "${RECEIPT_FLAGS[@]}" -C "$R" --prompt-file "$T/prompt.md" -o "$OUT"
     [ "$status" -ne 0 ]
     [[ "$output" == *"codex engine only"* ]]
@@ -164,7 +164,7 @@ scratch_dirs() { find "$T/scratchroot" -maxdepth 1 -name 'clavain-review-scratch
     # pointing --head at a commit the checkout lacks.
     local missing; missing="$(printf 'b%.0s' {1..40})"
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --role-resolved --role cross-lab-review \
-        --to codex --model gpt-6.1-sol --resolved-route-json "$ROUTE_JSON" \
+        --to codex --model gpt-6.2-sol --resolved-route-json "$ROUTE_JSON" \
         --review-scratch --repo o/r --repo-id R_abc123 --pr 7 --head "$missing" --base "$BASE" \
         -C "$R" --prompt-file "$T/prompt.md" -o "$OUT"
     [ "$status" -ne 0 ]
@@ -218,9 +218,9 @@ SH
     chmod +x "$T/bin/claude"
     local claude_route
     claude_route="$(jq -n --arg h "$POLICY_HASH" \
-        '{policy_hash:$h, profile_ref:"primary", profile:{backend:"claude",model:"gpt-6-astra",model_identity:"gpt-6.1-sol"}}')"
+        '{policy_hash:$h, profile_ref:"primary", profile:{backend:"claude",model:"gpt-6.2-astra",model_identity:"gpt-6.2-sol"}}')"
     REVIEW_CODEX_TMPDIR=/dev/shm PATH="$T/bin:$PATH" run bash "$DISPATCH" --role-resolved --role cross-lab-review \
-        --to claude --model gpt-6-astra --resolved-route-json "$claude_route" \
+        --to claude --model gpt-6.2-astra --resolved-route-json "$claude_route" \
         --producer-identity claude-sonnet-5-5 "${RECEIPT_FLAGS[@]}" -C "$R" --prompt-file "$T/prompt.md" -o "$OUT"
     f="$T/reviews/o__r/7-$HEAD_SHA.json"
     [ -f "$f" ]
@@ -230,7 +230,7 @@ SH
 @test "a read-only receipt carries no scratch fields" {
     fake_codex_plain
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --role-resolved --role cross-lab-review \
-        --to codex --model gpt-6.1-sol --resolved-route-json "$ROUTE_JSON" \
+        --to codex --model gpt-6.2-sol --resolved-route-json "$ROUTE_JSON" \
         --producer-identity claude-sonnet-5-5 "${RECEIPT_FLAGS[@]}" -C "$R" --prompt-file "$T/prompt.md" -o "$OUT"
     [ "$status" -eq 0 ]
     f="$T/reviews/o__r/7-$HEAD_SHA.json"
@@ -406,7 +406,7 @@ assert_scratch_refuses() {
 @test "read-only reviews keep their passthrough behaviour" {
     fake_codex_plain
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --role-resolved --role cross-lab-review \
-        --to codex --model gpt-6.1-sol --resolved-route-json "$ROUTE_JSON" \
+        --to codex --model gpt-6.2-sol --resolved-route-json "$ROUTE_JSON" \
         --producer-identity claude-sonnet-5-5 "${RECEIPT_FLAGS[@]}" -C "$R" \
         --prompt-file "$T/prompt.md" -o "$OUT" --json -c some.key=value
     [ "$status" -eq 0 ]
@@ -844,7 +844,7 @@ EOF
     mkdir -p "$T/elsewhere" "$R/sub"
     ln -s "$T/elsewhere" "$R/.clavain"
     PATH="$T/bin:$PATH" run bash "$DISPATCH" --role-resolved --role cross-lab-review \
-        --to codex --model gpt-6.1-sol --resolved-route-json "$ROUTE_JSON" \
+        --to codex --model gpt-6.2-sol --resolved-route-json "$ROUTE_JSON" \
         --review-scratch --producer-identity claude-sonnet-5-5 "${RECEIPT_FLAGS[@]}" -C "$R/sub" \
         --prompt-file "$T/prompt.md" -o "$OUT"
     [ "$status" -ne 0 ]
@@ -904,7 +904,7 @@ exec sleep 60
 EOF
     chmod +x "$T/bin/codex"
     PATH="$T/bin:$PATH" setsid bash "$DISPATCH" --role-resolved --role cross-lab-review \
-        --to codex --model gpt-6.1-sol --resolved-route-json "$ROUTE_JSON" \
+        --to codex --model gpt-6.2-sol --resolved-route-json "$ROUTE_JSON" \
         --review-scratch --producer-identity claude-sonnet-5-5 "${RECEIPT_FLAGS[@]}" -C "$R" \
         --prompt-file "$T/prompt.md" -o "$OUT" >"$T/run.out" 2>&1 &
     pid=$!

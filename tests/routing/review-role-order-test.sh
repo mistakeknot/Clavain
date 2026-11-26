@@ -29,7 +29,7 @@ for context in routine frontier; do
   for role in plan-review; do
     receipt="$(resolve claude-sonnet-5-5 "$ctx")"
     check "$receipt" '
-      .profile_ref == "review-astra" and .profile.model_identity == "gpt-6-astra"
+      .profile_ref == "review-astra" and .profile.model_identity == "gpt-6.2-astra"
       and .fallback_reason == "cross_lab_reorder"
       and .cross_lab_reorder == {from:["review-opus","review-astra"],to:["review-astra","review-opus"]}
       and [.fallback_chain[].profile_ref] == ["review-opus"]
@@ -43,14 +43,14 @@ for context in routine frontier; do
       and any(.excluded[]; .profile_ref == "review-opus" and .reason == "producer_model_conflict")
     ' 'Opus producer must exclude itself'
 
-    receipt="$(resolve gpt-6-astra "$ctx")"
+    receipt="$(resolve gpt-6.2-astra "$ctx")"
     check "$receipt" '
       .profile_ref == "review-opus" and .profile.model_identity == "claude-opus-5-5"
       and .fallback_reason == null and ((.fallback_chain // []) | length == 0)
       and any(.excluded[]; .profile_ref == "review-astra" and .reason == "producer_model_conflict")
     ' 'Astra producer must keep Opus first and exclude itself'
 
-    receipt="$(resolve gpt-6.1-sol "$ctx")"
+    receipt="$(resolve gpt-6.2-sol "$ctx")"
     check "$receipt" '
       .profile_ref == "review-opus" and .fallback_reason == null
       and [.fallback_chain[].profile_ref] == ["review-astra"]
@@ -76,16 +76,16 @@ done
 role=cross-lab-review
 for context in routine frontier; do
   ctx="$WORK/$context.json"
-  jq '.available_models = ["claude-opus-5-5", "claude-sonnet-5-5", "gpt-6-astra"]' "$ctx" > "$WORK/no-sol.json"
+  jq '.available_models = ["claude-opus-5-5", "claude-sonnet-5-5", "gpt-6.2-astra"]' "$ctx" > "$WORK/no-sol.json"
 
   receipt="$(resolve claude-sonnet-5-5 "$ctx")"
   check "$receipt" '
     .profile_ref == "crosslab-sol" and .fallback_chain[0].profile_ref == "crosslab-astra"
-    and .fallback_chain[0].profile.model_identity == "gpt-6-astra"
+    and .fallback_chain[0].profile.model_identity == "gpt-6.2-astra"
     and ([.fallback_chain[].profile_ref] | index("crosslab-astra")) < ([.fallback_chain[].profile_ref] | index("crosslab-opus"))
   ' 'Claude producer must reach Sol, then Astra, then Opus'
 
-  receipt="$(resolve gpt-6-astra "$ctx")"
+  receipt="$(resolve gpt-6.2-astra "$ctx")"
   check "$receipt" '
     .profile_ref == "crosslab-opus"
     and any(.excluded[]; .profile_ref == "crosslab-astra" and .reason == "producer_model_conflict")
@@ -93,7 +93,7 @@ for context in routine frontier; do
 
   receipt="$(resolve claude-sonnet-5-5 "$WORK/no-sol.json")"
   check "$receipt" '
-    .profile_ref == "crosslab-astra" and .profile.model_identity == "gpt-6-astra"
+    .profile_ref == "crosslab-astra" and .profile.model_identity == "gpt-6.2-astra"
     and .profile.reasoning_effort == "xhigh"
     and any(.excluded[]; .profile_ref == "crosslab-sol" and .reason == "model_unavailable")
   ' 'Sol unavailable must land on Astra'

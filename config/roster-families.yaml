@@ -14,6 +14,15 @@
 # family below, never on a name or slug fragment: `sao10k-l3-lunaris-8b`
 # ("Sao10K: Llama 3 8B Lunaris") is deliberately absent.
 models:
+  # Current seats; prior versions remain for receipt attribution.
+  gpt-6.2-astra:
+    lab: openai
+    family: astra
+    snapshot_name: GPT-6.2 Astra
+  gpt-6.2-sol:
+    lab: openai
+    family: sol
+    snapshot_name: GPT-6.2 Sol
   gpt-6-astra:
     lab: openai
     family: astra

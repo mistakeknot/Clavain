@@ -38,7 +38,7 @@ CODEX_AT_CAPACITY = re.compile(r"\bmodel is at capacity\b", re.IGNORECASE)
 CODEX_ACCOUNT_UNSUPPORTED = re.compile(
     r"\bmodel is not supported when using Codex with a ChatGPT account\b", re.IGNORECASE)
 # A provider-side content filter refused this prompt on this seat (seen from
-# gpt-6.1-sol: "flagged for potentially high-risk cyber activity ... apply for
+# gpt-6.2-sol: "flagged for potentially high-risk cyber activity ... apply for
 # trusted access"). The refusal depends on the seat, so the declared fallback
 # walk tries the next seat with the prompt unchanged. It is its own class so a
 # receipt states the true cause, not account_access_absent.

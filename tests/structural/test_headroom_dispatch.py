@@ -108,7 +108,7 @@ print('{"type":"result","subtype":"success","is_error":false,"result":"VERDICT: 
         args = ['bash', str(ROOT/'scripts/dispatch.sh'), '--role', role, '--context-file', str(context),
                 '-C', str(work), '-o', str(tmp_path/'out')]
         if role in ('plan-review', 'validation', 'cross-lab-review'):
-            args += ['--producer-identity', 'gpt-6-astra']
+            args += ['--producer-identity', 'gpt-6.2-astra']
         p = subprocess.run(args+['fixture only'], env=env, text=True, capture_output=True, timeout=20)
         rows = [json.loads(line) for line in receipt.read_text().splitlines()]
         return p, rows, calls.read_text(), work
@@ -122,7 +122,7 @@ def test_execution_keeps_sol_first_and_receipt_preserves_ic_profile(dispatch):
     assert p.returncode == 0, p.stderr
     assert calls == 'status\n'
     r = rows[-1]
-    assert r['execution']['model'] == 'gpt-6.1-sol'
+    assert r['execution']['model'] == 'gpt-6.2-sol'
     assert r['profile_ref'] == r['resolved_route']['profile_ref'] == 'routine-exec-sol'
     assert r['resolved_profile']['profile_ref'] == 'routine-exec-sol'
     assert not r.get('headroom_reorder')
@@ -133,8 +133,8 @@ def test_forecast_exclusion_has_evidence_and_separate_label(dispatch):
     assert p.returncode == 0, p.stderr
     r = rows[-1]
     assert r['execution']['model'] == 'claude-sonnet-5-5'
-    assert r['headroom_exclusion'] == ['gpt-6.1-sol']
-    assert r['resolved_route']['headroom_exclusion'] == ['gpt-6.1-sol']
+    assert r['headroom_exclusion'] == ['gpt-6.2-sol']
+    assert r['resolved_route']['headroom_exclusion'] == ['gpt-6.2-sol']
     assert not any(e['reason'] == 'model_unavailable' for e in r['resolved_route'].get('excluded', []))
     ctx = r['resolved_route']['decision_context']
     assert 'forecast from bb pool headroom' in ctx['rationale']
@@ -148,14 +148,14 @@ def test_coordination_reorders_to_sol_under_claude_pressure(dispatch):
     p, rows, calls, _ = dispatch([account('codex', .2), account('claude', .9)], 'coordination')
     assert p.returncode == 0, p.stderr
     assert calls == 'status\n'
-    assert rows[-1]['execution']['model'] == 'gpt-6.1-sol'
+    assert rows[-1]['execution']['model'] == 'gpt-6.2-sol'
     assert rows[-1]['headroom_reorder']['to'][0] == 'coordination-sol'
 
 
 def test_coordination_excludes_exhausted_claude(dispatch):
     p, rows, _, _ = dispatch([account('codex', .2), account('claude', .99)], 'coordination')
     assert p.returncode == 0, p.stderr
-    assert rows[-1]['execution']['model'] == 'gpt-6.1-sol'
+    assert rows[-1]['execution']['model'] == 'gpt-6.2-sol'
     assert rows[-1]['headroom_exclusion'] == ['claude-sonnet-5-5']
 
 
@@ -180,14 +180,14 @@ def test_protected_resolution_never_probes_pool(dispatch, role):
 def test_unknown_pool_does_not_change_execution(dispatch):
     p, rows, _, work = dispatch([])
     assert p.returncode == 0, p.stderr
-    assert rows[-1]['execution']['model'] == 'gpt-6.1-sol'
+    assert rows[-1]['execution']['model'] == 'gpt-6.2-sol'
     assert rows[-1].get('headroom_exclusion', []) == []
     assert not list(work.glob('.clavain/capacity/*'))
 
 
 def test_forecast_does_not_resurrect_previously_unavailable_models(dispatch):
     p, rows, _, _ = dispatch([account('codex', .99), account('claude', .2)],
-                            available=['gpt-6.1-sol'])
+                            available=['gpt-6.2-sol'])
     assert p.returncode != 0
     assert not rows  # No eligible seat remains; never invoke Claude.
 
@@ -195,13 +195,13 @@ def test_forecast_does_not_resurrect_previously_unavailable_models(dispatch):
 def test_probe_wrapper_failure_leaves_route_unchanged(dispatch):
     p, rows, _, _ = dispatch([], broken_probe=True)
     assert p.returncode == 0, p.stderr
-    assert rows[-1]['execution']['model'] == 'gpt-6.1-sol'
+    assert rows[-1]['execution']['model'] == 'gpt-6.2-sol'
 
 
 def test_evidence_creation_is_portable(dispatch):
     p, rows, _, _ = dispatch([account('codex', .99), account('claude', .2)], bsd_temp=True)
     assert p.returncode == 0, p.stderr
-    assert rows[-1]['headroom_exclusion'] == ['gpt-6.1-sol']
+    assert rows[-1]['headroom_exclusion'] == ['gpt-6.2-sol']
 
 
 # mk-47vtm.3: routing artifacts are scanned for the bearer token before routing

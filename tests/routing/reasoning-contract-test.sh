@@ -11,12 +11,12 @@ ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=routine-exe
 jq -e '.classification_reasons == [] and .frontier_required == false and .decision_context.reasons == []' \
   "$work/routine-resolution.json" >/dev/null
 printf '%s\n' '{"reasons":["foundational-invariants"],"rationale":"shared admission policy"}' > "$work/context.json"
-out="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role plan-review --producer-identity gpt-6-astra --context-file "$work/context.json" -C "$work" fixture 2>&1)"
+out="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role plan-review --producer-identity gpt-6.2-astra --context-file "$work/context.json" -C "$work" fixture 2>&1)"
 [[ "$out" == *'claude-opus-5-5'* && "$out" == *'--effort high'* ]] || { echo 'FAIL: Claude effort not propagated'; exit 1; }
 # Default producer exclusions must retain Astra and the cross-lab route.
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=plan-review \
   --producer-identity=claude-opus-5-5 --context-file="$work/context.json" > "$work/opus-producer.json"
-jq -e '.profile.model == "gpt-6-astra"' "$work/opus-producer.json" >/dev/null
+jq -e '.profile.model == "gpt-6.2-astra"' "$work/opus-producer.json" >/dev/null
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=cross-lab-review \
   --producer-identity=claude-opus-5-5 --context-file="$work/routine.json" > "$work/crosslab.json"
 jq -e '.profile.backend != "claude"' "$work/crosslab.json" >/dev/null
@@ -26,13 +26,13 @@ jq -e '.profile.backend != "claude"' "$work/crosslab.json" >/dev/null
 # Needs ic >= intercore 2caa435.
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
   --producer-identity=claude-sonnet-5-5 --context-file="$work/routine.json" > "$work/claude-review.json"
-jq -e '.profile.model == "gpt-6.1-sol" and .fallback_chain[0].profile.model == "claude-opus-5-5"
+jq -e '.profile.model == "gpt-6.2-sol" and .fallback_chain[0].profile.model == "claude-opus-5-5"
   and ([.profile.model, .fallback_chain[].profile.model] | index("claude-sonnet-5-5") == null)
   and .cross_lab_reorder.to[0] == "validation-sol"' "$work/claude-review.json" >/dev/null ||
   { echo 'FAIL: Claude-produced code does not reach Sol, then Opus'; exit 1; }
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
   --producer-identity=claude-opus-5-5 --context-file="$work/routine.json" > "$work/opus-review.json"
-jq -e '.profile.model == "gpt-6.1-sol"
+jq -e '.profile.model == "gpt-6.2-sol"
   and ([.profile.model, .fallback_chain[].profile.model] | index("claude-opus-5-5") == null)' "$work/opus-review.json" >/dev/null ||
   { echo 'FAIL: Opus-produced code reaches Opus or skips Sol'; exit 1; }
 printf '%s\n' '{"reasons":[],"rationale":"codex lane out","available_models":["claude-opus-5-5","claude-sonnet-5-5","kimi-code/k3"]}' > "$work/codex-out.json"
@@ -41,13 +41,13 @@ ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation 
 jq -e '.profile.model == "claude-opus-5-5"' "$work/codex-out-review.json" >/dev/null ||
   { echo 'FAIL: Codex out does not fall back to Opus'; exit 1; }
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
-  --producer-identity=gpt-6-astra --context-file="$work/routine.json" > "$work/codex-review.json"
+  --producer-identity=gpt-6.2-astra --context-file="$work/routine.json" > "$work/codex-review.json"
 jq -e '.profile.model == "claude-opus-5-5" and .cross_lab_reorder == null' "$work/codex-review.json" >/dev/null ||
   { echo 'FAIL: Codex-produced code review order changed'; exit 1; }
 # Opus 5.5 is the packaged plan reviewer: a distinct frontier model
 # for Astra-authored plans, never a downgrade.
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=plan-review \
-  --producer-identity=gpt-6-astra --context-file="$work/context.json" > "$work/astra-plan-route.json"
+  --producer-identity=gpt-6.2-astra --context-file="$work/context.json" > "$work/astra-plan-route.json"
 jq -e '.profile.model == "claude-opus-5-5" and .frontier_required and .validator_relationship == "different-model"' "$work/astra-plan-route.json" >/dev/null
 # With Astra out an Opus-authored plan has no routed reviewer: resolution
 # fails closed rather than admitting Opus as its own reviewer (the agent then
@@ -117,7 +117,7 @@ chmod +x "$work/bin/claude"
 (cd "$work" && ic init >/dev/null)
 PATH="$work/bin:$PATH" CONTRACT_PROMPT="$work/child-prompt.md" CONTRACT_ARGS="$work/child-args.txt" \
   CLAVAIN_CONTEXT_GATEWAY_MODE=off bash "$ROOT/scripts/dispatch.sh" --role plan-review \
-  --producer-identity gpt-6-astra --context-file "$work/context.json" -C "$work" \
+  --producer-identity gpt-6.2-astra --context-file "$work/context.json" -C "$work" \
   -o "$work/answer.md" 'Replay the admission criteria.' >/dev/null
 grep -q 'project,local' "$work/child-args.txt"
 grep -q 'Sylveste operating contract' "$work/child-prompt.md"
@@ -135,7 +135,7 @@ GATEWAY
 chmod +x "$work/bin/change-policy"
 if PATH="$work/bin:$PATH" CONTRACT_PROMPT="$work/should-not-run" CONTRACT_ARGS="$work/should-not-have-args" \
   CHANGING_POLICY="$work/changed-policy.yaml" CLAVAIN_CONTEXT_GATEWAY_BIN="$work/bin/change-policy" \
-  bash "$ROOT/scripts/dispatch.sh" --role plan-review --producer-identity gpt-6-astra \
+  bash "$ROOT/scripts/dispatch.sh" --role plan-review --producer-identity gpt-6.2-astra \
   --policy "$work/changed-policy.yaml" --context-file "$work/context.json" -C "$work" \
   -o "$work/should-not-exist.md" fixture > "$work/drift.log" 2>&1; then
   echo 'FAIL: policy drift admitted'; exit 1
@@ -151,7 +151,7 @@ grep -q 'policy changed after resolution' "$work/drift.log"
 # A medium-configured fallback candidate under a floored reason is raised,
 # and the raise is receipted with its from/to and the reason that fired.
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
-  --producer-identity=gpt-6-astra --context-file="$work/context.json" > "$work/floor-medium.json"
+  --producer-identity=gpt-6.2-astra --context-file="$work/context.json" > "$work/floor-medium.json"
 jq -e '(.fallback_chain[] | select(.profile_ref == "validation-sol") | .profile.reasoning_effort) == "high"
   and (.effort_floors_applied[] | select(.profile_ref == "validation-sol")
     | .from == "medium" and .to == "high" and (.reasons | index("foundational-invariants")) != null)' \
@@ -221,7 +221,7 @@ text = text.replace(needle, '      fallbacks: [validation-sonnet, pilot-opus, va
 Path(sys.argv[2]).write_text(text)
 PYFIXTURE
 ic --json route dispatch --policy="$work/unsupported-adapter.yaml" --role=validation \
-  --producer-identity=gpt-6-astra --context-file="$work/context.json" > "$work/floor-unsupported.json"
+  --producer-identity=gpt-6.2-astra --context-file="$work/context.json" > "$work/floor-unsupported.json"
 jq -e '(.excluded[]? | select(.profile_ref == "pilot-opus") | .reason) == "unsupported_adapter"
   and (([.profile_ref] + [.fallback_chain[]?.profile_ref]) | index("pilot-opus")) == null' \
   "$work/floor-unsupported.json" >/dev/null \
@@ -246,7 +246,7 @@ jq -e '.profile_ref == "crosslab-sol"
 # An override matching the already-resolved effort is still receipted, with
 # applied true and changed false -- a no-op override is not silently dropped.
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
-  --producer-identity=gpt-6-astra --context-file="$work/routine.json" --effort-override=medium \
+  --producer-identity=gpt-6.2-astra --context-file="$work/routine.json" --effort-override=medium \
   > "$work/override-noop.json"
 jq -e '.effort_override.requested == "medium" and .effort_override.applied == true
   and .effort_override.changed == false and .effort_override.from == "medium" and .effort_override.to == "medium"' \
@@ -264,7 +264,7 @@ assert text.count(needle) == 1  # review-opus ships at medium (mk-42j9.20); the 
 Path(sys.argv[2]).write_text(text)
 PYFIXTURE
 out="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role plan-review --policy "$work/claude-propagation.yaml" \
-  --producer-identity gpt-6-astra --context-file "$work/context.json" -C "$work" fixture 2>&1)"
+  --producer-identity gpt-6.2-astra --context-file "$work/context.json" -C "$work" fixture 2>&1)"
 [[ "$out" == *'claude-opus-5-5'* && "$out" == *'--effort high'* ]] \
   || { echo 'FAIL: floor-raised effort did not propagate to the dispatched child'; exit 1; }
 

@@ -135,7 +135,7 @@ GPT-5.6 07-09; consensus 16).
 | Validation | opus, against FROZEN criteria only | per plan | verification asymmetry; criteria frozen before execution, exogenous to the treatment in any A/B (parley item 33) |
 | Scouts — correctness (recuttable) | haiku / cheap lane | wide | wrong candidates leave artifacts a verifier can reject |
 | Scouts — coverage (propagates) | frontier or adversarial second scout | narrow | omitted candidates leave NO artifact; verification cannot see gaps (f-030, consensus 4). Pattern D requires a coverage adversary, not just a frontier synthesizer |
-| Cross-lab second review at gates | gpt-6.1-sol via codex peer (sandboxed) — reviewer must RE-DERIVE from requirements, never inspect the incumbent plan (consensus 10); K3 via kimi CLI lane (interflux ≥0.2.85) as third seat when warranted | gate-tier only | sealed first-pass + disposition field (upheld/dismissed), never raw disagreement counts (consensus 11) |
+| Cross-lab second review at gates | gpt-6.2-sol via codex peer (sandboxed) — reviewer must RE-DERIVE from requirements, never inspect the incumbent plan (consensus 10); K3 via kimi CLI lane (interflux ≥0.2.85) as third seat when warranted | gate-tier only | sealed first-pass + disposition field (upheld/dismissed), never raw disagreement counts (consensus 11) |
 | Escalation / tie-break | fable | reserve-protected | two-strikes, with STRIKE TAXONOMY below |
 
 ### Rules added in v2

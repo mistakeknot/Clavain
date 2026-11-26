@@ -252,28 +252,28 @@ latest_receipt() {
 }
 
 # Astra-authored plan: Opus 5.5 reviews; Astra must never review itself.
-run_review gpt-6-astra
+run_review gpt-6.2-astra
 [[ "$rc" == 0 ]] || fail "Astra producer: expected success, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
 [[ "$(cat "$FAKE_CLAUDE_LOG")" == "claude-opus-5-5" ]] || fail "Astra producer: expected claude-opus-5-5, got: $(cat "$FAKE_CLAUDE_LOG")"
 [[ ! -s "$FAKE_CODEX_LOG" ]] || fail "Astra producer: Codex should never have been invoked, got: $(cat "$FAKE_CODEX_LOG")"
-never_reviewed_by "Astra producer" gpt-6-astra
+never_reviewed_by "Astra producer" gpt-6.2-astra
 
 # Opus-authored plan: Astra is the only distinct reviewer, reached after the
 # pre-walk producer_model_conflict exclusion of review-opus.
 FAKE_CODEX_MODE=success run_review claude-opus-5-5
 [[ "$rc" == 0 ]] || fail "Opus producer: expected success, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
-[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-astra" ]] || fail "Opus producer: expected gpt-6-astra, got: $(cat "$FAKE_CODEX_LOG")"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6.2-astra" ]] || fail "Opus producer: expected gpt-6.2-astra, got: $(cat "$FAKE_CODEX_LOG")"
 never_reviewed_by "Opus producer" claude-opus-5-5
 
 # Cross-lab first: Sonnet-produced plans start across labs with Astra. When
 # Astra quota-exhausts, Opus remains the declared same-lab substitute.
 FAKE_CODEX_MODE=success run_review claude-sonnet-5-5
 [[ "$rc" == 0 ]] || fail "Sonnet producer: expected success, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
-[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-astra" ]] || fail "Sonnet producer: expected Astra first"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6.2-astra" ]] || fail "Sonnet producer: expected Astra first"
 [[ ! -s "$FAKE_CLAUDE_LOG" ]] || fail "Sonnet producer: same-lab Opus ran before capacity fallback"
 run_review claude-sonnet-5-5
 [[ "$rc" == 0 ]] || fail "Sonnet producer, Astra out: expected Opus fallback, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
-[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-astra" ]] || fail "Sonnet producer, Astra out: expected one Astra attempt"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6.2-astra" ]] || fail "Sonnet producer, Astra out: expected one Astra attempt"
 [[ "$(cat "$FAKE_CLAUDE_LOG")" == "claude-opus-5-5" ]] || fail "Sonnet producer, Astra out: expected Opus fallback"
 receipt="$(latest_receipt)"
 [[ "$(jq -r '.capacity_substitute.failure_class' <<< "$receipt")" == quota_exhausted ]] || fail "Sonnet producer, Astra out: capacity failure was not recorded: $receipt"
@@ -282,12 +282,12 @@ never_reviewed_by "Sonnet producer, Astra out" claude-sonnet-5-5
 # Third-model plan (Sol), Opus out of Claude quota: the walk must continue to
 # Astra. Before mk-esex the Claude limit classified as terminal_error and the
 # fallback was suppressed, so this review blocked.
-FAKE_CODEX_MODE=success FAKE_CLAUDE_QUOTA="claude-opus-5-5" run_review gpt-6.1-sol
+FAKE_CODEX_MODE=success FAKE_CLAUDE_QUOTA="claude-opus-5-5" run_review gpt-6.2-sol
 [[ "$rc" == 0 ]] || fail "Sol producer, Opus out: expected review to degrade to Astra, got exit $rc: $(grep '^dispatch:' "$TMP_ROOT/err" | tail -3)"
 [[ "$(cat "$FAKE_CLAUDE_LOG")" == "claude-opus-5-5" ]] || fail "Sol producer, Opus out: expected one claude-opus-5-5 attempt first, got: $(cat "$FAKE_CLAUDE_LOG")"
-[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-astra" ]] || fail "Sol producer, Opus out: expected the fallback gpt-6-astra, got: $(cat "$FAKE_CODEX_LOG")"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6.2-astra" ]] || fail "Sol producer, Opus out: expected the fallback gpt-6.2-astra, got: $(cat "$FAKE_CODEX_LOG")"
 grep -q "quota_exhausted" "$TMP_ROOT/err" || fail "Sol producer, Opus out: the Opus quota failure left no record on stderr"
-never_reviewed_by "Sol producer, Opus out" gpt-6.1-sol
+never_reviewed_by "Sol producer, Opus out" gpt-6.2-sol
 
 echo "PASS: plan review degrades to a distinct frontier model when the preferred reviewer is out of quota"
 
@@ -295,13 +295,13 @@ echo "PASS: plan review degrades to a distinct frontier model when the preferred
 # validation-opus seat it reaches through validation-sol are both Opus 5.5
 #; once that seat failed on capacity the walk must not retry it
 # under the second profile_ref, and goes on to Sonnet.
-REVIEW_ROLE=cross-lab-review FAKE_CODEX_MODE=success FAKE_CLAUDE_QUOTA="claude-opus-5-5" run_review gpt-6.1-sol
+REVIEW_ROLE=cross-lab-review FAKE_CODEX_MODE=success FAKE_CLAUDE_QUOTA="claude-opus-5-5" run_review gpt-6.2-sol
 [[ "$rc" == 0 ]] || fail "cross-lab, Opus out: expected review to reach Sonnet, got exit $rc: $(grep '^dispatch:' "$TMP_ROOT/err" | tail -3)"
 [[ "$(paste -sd' ' "$FAKE_CLAUDE_LOG")" == "claude-opus-5-5 claude-sonnet-5-5" ]] \
   || fail "cross-lab, Opus out: expected one Opus attempt then Sonnet, got: $(paste -sd' ' "$FAKE_CLAUDE_LOG")"
 grep -q "reuses claude/claude-opus-5-5, already unavailable" "$TMP_ROOT/err" \
   || fail "cross-lab, Opus out: the repeated Opus seat was not skipped by name"
-never_reviewed_by "cross-lab, Opus out" gpt-6.1-sol
+never_reviewed_by "cross-lab, Opus out" gpt-6.2-sol
 
 echo "PASS: a seat that failed on capacity is not retried under another profile_ref"
 
@@ -309,7 +309,7 @@ echo "PASS: a seat that failed on capacity is not retried under another profile_
 # review blocks (fail-closed) and never falls through to Opus itself.
 run_review claude-opus-5-5
 [[ "$rc" != 0 ]] || fail "Opus producer, Codex out: expected a blocked review (non-zero exit), got success"
-[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-astra" ]] || fail "Opus producer, Codex out: expected one gpt-6-astra attempt, got: $(cat "$FAKE_CODEX_LOG")"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6.2-astra" ]] || fail "Opus producer, Codex out: expected one gpt-6.2-astra attempt, got: $(cat "$FAKE_CODEX_LOG")"
 grep -q "quota_exhausted" "$TMP_ROOT/err" || fail "Opus producer, Codex out: the Astra quota failure left no record on stderr"
 never_reviewed_by "Opus producer, Codex out" claude-opus-5-5
 
@@ -322,22 +322,22 @@ grep -q "rate_limited" "$TMP_ROOT/err" || fail "Opus producer, Codex 429: the As
 never_reviewed_by "Opus producer, Codex 429" claude-opus-5-5
 
 # Astra-authored plan, Opus out: Astra is the producer, so nothing is left.
-FAKE_CODEX_MODE=success FAKE_CLAUDE_QUOTA="claude-opus-5-5" run_review gpt-6-astra
+FAKE_CODEX_MODE=success FAKE_CLAUDE_QUOTA="claude-opus-5-5" run_review gpt-6.2-astra
 [[ "$rc" != 0 ]] || fail "Astra producer, Opus out: expected a blocked review (non-zero exit), got success"
-never_reviewed_by "Astra producer, Opus out" gpt-6-astra
+never_reviewed_by "Astra producer, Opus out" gpt-6.2-astra
 
 echo "PASS: plan review stays blocked rather than self-reviewing when no distinct frontier model is available"
 
 # --- mk-gp32: capacity-substitute reviews are provisional, never blocking --
 #
 # The Sol-producer/Opus-out case above (Opus quota-exhausts, Astra reviews)
-# is itself the same-lab substitute this covers: producer gpt-6.1-sol and
-# reviewer gpt-6-astra are both openai, and the candidate is reached after a
+# is itself the same-lab substitute this covers: producer gpt-6.2-sol and
+# reviewer gpt-6.2-astra are both openai, and the candidate is reached after a
 # walk (fallback_reason non-empty). Reuse it to check the reviewer's prompt
 # carries B1's fixed re-check paragraph. Sonnet-produced plans can likewise
 # reach same-lab Opus after Astra exhausts capacity (cross-lab rule above).
 run_substitute_review() {
-  FAKE_CODEX_MODE=success FAKE_CLAUDE_QUOTA="claude-opus-5-5" run_review gpt-6.1-sol "$@"
+  FAKE_CODEX_MODE=success FAKE_CLAUDE_QUOTA="claude-opus-5-5" run_review gpt-6.2-sol "$@"
 }
 run_substitute_review
 [[ "$rc" == 0 ]] || fail "capacity substitute: expected review to succeed, got exit $rc"
@@ -472,7 +472,7 @@ echo "PASS: capacity-substitute plan reviews carry the re-check paragraph and fi
 # fallback-walk review.
 FAKE_CODEX_MODE=success FAKE_CLAUDE_QUOTA="claude-opus-5-5" run_review kimi-code/k3
 [[ "$rc" == 0 ]] || fail "cross-lab (not substitute): expected review to degrade to Astra, got exit $rc"
-[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-astra" ]] || fail "cross-lab (not substitute): expected the fallback gpt-6-astra, got: $(cat "$FAKE_CODEX_LOG")"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6.2-astra" ]] || fail "cross-lab (not substitute): expected the fallback gpt-6.2-astra, got: $(cat "$FAKE_CODEX_LOG")"
 grep -q "capacity-substitute" "$FAKE_CODEX_PROMPT_LOG" 2>/dev/null && fail "cross-lab (not substitute): the Astra prompt unexpectedly carried the re-check paragraph"
 [[ ! -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "cross-lab (not substitute): unexpectedly wrote a recheck sidecar"
 [[ ! -s "$FAKE_BD_LOG" ]] || fail "cross-lab (not substitute): unexpectedly filed a bd create call"
@@ -502,12 +502,12 @@ echo "PASS: a different-lab fallback review is not treated as a capacity substit
 # flagged as a capacity substitute with provisional handling kicking in. This
 # used to assert capacity_substitute was null for this exact case; that
 # assertion was wrong and is corrected here.
-jq -c '. + {available_models: ["gpt-6-astra"]}' "$CONTEXT_FILE" > "$TMP_ROOT/context-no-opus.json"
-FAKE_CODEX_MODE=success CONTEXT_FILE="$TMP_ROOT/context-no-opus.json" run_review gpt-6.1-sol
+jq -c '. + {available_models: ["gpt-6.2-astra"]}' "$CONTEXT_FILE" > "$TMP_ROOT/context-no-opus.json"
+FAKE_CODEX_MODE=success CONTEXT_FILE="$TMP_ROOT/context-no-opus.json" run_review gpt-6.2-sol
 [[ "$rc" == 0 ]] || fail "pre-walk exclusion only: expected review to succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
 [[ ! -s "$FAKE_CLAUDE_LOG" ]] || fail "pre-walk exclusion only: review-opus should never have been actually attempted, got: $(cat "$FAKE_CLAUDE_LOG")"
-[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-astra" ]] || fail "pre-walk exclusion only: expected gpt-6-astra to review, got: $(cat "$FAKE_CODEX_LOG")"
-never_reviewed_by "pre-walk exclusion only" gpt-6.1-sol
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6.2-astra" ]] || fail "pre-walk exclusion only: expected gpt-6.2-astra to review, got: $(cat "$FAKE_CODEX_LOG")"
+never_reviewed_by "pre-walk exclusion only" gpt-6.2-sol
 # Provisional handling now kicks in exactly as it does for an in-loop
 # capacity substitute (run_substitute_review below): the reviewer prompt
 # carries the re-check paragraph, and since the default fake-codex answer
@@ -565,7 +565,7 @@ echo "PASS: a pre-walk operational (model_unavailable) exclusion IS a capacity s
 # capacity_failure_class is never set and review-opus is never reached.
 FAKE_CODEX_MODE=success run_review claude-opus-5-5
 [[ "$rc" == 0 ]] || fail "producer_model_conflict alone: expected review to succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
-[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-astra" ]] || fail "producer_model_conflict alone: expected review-astra to actually review, got: $(cat "$FAKE_CODEX_LOG")"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6.2-astra" ]] || fail "producer_model_conflict alone: expected review-astra to actually review, got: $(cat "$FAKE_CODEX_LOG")"
 [[ ! -s "$FAKE_CLAUDE_LOG" ]] || fail "producer_model_conflict alone: review-opus should never have been reached, got: $(cat "$FAKE_CLAUDE_LOG")"
 never_reviewed_by "producer_model_conflict alone" claude-opus-5-5
 [[ ! -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "producer_model_conflict alone: unexpectedly wrote a recheck sidecar"

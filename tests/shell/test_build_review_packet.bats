@@ -191,12 +191,12 @@ build() {
 # --- Step 2: producer attribution reuse and transcript-input rejection -----
 
 @test "producer identity follows the executed fallback" {
-    # The receipt declares codex/gpt-6-astra; ic route identity agrees; ic
+    # The receipt declares codex/gpt-6.2-astra; ic route identity agrees; ic
     # route list has a matching terminal attempt. Build must succeed and the
     # rendered packet must show the EXECUTED identity, not a requested one.
     build
     [ "$status" -eq 0 ]
-    grep -q '`gpt-6-astra`' "$output"
+    grep -q '`gpt-6.2-astra`' "$output"
     grep -q "route list" "$FIXTURE_DIR/ic.log"
     grep -q "route identity" "$FIXTURE_DIR/ic.log"
 }

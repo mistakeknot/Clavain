@@ -23,14 +23,14 @@ cat > "$TMP_ROOT/bin/ic" <<'FAKE_IC'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FAKE_IC_LOG"
 if [[ "$*" == *"route dispatch"* ]]; then
-  cat <<'JSON' | jq --arg args "$*" --arg policy "$FAKE_ROUTING_POLICY" --arg hash "$FAKE_POLICY_HASH" '.policy_source=$policy | .policy_hash=$hash | if env.FAKE_ROUTE_KIMI_FIRST == "1" then .profile_ref="unsupported-kimi" | .profile.backend="kimi" | .profile.model="kimi-code/k3" else . end | if ($args | contains("--producer-identity=")) then .producer_model="gpt-6-astra" | .validator_relationship="different-model" | .fallback_reason="producer_model_conflict" | .profile_ref=.fallback_chain[0].profile_ref | .profile=.fallback_chain[0].profile | .fallback_chain=[] else . end | if env.FAKE_ROUTE_CROSS_LAB_REORDER == "1" then .cross_lab_reorder={"from":["a","b"],"to":["b","a"]} else . end'
+  cat <<'JSON' | jq --arg args "$*" --arg policy "$FAKE_ROUTING_POLICY" --arg hash "$FAKE_POLICY_HASH" '.policy_source=$policy | .policy_hash=$hash | if env.FAKE_ROUTE_KIMI_FIRST == "1" then .profile_ref="unsupported-kimi" | .profile.backend="kimi" | .profile.model="kimi-code/k3" else . end | if ($args | contains("--producer-identity=")) then .producer_model="gpt-6.2-astra" | .validator_relationship="different-model" | .fallback_reason="producer_model_conflict" | .profile_ref=.fallback_chain[0].profile_ref | .profile=.fallback_chain[0].profile | .fallback_chain=[] else . end | if env.FAKE_ROUTE_CROSS_LAB_REORDER == "1" then .cross_lab_reorder={"from":["a","b"],"to":["b","a"]} else . end'
 {
   "requested_role": "deep-execution",
   "profile_ref": "deep-astra",
   "profile": {
     "role": "deep-execution",
     "backend": "codex",
-    "model": "gpt-6-astra",
+    "model": "gpt-6.2-astra",
     "reasoning_effort": "high",
     "service_tier": "standard",
     "minimum_codex_version": "0.153.1",
@@ -82,20 +82,20 @@ pooled=0; for a in "$@"; do [[ "$a" != 'model_provider="bb-account-pool"' ]] || 
 printf '%s:%s:%s\n' "$model" "$pooled" "${CODEX_POOL_AUTH_TOKEN:-}" >> "$FAKE_CODEX_LOG.pool"
 if [[ "${FAKE_CODEX_MODE:-}" == quota* ]]; then
   printf '%s:%s\n' "$model" "${CLAVAIN_BB_POOL_RETRY:-0}" >> "$FAKE_CODEX_LOG.axes"
-  if [[ "$model" == gpt-6-astra && ( "${FAKE_CODEX_MODE}" == quota_all || "${CLAVAIN_BB_POOL_RETRY:-0}" != 1 ) ]]; then
+  if [[ "$model" == gpt-6.2-astra && ( "${FAKE_CODEX_MODE}" == quota_all || "${CLAVAIN_BB_POOL_RETRY:-0}" != 1 ) ]]; then
     echo '{"type":"task_complete","error":{"codex_error_info":"usage_limit_exceeded"}}'
     exit 0
   fi
 fi
 case "${FAKE_CODEX_MODE:-success}" in
   unsupported)
-    if [[ "$model" == "gpt-6-astra" ]]; then
-      echo '{"type":"error","status":400,"error":{"message":"The gpt-6-astra model is not supported when using Codex with a ChatGPT account."}}' >&2
+    if [[ "$model" == "gpt-6.2-astra" ]]; then
+      echo '{"type":"error","status":400,"error":{"message":"The gpt-6.2-astra model is not supported when using Codex with a ChatGPT account."}}' >&2
       exit 1
     fi
     ;;
   contentfilter)
-    if [[ "$model" == "gpt-6-astra" ]]; then
+    if [[ "$model" == "gpt-6.2-astra" ]]; then
       echo '{"type":"error","error":{"message":"This request was flagged for potentially high-risk cyber activity. Apply for trusted access."}}' >&2
       exit 1
     fi
@@ -165,7 +165,7 @@ export CLAVAIN_POOL_HEADROOM=0
 
 dry_run="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role deep-execution -C "$TMP_ROOT/work" "hi" 2>&1)" \
   || fail "role dry-run failed"
-contains "$dry_run" "-m gpt-6-astra"
+contains "$dry_run" "-m gpt-6.2-astra"
 contains "$dry_run" "model_reasoning_effort=high"
 contains "$dry_run" "service_tier=default"
 
@@ -184,7 +184,7 @@ while IFS= read -r attempt; do
   attempts+=("$attempt")
 done < "$FAKE_CODEX_LOG"
 [[ "${#attempts[@]}" == "2" ]] || fail "account-access fallback attempts=${#attempts[@]}, want 2"
-[[ "${attempts[0]}" == "gpt-6-astra" && "${attempts[1]}" == "gpt-6-sol" ]] \
+[[ "${attempts[0]}" == "gpt-6.2-astra" && "${attempts[1]}" == "gpt-6-sol" ]] \
   || fail "account-access fallback order was: ${attempts[*]}"
 
 : > "$FAKE_CODEX_LOG"
@@ -194,7 +194,7 @@ attempts=()
 while IFS= read -r attempt; do
   attempts+=("$attempt")
 done < "$FAKE_CODEX_LOG"
-[[ "${#attempts[@]}" == "2" && "${attempts[0]}" == "gpt-6-astra" && "${attempts[1]}" == "gpt-6-sol" ]] \
+[[ "${#attempts[@]}" == "2" && "${attempts[0]}" == "gpt-6.2-astra" && "${attempts[1]}" == "gpt-6-sol" ]] \
   || fail "content-filter fallback order was: ${attempts[*]}"
 contains "$filter_out" 'content_filter_refused'
 contains "$(cat "$FAKE_IC_LOG")" '--fallback-reason=content_filter_refused'
@@ -227,7 +227,7 @@ set -e
 # first model, then the walk moves to its declared fallback — which also
 # 429s here, so the role stays blocked rather than looping.
 [[ "$rate_rc" != "0" ]] || fail "persistent 429 unexpectedly succeeded"
-[[ "$(cat "$FAKE_CODEX_LOG")" == "$(printf 'gpt-6-astra\ngpt-6-sol')" ]] \
+[[ "$(cat "$FAKE_CODEX_LOG")" == "$(printf 'gpt-6.2-astra\ngpt-6-sol')" ]] \
   || fail "429 did not make exactly one attempt per candidate then walk: $(cat "$FAKE_CODEX_LOG")"
 
 : > "$FAKE_CODEX_LOG"
@@ -236,7 +236,7 @@ FAKE_CODEX_VERSION=0.150.0 bash "$ROOT/scripts/dispatch.sh" --role deep-executio
 [[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-sol" ]] || fail "old Codex did not skip Astra: $(cat "$FAKE_CODEX_LOG")"
 
 : > "$FAKE_CODEX_LOG"
-bash "$ROOT/scripts/dispatch.sh" --role validation --producer-identity codex/gpt-6-astra -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1 \
+bash "$ROOT/scripts/dispatch.sh" --role validation --producer-identity codex/gpt-6.2-astra -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1 \
   || fail "validator model separation failed"
 [[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-sol" ]] \
   || fail "validator reused producer model: $(cat "$FAKE_CODEX_LOG")"
@@ -256,7 +256,7 @@ set -e
 contains "$(cat "$FAKE_IC_LOG")" "route record"
 contains "$(cat "$FAKE_IC_LOG")" "--role=deep-execution"
 contains "$(cat "$FAKE_IC_LOG")" "--profile=deep-sol"
-contains "$(cat "$FAKE_IC_LOG")" "--producer-identity=codex/gpt-6-astra"
+contains "$(cat "$FAKE_IC_LOG")" "--producer-identity=codex/gpt-6.2-astra"
 [[ -s "$FAKE_IC_CONTEXT_LOG" ]] || fail "missing immutable routing contexts"
 jq -s -e 'all(.[]; .schema_version == 1 and (.dispatch_id | length > 0) and (.attempt_id | length > 0) and .resolved_profile.profile.model != null and .resolved_route.profile != null and .execution.service_tier == "standard")' "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "incomplete routing snapshot"
 jq -s -e 'any(.[]; .state == "started") and any(.[]; .state == "completed") and any(.[]; .state == "failed" and .result.failure_class == "terminal_policy")' "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "missing dispatch lifecycle evidence"
@@ -432,7 +432,7 @@ export CODEX_POOL_AUTH_TOKEN=fixture-only CODEX_OPENAI_BASE_URL="$BB_SERVER_URL/
 for mode in quota_once quota_all; do
   : > "$FAKE_CODEX_LOG.axes"
   FAKE_CODEX_MODE="$mode" bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" fixture >/dev/null 2>&1 || fail "$mode failed"
-  expected=$'gpt-6-astra:0\ngpt-6-astra:1'
+  expected=$'gpt-6.2-astra:0\ngpt-6.2-astra:1'
   [[ "$mode" != quota_all ]] || expected+=$'\ngpt-6-sol:0'
   [[ "$(cat "$FAKE_CODEX_LOG.axes")" == "$expected" ]] || fail "wrong account/model fallback order"
 done
@@ -444,11 +444,11 @@ unset CODEX_POOL_AUTH_TOKEN CODEX_OPENAI_BASE_URL
 export ANTHROPIC_AUTH_TOKEN=machine-fixture ANTHROPIC_BASE_URL="$BB_SERVER_URL/api/v1/plugins/account-pool/http"
 : > "$FAKE_CODEX_LOG.axes"; : > "$FAKE_CODEX_LOG.pool"
 FAKE_CODEX_MODE=quota_all bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" fixture >/dev/null 2>&1 || fail "claude-thread quota_all failed"
-[[ "$(cat "$FAKE_CODEX_LOG.axes")" == $'gpt-6-astra:0\ngpt-6-astra:1\ngpt-6-sol:0' ]] || fail "claude-thread pool retry did not fire"
-[[ "$(cat "$FAKE_CODEX_LOG.pool")" == $'gpt-6-astra:1:machine-fixture\ngpt-6-astra:1:machine-fixture\ngpt-6-sol:1:machine-fixture' ]] || fail "claude-thread codex attempts were not pooled"
+[[ "$(cat "$FAKE_CODEX_LOG.axes")" == $'gpt-6.2-astra:0\ngpt-6.2-astra:1\ngpt-6-sol:0' ]] || fail "claude-thread pool retry did not fire"
+[[ "$(cat "$FAKE_CODEX_LOG.pool")" == $'gpt-6.2-astra:1:machine-fixture\ngpt-6.2-astra:1:machine-fixture\ngpt-6-sol:1:machine-fixture' ]] || fail "claude-thread codex attempts were not pooled"
 : > "$FAKE_CODEX_LOG.axes"; : > "$FAKE_CODEX_LOG.pool"
 CLAVAIN_BB_DIRECT_POOL=0 FAKE_CODEX_MODE=quota_all bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" fixture >/dev/null 2>&1 || fail "kill-switch dispatch did not reach its Sol fallback"
-[[ "$(cat "$FAKE_CODEX_LOG.axes")" == $'gpt-6-astra:0\ngpt-6-sol:0' ]] || fail "kill switch still ran the pool retry"
-[[ "$(cat "$FAKE_CODEX_LOG.pool")" == $'gpt-6-astra:0:\ngpt-6-sol:0:' ]] || fail "kill switch still pooled or borrowed"
+[[ "$(cat "$FAKE_CODEX_LOG.axes")" == $'gpt-6.2-astra:0\ngpt-6-sol:0' ]] || fail "kill switch still ran the pool retry"
+[[ "$(cat "$FAKE_CODEX_LOG.pool")" == $'gpt-6.2-astra:0:\ngpt-6-sol:0:' ]] || fail "kill switch still pooled or borrowed"
 unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL
 echo 'PASS: Claude-thread Codex seats borrow the pool token; kill switch holds'

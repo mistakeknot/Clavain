@@ -35,7 +35,7 @@ def test_routine_accountable_judgment_is_valid():
     assert readiness.validate_decision(json.dumps(value)) == value
 
 
-def native_codex(tmp_path, *, session="subject", sandbox="read-only", model="gpt-6-astra", effort="high"):
+def native_codex(tmp_path, *, session="subject", sandbox="read-only", model="gpt-6.2-astra", effort="high"):
     value = {"reasons": ["difficult-verification"], "rationale": "Native boundaries require a canary."}
     rows = [
         {"type": "session_meta", "payload": {"id": session, "source": "exec", "thread_source": "user"}},
@@ -59,7 +59,7 @@ def test_binding_uses_native_message_and_turn_not_parent_enrollment(tmp_path):
     assert binding["message_id"] == "message-1"
     assert binding["turn_id"] == "turn-1"
     assert binding["session_id"] == "subject"
-    assert binding["model"] == "gpt-6-astra"
+    assert binding["model"] == "gpt-6.2-astra"
     assert binding["effort"] == "high"
     assert len(binding["native_sha256"]) == 64
 

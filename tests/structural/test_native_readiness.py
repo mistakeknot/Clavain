@@ -85,7 +85,7 @@ def test_existing_attempt_directory_cannot_be_reused(tmp_path):
 
 
 def valid_request(project, host="codex"):
-    command = ([sys.executable, "exec", "--json", "-m", "gpt-6-astra", "-c", 'model_reasoning_effort="high"']
+    command = ([sys.executable, "exec", "--json", "-m", "gpt-6.2-astra", "-c", 'model_reasoning_effort="high"']
                if host == "codex" else [sys.executable, "--model", "claude-opus-5-5", "--effort", "high",
                                        "--output-format", "stream-json", "--verbose", "-p"])
     return dict(host=host, command=command, project=str(project), source=str(SCRIPTS.parent.resolve()), prompt="task")
@@ -188,11 +188,11 @@ def test_interrupt_terminates_detached_child(tmp_path, monkeypatch):
 def test_native_execution_requires_unchanged_prefix_and_model(tmp_path):
     prefix = tmp_path / "prefix"; prefix.write_text('{}\n')
     actual = tmp_path / "actual"
-    actual.write_text('{}\n' + json.dumps({"type": "turn_context", "payload": {"model": "gpt-6-astra", "effort": "high"}}) + '\n')
-    assert native.verify_execution_native("codex", actual, prefix, "subject", "gpt-6-astra")["effort"] == "high"
+    actual.write_text('{}\n' + json.dumps({"type": "turn_context", "payload": {"model": "gpt-6.2-astra", "effort": "high"}}) + '\n')
+    assert native.verify_execution_native("codex", actual, prefix, "subject", "gpt-6.2-astra")["effort"] == "high"
     with pytest.raises(ValueError): native.verify_execution_native("codex", actual, prefix, "subject", "other")
     prefix.write_text('{"changed":true}\n')
-    with pytest.raises(ValueError): native.verify_execution_native("codex", actual, prefix, "subject", "gpt-6-astra")
+    with pytest.raises(ValueError): native.verify_execution_native("codex", actual, prefix, "subject", "gpt-6.2-astra")
 
 
 @pytest.mark.parametrize("mutation", [None, "model", "session", "mode", "duplicate", "error"])
@@ -272,7 +272,7 @@ def test_full_flow_rechecks_every_preparation_artifact(tmp_path, monkeypatch, ta
     original = tmp_path / "native.jsonl"
     session = "00000000-0000-0000-0000-000000000001"
     decision = {"reasons": [], "rationale": "Settled fixture."}
-    context = dict(model="gpt-6-astra", effort="high", turn_id="turn", approval_policy="never", sandbox_policy={"type": "read-only"})
+    context = dict(model="gpt-6.2-astra", effort="high", turn_id="turn", approval_policy="never", sandbox_policy={"type": "read-only"})
     prefix = [dict(type="session_meta", payload=dict(id=session, source="exec", thread_source="user")),
               dict(type="turn_context", payload=context),
               dict(type="response_item", payload=dict(type="message", role="assistant", phase="final_answer", id="msg",

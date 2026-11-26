@@ -9,7 +9,7 @@ setup() {
 #!/bin/sh
 case "$*" in
   *"route list"*) echo '[]' ;;
-  *"route identity"*) echo '{"model_identity":"gpt-6.1-sol"}' ;;
+  *"route identity"*) echo '{"model_identity":"gpt-6.2-sol"}' ;;
   *"route record"*) exit 0 ;;
   *) exit 3 ;;
 esac
@@ -41,7 +41,7 @@ case "$1" in
 esac
 SH
     chmod +x "$T/bin/codex"
-    route="$(jq -n --arg h "$(sha256sum "$BATS_TEST_DIRNAME/../../config/routing.yaml" | cut -d' ' -f1)" '{policy_hash:$h,profile_ref:"primary",profile:{backend:"codex",model:"gpt-6.1-sol",model_identity:"gpt-6.1-sol"}}')"
+    route="$(jq -n --arg h "$(sha256sum "$BATS_TEST_DIRNAME/../../config/routing.yaml" | cut -d' ' -f1)" '{policy_hash:$h,profile_ref:"primary",profile:{backend:"codex",model:"gpt-6.2-sol",model_identity:"gpt-6.2-sol"}}')"
     CLAVAIN_DISPATCH_FAILURE_FILE="$T/failure" PATH="$T/bin:$PATH" run bash "$DISPATCH" --role cross-lab-review --role-resolved \
         --to codex --resolved-route-json "$route" -C "$T/repo" -o "$T/out" 'Review it'
     [ "$status" -ne 0 ]
@@ -80,7 +80,7 @@ with tempfile.TemporaryDirectory() as d:
 printf 'VERDICT: PASS\n' > "\$out"
 SH
     chmod +x "$T/bin/codex"
-    route="$(jq -n --arg h "$(sha256sum "$BATS_TEST_DIRNAME/../../config/routing.yaml" | cut -d' ' -f1)" '{policy_hash:$h,profile_ref:"primary",profile:{backend:"codex",model:"gpt-6.1-sol",model_identity:"gpt-6.1-sol"}}')"
+    route="$(jq -n --arg h "$(sha256sum "$BATS_TEST_DIRNAME/../../config/routing.yaml" | cut -d' ' -f1)" '{policy_hash:$h,profile_ref:"primary",profile:{backend:"codex",model:"gpt-6.2-sol",model_identity:"gpt-6.2-sol"}}')"
     TMPDIR="$T/hosttmp" PATH="$T/bin:$PATH" run bash "$DISPATCH" --role cross-lab-review --role-resolved \
         --to codex --resolved-route-json "$route" -C "$T/repo" -o "$T/out" 'Review it'
     [ "$status" -eq 0 ]

@@ -17,7 +17,7 @@ def test_observe_heuristic(tmp_path, monkeypatch, linked):
         return type('Result', (), {'stdout': json.dumps(answer)})()
     monkeypatch.setattr(shadow.subprocess, 'run', run)
     route = {'profile_ref': 'opus', 'profile': {'backend': 'claude', 'model': 'claude-opus-5-5'},
-             'fallback_chain': [{'profile_ref': 'sol', 'profile': {'backend': 'codex', 'model': 'gpt-6.1-sol'}}]}
+             'fallback_chain': [{'profile_ref': 'sol', 'profile': {'backend': 'codex', 'model': 'gpt-6.2-sol'}}]}
     project = tmp_path
     if linked:
         project = tmp_path / 'alias'

@@ -14,7 +14,7 @@
 # This script never edits config/routing.yaml and never edits a policy snapshot.
 # It writes a derived decision context next to the original and prints receipts.
 #
-#   scripts/capacity-fallback.sh --seat gpt-6-astra \
+#   scripts/capacity-fallback.sh --seat gpt-6.2-astra \
 #     --context .clavain/decisions/2026-09-17-rift-slice-1-planning.json \
 #     --evidence .clavain/capacity/2026-09-18-astra-usage-limit.md \
 #     --role plan-review --producer-identity claude-opus-5-5 \
