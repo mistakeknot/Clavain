@@ -4080,10 +4080,9 @@ elif [[ "$ENGINE" == "claude" ]]; then
       _dispatch_write_failure_class terminal_configuration
       exit 1
     fi
-    # Settings isolation: the caller-side --setting-sources flag is not sent. The
-    # host's fixed restricted template passes empty setting sources, and
-    # --restricted ignores user, project and local settings (Aleph mk-14uh1), so
-    # isolation is host-enforced and stricter than project,local.
+    # The Account Pooler restricted profile requires every isolation control
+    # below; the host validates them and rebuilds its fixed security argv.
+    # Empty settings sources exclude user, project and local settings.
     # The host accepts only a direct child of its validated caller cwd.
     # Cover early exits (the full EXIT trap is installed later and also cleans).
     trap '[[ -z "${POOL_SEAT_DIR:-}" ]] || rm -rf -- "$POOL_SEAT_DIR"; [[ -z "${PROMPT_STDIN_FILE:-}" ]] || rm -f -- "$PROMPT_STDIN_FILE"' EXIT
@@ -4108,9 +4107,12 @@ elif [[ "$ENGINE" == "claude" ]]; then
     PROMPT+="$POOL_SEAT_DIR. Use the staged plan, diff.txt, diffstat.txt, log.txt and files.txt; do not attempt command execution."
     PROMPT_STDIN_FILE=$(mktemp "${WORKDIR:-.}/.dispatch-prompt.XXXXXX")
     PROMPT_STDIN_FILE="$(cd "$(dirname "$PROMPT_STDIN_FILE")" && pwd)/$(basename "$PROMPT_STDIN_FILE")"
-    CMD=("${BB_CLI:-bb}" pool exec -- claude -p --restricted
-      --permission-mode dontAsk "--tools=Read,Glob,Grep"
-      --prompt-file "$PROMPT_STDIN_FILE")
+    # --prompt-file is a pool option, never a Claude child option.
+    CMD=("${BB_CLI:-bb}" pool exec --prompt-file "$PROMPT_STDIN_FILE" -- claude -p
+      --restricted --safe-mode "--tools=Read,Glob,Grep" --permission-mode=dontAsk
+      --disallowedTools=Bash,PowerShell,Edit,Write,NotebookEdit,Agent,Task,Skill,WebFetch,WebSearch
+      --setting-sources= --strict-mcp-config '--mcp-config={"mcpServers":{}}'
+      --disable-slash-commands --no-chrome --no-session-persistence)
     [[ -z "$MODEL" ]] || CMD+=(--model "$MODEL")
     [[ -z "$REASONING_EFFORT" ]] || CMD+=(--effort "$REASONING_EFFORT")
   else
