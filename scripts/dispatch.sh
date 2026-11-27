@@ -1989,7 +1989,7 @@ _dispatch_role_profile() {
     [[ -z "$SUBMIT_HELD" ]] || return "$rc"
     [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]] || return "$rc"
     case "$CLAVAIN_LAST_FAILURE_CLASS" in
-      quota_exhausted|rate_limited|model_unavailable|account_access_absent)
+      quota_exhausted|rate_limited|model_unavailable|account_access_absent|codex_startup_readonly)
         fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
         capacity_failure_class="$CLAVAIN_LAST_FAILURE_CLASS"
         HELD_SKIPPED_CANDIDATES="$(jq -cn --argjson s "$HELD_SKIPPED_CANDIDATES" --arg ref "$profile_ref" --arg c "$capacity_failure_class" '$s+[{profile_ref:$ref,failure_class:$c}]')"
@@ -6146,6 +6146,17 @@ _finalize_dispatch_result() {
     failure_class=terminal_accounting
   elif [[ -z "$failure_class" ]]; then
     failure_class="$(_classify_dispatch_failure "$STDERR_FILE" "$exit_code")"
+  fi
+  # Local deep execution can fail before Codex emits its first event if the
+  # parent sandbox mounts Codex state read-only. The PATH alias warning alone
+  # is nonfatal. Preserve provider denials and strict accounting precedence.
+  if [[ "$failure_class" == terminal_error && "$ROLE" == deep-execution && "$ENGINE" == codex &&
+        -z "$VIA" && ! -s "$PROVIDER_EVENTS" ]] &&
+    grep -Fxq 'Error: failed to initialize in-process app-server client: Read-only file system (os error 30)' "$STDERR_FILE"; then
+    failure_class=codex_startup_readonly
+    local detail='Codex app-server initialization failed because its runtime state is on a read-only file system (os error 30). Run the Codex seat from an authorized host session with writable Codex runtime state.'
+    echo "Error: $detail" >&2
+    [[ -z "$OUTPUT" ]] || _write_error_verdict "$OUTPUT" error "$detail"
   fi
   # mk-bi91j: a claude authentication failure is an operational access failure
   # (the same class a Codex account-access refusal gets), so the declared
