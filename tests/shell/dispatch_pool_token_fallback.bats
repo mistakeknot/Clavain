@@ -51,21 +51,41 @@ if [ "$1 $2" = "pool exec" ] && [ "${FAKE_POOL_EXEC:-}" = 1 ]; then
   shift 2
   [ "$1" != --help ] || exit 0
   echo pooled > "$FAKE_POOL_LOG"
-  [ "$1" = -- ] && [ "$2" = claude ] || exit 2
-  shift
-  input=
-  prev=
-  for arg in "$@"; do
-    [ "$prev" != --prompt-file ] || input=$arg
-    prev=$arg
-  done
+  # Pool options belong before --; child options belong after it.
+  [ "$1" = --prompt-file ] && [ "$3" = -- ] && [ "$4" = claude ] || exit 2
+  input=$2
+  shift 3
   [ -n "$input" ] || exit 2
   [ "$(dirname "$input")" = "$PWD" ] || exit 2
-  for arg in "$@"; do
-    case "$arg" in --add-dir|--allowedTools|--include-partial-messages|--session-id|hello) exit 2 ;; esac
-  done
-  case " $* " in *' --tools=Read,Glob,Grep '*) ;; *) exit 2 ;; esac
-  case " $* " in *' --restricted '*) ;; *) exit 2 ;; esac
+  python3 - "$@" <<'PYARGS' || exit 2
+import json, os, pathlib, sys
+args = sys.argv[1:]
+pathlib.Path(os.environ['FAKE_POOL_LOG'] + '.argv').write_text(json.dumps(args))
+required = {
+    '--restricted', '--safe-mode', '--tools=Read,Glob,Grep',
+    '--permission-mode=dontAsk',
+    '--disallowedTools=Bash,PowerShell,Edit,Write,NotebookEdit,Agent,Task,Skill,WebFetch,WebSearch',
+    '--setting-sources=', '--strict-mcp-config', '--mcp-config={"mcpServers":{}}',
+    '--disable-slash-commands', '--no-chrome', '--no-session-persistence',
+}
+assert args[0] == 'claude'
+# Accept the host's split or equals spelling for scalar options.
+normalized = []
+i = 1
+while i < len(args):
+    arg = args[i]
+    if arg in ('--permission-mode', '--model', '--effort', '--output-format'):
+        i += 1
+        arg += '=' + args[i]
+    normalized.append(arg)
+    i += 1
+names = [arg.split('=')[0] for arg in normalized]
+assert len(names) == len(set(names)), 'duplicate child option'
+assert required <= set(normalized), 'incomplete restricted profile'
+assert all(arg in required or arg in ('-p', '--verbose') or
+           arg.startswith(('--model=', '--effort=', '--output-format='))
+           for arg in normalized), 'unexpected child option or positional prompt'
+PYARGS
   if [ -n "${FAKE_POOL_ERROR:-}" ]; then
     echo "$FAKE_POOL_ERROR" >&2
     exit 1
@@ -85,6 +105,7 @@ fi
 SH
     cat > "$T/bin/claude" <<'SH'
 #!/usr/bin/env bash
+if [[ "${1:-}" == --help ]]; then echo '--tools'; exit 0; fi
 cat > /dev/null
 { echo "ran"; for v in ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY; do
     if [ -n "${!v+x}" ]; then echo "$v=set"; else echo "$v=unset"; fi
@@ -341,6 +362,32 @@ PYTEST
     run_claude
     [ "$status" -eq 0 ]
     [ -e "$T/pool.log" ]
+}
+
+@test "claude: pooled argv carries every mandatory control and optional model and effort" {
+    export ANTHROPIC_BASE_URL="$ROUTE" FAKE_POOL_EXEC=1
+    ERRF="$T/err" run bash -c 'exec bash "$@" 2> "$ERRF"' _ "$DISPATCH" --to claude --model m --reasoning-effort high -C "$T/repo" -o "$T/out.md" 'hello'
+    [ "$status" -eq 0 ]
+    python3 - "$T/pool.log.argv" <<'PYARGS'
+import json, sys
+args = json.load(open(sys.argv[1]))
+assert args[args.index('--model') + 1] == 'm'
+assert args[args.index('--effort') + 1] == 'high'
+assert args[args.index('--output-format') + 1] == 'stream-json'
+assert '--verbose' in args
+assert '--prompt-file' not in args
+PYARGS
+}
+
+@test "claude: pooled unsupported profiles remain terminal before child launch" {
+    export ANTHROPIC_BASE_URL="$ROUTE" FAKE_POOL_EXEC=1
+    for profile in --claude-unsafe --no-tools; do
+        ERRF="$T/err" run bash -c 'exec bash "$@" 2> "$ERRF"' _ "$DISPATCH" --to claude --model m "$profile" -C "$T/repo" -o "$T/out.md" 'hello'
+        [ "$status" -ne 0 ]
+        [ "$(cat "$T/failure")" = terminal_configuration ]
+        [ ! -e "$T/pool.log" ]
+        [ ! -e "$T/seen.log" ]
+    done
 }
 
 @test "claude: old host refusal stays terminal and never launches a local account" {
