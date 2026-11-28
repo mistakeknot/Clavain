@@ -143,12 +143,15 @@ it), offer `/clavain:deepen` on it before proposing approaches, to name the
 practitioner method, rawest source, instruments and external evidence. Skip it
 if the user declines.
 
-Propose **2-3 concrete approaches** based on research and dialogue. For each:
-- Brief description (2-3 sentences)
-- Pros and cons
-- When best suited
+Use the research and dialogue to propose concrete approaches. For a non-trivial task, present three distinct options:
 
-Lead with recommendation and rationale. Apply YAGNI — prefer simpler.
+1. **Conventional.** Give the strongest solution that uses an established pattern for this problem.
+2. **Upstream.** Identify what creates the problem and change that condition so the problem disappears.
+3. **Non-obvious.** Find a different way to reach the goal. Name a specific file, mechanism, or tool and explain how it makes the approach possible.
+
+For each option, describe the change, when it fits, its main benefit, its biggest risk, and one cheap first test of that risk. Lead with your recommendation and explain why it fits the constraints. Recommend the conventional option when it serves the goal best.
+
+This comparison draws on the [Move 37 skill](https://github.com/DannyMac180/skills/blob/main/move-37/SKILL.md) (MIT).
 
 **Research and escalation:** for a bounded question, use one careful pass or
 `/interflux:flux-review`; do not turn ordinary discovery-shaped work into an
