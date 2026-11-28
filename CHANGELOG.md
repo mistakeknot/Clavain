@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Non-trivial brainstorms compare conventional, upstream, and non-obvious approaches, each with a risk and a cheap first test.
+
 - Move all Astra and Sol routing seats to GPT-6.2, retaining efforts and fallback
   order. Update frontier eligibility, experiment bindings, roster identities and
   routing examples. Older roster identities remain available for attribution.
