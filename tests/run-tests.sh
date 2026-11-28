@@ -9,6 +9,10 @@ set -euo pipefail
 #   ./tests/run-tests.sh --shell          # Tier 2 only (bats)
 #   ./tests/run-tests.sh --smoke          # Tier 3 only (claude subagents)
 #   ./tests/run-tests.sh --all            # All three tiers
+#   ./tests/run-tests.sh --affected BASE  # PR runs only: tests mapped to files changed since BASE;
+#                                         # falls back to Tiers 1+2 when anything is unmapped.
+#                                         # Never qualification evidence; the full suite stays
+#                                         # required on the merge head.
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FAILED=0
@@ -46,7 +50,52 @@ run_smoke() {
   "$PROJECT_ROOT/tests/smoke/run-smoke-tests.sh" || FAILED=1
 }
 
+run_affected() {
+  local base="${1:?--affected needs a base ref}" sel parsed mode py_list bats_list
+  local -a py bt
+  # Any failure to obtain or read the selection widens to the full suite; it
+  # never skips tests.
+  if ! sel="$(python3 -I "$PROJECT_ROOT/scripts/affected-checks.py" --event pull_request --base "$base")" \
+     || ! parsed="$(python3 -I -c '
+import json, sys
+d = json.load(sys.stdin)
+print(d["mode"])
+print(d["reason"])
+print(len(d["pytest"]))
+print(len(d["bats"]))
+for t in d["pytest"] + d["bats"]:
+    print(t)
+' <<<"$sel")"; then
+    echo "=== Affected-only selection unusable; running the full suite ==="
+    run_structural
+    run_shell
+    return
+  fi
+  mapfile -t lines <<<"$parsed"
+  mode="${lines[0]}"
+  echo "=== Affected-only selection: $mode ==="
+  echo "${lines[1]}"
+  if [[ "$mode" != "affected" ]]; then
+    run_structural
+    run_shell
+    return
+  fi
+  local npy="${lines[2]}" nbt="${lines[3]}"
+  py=("${lines[@]:4:npy}")
+  bt=("${lines[@]:$((4 + npy)):nbt}")
+  printf '%s\n' "${py[@]}" "${bt[@]}"
+  if (( npy > 0 )); then
+    (cd "$PROJECT_ROOT" && uv run --project tests pytest "${py[@]}" -v --tb=short -n 0) || FAILED=1
+  fi
+  if (( nbt > 0 )); then
+    (cd "$PROJECT_ROOT" && bats "${bt[@]}") || FAILED=1
+  fi
+}
+
 case "${1:-}" in
+  --affected)
+    run_affected "${2:-}"
+    ;;
   --structural)
     run_structural
     ;;
