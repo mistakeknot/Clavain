@@ -63,7 +63,7 @@ complexity=$(clavain-cli classify-complexity "$CLAVAIN_BEAD_ID" "<feature_descri
 ```
 
 - **simple**: Skip Phase 1 dialogue. Brief repo scan → ONE AskUserQuestion confirming approach → Phase 3.
-- **medium**: Phase 1 repo scan → propose 2-3 approaches → ONE question to choose → Phase 3.
+- **medium**: Phase 1 repo scan → compare the three Phase 2 approaches → ONE question to choose → Phase 3.
 - **complex**: Full dialogue — all phases as normal.
 
 **Invariant:** Even simple features get exactly one question. Never zero.
@@ -143,12 +143,15 @@ it), offer `/clavain:deepen` on it before proposing approaches, to name the
 practitioner method, rawest source, instruments and external evidence. Skip it
 if the user declines.
 
-Propose **2-3 concrete approaches** based on research and dialogue. For each:
-- Brief description (2-3 sentences)
-- Pros and cons
-- When best suited
+Use the research and dialogue to propose concrete approaches. For a non-trivial task (including medium and complex sprints), present three distinct options:
 
-Lead with recommendation and rationale. Apply YAGNI — prefer simpler.
+1. **Conventional.** Give the strongest solution that uses an established pattern for this problem.
+2. **Upstream.** Identify what creates the problem and change that condition so the problem disappears.
+3. **Non-obvious.** Find a different way to reach the goal. Name a specific file, mechanism, or tool from the research and explain how it makes the approach possible.
+
+For each option, describe the change, when it fits, its main benefit, its biggest risk, and one cheap first test of that risk. Lead with your recommendation and explain why it fits the constraints. Recommend the conventional option when it serves the goal best. Prefer the simplest option that works. Flag any assumption the research could not confirm.
+
+This comparison draws on the [Move 37 skill](https://github.com/DannyMac180/skills/blob/6e6ffc686d7e9d5a181fba61ef7c13af294627ca/move-37/SKILL.md) (MIT, copyright 2026 Dan McAteer).
 
 **Research and escalation:** for a bounded question, use one careful pass or
 `/interflux:flux-review`; do not turn ordinary discovery-shaped work into an
