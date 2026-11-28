@@ -88,6 +88,27 @@ if [[ "${FAKE_CODEX_MODE:-}" == quota* ]]; then
   fi
 fi
 case "${FAKE_CODEX_MODE:-success}" in
+  readonly_startup*)
+    if [[ "$model" == gpt-6.2-astra ]]; then
+      echo 'WARNING: proceeding, even though we could not create PATH aliases: Read-only file system (os error 30)' >&2
+      echo 'Error: failed to initialize in-process app-server client: Read-only file system (os error 30)' >&2
+      case "$FAKE_CODEX_MODE" in
+        readonly_startup_auth) echo 'HTTP 401 Unauthorized' >&2 ;;
+        readonly_startup_policy)
+          printf '%s\n' '{"type":"turn.failed","error":{"code":"policy_denied"}}'
+          ;;
+        readonly_startup_turn) printf '%s\n' '{"type":"thread.started","thread_id":"fixture"}' ;;
+      esac
+      exit 1
+    fi
+    ;;
+  readonly_warning*)
+    echo 'WARNING: proceeding, even though we could not create PATH aliases: Read-only file system (os error 30)' >&2
+    if [[ "$FAKE_CODEX_MODE" == readonly_warning_failure ]]; then
+      echo 'Error: failed to save output: Read-only file system (os error 30)' >&2
+      exit 7
+    fi
+    ;;
   unsupported)
     if [[ "$model" == "gpt-6.2-astra" ]]; then
       echo '{"type":"error","status":400,"error":{"message":"The gpt-6.2-astra model is not supported when using Codex with a ChatGPT account."}}' >&2
@@ -150,6 +171,7 @@ export FAKE_POLICY_HASH
 export FAKE_IC_LOG="$TMP_ROOT/ic.log"
 export FAKE_IC_CONTEXT_LOG="$TMP_ROOT/contexts.jsonl"
 export FAKE_CODEX_LOG="$TMP_ROOT/codex.log"
+export CLAVAIN_DISPATCH_RECEIPT_FILE="$TMP_ROOT/receipts.jsonl"
 export CLAVAIN_CONTEXT_GATEWAY_MODE=off
 export CLAVAIN_BB_DIRECT_POOL=0
 # mk-c66x: execution roles (routine-execution|deep-execution|scout) probe a
@@ -162,6 +184,47 @@ export CLAVAIN_BB_DIRECT_POOL=0
 # Disable the live probe so this test's dispatch calls are driven purely by
 # the fixtures it controls, like CLAVAIN_BB_DIRECT_POOL above.
 export CLAVAIN_POOL_HEADROOM=0
+
+: > "$FAKE_CODEX_LOG"
+startup_out="$(FAKE_CODEX_MODE=readonly_startup bash "$ROOT/scripts/dispatch.sh" --role deep-execution \
+  -C "$TMP_ROOT/work" -o "$TMP_ROOT/startup.md" hi 2>&1)" \
+  || { echo "$startup_out" >&2; fail "read-only Codex startup suppressed the declared fallback"; }
+contains "$startup_out" 'codex_startup_readonly'
+contains "$startup_out" 'Codex app-server initialization failed'
+[[ "$(cat "$FAKE_CODEX_LOG")" == "$(printf 'gpt-6.2-astra\ngpt-6-sol')" ]] \
+  || fail "read-only Codex startup did not make one launch per candidate"
+jq -se '
+  length == 2 and
+  .[0].outcome == "failed" and .[0].exit_code == 1 and .[0].usage_status == "unavailable" and
+  .[1].outcome == "completed" and .[1].fallback_reason == "codex_startup_readonly" and
+  .[0].dispatch_id == .[1].dispatch_id and .[0].attempt_id != .[1].attempt_id
+' "$CLAVAIN_DISPATCH_RECEIPT_FILE" >/dev/null || fail "startup failure and fallback receipts lost attribution"
+jq -se 'any(.[]; .state == "failed" and .result.failure_class == "codex_startup_readonly")' \
+  "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "missing startup routing audit class"
+
+for mode_and_class in readonly_startup_policy:terminal_policy readonly_startup_auth:terminal_configuration \
+  readonly_startup_turn:terminal_error readonly_warning_failure:terminal_error readonly_startup:terminal_accounting; do
+  mode="${mode_and_class%:*}"
+  expected_class="${mode_and_class#*:}"
+  require_usage=0
+  [[ "$expected_class" != terminal_accounting ]] || require_usage=1
+  : > "$FAKE_CODEX_LOG"
+  : > "$FAKE_IC_CONTEXT_LOG"
+  if control_out="$(FAKE_CODEX_MODE="$mode" CLAVAIN_REQUIRE_USAGE="$require_usage" \
+      CLAVAIN_REVIEW_EVENTS="$TMP_ROOT/strict-events.jsonl" bash "$ROOT/scripts/dispatch.sh" \
+      --role deep-execution -C "$TMP_ROOT/work" hi 2>&1)"; then
+    fail "$mode/$expected_class unexpectedly succeeded"
+  fi
+  [[ "$(cat "$FAKE_CODEX_LOG")" == gpt-6.2-astra ]] || fail "$mode/$expected_class retried or fell back"
+  jq -se --arg c "$expected_class" 'any(.[]; .state == "failed" and .result.failure_class == $c)' \
+    "$FAKE_IC_CONTEXT_LOG" >/dev/null || { echo "$control_out" >&2; fail "$mode lost $expected_class"; }
+done
+
+: > "$FAKE_CODEX_LOG"
+warning_out="$(FAKE_CODEX_MODE=readonly_warning bash "$ROOT/scripts/dispatch.sh" --role deep-execution \
+  -C "$TMP_ROOT/work" hi 2>&1)" || fail "PATH warning broke a successful run"
+[[ "$(cat "$FAKE_CODEX_LOG")" == gpt-6.2-astra && "$warning_out" != *codex_startup_readonly* ]] \
+  || fail "PATH warning misclassified a successful run"
 
 dry_run="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role deep-execution -C "$TMP_ROOT/work" "hi" 2>&1)" \
   || fail "role dry-run failed"
