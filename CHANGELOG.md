@@ -8,6 +8,15 @@
 - Live effort-floor resolution requires the GPT-6.2 effort ladder from Intercore
   PR #72; installations without that support may reject floored seats.
 
+## 0.6.340
+
+### Fixed
+
+- Strict Claude pool accounting accepts authenticated, finished metadata
+  requests with a successful HTTP hop, an unknown hop state, and explicitly
+  null model and usage. These requests count as zero usage. Inference still
+  requires complete usage and a valid hop state (PR #239).
+
 ## 0.6.334
 
 Summary of changes merged since 0.6.333.
