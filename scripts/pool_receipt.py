@@ -39,12 +39,16 @@ def validate(data, attempt, provider="claude"):
         for j, hop in enumerate(hops, 1):
             require(isinstance(hop, dict) and hop.get("index") == j and
                     isinstance(hop.get("account_id"), str) and bool(hop["account_id"]) and
-                    hop.get("provider") == provider and hop.get("state") == "complete" and
+                    hop.get("provider") == provider and
                     type(hop.get("status")) is int and 200 <= hop["status"] < 300)
             usage = hop.get("usage")
             if request["kind"] == "metadata":
-                require(usage is None and hop.get("model") is None)
+                # Aleph v1 attests metadata separately. It has no inference terminal.
+                require(hop.get("state") == "unknown" and
+                        "usage" in hop and usage is None and
+                        "model" in hop and hop["model"] is None)
             else:
+                require(hop.get("state") == "complete")
                 inference = True
                 require(isinstance(hop.get("model"), str) and bool(hop["model"]) and isinstance(usage, dict))
                 require(set(usage) <= set(FIELDS) | {"cache_creation_5m_input_tokens", "cache_creation_1h_input_tokens"})

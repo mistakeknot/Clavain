@@ -1,6 +1,8 @@
 """Authenticated pool evidence must survive dispatch without accepting guesses."""
 import copy
+import hashlib
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -22,6 +24,75 @@ def receipt():
                     index=1, account_id="account-test", provider="claude", status=200,
                     state="complete", model="claude-opus-5-5", usage=dict(input_tokens=10,
                     output_tokens=9, cache_read_input_tokens=30, cache_creation_input_tokens=20))])])
+
+
+def mixed_receipt():
+    data = receipt()
+    data['requests'].append(dict(id=2, kind='metadata', state='finished', hops=[dict(
+        index=1, account_id='account-test', provider='claude', status=200,
+        state='unknown', model=None, usage=None)]))
+    return data
+
+
+def test_metadata_contributes_nothing_to_the_four_inference_totals():
+    assert load().validate(mixed_receipt(), 'attempt-test') == dict(
+        input_tokens=10, output_tokens=9, cache_read_input_tokens=30,
+        cache_creation_input_tokens=20)
+
+
+@pytest.mark.parametrize('target, field, value', [
+    ('request', 'kind', 'other'),
+    ('request', 'kind', None),
+    ('request', 'state', 'active'),
+    ('request', 'state', 'error'),
+    ('request', 'state', 'cancelled'),
+    ('hop', 'state', 'complete'),
+    ('hop', 'state', 'truncated'),
+    ('hop', 'state', 'rejected'),
+    ('hop', 'state', 'cancelled'),
+    ('hop', 'state', 'transport_error'),
+    ('hop', 'status', None),
+    ('hop', 'status', 401),
+    ('hop', 'status', 302),
+    ('hop', 'account_id', ''),
+    ('hop', 'provider', 'codex'),
+    ('hop', 'usage', {}),
+    ('hop', 'model', 'claude-opus-5-5'),
+])
+def test_rejects_invalid_metadata_in_an_otherwise_complete_receipt(target, field, value):
+    data = mixed_receipt()
+    request = data['requests'][1]
+    record = request if target == 'request' else request['hops'][0]
+    record[field] = value
+    with pytest.raises(ValueError):
+        load().validate(data, 'attempt-test')
+
+
+@pytest.mark.parametrize('field', ['usage', 'model'])
+def test_metadata_requires_explicit_nulls(field):
+    data = mixed_receipt()
+    del data['requests'][1]['hops'][0][field]
+    with pytest.raises(ValueError):
+        load().validate(data, 'attempt-test')
+
+
+def test_metadata_only_is_not_accounting():
+    data = mixed_receipt()
+    data['requests'].pop(0)
+    data['requests'][0]['id'] = 1
+    with pytest.raises(ValueError):
+        load().validate(data, 'attempt-test')
+
+
+@pytest.mark.parametrize('kind', ['inference', 'metadata'])
+def test_successful_retry_does_not_erase_a_prior_failed_hop(kind):
+    data = mixed_receipt()
+    request = next(r for r in data['requests'] if r['kind'] == kind)
+    request['hops'][0]['index'] = 2
+    request['hops'].insert(0, dict(index=1, account_id='prior-account', provider='claude',
+                                   status=429, state='rejected', model=None, usage=None))
+    with pytest.raises(ValueError):
+        load().validate(data, 'attempt-test')
 
 
 def test_accepts_real_request_account_and_usage():
@@ -157,3 +228,28 @@ def test_finalize_array_is_controlled_refusal(tmp_path, monkeypatch):
     monkeypatch.setattr(attempt, 'request', lambda *_: [])
     attempt.id, attempt.attempt = 'a'*32, 'attempt-test'
     with pytest.raises(ValueError, match='object'): attempt.finish({})
+
+
+@pytest.mark.parametrize('fault', ['none', 'unverified-kind', 'receipt-id', 'attempt', 'totals'])
+def test_ledger_revalidates_mixed_receipt_after_checking_its_hash(tmp_path, fault):
+    data = mixed_receipt()
+    if fault == 'unverified-kind':
+        del data['requests'][1]['kind']
+    elif fault == 'receipt-id':
+        data['id'] = 'b' * 32
+    elif fault == 'attempt':
+        data['attempt_id'] = 'another-attempt'
+    path = tmp_path / 'receipt.json'
+    path.write_text(json.dumps(data))
+    ref = dict(path=str(path), sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+               id='a' * 32, attempt_id='attempt-test')
+    ledger = tmp_path / 'ledger.jsonl'
+    ledger.write_text(json.dumps(dict(
+        terminal=True, complete=True, status='success', pool_receipt=ref,
+        input_tokens=10, output_tokens=9, cache_read_input_tokens=30,
+        cache_creation_input_tokens=21 if fault == 'totals' else 20)) + '\n')
+    if fault == 'none':
+        assert load().check_ledger(ledger, 'attempt-test') == ref
+    else:
+        with pytest.raises(ValueError):
+            load().check_ledger(ledger, 'attempt-test')

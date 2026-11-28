@@ -23,7 +23,7 @@ collect_ignore = [
 #
 # tests/structural/test_claude_usage.py drives scripts/claude_usage.py, whose
 # meter calls `ic --json route identity` and fails closed when the binary is
-# missing. A hosted runner has no `ic`, so from 75fed68 those 28 cases turned
+# missing. A hosted runner has no `ic`, so from 75fed68 the dependent cases turned
 # Tier 1 red and Tier 2 bats was never reached again -- 872 shell assertions
 # stopped running for eleven days behind a failure that had nothing to do with
 # them.

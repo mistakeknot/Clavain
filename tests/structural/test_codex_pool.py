@@ -44,8 +44,12 @@ def test_budgeted_codex_pool(tmp_path, mode, source, no_gawk=False):
                 if mode == 'wrong-provider': hop['provider'] = 'claude'
                 if mode == 'wrong-model': hop['model'] = 'gpt-6.2-sol'
                 if mode == 'unknown-hop': hop['state'] = 'unknown'
-                data.update(sealed=True, valid=True, complete=True, requests=[dict(
-                    id=1, kind='inference', state='finished', hops=[hop])])
+                metadata = dict(index=1, account_id='fixture-account', provider='codex',
+                                status=200, state='unknown', model=None, usage=None)
+                data.update(sealed=True, valid=True, complete=True, requests=[
+                    dict(id=1, kind='inference', state='finished', hops=[hop]),
+                    dict(id=2, kind='metadata', state='finished', hops=[metadata]),
+                ])
             self.wfile.write(json.dumps([] if mode == 'array' and action == 'finalize' else data).encode())
     server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -126,7 +130,9 @@ sys.exit(7 if os.environ['MODE'] == 'provider-fail' else 0)
         rows = [json.loads(line) for line in ledger.read_text().splitlines()]
         record = next(row for row in rows if row.get('type') == 'pool.accounting')
         assert record['input_tokens'] == 10
+        assert record['output_tokens'] == 9
         assert record['cache_read_input_tokens'] == 30
+        assert record['cache_creation_input_tokens'] == 0
         assert record['status'] == 'success'
         evidence = Path(record['pool_receipt']['path'])
         assert evidence.stat().st_mode & 0o777 == 0o600
@@ -140,6 +146,7 @@ sys.exit(7 if os.environ['MODE'] == 'provider-fail' else 0)
             terminal = [row for row in rows if row.get('type') == 'pool.accounting']
             assert len(terminal) == 1
             assert terminal[0].get('attempt_id')
+            if mode == 'wrong-model': assert terminal[0].get('pool_receipt')
             if mode == 'array': assert 'Traceback' not in proc.stderr
     if mode == 'refused':
         assert calls == ['begin']

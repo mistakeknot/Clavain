@@ -106,7 +106,9 @@ sys.exit(int(os.environ['PROVIDER_EXIT']))
 
 
 @pytest.mark.requires_ic
-@pytest.mark.parametrize("mode", ["success", "refused", "missing-account", "wrong-totals", "provider-fail"])
+@pytest.mark.parametrize("mode", ["success", "refused", "unauthenticated-finalize", "wrong-host",
+                                  "missing-account", "unknown-inference", "unverified-kind",
+                                  "malformed-usage", "wrong-totals", "wrong-model", "provider-fail"])
 def test_pooled_dispatch_admits_before_spending_and_retains_attribution(tmp_path, mode):
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     import threading
@@ -121,42 +123,72 @@ def test_pooled_dispatch_admits_before_spending_and_retains_attribution(tmp_path
             calls.append(action)
             payload = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
             assert self.headers['x-bb-account-pool-token'] == 'synthetic-host-token'
-            self.send_response(503 if mode == 'refused' else 200); self.end_headers()
-            if mode == 'refused': return
+            status = (503 if mode == 'refused' else
+                      401 if mode == 'unauthenticated-finalize' and action == 'finalize' else 200)
+            self.send_response(status); self.end_headers()
             data = dict(version=1, id='a'*32, host_id='fixture-host', attempt_id=payload['attempt_id'], provider='claude')
             if action == 'begin':
                 data.update(token='synthetic-scoped-token', expires_at=9999999999999)
             else:
-                data.update(sealed=True, valid=True, complete=True, requests=[dict(id=1, kind='inference', state='finished', hops=[dict(index=1, account_id='fixture-account', provider='claude', status=200, state='complete', model=MODEL, usage=dict(input_tokens=10, output_tokens=9, cache_read_input_tokens=30, cache_creation_input_tokens=20))])])
-                if mode == 'missing-account': data['requests'][0]['hops'][0]['account_id'] = None
-                if mode == 'wrong-totals': data['requests'][0]['hops'][0]['usage']['input_tokens'] = 11
+                inference = dict(index=1, account_id='fixture-account', provider='claude',
+                                 status=200, state='complete', model=MODEL,
+                                 usage=dict(input_tokens=10, output_tokens=9,
+                                            cache_read_input_tokens=30, cache_creation_input_tokens=20))
+                metadata = dict(index=1, account_id='fixture-account', provider='claude',
+                                status=200, state='unknown', model=None, usage=None)
+                data.update(sealed=True, valid=True, complete=True, requests=[
+                    dict(id=1, kind='inference', state='finished', hops=[inference]),
+                    dict(id=2, kind='metadata', state='finished', hops=[metadata]),
+                ])
+                if mode == 'wrong-host': data['host_id'] = 'different-host'
+                if mode == 'missing-account': metadata['account_id'] = None
+                if mode == 'unknown-inference': inference['state'] = 'unknown'
+                if mode == 'unverified-kind': del data['requests'][1]['kind']
+                if mode == 'malformed-usage': inference['usage']['output_tokens'] = True
+                if mode == 'wrong-totals': inference['usage']['input_tokens'] = 11
             self.wfile.write(json.dumps(data).encode())
     server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     origin = 'http://127.0.0.1:' + str(server.server_port)
     try:
-        proc, _, records = dispatch(tmp_path, events(), exit_code=7 if mode == 'provider-fail' else 0, pool_env=dict(
+        stream = events()
+        if mode == 'wrong-model':
+            wrong_model = 'claude-sonnet-5-5'
+            stream = [json.loads(json.dumps(event).replace(MODEL, wrong_model)) for event in stream]
+        proc, _, records = dispatch(tmp_path, stream, exit_code=7 if mode == 'provider-fail' else 0, pool_env=dict(
             BB_SERVER_URL=origin, BB_THREAD_ID='fixture-thread', CLAVAIN_BB_DIRECT_POOL='1',
             ANTHROPIC_BASE_URL=origin+'/api/v1/plugins/account-pool/http',
             ANTHROPIC_AUTH_TOKEN='synthetic-host-token', CODEX_POOL_AUTH_TOKEN='',
             EXPECTED_POOL_TOKEN='synthetic-scoped-token'))
     finally:
         server.shutdown(); server.server_close(); thread.join()
-    if mode == 'success':
-        assert proc.returncode == 0, proc.stderr
-        assert calls == ['begin', 'finalize']
-        ref = records[-1]['pool_receipt']
-        data = json.loads(Path(ref['path']).read_text())
-        assert data['requests'][0]['hops'][0]['account_id'] == 'fixture-account'
-    elif mode == 'refused':
+    if mode == 'refused':
         assert proc.returncode != 0
         assert calls == ['begin']
         assert not (tmp_path/'calls').exists()
+        return
+    assert calls == ['begin', 'finalize']
+    terminal = records[-1]
+    assert terminal['terminal'] is True
+    if mode == 'success':
+        assert proc.returncode == 0, proc.stderr
+        assert terminal['complete'] is True
+        assert terminal['status'] == 'success'
+        assert tuple(terminal[key] for key in ('input_tokens', 'output_tokens',
+                     'cache_read_input_tokens', 'cache_creation_input_tokens')) == (10, 9, 30, 20)
+        ref = terminal['pool_receipt']
+        data = json.loads(Path(ref['path']).read_text())
+        assert data['requests'][0]['hops'][0]['account_id'] == 'fixture-account'
+        assert data['requests'][1]['hops'][0]['state'] == 'unknown'
     else:
         assert proc.returncode != 0
-        assert calls == ['begin', 'finalize']
-        assert records[-1]['status'] != 'success'
+        assert terminal['status'] == ('failed' if mode == 'provider-fail' else 'accounting_error')
+        if mode == 'provider-fail':
+            assert proc.returncode == terminal['backend_exit'] == 7
+        elif mode != 'wrong-model':
+            assert not terminal['complete']
+            assert 'pool_receipt' not in terminal
 
 
 @pytest.mark.requires_ic
